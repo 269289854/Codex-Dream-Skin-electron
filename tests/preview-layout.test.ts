@@ -116,6 +116,17 @@ describe('Studio home preview', () => {
     expect(composerRule).not.toMatch(/(?:background|box-shadow|border):/)
   })
 
+  it('keeps quick editor chrome fixed while only its body scrolls', async () => {
+    const css = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'styles.css'), 'utf8')
+    const popoverRule = css.match(/\.preview-edit-popover\s*\{[^}]+\}/)?.[0]
+    const bodyRule = css.match(/\.preview-edit-popover-body\s*\{[^}]+\}/)?.[0]
+
+    expect(popoverRule).toContain('display: flex')
+    expect(popoverRule).toContain('flex-direction: column')
+    expect(bodyRule).toContain('flex: 1 1 auto')
+    expect(bodyRule).toContain('overflow-y: auto')
+  })
+
   it('only renders the Studio polaroid when the visibility option is enabled', async () => {
     const source = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'App.tsx'), 'utf8')
     expect(source).toContain('draft.polaroid.visible && polaroidUrl')
