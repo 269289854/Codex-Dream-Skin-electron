@@ -6,28 +6,7 @@
   const CARD_GRID_ID = "codex-dream-skin-actions";
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
-  const actions = [
-    {
-      icon: "</>",
-      label: "探索并理解代码",
-      prompt: "请探索并理解当前项目的代码结构，说明关键模块、入口和主要数据流。",
-    },
-    {
-      icon: "+",
-      label: "构建新功能、应用或工具",
-      prompt: "请基于当前项目构建一个新功能、应用或工具。先分析现有模式，再完成实现和验证。",
-    },
-    {
-      icon: "✓",
-      label: "审查代码并提出修改建议",
-      prompt: "请审查当前项目的代码，优先指出缺陷、回归风险和缺失测试，并提出具体修改建议。",
-    },
-    {
-      icon: "✦",
-      label: "修复问题和失败",
-      prompt: "请诊断并修复当前项目中的问题或失败，先定位根因，再实施修复并运行相关验证。",
-    },
-  ];
+  const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
 
   const builtinGlyphs = {
     sparkles: "✦", "wand-sparkles": "✧", image: "▣", send: "➤",
@@ -130,14 +109,14 @@
     grid.className = "dream-action-grid";
     grid.dataset.dreamVersion = VERSION;
     grid.setAttribute("aria-label", "初音未来主题快捷操作");
-    actions.forEach((action, index) => {
+    actions.forEach((action) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "dream-action-card";
       button.dataset.dreamPrompt = action.prompt;
       button.setAttribute("aria-label", action.label);
       button.innerHTML = `<span class="dream-action-icon" aria-hidden="true"></span><span class="dream-action-label"></span><span class="dream-action-heart" aria-hidden="true">♥</span>`;
-      renderSlot(button.querySelector(".dream-action-icon"), index === 0 ? "cardPrimary" : "cardSecondary", action.icon);
+      renderSlot(button.querySelector(".dream-action-icon"), action.iconSlot, action.icon);
       button.querySelector(".dream-action-label").textContent = action.label;
       renderSlot(button.querySelector(".dream-action-heart"), "decoration", "♥");
       button.addEventListener("click", () => populateComposer(action.prompt));
@@ -172,6 +151,51 @@
     node?.classList.add(className);
   };
 
+  const clearHeading = (heading) => {
+    heading?.querySelectorAll(":scope > .dream-copy-node").forEach((node) => node.remove());
+    heading?.classList.remove("dream-heading");
+    heading?.removeAttribute("data-dream-copy-version");
+    heading?.querySelectorAll(".dream-project-selector").forEach((node) => node.classList.remove("dream-project-selector"));
+    heading?.parentElement?.classList.remove("dream-heading-region");
+  };
+
+  const ensureHeading = (home) => {
+    const heading = home.querySelector('[data-feature="game-source"]');
+    const projectButton = heading?.querySelector("button");
+    const parts = themeConfig?.copy?.parts;
+    if (!heading || !projectButton || typeof parts?.before !== "string" || typeof parts?.after !== "string") {
+      document.querySelectorAll(".dream-heading").forEach(clearHeading);
+      return null;
+    }
+
+    for (const previousHeading of document.querySelectorAll(".dream-heading")) {
+      if (previousHeading !== heading) clearHeading(previousHeading);
+    }
+    heading.classList.add("dream-heading");
+    heading.parentElement?.classList.add("dream-heading-region");
+    projectButton.classList.add("dream-project-selector");
+
+    if (heading.dataset.dreamCopyVersion !== VERSION) {
+      heading.querySelectorAll(":scope > .dream-copy-node").forEach((node) => node.remove());
+      const before = document.createElement("span");
+      before.className = "dream-copy-node dream-copy-before";
+      before.textContent = parts.before;
+      heading.insertBefore(before, heading.firstChild);
+
+      const after = document.createElement("span");
+      after.className = "dream-copy-node dream-copy-after";
+      after.textContent = parts.after;
+      heading.appendChild(after);
+
+      const subtitle = document.createElement("span");
+      subtitle.className = "dream-copy-node dream-copy-subtitle";
+      subtitle.textContent = typeof themeConfig.copy.subtitle === "string" ? themeConfig.copy.subtitle : "";
+      heading.appendChild(subtitle);
+      heading.dataset.dreamCopyVersion = VERSION;
+    }
+    return heading;
+  };
+
   const ensure = () => {
     if (window.__CODEX_DREAM_SKIN_DISABLED__) return;
     const root = document.documentElement;
@@ -197,13 +221,24 @@
 
     let hero = null;
     if (home) {
-      hero = home.firstElementChild?.firstElementChild?.firstElementChild || null;
+      const heading = ensureHeading(home);
+      const candidate = heading ? home.firstElementChild?.firstElementChild?.firstElementChild || null : null;
+      hero = candidate?.contains(heading) ? candidate : null;
       markCurrentNode(".dream-hero", hero, "dream-hero");
+      markCurrentNode(".dream-layout-root", hero, "dream-layout-root");
       if (hero) ensureActionGrid(hero);
+      else document.getElementById(CARD_GRID_ID)?.remove();
       const quickBanner = findQuickModeBanner(home);
       markCurrentNode(".dream-quick-mode-banner", quickBanner, "dream-quick-mode-banner");
+
+      const projectGroup = home.querySelector(".horizontal-scroll-fade-mask .group\\/project-selector");
+      const projectBar = projectGroup?.closest(".horizontal-scroll-fade-mask")?.parentElement || null;
+      markCurrentNode(".dream-project-bar", projectBar, "dream-project-bar");
     } else {
+      document.querySelectorAll(".dream-heading").forEach(clearHeading);
       markCurrentNode(".dream-hero", null, "dream-hero");
+      markCurrentNode(".dream-layout-root", null, "dream-layout-root");
+      markCurrentNode(".dream-project-bar", null, "dream-project-bar");
       markCurrentNode(".dream-quick-mode-banner", null, "dream-quick-mode-banner");
       document.getElementById(CARD_GRID_ID)?.remove();
     }
@@ -256,6 +291,11 @@
     document.querySelectorAll(".dream-home").forEach((node) => node.classList.remove("dream-home"));
     document.querySelectorAll(".dream-home-shell").forEach((node) => node.classList.remove("dream-home-shell"));
     document.querySelectorAll(".dream-hero").forEach((node) => node.classList.remove("dream-hero"));
+    document.querySelectorAll(".dream-layout-root").forEach((node) => node.classList.remove("dream-layout-root"));
+    document.querySelectorAll(".dream-heading").forEach(clearHeading);
+    document.querySelectorAll(".dream-heading-region").forEach((node) => node.classList.remove("dream-heading-region"));
+    document.querySelectorAll(".dream-project-selector").forEach((node) => node.classList.remove("dream-project-selector"));
+    document.querySelectorAll(".dream-project-bar").forEach((node) => node.classList.remove("dream-project-bar"));
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.getElementById(CARD_GRID_ID)?.remove();

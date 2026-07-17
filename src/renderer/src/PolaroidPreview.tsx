@@ -14,7 +14,7 @@ export function PolaroidPreview({ imageUrl, fence, sourceSize, placement, onPoin
   const aspectRatio = (bounds.width * sourceSize.width) / (bounds.height * sourceSize.height)
   return (
     <div
-      className="preview-polaroid"
+      className="preview-polaroid dream-layout-polaroid"
       onPointerDown={onPointerDown}
       style={{
         left: `${placement.x * 100}%`,

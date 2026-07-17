@@ -363,14 +363,7 @@ html.codex-dream-skin .dream-home {
 }
 
 .dream-home [data-feature="game-source"]::after {
-  content: "和初音未来一起，把灵感写成代码与旋律 ♫";
-  display: block;
-  margin-top: 12px;
-  color: #2f7782;
-  font-size: 15px;
-  line-height: 1.5;
-  font-weight: 500;
-  letter-spacing: 0;
+  content: none;
 }
 
 .dream-home [data-feature="game-source"] button {

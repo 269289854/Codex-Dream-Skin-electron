@@ -1,4 +1,5 @@
 import type { CompiledTheme } from '../shared/contracts'
+import { HOME_ACTIONS } from '../shared/home-layout'
 import type { ThemeProfile } from '../shared/theme'
 
 export async function compileTheme(
@@ -26,7 +27,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 1, profile, assets }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 2, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
     assets
   }
 }

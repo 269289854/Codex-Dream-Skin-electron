@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
 import type { ThemeProfile } from '../shared/theme'
+import { HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { CdpWatcher } from './cdp-watcher'
 import { runPowerShell } from './powershell'
 import type { ProfileStore } from './profile-store'
@@ -181,13 +182,14 @@ export class CodexService {
   }
 
   private async buildPayload(themeId: string): Promise<string> {
-    const [profile, compiled, baseCss, renderer] = await Promise.all([
+    const [profile, compiled, baseCss, homeLayoutCss, renderer] = await Promise.all([
       this.store.get(themeId), this.store.compile(themeId),
       readFile(join(this.resourcesRoot, 'dream-skin.css'), 'utf8'),
+      readFile(join(this.resourcesRoot, 'dream-home-layout.css'), 'utf8'),
       readFile(join(this.resourcesRoot, 'renderer-inject.js'), 'utf8')
     ])
     const hero = profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
-    const css = `${baseCss}\n${this.dynamicCss(profile, compiled.assets)}\n`
+    const css = `${baseCss}\n${homeLayoutCss}\n${this.dynamicCss(profile, compiled.assets)}\n`
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
       source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
     ]))
@@ -195,14 +197,18 @@ export class CodexService {
       .replace('__DREAM_VERSION_JSON__', JSON.stringify(`studio-${profile.updatedAt}`))
       .replace('__DREAM_CSS_JSON__', JSON.stringify(css))
       .replace('__DREAM_ART_JSON__', JSON.stringify(hero ?? TRANSPARENT_PNG))
-      .replace('__DREAM_CONFIG_JSON__', JSON.stringify({ icons }))
+      .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
+        icons,
+        copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
+        actions: HOME_ACTIONS
+      }))
   }
 
   private dynamicCss(profile: ThemeProfile, assets: Record<string, string>): string {
     const c = profile.colors
-    const rules = [`:root.codex-dream-skin { --dream-ink: ${c.ink}; --dream-deep: ${c.accent}; --dream-cyan: ${c.accent}; --dream-pink: ${c.pink}; --dream-lavender: ${c.lavender}; --dream-line: ${c.border}; }`,
+    const rules = [`:root.codex-dream-skin { --dream-ink: ${c.ink}; --dream-deep: ${c.accent}; --dream-cyan: ${c.accent}; --dream-accent: ${c.accent}; --dream-pink: ${c.pink}; --dream-lavender: ${c.lavender}; --dream-line: ${c.border}; --dream-border: ${c.border}; --dream-surface: ${c.surface}; }`,
       `html.codex-dream-skin body { color: ${c.ink} !important; background-color: ${c.surface} !important; }`,
-      `.dream-home .dream-hero { background-size: 100% 100%, ${Math.round(profile.hero.scale * 100)}% auto !important; background-position: center, ${profile.hero.position.x * 100}% ${profile.hero.position.y * 100}% !important; }`]
+      `.dream-layout-root { --dream-art-scale: ${Math.round(profile.hero.scale * 100)}%; --dream-art-x: ${profile.hero.position.x * 100}%; --dream-art-y: ${profile.hero.position.y * 100}%; }`]
     const source = profile.polaroid.sourceImage
     const fence = profile.polaroid.fence as Fence
     if (source && profile.polaroid.sourceSize && assets[source] && isFenceValid(fence)) {

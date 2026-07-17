@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DEFAULT_HOME_COPY, splitHeadingTemplate } from './home-layout'
 
 const normalized = z.number().finite().min(0).max(1)
 
@@ -9,10 +10,16 @@ const iconSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('asset'), asset: z.string().min(1).max(260) }).strict()
 ])
 
-export const themeProfileSchema = z.object({
+const homeCopySchema = z.object({
+  headingTemplate: z.string().trim().min(1).max(120).refine((value) => splitHeadingTemplate(value) !== null, {
+    message: 'Heading template must contain exactly one {project} placeholder.'
+  }),
+  subtitle: z.string().trim().max(160)
+}).strict()
+
+const profileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
-  version: z.literal(1),
   updatedAt: z.string().datetime(),
   hero: z.object({
     sourceImage: z.string().max(260).nullable(),
@@ -51,6 +58,17 @@ export const themeProfileSchema = z.object({
     decoration: iconSourceSchema,
     polaroidPin: iconSourceSchema
   }).strict()
+}
+
+export const themeProfileSchema = z.object({
+  ...profileFields,
+  version: z.literal(2),
+  copy: homeCopySchema
+}).strict()
+
+const versionOneThemeSchema = z.object({
+  ...profileFields,
+  version: z.literal(1)
 }).strict()
 
 const legacyThemeSchema = z.object({
@@ -77,8 +95,9 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 1,
+    version: 2,
     updatedAt: new Date().toISOString(),
+    copy: { ...DEFAULT_HOME_COPY },
     hero: {
       sourceImage: null,
       focus: { x: 0.62, y: 0.42 },
@@ -119,8 +138,12 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 1) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 2) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 1) {
+    const legacy = versionOneThemeSchema.parse(input)
+    return themeProfileSchema.parse({ ...legacy, version: 2, copy: { ...DEFAULT_HOME_COPY } })
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 0) {
     const legacy = legacyThemeSchema.parse(input)

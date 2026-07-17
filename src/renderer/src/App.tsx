@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
+import { headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { FenceEditor } from './FenceEditor'
 import { builtinIconOptions, builtinIcons } from './icons'
@@ -30,6 +31,8 @@ export function App(): React.JSX.Element {
   const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
   const [draggingPlacement, setDraggingPlacement] = useState(false)
+  const [previewScale, setPreviewScale] = useState(1)
+  const previewStageRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const historyRef = useRef<ThemeProfile[]>([])
 
@@ -61,6 +64,19 @@ export function App(): React.JSX.Element {
     return window.studio.runtime.subscribeStatus(setRuntime)
   }, [])
 
+  useEffect(() => {
+    const stage = previewStageRef.current
+    if (!stage) return
+    const updateScale = (): void => {
+      const bounds = stage.getBoundingClientRect()
+      setPreviewScale(Math.max(.1, Math.min(bounds.width / HOME_PREVIEW_VIEWPORT.width, bounds.height / HOME_PREVIEW_VIEWPORT.height)))
+    }
+    const observer = new ResizeObserver(updateScale)
+    observer.observe(stage)
+    updateScale()
+    return () => observer.disconnect()
+  }, [draft?.id])
+
   const change = (mutator: (profile: ThemeProfile) => void): void => {
     setDraft((current) => {
       if (!current) return current
@@ -72,8 +88,13 @@ export function App(): React.JSX.Element {
     })
   }
 
-  const save = async (): Promise<void> => {
-    if (!draft) return
+  const save = async (): Promise<boolean> => {
+    if (!draft) return false
+    const copyError = headingTemplateError(draft.copy.headingTemplate)
+    if (copyError || draft.copy.subtitle.trim().length > 160) {
+      setError(copyError ?? '首页副标题不能超过 160 个字符。')
+      return false
+    }
     setSaving(true)
     setError(null)
     try {
@@ -82,7 +103,11 @@ export function App(): React.JSX.Element {
       setDraft(saved)
       historyRef.current = []
       await refreshThemes()
-    } catch (reason) { setError(messageOf(reason)) } finally { setSaving(false) }
+      return true
+    } catch (reason) {
+      setError(messageOf(reason))
+      return false
+    } finally { setSaving(false) }
   }
 
   const createTheme = async (): Promise<void> => {
@@ -160,7 +185,7 @@ export function App(): React.JSX.Element {
     setRuntimeBusy(true)
     setError(null)
     try {
-      await save()
+      if (!(await save())) return
       const detection = await window.studio.codex.detect()
       const restart = detection.running && window.confirm('Codex 需要重启一次以启用本地主题端口。未提交的输入可能丢失，继续吗？')
       if (detection.running && !restart) return
@@ -191,6 +216,20 @@ export function App(): React.JSX.Element {
   if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? '正在打开主题工作台'}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>重新加载</button>}</div>
   const heroUrl = draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
   const polaroidUrl = draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
+  const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
+  const copyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.trim().length > 160 ? '首页副标题不能超过 160 个字符。' : null)
+  const previewStyle = {
+    '--dream-surface': draft.colors.surface,
+    '--dream-ink': draft.colors.ink,
+    '--dream-accent': draft.colors.accent,
+    '--dream-pink': draft.colors.pink,
+    '--dream-lavender': draft.colors.lavender,
+    '--dream-border': draft.colors.border,
+    '--dream-art': heroUrl ? `url(${JSON.stringify(heroUrl)})` : 'linear-gradient(135deg, #d9fbfc, #fff4fb 52%, #e7ddff)',
+    '--dream-art-scale': `${draft.hero.scale * 100}%`,
+    '--dream-art-x': `${draft.hero.position.x * 100}%`,
+    '--dream-art-y': `${draft.hero.position.y * 100}%`
+  } as React.CSSProperties
 
   return (
     <main className="studio-shell">
@@ -212,28 +251,52 @@ export function App(): React.JSX.Element {
         </aside>
 
         <section className="preview-panel">
-          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">1280 × 820</span></div><div className="preview-actions"><button className="tool-button" title="撤销" onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" onClick={() => change((profile) => Object.assign(profile, createDefaultTheme(profile.id, profile.name)))}><RotateCcw size={16} /></button><button className="primary-button" onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
-          <div
-            className="codex-preview"
-            ref={previewRef}
-            onPointerMove={movePlacement}
-            onPointerUp={() => setDraggingPlacement(false)}
-            onPointerLeave={() => setDraggingPlacement(false)}
-            style={{ '--preview-surface': draft.colors.surface, '--preview-ink': draft.colors.ink, '--preview-accent': draft.colors.accent, '--preview-pink': draft.colors.pink, '--preview-lavender': draft.colors.lavender, '--preview-border': draft.colors.border } as React.CSSProperties}
-          >
-            <aside className="codex-rail"><RenderIcon slot="branding" profile={draft} assets={assets} /><span className="rail-line active" /><span className="rail-line" /><span className="rail-line" /><span className="rail-avatar" /></aside>
-            <aside className="codex-nav"><strong>Codex</strong><button>新任务</button><button>任务</button><button>技能</button><small>项目</small><button className="project-row"><RenderIcon slot="project" profile={draft} assets={assets} />Codex-Dream-Skin</button></aside>
-            <section className="codex-main">
-              <div className="hero-layer" style={heroUrl ? { backgroundImage: `url(${JSON.stringify(heroUrl)})`, backgroundPosition: `${draft.hero.position.x * 100}% ${draft.hero.position.y * 100}%`, backgroundSize: `${draft.hero.scale * 100}% auto` } : undefined} />
-              <div className="welcome-content"><span className="welcome-kicker">DREAM SKIN</span><h1>今天想构建什么？</h1><div className="action-grid"><button><RenderIcon slot="cardPrimary" profile={draft} assets={assets} /><strong>创建一个新功能</strong><span>从想法开始规划和编码</span></button><button><RenderIcon slot="cardSecondary" profile={draft} assets={assets} /><strong>处理本地项目</strong><span>继续现有工作区任务</span></button><button><RenderIcon slot="decoration" profile={draft} assets={assets} /><strong>完善主题细节</strong><span>调整视觉与交互体验</span></button></div><div className="composer"><span>询问 Codex 或描述一个任务</span><RenderIcon slot="composer" profile={draft} assets={assets} /></div></div>
-              {polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} onPointerDown={beginPlacementDrag} />}
-            </section>
+          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><button className="tool-button" title="撤销" onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" onClick={() => change((profile) => Object.assign(profile, createDefaultTheme(profile.id, profile.name)))}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
+          <div className="preview-stage" ref={previewStageRef}>
+            <div className="preview-frame" style={{ width: HOME_PREVIEW_VIEWPORT.width * previewScale, height: HOME_PREVIEW_VIEWPORT.height * previewScale }}>
+              <div
+                className="codex-preview"
+                onPointerMove={movePlacement}
+                onPointerUp={() => setDraggingPlacement(false)}
+                onPointerLeave={() => setDraggingPlacement(false)}
+                style={{ ...previewStyle, transform: `scale(${previewScale})` }}
+              >
+                <aside className="codex-rail"><RenderIcon slot="branding" profile={draft} assets={assets} /><span className="rail-line active" /><span className="rail-line" /><span className="rail-line" /><span className="rail-avatar" /></aside>
+                <aside className="codex-nav"><strong>Codex</strong><button>新任务</button><button>拉取请求</button><button>站点</button><button>已安排</button><button>插件</button><small>项目</small><button className="project-row"><RenderIcon slot="project" profile={draft} assets={assets} />Codex-Dream-Skin</button></aside>
+                <section className="codex-main" ref={previewRef}>
+                  <header className="preview-brand"><span>✦</span><div><strong>初音未来主题 Codex App</strong><small>你的专属 AI 编程与创作伙伴</small></div><em>MIKU ✦ 01</em></header>
+                  <div className="preview-home-content">
+                    <section className="dream-layout-root dream-hero">
+                      <div className="dream-heading-region">
+                        <h1 className="dream-heading">
+                          <span className="dream-copy-node dream-copy-before">{headingParts.before}</span>
+                          <button className="dream-project-selector" type="button">Codex-Dream-Skin</button>
+                          <span className="dream-copy-node dream-copy-after">{headingParts.after}</span>
+                          <span className="dream-copy-node dream-copy-subtitle">{draft.copy.subtitle}</span>
+                        </h1>
+                      </div>
+                      <div className="dream-action-grid">
+                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" type="button" key={action.label}><span className="dream-action-icon"><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} /></span><span className="dream-action-label">{action.label}</span><span className="dream-action-heart"><RenderIcon slot="decoration" profile={draft} assets={assets} /></span></button>)}
+                      </div>
+                    </section>
+                    <div className="dream-project-bar preview-project-bar"><button type="button"><RenderIcon slot="project" profile={draft} assets={assets} />Codex-Dream-Skin</button></div>
+                    <div className="dream-composer preview-composer"><span>随心输入，让灵感与代码一起起飞吧～</span><div><span>完全访问</span><RenderIcon slot="composer" profile={draft} assets={assets} /></div></div>
+                  </div>
+                  {polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} onPointerDown={beginPlacementDrag} />}
+                </section>
+              </div>
+            </div>
           </div>
         </section>
 
         <aside className="inspector">
           <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
+            <Property title="首页文案">
+              <label className="copy-field">首页标题<input value={draft.copy.headingTemplate} maxLength={120} aria-invalid={Boolean(headingTemplateError(draft.copy.headingTemplate))} onChange={(event) => change((profile) => { profile.copy.headingTemplate = event.target.value })} /></label>
+              <label className="copy-field">副标题<textarea value={draft.copy.subtitle} maxLength={160} rows={3} onChange={(event) => change((profile) => { profile.copy.subtitle = event.target.value })} /></label>
+              {copyValidationError && <p className="field-error">{copyValidationError}</p>}
+            </Property>
             <Property title="主视觉">
               <button className="asset-picker" onClick={() => void selectImage('hero')}>{heroUrl ? <img src={heroUrl} alt="主视觉" /> : <Image size={20} />}<span><Upload size={13} />选择背景图片</span></button>
               <Range label="缩放" min={.5} max={3} step={.01} value={draft.hero.scale} onChange={(value) => change((profile) => { profile.hero.scale = value })} />
