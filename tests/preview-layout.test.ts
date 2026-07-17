@@ -95,6 +95,7 @@ describe('Studio home preview', () => {
     expect(lowerRule).toContain('flex: 1')
     expect(lowerRule).toContain('justify-content: flex-end')
     expect(projectRule).toContain('width: 100%')
+    expect(projectRule).toContain('border-radius: 28px 28px 0 0')
     expect(lowerRule).toContain('padding: 0 54px 14px')
     expect(composerRule).toContain('width: 100%')
     expect(composerRule).toContain('height: 128px')
