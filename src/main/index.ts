@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, type NativeImag
 import { join } from 'node:path'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
+import { captureIpcResult } from '../shared/ipc-result'
 
 let mainWindow: BrowserWindow | null = null
 let store: ProfileStore
@@ -54,13 +55,17 @@ function registerIpc(): void {
     if (result.canceled || !result.filePaths[0]) return null
     return store.importAsset(themeId, result.filePaths[0], purpose)
   })
-  ipcMain.handle('codex:detect', () => codexService.detect())
-  ipcMain.handle('codex:install-theme', (_event, themeId: string) => codexService.installTheme(themeId))
-  ipcMain.handle('codex:start', (_event, themeId: string, restartExisting: boolean) => codexService.start(themeId, restartExisting === true))
-  ipcMain.handle('codex:verify', () => codexService.verify())
-  ipcMain.handle('codex:reinject', (_event, themeId: string) => codexService.reinject(themeId))
-  ipcMain.handle('codex:stop', () => codexService.stop())
-  ipcMain.handle('codex:restore', (_event, restartCodex: boolean) => codexService.restore(restartCodex === true))
+  ipcMain.handle('codex:detect', () => captureIpcResult(() => codexService.detect()))
+  ipcMain.handle('codex:install-theme', (_event, themeId: string) =>
+    captureIpcResult(() => codexService.installTheme(themeId)))
+  ipcMain.handle('codex:start', (_event, themeId: string, restartExisting: boolean) =>
+    captureIpcResult(() => codexService.start(themeId, restartExisting === true)))
+  ipcMain.handle('codex:verify', () => captureIpcResult(() => codexService.verify()))
+  ipcMain.handle('codex:reinject', (_event, themeId: string) =>
+    captureIpcResult(() => codexService.reinject(themeId)))
+  ipcMain.handle('codex:stop', () => captureIpcResult(() => codexService.stop()))
+  ipcMain.handle('codex:restore', (_event, restartCodex: boolean) =>
+    captureIpcResult(() => codexService.restore(restartCodex === true)))
   ipcMain.handle('runtime:get-status', () => codexService.getStatus())
 }
 

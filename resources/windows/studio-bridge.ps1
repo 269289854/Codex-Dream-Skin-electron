@@ -114,6 +114,7 @@ try {
   if ($Action -eq 'Start') {
     Assert-DreamSkinPort -Port $Port
     $codex = Get-DreamSkinCodexInstall
+    $selectedPort = $Port
     $identity = Get-DreamSkinVerifiedCdpIdentity -Port $Port -Codex $codex
     if ($null -eq $identity) {
       $processes = @(Get-DreamSkinCodexProcesses -Codex $codex)
@@ -121,20 +122,22 @@ try {
         if (-not $RestartExisting) { throw 'Codex must restart once to enable the local theme endpoint.' }
         Stop-DreamSkinCodex -Codex $codex -AllowForce
       }
-      if (-not (Test-DreamSkinPortAvailable -Port $Port)) { throw "Port $Port is occupied by another process." }
+      if (-not (Wait-DreamSkinPortAvailable -Port $Port -TimeoutSeconds 3)) {
+        $selectedPort = Select-DreamSkinPort -PreferredPort $Port
+      }
       Start-DreamSkinCodexProcess -Codex $codex -Arguments @(
-        '--remote-debugging-address=127.0.0.1', "--remote-debugging-port=$Port"
+        '--remote-debugging-address=127.0.0.1', "--remote-debugging-port=$selectedPort"
       ) | Out-Null
       $deadline = (Get-Date).AddSeconds(45)
       do {
         Start-Sleep -Milliseconds 400
-        $identity = Get-DreamSkinVerifiedCdpIdentity -Port $Port -Codex $codex
+        $identity = Get-DreamSkinVerifiedCdpIdentity -Port $selectedPort -Codex $codex
       } while ($null -eq $identity -and (Get-Date) -lt $deadline)
-      if ($null -eq $identity) { throw "Codex did not expose a verified loopback endpoint on port $Port." }
+      if ($null -eq $identity) { throw "Codex did not expose a verified loopback endpoint on port $selectedPort." }
     }
     Write-StudioResult ([pscustomobject]@{
       started = $true
-      port = $Port
+      port = $selectedPort
       browserId = $identity.BrowserId
       targetCount = $identity.TargetCount
       version = $codex.Version

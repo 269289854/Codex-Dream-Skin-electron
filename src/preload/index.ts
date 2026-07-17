@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { StudioApi } from '../shared/contracts'
+import { unwrapIpcResult, type IpcResult } from '../shared/ipc-result'
+
+async function invokeCodex<T>(channel: string, ...args: unknown[]): Promise<T> {
+  const result = await ipcRenderer.invoke(channel, ...args) as IpcResult<T>
+  return unwrapIpcResult(result)
+}
 
 const api: StudioApi = {
   app: {
@@ -20,13 +26,13 @@ const api: StudioApi = {
     selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon')
   },
   codex: {
-    detect: () => ipcRenderer.invoke('codex:detect'),
-    installTheme: (themeId) => ipcRenderer.invoke('codex:install-theme', themeId),
-    start: (themeId, restartExisting) => ipcRenderer.invoke('codex:start', themeId, restartExisting),
-    verify: () => ipcRenderer.invoke('codex:verify'),
-    reinject: (themeId) => ipcRenderer.invoke('codex:reinject', themeId),
-    stop: () => ipcRenderer.invoke('codex:stop'),
-    restore: (restartCodex) => ipcRenderer.invoke('codex:restore', restartCodex)
+    detect: () => invokeCodex('codex:detect'),
+    installTheme: (themeId) => invokeCodex('codex:install-theme', themeId),
+    start: (themeId, restartExisting) => invokeCodex('codex:start', themeId, restartExisting),
+    verify: () => invokeCodex('codex:verify'),
+    reinject: (themeId) => invokeCodex('codex:reinject', themeId),
+    stop: () => invokeCodex('codex:stop'),
+    restore: (restartCodex) => invokeCodex('codex:restore', restartCodex)
   },
   runtime: {
     getStatus: () => ipcRenderer.invoke('runtime:get-status'),
