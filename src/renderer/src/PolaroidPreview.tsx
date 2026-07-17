@@ -15,6 +15,7 @@ export function PolaroidPreview({ imageUrl, fence, sourceSize, placement, onPoin
   return (
     <div
       className="preview-polaroid dream-layout-polaroid"
+      data-preview-target="polaroid"
       onPointerDown={onPointerDown}
       style={{
         left: `${placement.x * 100}%`,

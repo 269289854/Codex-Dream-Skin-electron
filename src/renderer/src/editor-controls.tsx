@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { Sparkles, Upload } from 'lucide-react'
 import { HOME_ACTION_FALLBACK_BUILTINS } from '../../shared/home-layout'
 import { resolveBuiltinIconGlyph } from '../../shared/icon-glyphs'
@@ -55,12 +56,13 @@ interface ThemeIconControlProps {
   assets: Record<string, string>
   onChange: (name: string) => void
   onImport: () => void
+  highlighted?: boolean
 }
 
-export function ThemeIconControl({ slot, profile, assets, onChange, onImport }: ThemeIconControlProps): React.JSX.Element {
+export function ThemeIconControl({ slot, profile, assets, onChange, onImport, highlighted = false }: ThemeIconControlProps): React.JSX.Element {
   const source = profile.icons[slot]
   return (
-    <div className="icon-slot" data-icon-slot={slot}>
+    <div className={highlighted ? 'icon-slot inspector-highlight' : 'icon-slot'} data-icon-slot={slot} data-inspector-anchor={`icon-${slot}`}>
       <span className="icon-preview"><RenderIcon slot={slot} profile={profile} assets={assets} /></span>
       <label>{iconLabels[slot]}
         <select value={source.kind === 'builtin' ? source.name : '__asset'} onChange={(event) => { if (event.target.value !== '__asset') onChange(event.target.value) }}>

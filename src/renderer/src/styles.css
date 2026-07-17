@@ -78,3 +78,36 @@ button { cursor: pointer; }
 .toggle-row { min-height: 30px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; color: #57777d; font-size: 10px; }
 .toggle-row input { width: 34px; height: 18px; accent-color: #149ba2; }
 .primary-button:disabled { opacity: .5; cursor: not-allowed; }
+
+.codex-preview [data-preview-target] { cursor: pointer; }
+.codex-preview [data-preview-target]:hover { outline: 2px solid color-mix(in srgb, var(--dream-accent) 58%, white); outline-offset: -2px; }
+.codex-preview [data-preview-target]:has([data-preview-target]:hover) { outline-color: transparent; }
+.codex-preview [data-preview-selected="true"] { outline: 3px solid color-mix(in srgb, var(--dream-accent) 82%, #08737a) !important; outline-offset: -3px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.88); }
+.codex-preview .dream-action-icon[data-preview-selected="true"],.codex-preview .dream-action-heart[data-preview-selected="true"],.codex-preview .preview-brand-icon[data-preview-selected="true"] { border-radius: 5px; outline-offset: 2px; }
+
+.preview-edit-popover { position: absolute; z-index: 25; width: min(270px, calc(100% - 16px)); max-height: calc(100% - 16px); display: grid; grid-template-rows: auto minmax(0,1fr) auto; overflow: hidden; border: 1px solid #b8cfd2; border-radius: 7px; color: #173e46; background: rgba(251,254,254,.98); box-shadow: 0 18px 46px rgba(32,67,74,.24),0 2px 8px rgba(32,67,74,.12); }
+.preview-edit-popover.measuring { visibility: hidden; }
+.preview-edit-popover-header { min-height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px 8px 12px; border-bottom: 1px solid #dce7e8; background: #f3f8f8; }
+.preview-edit-popover-header > div { min-width: 0; display: grid; gap: 2px; }
+.preview-edit-popover-header span { color: #7a9499; font-size: 8px; font-weight: 700; }
+.preview-edit-popover-header strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.preview-edit-close { width: 29px; height: 29px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; color: #607d82; background: transparent; }
+.preview-edit-close:hover { color: #164b59; background: #e3eeee; }
+.preview-edit-popover-body { min-height: 0; overflow-y: auto; padding: 12px; }
+.preview-edit-popover .range-row { grid-template-columns: 58px minmax(0,1fr) 42px; font-size: 9px; }
+.quick-copy-field { display: grid; gap: 6px; color: #57777d; font-size: 9px; }
+.quick-copy-field input,.quick-copy-field textarea { width: 100%; padding: 8px 9px; border: 1px solid #c4d6d9; border-radius: 5px; outline: 0; color: #173f49; background: #fff; font: 10px/1.45 inherit; resize: vertical; }
+.quick-copy-field input:focus,.quick-copy-field textarea:focus { border-color: #159ca3; box-shadow: 0 0 0 2px rgba(21,156,163,.12); }
+.quick-copy-field input[aria-invalid="true"] { border-color: #d84a5d; }
+.quick-asset-command { position: relative; width: 100%; height: 78px; display: grid; place-items: center; margin-bottom: 8px; overflow: hidden; border: 1px dashed #b7cdd0; border-radius: 5px; color: #69878c; background: #edf4f5; }
+.quick-asset-command img { width: 100%; height: 100%; object-fit: cover; }
+.quick-asset-command span { position: absolute; right: 7px; bottom: 7px; display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 4px; color: #fff; background: rgba(21,65,73,.8); font-size: 8px; }
+.quick-color-grid { gap: 8px 10px; }
+.quick-icon-editor .icon-slot { grid-template-columns: 34px minmax(0,1fr) 31px; }
+.quick-icon-editor .icon-preview { width: 34px; height: 34px; }
+.preview-edit-popover-footer { padding: 8px 10px; border-top: 1px solid #dce7e8; background: #f7fbfb; }
+.preview-edit-popover-footer button { width: 100%; min-height: 32px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #bfd4d7; border-radius: 5px; color: #19777e; background: #fff; font-size: 10px; }
+.preview-edit-popover-footer button:hover { border-color: #8ebbc0; background: #edf8f8; }
+.property-group,.icon-slot { transition: background-color .18s ease,box-shadow .18s ease; }
+.property-group.inspector-highlight { margin-inline: -8px; padding-inline: 8px; border-radius: 5px; background: #eaf8f8; box-shadow: inset 3px 0 #159ca3; }
+.icon-slot.inspector-highlight { margin-inline: -5px; padding: 5px; border-radius: 5px; background: #eaf8f8; box-shadow: inset 3px 0 #159ca3; }

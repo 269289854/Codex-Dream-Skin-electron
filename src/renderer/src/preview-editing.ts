@@ -79,6 +79,16 @@ export type PreviewTargetId = keyof typeof PREVIEW_TARGETS
 
 export const PREVIEW_TARGET_ATTRIBUTE = 'data-preview-target'
 
+export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
+  branding: 'icon-branding',
+  cardPrimary: 'icon-card-primary',
+  cardSecondary: 'icon-card-secondary',
+  composer: 'icon-composer',
+  project: 'icon-project',
+  decoration: 'icon-decoration',
+  polaroidPin: 'icon-polaroid-pin'
+}
+
 export function isPreviewTargetId(value: string | undefined): value is PreviewTargetId {
   return Boolean(value && Object.prototype.hasOwnProperty.call(PREVIEW_TARGETS, value))
 }
