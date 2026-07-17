@@ -1,4 +1,4 @@
-import { parse } from 'culori'
+import { converter, formatRgb, parse } from 'culori'
 import { z } from 'zod'
 
 export const MAX_CSS_COLOR_LENGTH = 128
@@ -223,7 +223,115 @@ export function resolveAppearanceColor(appearance: ThemeAppearance, colors: Lega
 }
 
 export function resolveAppearancePaint(appearance: ThemeAppearance, colors: LegacyThemeColors, token: AppearancePaintToken): ThemePaint {
-  return appearance.paints[token] ?? { kind: 'solid', color: colors[APPEARANCE_PAINT_TOKENS[token].fallback] }
+  return appearance.paints[token] ?? resolveDefaultAppearancePaint(colors, token)
+}
+
+const toRgb = converter('rgb')
+
+export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: AppearancePaintToken): ThemePaint {
+  const tint = (color: string, amount: number): string => mixCssColors(colors.surface, color, amount)
+  const blend = (from: string, to: string, amount: number): string => mixCssColors(from, to, amount)
+  const linear = (angle: number, stops: Array<[string, number]>): ThemePaint => ({
+    kind: 'linear',
+    angle,
+    stops: stops.map(([color, position]) => ({ color, position }))
+  })
+
+  switch (token) {
+    case 'canvas':
+      return linear(135, [[colors.surface, 0], [tint(colors.lavender, 0.1), 0.52], [tint(colors.pink, 0.08), 1]])
+    case 'mainSurface':
+      return linear(180, [[tint(colors.accent, 0.03), 0], [colors.surface, 0.48], [tint(colors.pink, 0.06), 1]])
+    case 'conversationMessage':
+      return linear(145, [[colors.surface, 0], [tint(colors.lavender, 0.06), 0.54], [tint(colors.pink, 0.05), 1]])
+    case 'conversationMessageHover':
+      return linear(135, [[tint(colors.accent, 0.1), 0], [tint(colors.lavender, 0.16), 0.55], [tint(colors.pink, 0.12), 1]])
+    case 'primaryButton':
+      return linear(145, [[colors.accent, 0], [blend(colors.accent, colors.lavender, 0.45), 0.55], [colors.lavender, 1]])
+    case 'primaryButtonHover':
+      return linear(145, [[colors.accent, 0], [colors.lavender, 0.52], [colors.pink, 1]])
+    case 'primaryButtonSelected':
+      return linear(145, [[colors.lavender, 0], [blend(colors.lavender, colors.pink, 0.55), 0.56], [colors.pink, 1]])
+    case 'sidebarSurface':
+      return linear(180, [[colors.surface, 0], [tint(colors.accent, 0.08), 0.58], [tint(colors.lavender, 0.1), 1]])
+    case 'sidebarHeader':
+    case 'sidebarModeBadge':
+    case 'sidebarSearchButton':
+    case 'sidebarNavItem':
+    case 'sidebarProjectRow':
+    case 'sidebarTaskRow':
+    case 'sidebarFooter':
+    case 'composerToolButton':
+      return { kind: 'solid', color: 'transparent' }
+    case 'sidebarSearchButtonHover':
+    case 'sidebarNavItemHover':
+    case 'sidebarProjectRowHover':
+    case 'sidebarTaskRowHover':
+    case 'composerToolButtonHover':
+      return linear(90, [[tint(colors.accent, 0.24), 0], [tint(colors.pink, 0.18), 1]])
+    case 'sidebarNavItemSelected':
+    case 'sidebarProjectRowSelected':
+    case 'composerToolButtonSelected':
+      return linear(90, [[tint(colors.accent, 0.27), 0], [tint(colors.pink, 0.2), 1]])
+    case 'sidebarAvatar':
+      return linear(145, [[tint(colors.lavender, 0.13), 0], [tint(colors.pink, 0.1), 1]])
+    case 'brandSurface':
+      return linear(90, [[colors.surface, 0], [tint(colors.accent, 0.12), 0.5], [tint(colors.pink, 0.14), 1]])
+    case 'homeHeadingBackdrop':
+      return { kind: 'solid', color: tint(colors.accent, 0.1) }
+    case 'projectSelector':
+      return linear(135, [[colors.surface, 0], [tint(colors.accent, 0.12), 1]])
+    case 'projectSelectorHover':
+      return linear(90, [[tint(colors.accent, 0.18), 0], [tint(colors.pink, 0.12), 1]])
+    case 'projectSelectorSelected':
+      return linear(90, [[tint(colors.accent, 0.24), 0], [tint(colors.pink, 0.18), 1]])
+    case 'actionCard':
+      return linear(145, [[colors.surface, 0], [tint(colors.lavender, 0.06), 0.54], [tint(colors.pink, 0.08), 1]])
+    case 'actionCardHover':
+      return linear(145, [[tint(colors.accent, 0.12), 0], [tint(colors.lavender, 0.14), 0.55], [tint(colors.pink, 0.14), 1]])
+    case 'actionCardSelected':
+      return linear(145, [[tint(colors.accent, 0.18), 0], [tint(colors.pink, 0.2), 1]])
+    case 'actionCardIconBadge':
+      return linear(145, [[colors.accent, 0], [colors.lavender, 0.58], [colors.pink, 1]])
+    case 'projectBar':
+      return linear(180, [[colors.surface, 0], [tint(colors.pink, 0.12), 1]])
+    case 'projectChip':
+      return linear(135, [[colors.surface, 0], [tint(colors.accent, 0.12), 1]])
+    case 'projectChipHover':
+      return linear(90, [[tint(colors.accent, 0.18), 0], [tint(colors.pink, 0.12), 1]])
+    case 'projectChipSelected':
+      return linear(90, [[tint(colors.accent, 0.24), 0], [tint(colors.pink, 0.18), 1]])
+    case 'composer':
+      return linear(145, [[colors.surface, 0], [tint(colors.lavender, 0.05), 0.52], [tint(colors.pink, 0.08), 1]])
+    case 'composerSendButton':
+      return linear(145, [[colors.accent, 0], [colors.pink, 1]])
+    case 'composerSendButtonHover':
+      return linear(145, [[colors.accent, 0], [colors.lavender, 0.52], [colors.pink, 1]])
+    case 'composerSendButtonSelected':
+      return linear(145, [[colors.lavender, 0], [colors.pink, 1]])
+    default: {
+      const exhaustiveToken: never = token
+      return exhaustiveToken
+    }
+  }
+}
+
+function mixCssColors(from: string, to: string, amount: number): string {
+  const parsedFrom = parse(from)
+  const parsedTo = parse(to)
+  if (!parsedFrom || !parsedTo) return from
+  const fromRgb = toRgb(parsedFrom)
+  const toRgbColor = toRgb(parsedTo)
+  if (!fromRgb || !toRgbColor ||
+    typeof fromRgb.r !== 'number' || typeof fromRgb.g !== 'number' || typeof fromRgb.b !== 'number' ||
+    typeof toRgbColor.r !== 'number' || typeof toRgbColor.g !== 'number' || typeof toRgbColor.b !== 'number') return from
+  return formatRgb({
+    mode: 'rgb',
+    r: fromRgb.r + (toRgbColor.r - fromRgb.r) * amount,
+    g: fromRgb.g + (toRgbColor.g - fromRgb.g) * amount,
+    b: fromRgb.b + (toRgbColor.b - fromRgb.b) * amount,
+    alpha: (fromRgb.alpha ?? 1) + ((toRgbColor.alpha ?? 1) - (fromRgb.alpha ?? 1)) * amount
+  }) ?? from
 }
 
 function formatNumber(value: number): string {

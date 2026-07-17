@@ -3,6 +3,7 @@ import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTIONS, PROJECT_PLACEHOLDE
 import { createDefaultTheme, parseThemeProfile } from '../src/shared/theme'
 import { compileTheme } from '../src/main/theme-compiler'
 import { buildDynamicThemeCss } from '../src/main/codex-service'
+import { buildThemeStyleVariables } from '../src/shared/runtime-theme'
 
 const id = '11111111-1111-4111-8111-111111111111'
 
@@ -53,6 +54,10 @@ describe('theme schema and compiler', () => {
     expect(migratedZero.copy).toEqual(expectedCopy)
     expect(migratedZero.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
     expect(migratedZero.polaroid.visible).toBe(true)
+    for (const migrated of [migratedFour, migratedThree, migratedTwo, migratedOne, migratedZero]) {
+      expect(buildThemeStyleVariables(migrated)['--dream-canvas']).toContain('linear-gradient(135deg')
+    }
+    expect(buildThemeStyleVariables(migratedZero)['--dream-action-card-icon-badge']).toContain('#123456')
     expect(parseThemeProfile({ ...migratedZero, colors: { ...migratedZero.colors, accent: 'red' } }).colors.accent).toBe('red')
     expect(() => parseThemeProfile({ ...migratedZero, colors: { ...migratedZero.colors, accent: 'red; background: black' } })).toThrow()
   })

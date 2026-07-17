@@ -208,7 +208,6 @@ describe('Studio preview editing interaction', () => {
     if (!selector || !canvas) throw new Error('Project selector preview is missing.')
     pointerDown(selector)
 
-    act(() => clickDialogButton('线性'))
     expect(canvas.style.getPropertyValue('--dream-project-selector')).toContain('linear-gradient(135deg')
     let angle = container.querySelector<HTMLInputElement>('[role="dialog"] .paint-control > .range-row input')
     if (!angle) throw new Error('Gradient angle control is missing.')
@@ -223,8 +222,6 @@ describe('Studio preview editing interaction', () => {
     if (!undo) throw new Error('Undo command is missing.')
     act(() => undo.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(canvas.style.getPropertyValue('--dream-project-selector')).toContain('linear-gradient(135deg')
-    act(() => undo.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
-    expect(canvas.style.getPropertyValue('--dream-project-selector')).not.toContain('gradient(')
 
     act(() => clickDialogButton('悬停'))
     expect(selector.getAttribute('data-preview-state')).toBe('hover')
@@ -234,6 +231,29 @@ describe('Studio preview editing interaction', () => {
     expect(selector.getAttribute('data-preview-state')).toBe('selected')
     act(() => clickDialogButton('普通'))
     expect(selector.getAttribute('data-preview-state')).toBe('normal')
+  })
+
+  it('persists a user gradient edited directly from the inherited default', async () => {
+    const selector = container.querySelector<HTMLElement>('[data-preview-target="project-selector"]')
+    if (!selector) throw new Error('Project selector preview is missing.')
+    pointerDown(selector)
+
+    const angle = container.querySelector<HTMLInputElement>('[role="dialog"] .paint-control > .range-row input')
+    if (!angle) throw new Error('Inherited gradient angle control is missing.')
+    act(() => {
+      setInputValue(angle, '225')
+      angle.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    })
+
+    const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('保存主题'))
+    if (!save) throw new Error('Save theme command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+
+    expect(savedProfiles).toHaveLength(1)
+    expect(savedProfiles[0]?.appearance.paints.projectSelector).toMatchObject({ kind: 'linear', angle: 225 })
   })
 
   it('supports keyboard selection and links quick editing to the full inspector', async () => {

@@ -2,12 +2,25 @@ import { describe, expect, it } from 'vitest'
 import {
   APPEARANCE_COLOR_TOKENS,
   APPEARANCE_PAINT_TOKENS,
+  createEmptyAppearance,
   isCssColor,
   paintToCss,
   parseCssColor,
+  resolveAppearancePaint,
   themeAppearanceSchema,
   themePaintSchema
 } from '../src/shared/appearance'
+
+const legacyColors = {
+  surface: '#F7FFFF',
+  ink: '#164B59',
+  accent: '#20BCC3',
+  pink: '#F06EA9',
+  lavender: '#B9A7E8',
+  border: '#BFDADD',
+  success: '#169B68',
+  danger: '#D84A5D'
+}
 
 describe('appearance model', () => {
   it.each([
@@ -71,5 +84,30 @@ describe('appearance model', () => {
     const definitions = [...Object.values(APPEARANCE_COLOR_TOKENS), ...Object.values(APPEARANCE_PAINT_TOKENS)]
     expect(new Set(definitions.map((token) => token.cssVariable)).size).toBe(definitions.length)
     expect(definitions.every((token) => token.targets.length > 0)).toBe(true)
+  })
+
+  it('restores the original cyan, pink, and lavender gradients when no paint is overridden', () => {
+    const appearance = createEmptyAppearance()
+    expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'canvas'))).toMatch(/^linear-gradient\(135deg, /)
+    expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'sidebarSurface'))).toMatch(/^linear-gradient\(180deg, /)
+    expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'brandSurface'))).toMatch(/^linear-gradient\(90deg, /)
+    expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'actionCardIconBadge'))).toBe(
+      'linear-gradient(145deg, #20BCC3 0%, #B9A7E8 58%, #F06EA9 100%)'
+    )
+    expect(resolveAppearancePaint(appearance, legacyColors, 'sidebarHeader')).toEqual({ kind: 'solid', color: 'transparent' })
+  })
+
+  it('recomputes inherited gradients from legacy theme colors and keeps explicit overrides authoritative', () => {
+    const appearance = createEmptyAppearance()
+    const changedColors = { ...legacyColors, accent: '#123456', pink: '#654321', lavender: '#ABCDEF' }
+    expect(paintToCss(resolveAppearancePaint(appearance, changedColors, 'canvas'))).not.toBe(
+      paintToCss(resolveAppearancePaint(appearance, legacyColors, 'canvas'))
+    )
+    expect(paintToCss(resolveAppearancePaint(appearance, changedColors, 'actionCardIconBadge'))).toContain('#123456')
+
+    appearance.paints.canvas = { kind: 'solid', color: 'rebeccapurple' }
+    expect(resolveAppearancePaint(appearance, changedColors, 'canvas')).toEqual({ kind: 'solid', color: 'rebeccapurple' })
+    delete appearance.paints.canvas
+    expect(paintToCss(resolveAppearancePaint(appearance, changedColors, 'canvas'))).toMatch(/^linear-gradient\(135deg, /)
   })
 })
