@@ -3,7 +3,15 @@ import { Image, PanelRightOpen, Upload, X } from 'lucide-react'
 import { headingTemplateError } from '../../shared/home-layout'
 import type { ThemeProfile } from '../../shared/theme'
 import { Range, ThemeColorControl, ThemeIconControl } from './editor-controls'
-import type { PopoverPosition, PreviewTargetDefinition } from './preview-editing'
+import type { PopoverPosition, PreviewCopyField, PreviewTargetDefinition } from './preview-editing'
+
+const copyFieldConfig: Record<PreviewCopyField, { label: string; maxLength: number; rows?: number }> = {
+  headingTemplate: { label: '首页标题', maxLength: 120 },
+  subtitle: { label: '副标题', maxLength: 160, rows: 3 },
+  brandTitle: { label: '品牌主标题', maxLength: 80 },
+  brandSubtitle: { label: '品牌副标题', maxLength: 120, rows: 2 },
+  brandSignature: { label: '品牌签名', maxLength: 32 }
+}
 
 interface PreviewQuickEditorProps {
   target: PreviewTargetDefinition
@@ -35,6 +43,12 @@ export function PreviewQuickEditor({
   onClose
 }: PreviewQuickEditorProps): React.JSX.Element {
   const editor = target.editor
+  const copyConfig = editor.kind === 'copy' ? copyFieldConfig[editor.field] : null
+  const copyInvalid = editor.kind === 'copy' && copyConfig ? (
+    profile.copy[editor.field].length > copyConfig.maxLength ||
+    (editor.field === 'headingTemplate' && Boolean(headingTemplateError(profile.copy.headingTemplate))) ||
+    (editor.field === 'brandTitle' && !profile.copy.brandTitle.trim())
+  ) : false
   return (
     <section
       ref={popoverRef}
@@ -49,21 +63,14 @@ export function PreviewQuickEditor({
         <button className="preview-edit-close" type="button" title="关闭快捷配置" onClick={onClose}><X size={16} /></button>
       </header>
       <div className="preview-edit-popover-body">
-        {editor.kind === 'copy' && editor.field === 'headingTemplate' && (
-          <label className="quick-copy-field">首页标题
-            <input
-              value={profile.copy.headingTemplate}
-              maxLength={120}
-              aria-invalid={Boolean(headingTemplateError(profile.copy.headingTemplate))}
-              onChange={(event) => onChange((next) => { next.copy.headingTemplate = event.target.value })}
-            />
+        {editor.kind === 'copy' && copyConfig && (
+          <label className="quick-copy-field">{copyConfig.label}
+            {copyConfig.rows
+              ? <textarea value={profile.copy[editor.field]} maxLength={copyConfig.maxLength} rows={copyConfig.rows} aria-invalid={copyInvalid} onInput={(event) => onChange((next) => { next.copy[editor.field] = event.currentTarget.value })} />
+              : <input value={profile.copy[editor.field]} maxLength={copyConfig.maxLength} aria-invalid={copyInvalid} onInput={(event) => onChange((next) => { next.copy[editor.field] = event.currentTarget.value })} />}
           </label>
         )}
-        {editor.kind === 'copy' && editor.field === 'subtitle' && (
-          <label className="quick-copy-field">副标题
-            <textarea value={profile.copy.subtitle} maxLength={160} rows={3} onChange={(event) => onChange((next) => { next.copy.subtitle = event.target.value })} />
-          </label>
-        )}
+        {editor.kind === 'copy' && editor.field === 'brandTitle' && copyInvalid && <p className="field-error">品牌主标题不能为空。</p>}
         {editor.kind === 'hero' && <>
           <button className="quick-asset-command" type="button" onClick={() => onSelectImage('hero')}>
             {heroUrl ? <img src={heroUrl} alt="主视觉" /> : <Image size={20} />}

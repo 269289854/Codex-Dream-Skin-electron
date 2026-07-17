@@ -86,4 +86,29 @@ describe('preview quick editor', () => {
     })
     expect(profile.icons.composer).toEqual({ kind: 'builtin', name: 'heart' })
   })
+
+  it('edits each brand copy field independently', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    const cases = [
+      ['copy-brand-title', 'brandTitle', '新的品牌主标题'],
+      ['copy-brand-subtitle', 'brandSubtitle', '新的品牌副标题'],
+      ['copy-brand-signature', 'brandSignature', 'MIKU NEW']
+    ] as const
+
+    for (const [targetId, field, value] of cases) {
+      renderEditor(PREVIEW_TARGETS[targetId], profile)
+      const control = container.querySelector<HTMLInputElement | HTMLTextAreaElement>('.quick-copy-field input, .quick-copy-field textarea')
+      if (!control) throw new Error(`${targetId} copy control is missing.`)
+      const prototype = control.tagName === 'TEXTAREA'
+        ? browserWindow.HTMLTextAreaElement.prototype
+        : browserWindow.HTMLInputElement.prototype
+      act(() => {
+        control.focus()
+        Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(control, value)
+        control.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+        control.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      })
+      expect(profile.copy[field]).toBe(value)
+    }
+  })
 })

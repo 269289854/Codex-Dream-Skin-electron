@@ -43,6 +43,21 @@ describe('preview editing registry', () => {
     expect(isPreviewTargetId('unknown-target')).toBe(false)
   })
 
+  it('maps each brand copy target to the shared brand inspector group', () => {
+    expect(PREVIEW_TARGETS['copy-brand-title']).toMatchObject({
+      inspectorAnchor: 'visual-brand-copy',
+      editor: { kind: 'copy', field: 'brandTitle' }
+    })
+    expect(PREVIEW_TARGETS['copy-brand-subtitle']).toMatchObject({
+      inspectorAnchor: 'visual-brand-copy',
+      editor: { kind: 'copy', field: 'brandSubtitle' }
+    })
+    expect(PREVIEW_TARGETS['copy-brand-signature']).toMatchObject({
+      inspectorAnchor: 'visual-brand-copy',
+      editor: { kind: 'copy', field: 'brandSignature' }
+    })
+  })
+
   it('resolves the most specific nested target inside the preview root', () => {
     const root = {
       contains: () => true

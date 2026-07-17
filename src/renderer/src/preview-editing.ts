@@ -1,10 +1,11 @@
-import type { IconSlot, ThemeColors } from '../../shared/theme'
+import type { IconSlot, ThemeColors, ThemeProfile } from '../../shared/theme'
 
 export type InspectorTab = 'visual' | 'icons'
 export type PreviewPaletteRegion = 'sidebar' | 'brand' | 'canvas' | 'action-card' | 'project-bar' | 'composer'
+export type PreviewCopyField = keyof ThemeProfile['copy']
 
 export type PreviewEditor =
-  | { kind: 'copy'; field: 'headingTemplate' | 'subtitle' }
+  | { kind: 'copy'; field: PreviewCopyField }
   | { kind: 'hero' }
   | { kind: 'polaroid' }
   | { kind: 'palette'; region: PreviewPaletteRegion; colors: readonly (keyof ThemeColors)[] }
@@ -36,6 +37,24 @@ const iconTarget = (label: string, slot: IconSlot): PreviewTargetDefinition => (
 })
 
 export const PREVIEW_TARGETS = {
+  'copy-brand-title': {
+    label: '品牌主标题',
+    inspector: 'visual',
+    inspectorAnchor: 'visual-brand-copy',
+    editor: { kind: 'copy', field: 'brandTitle' }
+  },
+  'copy-brand-subtitle': {
+    label: '品牌副标题',
+    inspector: 'visual',
+    inspectorAnchor: 'visual-brand-copy',
+    editor: { kind: 'copy', field: 'brandSubtitle' }
+  },
+  'copy-brand-signature': {
+    label: '品牌签名',
+    inspector: 'visual',
+    inspectorAnchor: 'visual-brand-copy',
+    editor: { kind: 'copy', field: 'brandSignature' }
+  },
   'copy-heading': {
     label: '首页标题',
     inspector: 'visual',

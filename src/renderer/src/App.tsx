@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
-import { headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
+import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { colorLabels, iconLabels, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { FenceEditor } from './FenceEditor'
@@ -197,9 +197,11 @@ export function App(): React.JSX.Element {
 
   const save = async (): Promise<boolean> => {
     if (!draft) return false
-    const copyError = headingTemplateError(draft.copy.headingTemplate)
-    if (copyError || draft.copy.subtitle.trim().length > 160) {
-      setError(copyError ?? '首页副标题不能超过 160 个字符。')
+    const copyError = headingTemplateError(draft.copy.headingTemplate) ??
+      (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null) ??
+      brandCopyError(draft.copy)
+    if (copyError) {
+      setError(copyError)
       return false
     }
     setSaving(true)
@@ -356,7 +358,9 @@ export function App(): React.JSX.Element {
   const heroUrl = draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
   const polaroidUrl = draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
   const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
-  const copyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.trim().length > 160 ? '首页副标题不能超过 160 个字符。' : null)
+  const homeCopyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
+  const brandValidationError = brandCopyError(draft.copy)
+  const copyValidationError = homeCopyValidationError ?? brandValidationError
   const selectedTarget = previewSelection ? PREVIEW_TARGETS[previewSelection.id] : null
   const previewStyle = {
     '--dream-surface': draft.colors.surface,
@@ -403,7 +407,7 @@ export function App(): React.JSX.Element {
               >
                 <CodexSidebarPreview profile={draft} assets={assets} />
                 <section className="codex-main" ref={previewRef} data-preview-target="palette-canvas">
-                  <header className="preview-brand" data-preview-target="palette-brand" tabIndex={0} role="button" aria-label="编辑品牌栏颜色"><span className="preview-brand-icon" data-preview-target="icon-branding"><RenderIcon slot="branding" profile={draft} assets={assets} /></span><div><strong>初音未来主题 Codex App</strong><small>你的专属 AI 编程与创作伙伴</small></div><em>MIKU ✦ 01</em></header>
+                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
                   <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
@@ -469,10 +473,16 @@ export function App(): React.JSX.Element {
         <aside className="inspector" ref={inspectorRef}>
           <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
+            <Property title="品牌文案" anchor="visual-brand-copy" highlighted={inspectorAnchor === 'visual-brand-copy'}>
+              <label className="copy-field">品牌主标题<input value={draft.copy.brandTitle} maxLength={80} aria-invalid={!draft.copy.brandTitle.trim() || draft.copy.brandTitle.length > 80} onChange={(event) => change((profile) => { profile.copy.brandTitle = event.target.value })} /></label>
+              <label className="copy-field">品牌副标题<textarea value={draft.copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => change((profile) => { profile.copy.brandSubtitle = event.target.value })} /></label>
+              <label className="copy-field">品牌签名<input value={draft.copy.brandSignature} maxLength={32} onChange={(event) => change((profile) => { profile.copy.brandSignature = event.target.value })} /></label>
+              {brandValidationError && <p className="field-error">{brandValidationError}</p>}
+            </Property>
             <Property title="首页文案" anchor="visual-copy" highlighted={inspectorAnchor === 'visual-copy'}>
               <label className="copy-field">首页标题<input value={draft.copy.headingTemplate} maxLength={120} aria-invalid={Boolean(headingTemplateError(draft.copy.headingTemplate))} onChange={(event) => change((profile) => { profile.copy.headingTemplate = event.target.value })} /></label>
               <label className="copy-field">副标题<textarea value={draft.copy.subtitle} maxLength={160} rows={3} onChange={(event) => change((profile) => { profile.copy.subtitle = event.target.value })} /></label>
-              {copyValidationError && <p className="field-error">{copyValidationError}</p>}
+              {homeCopyValidationError && <p className="field-error">{homeCopyValidationError}</p>}
             </Property>
             <Property title="主视觉" anchor="visual-hero" highlighted={inspectorAnchor === 'visual-hero'}>
               <button className="asset-picker" onClick={() => void selectImage('hero')}>{heroUrl ? <img src={heroUrl} alt="主视觉" /> : <Image size={20} />}<span><Upload size={13} />选择背景图片</span></button>

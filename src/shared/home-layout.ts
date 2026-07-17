@@ -62,3 +62,15 @@ export function headingTemplateError(template: string): string | null {
   if (!splitHeadingTemplate(trimmed)) return `首页标题必须且只能包含一个 ${PROJECT_PLACEHOLDER}。`
   return null
 }
+
+export function brandCopyError(copy: {
+  brandTitle: string
+  brandSubtitle: string
+  brandSignature: string
+}): string | null {
+  if (!copy.brandTitle.trim()) return '品牌主标题不能为空。'
+  if (copy.brandTitle.length > 80) return '品牌主标题不能超过 80 个字符。'
+  if (copy.brandSubtitle.length > 120) return '品牌副标题不能超过 120 个字符。'
+  if (copy.brandSignature.length > 32) return '品牌签名不能超过 32 个字符。'
+  return null
+}
