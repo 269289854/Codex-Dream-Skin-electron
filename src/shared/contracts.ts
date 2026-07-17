@@ -44,6 +44,12 @@ export interface RuntimeStatus {
   message: string
 }
 
+export interface PolaroidPlacementUpdate {
+  themeId: string
+  x: number
+  y: number
+}
+
 export interface StudioApi {
   app: {
     getInfo: () => Promise<AppInfo>
@@ -57,6 +63,7 @@ export interface StudioApi {
     delete: (id: string) => Promise<void>
     activate: (id: string) => Promise<ThemeProfile>
     compile: (id: string) => Promise<CompiledTheme>
+    subscribePolaroidPlacement: (listener: (update: PolaroidPlacementUpdate) => void) => () => void
   }
   assets: {
     selectImage: (themeId: string, purpose: Exclude<AssetPurpose, 'icon'>) => Promise<ImportedAsset | null>

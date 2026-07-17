@@ -8,6 +8,13 @@
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
+  let pendingPlacementUpdate = null;
+  const takePlacementUpdate = () => {
+    const update = pendingPlacementUpdate;
+    pendingPlacementUpdate = null;
+    return update;
+  };
+  const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
   const builtinGlyphs = {
     sparkles: "✦", "wand-sparkles": "✧", image: "▣", send: "➤",
@@ -56,6 +63,82 @@
 
   const findVisible = (root, selector) =>
     [...root.querySelectorAll(selector)].find(isVisible) || null;
+
+  const installPolaroidDragging = (chrome, polaroid) => {
+    if (!(chrome instanceof HTMLElement) || !(polaroid instanceof HTMLElement)) return;
+    const themeId = typeof themeConfig?.themeId === "string" ? themeConfig.themeId : "";
+    const dragVersion = `${VERSION}:${themeId}`;
+    if (polaroid.dataset.dreamDragVersion === dragVersion) return;
+
+    polaroid.dataset.dreamDragVersion = dragVersion;
+    polaroid.classList.remove("dream-polaroid-dragging");
+    polaroid.style.removeProperty("left");
+    polaroid.style.removeProperty("right");
+    polaroid.style.removeProperty("top");
+    let drag = null;
+
+    const finishDrag = (event) => {
+      if (!drag) return;
+      const completed = drag;
+      drag = null;
+      polaroid.classList.remove("dream-polaroid-dragging");
+      if (polaroid.hasPointerCapture?.(completed.pointerId)) polaroid.releasePointerCapture(completed.pointerId);
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      if (completed.moved && themeId) {
+        pendingPlacementUpdate = { themeId, x: completed.x, y: completed.y };
+      }
+    };
+
+    polaroid.onpointerdown = (event) => {
+      if (event.button !== 0 || !themeId) return;
+      const shellBox = chrome.getBoundingClientRect();
+      const photoBox = polaroid.getBoundingClientRect();
+      const shellWidth = shellBox.width;
+      const shellHeight = shellBox.height;
+      const photoWidth = polaroid.offsetWidth || photoBox.width;
+      const photoHeight = polaroid.offsetHeight || photoBox.height;
+      if (shellWidth <= 0 || shellHeight <= 0 || photoWidth <= 0 || photoHeight <= 0) return;
+      const startLeft = polaroid.offsetLeft;
+      const startTop = polaroid.offsetTop;
+      drag = {
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        startLeft,
+        startTop,
+        shellWidth,
+        shellHeight,
+        maxLeft: Math.max(0, shellWidth - photoWidth),
+        maxTop: Math.max(0, shellHeight - photoHeight),
+        x: clamp(startLeft / shellWidth, 0, 1),
+        y: clamp(startTop / shellHeight, 0, 1),
+        moved: false,
+      };
+      polaroid.classList.add("dream-polaroid-dragging");
+      polaroid.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    polaroid.onpointermove = (event) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const left = clamp(drag.startLeft + event.clientX - drag.startClientX, 0, drag.maxLeft);
+      const top = clamp(drag.startTop + event.clientY - drag.startClientY, 0, drag.maxTop);
+      drag.x = left / drag.shellWidth;
+      drag.y = top / drag.shellHeight;
+      drag.moved = drag.moved || left !== drag.startLeft || top !== drag.startTop;
+      polaroid.style.setProperty("right", "auto", "important");
+      polaroid.style.setProperty("left", `${drag.x * 100}%`, "important");
+      polaroid.style.setProperty("top", `${drag.y * 100}%`, "important");
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    polaroid.onpointerup = finishDrag;
+    polaroid.onpointercancel = finishDrag;
+    polaroid.onlostpointercapture = finishDrag;
+  };
 
   const findHomeContext = () => {
     const headings = [...document.querySelectorAll('[data-feature="game-source"]')].filter(isVisible);
@@ -340,6 +423,7 @@
       chrome.querySelector(".dream-polaroid")?.appendChild(pin);
     }
     renderSlot(pin, "polaroidPin", "●");
+    installPolaroidDragging(chrome, chrome.querySelector(".dream-polaroid"));
 
     const shellBox = shellMain.getBoundingClientRect();
     chrome.style.left = `${Math.round(shellBox.left)}px`;
@@ -398,6 +482,7 @@
     ensure,
     cleanup,
     populateComposer,
+    takePlacementUpdate,
     observer,
     timer,
     scheduler,

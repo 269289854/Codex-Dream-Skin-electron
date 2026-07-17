@@ -1,12 +1,20 @@
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
 vi.mock('../src/main/powershell', () => ({ runPowerShell: runPowerShellMock }))
 
 import { CodexService } from '../src/main/codex-service'
+import { ProfileStore } from '../src/main/profile-store'
+
+const roots: string[] = []
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+})
 
 const detection = {
   found: true,
@@ -40,5 +48,37 @@ describe('CodexService operation queue', () => {
     release(detection)
     await Promise.all([resume, detect])
     expect(runPowerShellMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('persists a runtime polaroid move and rebuilds the payload without changing other placement fields', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-runtime-placement-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const summary = (await store.list())[0]
+    if (!summary) throw new Error('Default theme was not created.')
+    const original = await store.get(summary.id)
+    const placementListener = vi.fn()
+    const service = new CodexService(store, join(process.cwd(), 'resources', 'windows'), () => undefined, placementListener)
+    const internal = service as unknown as {
+      activeThemeId: string | null
+      operationTail: Promise<void>
+      queuePolaroidPlacement: (update: { themeId: string; x: number; y: number }) => void
+    }
+    internal.activeThemeId = summary.id
+
+    internal.queuePolaroidPlacement({ themeId: summary.id, x: 0.27, y: 0.64 })
+    await internal.operationTail
+
+    const saved = await store.get(summary.id)
+    expect(saved.polaroid.placement).toEqual({ ...original.polaroid.placement, x: 0.27, y: 0.64 })
+    expect(placementListener).toHaveBeenCalledWith({ themeId: summary.id, x: 0.27, y: 0.64 })
+    const payload = await readFile(join(root, 'runtime', 'payload.js'), 'utf8')
+    expect(payload).toContain(JSON.stringify(summary.id))
+
+    internal.queuePolaroidPlacement({ themeId: '22222222-2222-4222-8222-222222222222', x: 0.4, y: 0.5 })
+    await internal.operationTail
+    expect(placementListener).toHaveBeenCalledTimes(1)
+    expect((await store.get(summary.id)).polaroid.placement).toEqual(saved.polaroid.placement)
   })
 })

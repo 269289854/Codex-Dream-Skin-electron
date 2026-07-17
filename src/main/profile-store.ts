@@ -102,6 +102,12 @@ export class ProfileStore {
     return next
   }
 
+  async updatePolaroidPlacement(id: string, placement: Pick<ThemeProfile['polaroid']['placement'], 'x' | 'y'>): Promise<ThemeProfile> {
+    const profile = await this.get(id)
+    profile.polaroid.placement = { ...profile.polaroid.placement, ...placement }
+    return await this.update(profile)
+  }
+
   async delete(id: string): Promise<void> {
     const themes = await this.list()
     if (themes.length <= 1) throw new Error('At least one theme must remain.')

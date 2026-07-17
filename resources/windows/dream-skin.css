@@ -232,6 +232,14 @@ html.codex-dream-skin main.main-surface > header.app-header-tint {
   box-shadow: none !important;
   clip-path: polygon(6% 0, 100% 8%, 92% 100%, 0 89%);
   filter: none !important;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.dream-polaroid.dream-polaroid-dragging {
+  cursor: grabbing;
 }
 
 .dream-custom-icon {

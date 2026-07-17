@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_HOME_COPY, HOME_ACTIONS } from '../src/shared/home-layout'
 
 let template = ''
+const themeId = '11111111-1111-4111-8111-111111111111'
 const windows: Window[] = []
 
 beforeAll(async () => {
@@ -68,6 +69,7 @@ function inject(window: Window): void {
     .replace('__DREAM_CSS_JSON__', JSON.stringify('.dream-layout-root { display: block; }'))
     .replace('__DREAM_ART_JSON__', JSON.stringify('data:image/png;base64,AA=='))
     .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
+      themeId,
       icons: {},
       copy: { ...DEFAULT_HOME_COPY, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
       actions: HOME_ACTIONS
@@ -75,13 +77,56 @@ function inject(window: Window): void {
   window.eval(payload)
 }
 
-function stateOf(window: Window): { ensure: () => void; cleanup: () => void } {
-  const state = (window as unknown as Record<string, { ensure: () => void; cleanup: () => void } | undefined>).__CODEX_DREAM_SKIN_STATE__
+function stateOf(window: Window): { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown } {
+  const state = (window as unknown as Record<string, { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown } | undefined>).__CODEX_DREAM_SKIN_STATE__
   if (!state) throw new Error('Renderer injection state was not installed.')
   return state
 }
 
 describe('renderer home DOM adaptation', () => {
+  it('drags the polaroid within the shell and exposes the final position once', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    inject(window)
+
+    const chrome = window.document.getElementById('codex-dream-skin-chrome')
+    const polaroid = chrome?.querySelector('.dream-polaroid') as unknown as HTMLElement | null
+    if (!chrome || !polaroid) throw new Error('Injected polaroid fixture is missing.')
+
+    Object.defineProperties(polaroid, {
+      offsetLeft: { configurable: true, value: 700 },
+      offsetTop: { configurable: true, value: 120 },
+      offsetWidth: { configurable: true, value: 200 },
+      offsetHeight: { configurable: true, value: 240 }
+    })
+    let capturedPointer: number | null = null
+    polaroid.setPointerCapture = (pointerId: number) => { capturedPointer = pointerId }
+    polaroid.hasPointerCapture = (pointerId: number) => capturedPointer === pointerId
+    polaroid.releasePointerCapture = () => { capturedPointer = null }
+
+    const pointer = (clientX: number, clientY: number): PointerEvent => ({
+      button: 0,
+      pointerId: 7,
+      clientX,
+      clientY,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    }) as unknown as PointerEvent
+
+    polaroid.onpointerdown?.(pointer(720, 140))
+    expect(capturedPointer).toBe(7)
+    polaroid.onpointermove?.(pointer(1200, 900))
+    polaroid.onpointerup?.(pointer(1200, 900))
+
+    expect(polaroid.style.getPropertyValue('left')).toBe('80%')
+    expect(Number.parseFloat(polaroid.style.getPropertyValue('top'))).toBeCloseTo(460 / 700 * 100)
+    const update = stateOf(window).takePlacementUpdate()
+    expect(update).toEqual({ themeId, x: 0.8, y: 460 / 700 })
+    expect(stateOf(window).takePlacementUpdate()).toBeNull()
+    expect(capturedPointer).toBeNull()
+    expect(polaroid.classList.contains('dream-polaroid-dragging')).toBe(false)
+  })
+
   it('creates a synchronized clickable project proxy for long project names', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Codex-Dream-Skin-electron')

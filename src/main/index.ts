@@ -126,6 +126,8 @@ if (!hasSingleInstanceLock) {
     codexService = new CodexService(store, resourcesRoot, (status) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
       try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
+    }, (update) => {
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send('themes:polaroid-placement', update)
     })
     registerIpc()
     createWindow()

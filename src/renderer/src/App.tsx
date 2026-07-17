@@ -66,6 +66,17 @@ export function App(): React.JSX.Element {
     return window.studio.runtime.subscribeStatus(setRuntime)
   }, [])
 
+  useEffect(() => window.studio.themes.subscribePolaroidPlacement((update) => {
+    setDraft((current) => current?.id === update.themeId ? {
+      ...current,
+      polaroid: {
+        ...current.polaroid,
+        placement: { ...current.polaroid.placement, x: update.x, y: update.y }
+      }
+    } : current)
+    void refreshThemes().catch((reason) => setError(messageOf(reason)))
+  }), [refreshThemes])
+
   useEffect(() => {
     const stage = previewStageRef.current
     if (!stage) return

@@ -1,9 +1,20 @@
 import WebSocket from 'ws'
+import type { PolaroidPlacementUpdate } from '../shared/contracts'
 
 interface CdpVersion { webSocketDebuggerUrl: string }
 interface CdpTarget { id: string; type: string; url: string; webSocketDebuggerUrl: string }
 
 const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); return true; })()'
+const TAKE_PLACEMENT_EXPRESSION = 'window.__CODEX_DREAM_SKIN_STATE__?.takePlacementUpdate?.() ?? null'
+
+export function parsePolaroidPlacementUpdate(value: unknown): PolaroidPlacementUpdate | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as Partial<PolaroidPlacementUpdate>
+  if (typeof candidate.themeId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(candidate.themeId)) return null
+  if (typeof candidate.x !== 'number' || !Number.isFinite(candidate.x) || candidate.x < 0 || candidate.x > 1) return null
+  if (typeof candidate.y !== 'number' || !Number.isFinite(candidate.y) || candidate.y < 0 || candidate.y > 1) return null
+  return { themeId: candidate.themeId, x: candidate.x, y: candidate.y }
+}
 
 export function isThemeCdpTargetUrl(value: string): boolean {
   try {
@@ -38,7 +49,8 @@ export class CdpWatcher {
     readonly port: number,
     readonly browserId: string,
     private readonly onSnapshot: (snapshot: CdpSnapshot) => void,
-    private readonly onError: (error: Error) => void
+    private readonly onError: (error: Error) => void,
+    private readonly onPlacementUpdate: (update: PolaroidPlacementUpdate) => void = () => undefined
   ) {
     if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('CDP port is invalid.')
     if (!/^[A-Za-z0-9._-]{1,200}$/.test(browserId)) throw new Error('CDP browser identity is invalid.')
@@ -100,9 +112,19 @@ export class CdpWatcher {
     try {
       const verified = await this.verify()
       if (!verified.connected) await this.inject()
+      else await this.collectPlacementUpdates()
     } catch (reason) {
       this.onError(reason instanceof Error ? reason : new Error(String(reason)))
     } finally { this.busy = false }
+  }
+
+  private async collectPlacementUpdates(): Promise<void> {
+    const targets = await this.targets()
+    const results = await Promise.all(targets.map((target) => this.evaluate(target, TAKE_PLACEMENT_EXPRESSION)))
+    for (const result of results) {
+      const update = parsePolaroidPlacementUpdate(result)
+      if (update) this.onPlacementUpdate(update)
+    }
   }
 
   private async cleanupExcludedTargets(): Promise<void> {
