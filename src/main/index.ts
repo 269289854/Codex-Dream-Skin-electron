@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, type NativeImage, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, type NativeImage, type OpenDialogOptions } from 'electron'
 import { join } from 'node:path'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
@@ -9,6 +9,7 @@ let store: ProfileStore
 let codexService: CodexService
 let tray: Tray | null = null
 let trayIcon: NativeImage | null = null
+let appIconPath = ''
 let quitting = false
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -80,6 +81,7 @@ function createWindow(): void {
     minWidth: 1120,
     minHeight: 720,
     show: false,
+    icon: appIconPath || undefined,
     backgroundColor: '#eef4f5',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -121,9 +123,14 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     if (process.platform !== 'win32') throw new Error('Codex Dream Skin Studio only supports Windows.')
-    trayIcon = await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
     const localAppData = process.env.LOCALAPPDATA ?? app.getPath('userData')
     const resourcesRoot = app.isPackaged ? join(process.resourcesPath, 'windows') : join(app.getAppPath(), 'resources', 'windows')
+    appIconPath = join(resourcesRoot, 'codex-dream-skin.ico')
+    const customIcon = nativeImage.createFromPath(appIconPath)
+    trayIcon = customIcon.isEmpty()
+      ? await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
+      : customIcon.resize({ width: 16, height: 16 })
+    app.setAppUserModelId('com.codexdreamskin.studio')
     store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), join(resourcesRoot, 'dream-reference.png'))
     await store.initialize()
     codexService = new CodexService(store, resourcesRoot, (status) => {

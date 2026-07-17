@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0 - 2026-07-18
+
+- Added the Codex Dream Skin Studio Windows application icon to the window, taskbar tray, installer, and uninstaller.
+- Added a customizable-directory Windows x64 NSIS release package.
+
 ## 0.1.0 - 2026-07-17
 
 - Added the Windows Electron theme studio and secure preload IPC bridge.
