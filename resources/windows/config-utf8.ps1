@@ -206,9 +206,6 @@ function Assert-DreamSkinDesktopShapeSupported {
   if ([regex]::IsMatch($Content, "(?m)^[\t ]*\[\[[\t ]*$desktopToken[\t ]*\]\]")) {
     throw 'Refusing to rewrite a config that represents desktop as an array of tables.'
   }
-  if ([regex]::IsMatch($Content, "(?m)^[\t ]*\[\[?[\t ]*$desktopToken[\t ]*\.")) {
-    throw 'Refusing to rewrite nested desktop tables; normalize them to a single [desktop] table first.'
-  }
 
   $firstTable = [regex]::Match($Content, '(?m)^[\t ]*\[\[?')
   $rootContent = if ($firstTable.Success) { $Content.Substring(0, $firstTable.Index) } else { $Content }

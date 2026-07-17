@@ -147,6 +147,8 @@ try {
     $restored = $false
     if (Test-Path -LiteralPath $paths.Backup) {
       Restore-DreamSkinBaseTheme -ConfigPath $paths.Config -BackupPath $paths.Backup
+      $archive = Join-Path (Split-Path -Parent $paths.Backup) ("config.restored-{0}.toml" -f (Get-Date).ToString('yyyyMMdd-HHmmss-fff'))
+      Archive-DreamSkinConfigBackup -BackupPath $paths.Backup -ArchivePath $archive
       $restored = $true
     }
     if ($RestartCodex) {

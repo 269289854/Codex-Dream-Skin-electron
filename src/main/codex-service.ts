@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
@@ -12,6 +12,8 @@ const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABC
 
 export class CodexService {
   private watcher: CdpWatcher | null = null
+  private activeThemeId: string | null = null
+  private recovering = false
   private status: RuntimeStatus = {
     phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null,
     backupAvailable: false, lastError: null, message: '等待检测 Codex'
@@ -25,6 +27,52 @@ export class CodexService {
 
   getStatus(): RuntimeStatus { return { ...this.status } }
   isActive(): boolean { return this.status.phase === 'active' || this.status.phase === 'injecting' || this.status.phase === 'starting' }
+
+  async resume(): Promise<void> {
+    let detection: CodexDetection
+    try {
+      detection = await this.bridge<CodexDetection>('Detect')
+      this.status.codexVersion = detection.version
+      this.status.backupAvailable = detection.backupAvailable
+    } catch (reason) {
+      this.status.lastError = reason instanceof Error ? reason.message : String(reason)
+      this.patch('error', '启动时无法检测 Microsoft Store Codex')
+      return
+    }
+
+    let session: { version?: number; themeId?: string; port?: number; browserId?: string }
+    try {
+      session = JSON.parse(await readFile(this.sessionPath(), 'utf8')) as typeof session
+    } catch (reason) {
+      if ((reason as NodeJS.ErrnoException).code === 'ENOENT') {
+        const message = detection.backupAvailable
+          ? '检测到可恢复的 Codex 配置备份'
+          : detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex'
+        this.patch('ready', message)
+        return
+      }
+      this.status.lastError = reason instanceof Error ? reason.message : String(reason)
+      this.patch('ready', '运行会话记录不可用，可重新启动或恢复')
+      return
+    }
+
+    try {
+      if (session.version !== 1 || !session.themeId || !session.browserId || !session.port) throw new Error('Saved runtime session is invalid.')
+      await this.store.get(session.themeId)
+      this.status.port = session.port
+      this.activeThemeId = session.themeId
+      this.patch('injecting', '正在恢复上次主题会话')
+      const payload = await this.buildPayload(session.themeId)
+      await this.writeRuntimePayload(payload)
+      await this.replaceWatcher(session.browserId, payload)
+      this.patch('active', '已恢复上次主题会话')
+    } catch (reason) {
+      await rm(this.sessionPath(), { force: true })
+      this.activeThemeId = null
+      this.status.lastError = reason instanceof Error ? reason.message : String(reason)
+      this.patch('ready', detection.backupAvailable ? '上次主题会话已结束，可恢复配置或重新启动' : '上次主题会话已结束，可重新启动')
+    }
+  }
 
   async detect(): Promise<CodexDetection> {
     this.patch('detecting', '正在检测 Microsoft Store Codex')
@@ -58,7 +106,9 @@ export class CodexService {
       const result = await this.bridge<StartResult>('Start', args, 65_000)
       this.status.port = result.port
       this.status.codexVersion = result.version
+      this.activeThemeId = themeId
       await this.replaceWatcher(result.browserId, await this.readRuntimePayload())
+      await this.writeSession(themeId, result.browserId)
       this.patch('active', `主题已注入 ${result.targetCount} 个 Codex 页面`)
       return this.getStatus()
     } catch (reason) { throw this.fail(reason) }
@@ -87,6 +137,8 @@ export class CodexService {
   }
 
   async stop(): Promise<RuntimeStatus> {
+    this.activeThemeId = null
+    await rm(this.sessionPath(), { force: true })
     if (this.watcher) await this.watcher.stop(true)
     this.watcher = null
     this.patch('stopped', '已停止注入并移除当前页面主题')
@@ -98,6 +150,8 @@ export class CodexService {
     try {
       if (this.watcher) await this.watcher.stop(true)
       this.watcher = null
+      this.activeThemeId = null
+      await rm(this.sessionPath(), { force: true })
       const args = restartCodex ? ['-RestartCodex'] : []
       await this.bridge('Restore', args, 65_000)
       this.status.backupAvailable = false
@@ -115,7 +169,12 @@ export class CodexService {
         this.status.targetCount = snapshot.targetCount
         this.emit()
       },
-      (error) => { this.status.lastError = error.message; this.status.message = '注入监视等待 Codex 页面恢复'; this.emit() }
+      (error) => {
+        this.status.lastError = error.message
+        this.status.message = 'Codex 会话中断，正在尝试恢复'
+        this.emit()
+        void this.recoverActiveSession()
+      }
     )
     this.watcher.setPayload(payload)
     await this.watcher.start()
@@ -163,10 +222,47 @@ export class CodexService {
     await mkdir(directory, { recursive: true })
     const temporary = join(directory, 'payload.js.tmp')
     const target = join(directory, 'payload.js')
+    const backup = join(directory, 'payload.js.previous')
     await writeFile(temporary, payload, 'utf8')
-    await rename(temporary, target).catch(async () => { await writeFile(target, payload, 'utf8') })
+    let hadTarget = false
+    try {
+      try { await rename(target, backup); hadTarget = true } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+      await rename(temporary, target)
+      if (hadTarget) await rm(backup, { force: true })
+    } catch (error) {
+      await rm(temporary, { force: true })
+      if (hadTarget) await rename(backup, target).catch(() => undefined)
+      throw error
+    }
   }
   private readRuntimePayload(): Promise<string> { return readFile(join(this.store.root, 'runtime', 'payload.js'), 'utf8') }
+
+  private async recoverActiveSession(): Promise<void> {
+    if (this.recovering || !this.activeThemeId) return
+    this.recovering = true
+    const themeId = this.activeThemeId
+    try {
+      this.patch('starting', '正在恢复 Codex 主题会话')
+      const result = await this.bridge<StartResult>('Start', ['-Port', String(this.status.port), '-RestartExisting'], 65_000)
+      const payload = await this.buildPayload(themeId)
+      await this.writeRuntimePayload(payload)
+      await this.replaceWatcher(result.browserId, payload)
+      await this.writeSession(themeId, result.browserId)
+      this.patch('active', 'Codex 主题会话已自动恢复')
+    } catch (reason) {
+      this.status.lastError = reason instanceof Error ? reason.message : String(reason)
+      this.status.phase = 'error'
+      this.status.message = '自动恢复失败，请重新启动主题'
+      this.emit()
+    } finally { this.recovering = false }
+  }
+
+  private sessionPath(): string { return join(this.store.root, 'runtime', 'session.json') }
+  private async writeSession(themeId: string, browserId: string): Promise<void> {
+    const path = this.sessionPath()
+    await mkdir(join(this.store.root, 'runtime'), { recursive: true })
+    await writeFile(path, `${JSON.stringify({ version: 1, themeId, port: this.status.port, browserId }, null, 2)}\n`, 'utf8')
+  }
 
   private bridge<T>(action: string, extra: string[] = [], timeoutMs?: number): Promise<T> {
     return runPowerShell<T>(join(this.resourcesRoot, 'studio-bridge.ps1'), ['-Action', action, '-StudioRoot', this.store.root, ...extra], timeoutMs)

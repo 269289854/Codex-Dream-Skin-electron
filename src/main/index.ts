@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, type NativeImage, type OpenDialogOptions } from 'electron'
 import { join } from 'node:path'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
@@ -7,6 +7,7 @@ let mainWindow: BrowserWindow | null = null
 let store: ProfileStore
 let codexService: CodexService
 let tray: Tray | null = null
+let trayIcon: NativeImage | null = null
 let quitting = false
 
 function showWindow(): void {
@@ -15,8 +16,8 @@ function showWindow(): void {
 }
 
 function updateTray(): void {
-  if (codexService.isActive() && !tray) {
-    tray = new Tray(process.execPath)
+  if (codexService.isActive() && !tray && trayIcon) {
+    tray = new Tray(trayIcon)
     tray.setToolTip('Codex Dream Skin Studio')
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: '显示主题工作台', click: showWindow },
@@ -106,16 +107,18 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   if (process.platform !== 'win32') throw new Error('Codex Dream Skin Studio only supports Windows.')
+  trayIcon = await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
   const localAppData = process.env.LOCALAPPDATA ?? app.getPath('userData')
-  store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'))
-  await store.initialize()
   const resourcesRoot = app.isPackaged ? join(process.resourcesPath, 'windows') : join(app.getAppPath(), 'resources', 'windows')
+  store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), join(resourcesRoot, 'dream-reference.png'))
+  await store.initialize()
   codexService = new CodexService(store, resourcesRoot, (status) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
-    updateTray()
+    try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
   })
   registerIpc()
   createWindow()
+  void codexService.resume()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })

@@ -18,7 +18,7 @@ export class ProfileStore {
   readonly themesRoot: string
   private readonly settingsPath: string
 
-  constructor(readonly root: string) {
+  constructor(readonly root: string, private readonly bundledDefaultAsset?: string) {
     this.themesRoot = join(root, 'themes')
     this.settingsPath = join(root, 'settings.json')
   }
@@ -29,6 +29,25 @@ export class ProfileStore {
       await this.readSettings()
     } catch {
       const profile = createDefaultTheme(randomUUID())
+      if (this.bundledDefaultAsset) {
+        const relativePath = 'assets/dream-reference.png'
+        const destination = this.resolveAsset(profile.id, relativePath)
+        await mkdir(dirname(destination), { recursive: true })
+        await copyFile(this.bundledDefaultAsset, destination)
+        const metadata = await sharp(destination).metadata()
+        if (metadata.width && metadata.height) {
+          profile.hero.sourceImage = relativePath
+          profile.polaroid.sourceImage = relativePath
+          profile.polaroid.sourceSize = { width: metadata.width, height: metadata.height }
+          profile.polaroid.fence = [
+            { x: 0.850, y: 0.739 },
+            { x: 0.981, y: 0.690 },
+            { x: 0.999, y: 0.930 },
+            { x: 0.871, y: 0.977 }
+          ]
+          profile.polaroid.placement = { x: 0.76, y: 0.56, width: 0.19, rotation: -2, hideBelowWidth: 920 }
+        }
+      }
       await this.writeProfile(profile)
       await this.writeJsonAtomic(this.settingsPath, { version: 1, activeThemeId: profile.id })
     }
