@@ -120,6 +120,7 @@ describe('Studio home preview', () => {
     const source = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'App.tsx'), 'utf8')
     expect(source).toContain('draft.polaroid.visible && polaroidUrl')
     expect(source).toContain('checked={draft.polaroid.visible}')
-    expect(source).toContain('profile.polaroid.visible = event.target.checked')
+    expect(source).toContain('const visible = event.currentTarget.checked')
+    expect(source).toContain('profile.polaroid.visible = visible')
   })
 })

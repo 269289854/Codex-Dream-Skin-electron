@@ -49,6 +49,9 @@ export function PreviewQuickEditor({
     (editor.field === 'headingTemplate' && Boolean(headingTemplateError(profile.copy.headingTemplate))) ||
     (editor.field === 'brandTitle' && !profile.copy.brandTitle.trim())
   ) : false
+  const updateCopy = (field: PreviewCopyField, value: string): void => {
+    onChange((next) => { next.copy[field] = value })
+  }
   return (
     <section
       ref={popoverRef}
@@ -66,8 +69,8 @@ export function PreviewQuickEditor({
         {editor.kind === 'copy' && copyConfig && (
           <label className="quick-copy-field">{copyConfig.label}
             {copyConfig.rows
-              ? <textarea value={profile.copy[editor.field]} maxLength={copyConfig.maxLength} rows={copyConfig.rows} aria-invalid={copyInvalid} onInput={(event) => onChange((next) => { next.copy[editor.field] = event.currentTarget.value })} />
-              : <input value={profile.copy[editor.field]} maxLength={copyConfig.maxLength} aria-invalid={copyInvalid} onInput={(event) => onChange((next) => { next.copy[editor.field] = event.currentTarget.value })} />}
+              ? <textarea value={profile.copy[editor.field]} maxLength={copyConfig.maxLength} rows={copyConfig.rows} aria-invalid={copyInvalid} onInput={(event) => updateCopy(editor.field, event.currentTarget.value)} />
+              : <input value={profile.copy[editor.field]} maxLength={copyConfig.maxLength} aria-invalid={copyInvalid} onInput={(event) => updateCopy(editor.field, event.currentTarget.value)} />}
           </label>
         )}
         {editor.kind === 'copy' && editor.field === 'brandTitle' && copyInvalid && <p className="field-error">品牌主标题不能为空。</p>}
@@ -79,7 +82,10 @@ export function PreviewQuickEditor({
           <Range label="缩放" min={.5} max={3} step={.01} value={profile.hero.scale} onChange={(value) => onChange((next) => { next.hero.scale = value })} />
         </>}
         {editor.kind === 'polaroid' && <>
-          <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={profile.polaroid.visible} onChange={(event) => onChange((next) => { next.polaroid.visible = event.target.checked })} /></label>
+          <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={profile.polaroid.visible} onChange={(event) => {
+            const visible = event.currentTarget.checked
+            onChange((next) => { next.polaroid.visible = visible })
+          }} /></label>
           <button className="secondary-command" type="button" onClick={() => onSelectImage('polaroid')}><Image size={15} />{polaroidUrl ? '更换拍立得原图' : '选择拍立得原图'}</button>
           <Range label="宽度" min={.08} max={.6} step={.01} value={profile.polaroid.placement.width} onChange={(value) => onChange((next) => { next.polaroid.placement.width = value })} />
           <Range label="旋转" min={-45} max={45} step={1} value={profile.polaroid.placement.rotation} onChange={(value) => onChange((next) => { next.polaroid.placement.rotation = value })} suffix="°" />

@@ -474,14 +474,14 @@ export function App(): React.JSX.Element {
           <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
             <Property title="品牌文案" anchor="visual-brand-copy" highlighted={inspectorAnchor === 'visual-brand-copy'}>
-              <label className="copy-field">品牌主标题<input value={draft.copy.brandTitle} maxLength={80} aria-invalid={!draft.copy.brandTitle.trim() || draft.copy.brandTitle.length > 80} onChange={(event) => change((profile) => { profile.copy.brandTitle = event.target.value })} /></label>
-              <label className="copy-field">品牌副标题<textarea value={draft.copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => change((profile) => { profile.copy.brandSubtitle = event.target.value })} /></label>
-              <label className="copy-field">品牌签名<input value={draft.copy.brandSignature} maxLength={32} onChange={(event) => change((profile) => { profile.copy.brandSignature = event.target.value })} /></label>
+              <label className="copy-field">品牌主标题<input value={draft.copy.brandTitle} maxLength={80} aria-invalid={!draft.copy.brandTitle.trim() || draft.copy.brandTitle.length > 80} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandTitle = value }) }} /></label>
+              <label className="copy-field">品牌副标题<textarea value={draft.copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSubtitle = value }) }} /></label>
+              <label className="copy-field">品牌签名<input value={draft.copy.brandSignature} maxLength={32} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSignature = value }) }} /></label>
               {brandValidationError && <p className="field-error">{brandValidationError}</p>}
             </Property>
             <Property title="首页文案" anchor="visual-copy" highlighted={inspectorAnchor === 'visual-copy'}>
-              <label className="copy-field">首页标题<input value={draft.copy.headingTemplate} maxLength={120} aria-invalid={Boolean(headingTemplateError(draft.copy.headingTemplate))} onChange={(event) => change((profile) => { profile.copy.headingTemplate = event.target.value })} /></label>
-              <label className="copy-field">副标题<textarea value={draft.copy.subtitle} maxLength={160} rows={3} onChange={(event) => change((profile) => { profile.copy.subtitle = event.target.value })} /></label>
+              <label className="copy-field">首页标题<input value={draft.copy.headingTemplate} maxLength={120} aria-invalid={Boolean(headingTemplateError(draft.copy.headingTemplate))} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.headingTemplate = value }) }} /></label>
+              <label className="copy-field">副标题<textarea value={draft.copy.subtitle} maxLength={160} rows={3} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.subtitle = value }) }} /></label>
               {homeCopyValidationError && <p className="field-error">{homeCopyValidationError}</p>}
             </Property>
             <Property title="主视觉" anchor="visual-hero" highlighted={inspectorAnchor === 'visual-hero'}>
@@ -491,7 +491,7 @@ export function App(): React.JSX.Element {
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
-              <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={draft.polaroid.visible} onChange={(event) => change((profile) => { profile.polaroid.visible = event.target.checked })} /></label>
+              <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={draft.polaroid.visible} onChange={(event) => { const visible = event.currentTarget.checked; change((profile) => { profile.polaroid.visible = visible }) }} /></label>
               <button className="secondary-command" onClick={() => void selectImage('polaroid')}><Image size={15} />{polaroidUrl ? '更换拍立得原图' : '选择拍立得原图'}</button>
               {polaroidUrl && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
               <Range label="宽度" min={.08} max={.6} step={.01} value={draft.polaroid.placement.width} onChange={(value) => change((profile) => { profile.polaroid.placement.width = value })} />

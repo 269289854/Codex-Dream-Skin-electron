@@ -46,14 +46,19 @@ describe('preview quick editor', () => {
     Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
   })
 
-  const renderEditor = (target: PreviewTargetDefinition, profile: ThemeProfile, onMore = vi.fn()): void => {
+  const renderEditor = (
+    target: PreviewTargetDefinition,
+    profile: ThemeProfile,
+    onMore = vi.fn(),
+    onChange = (mutator: (next: ThemeProfile) => void): void => mutator(profile)
+  ): void => {
     act(() => root.render(createElement(PreviewQuickEditor, {
       target,
       profile,
       assets: {},
       position: { left: 20, top: 30, placement: 'right' },
       popoverRef: createRef<HTMLDivElement>(),
-      onChange: (mutator: (next: ThemeProfile) => void) => mutator(profile),
+      onChange,
       onSelectImage: vi.fn(),
       onImportIcon: vi.fn(),
       onMore,
@@ -110,5 +115,28 @@ describe('preview quick editor', () => {
       })
       expect(profile.copy[field]).toBe(value)
     }
+  })
+
+  it('captures copy input before a queued state update runs', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    let queuedChange: ((next: ThemeProfile) => void) | undefined
+    renderEditor(
+      PREVIEW_TARGETS['copy-brand-signature'],
+      profile,
+      vi.fn(),
+      (mutator) => { queuedChange = mutator }
+    )
+    const control = container.querySelector<HTMLInputElement>('.quick-copy-field input')
+    if (!control) throw new Error('Brand signature control is missing.')
+
+    act(() => {
+      control.focus()
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(control, 'QUEUED VALUE')
+      control.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+    })
+
+    expect(queuedChange).toBeTypeOf('function')
+    expect(() => queuedChange?.(profile)).not.toThrow()
+    expect(profile.copy.brandSignature).toBe('QUEUED VALUE')
   })
 })
