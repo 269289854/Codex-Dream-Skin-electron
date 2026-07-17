@@ -18,6 +18,23 @@ const api: StudioApi = {
   assets: {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),
     selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon')
+  },
+  codex: {
+    detect: () => ipcRenderer.invoke('codex:detect'),
+    installTheme: (themeId) => ipcRenderer.invoke('codex:install-theme', themeId),
+    start: (themeId, restartExisting) => ipcRenderer.invoke('codex:start', themeId, restartExisting),
+    verify: () => ipcRenderer.invoke('codex:verify'),
+    reinject: (themeId) => ipcRenderer.invoke('codex:reinject', themeId),
+    stop: () => ipcRenderer.invoke('codex:stop'),
+    restore: (restartCodex) => ipcRenderer.invoke('codex:restore', restartCodex)
+  },
+  runtime: {
+    getStatus: () => ipcRenderer.invoke('runtime:get-status'),
+    subscribeStatus: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: Parameters<typeof listener>[0]) => listener(status)
+      ipcRenderer.on('runtime:status', handler)
+      return () => ipcRenderer.removeListener('runtime:status', handler)
+    }
   }
 }
 

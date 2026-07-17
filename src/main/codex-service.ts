@@ -1,0 +1,177 @@
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
+import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
+import type { ThemeProfile } from '../shared/theme'
+import { CdpWatcher } from './cdp-watcher'
+import { runPowerShell } from './powershell'
+import type { ProfileStore } from './profile-store'
+
+interface StartResult { port: number; browserId: string; targetCount: number; version: string }
+const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
+
+export class CodexService {
+  private watcher: CdpWatcher | null = null
+  private status: RuntimeStatus = {
+    phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null,
+    backupAvailable: false, lastError: null, message: '等待检测 Codex'
+  }
+
+  constructor(
+    private readonly store: ProfileStore,
+    private readonly resourcesRoot: string,
+    private readonly onStatus: (status: RuntimeStatus) => void
+  ) {}
+
+  getStatus(): RuntimeStatus { return { ...this.status } }
+  isActive(): boolean { return this.status.phase === 'active' || this.status.phase === 'injecting' || this.status.phase === 'starting' }
+
+  async detect(): Promise<CodexDetection> {
+    this.patch('detecting', '正在检测 Microsoft Store Codex')
+    try {
+      const detection = await this.bridge<CodexDetection>('Detect')
+      this.status.codexVersion = detection.version
+      this.status.backupAvailable = detection.backupAvailable
+      this.patch('ready', detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex')
+      return detection
+    } catch (reason) { throw this.fail(reason) }
+  }
+
+  async installTheme(themeId: string): Promise<RuntimeStatus> {
+    this.patch('installing', '正在生成并安装主题配置')
+    try {
+      const payload = await this.buildPayload(themeId)
+      await this.writeRuntimePayload(payload)
+      await this.bridge('ApplyConfig', ['-ThemePath', join(this.store.themesRoot, themeId, 'theme.json')])
+      this.status.backupAvailable = true
+      this.patch('ready', '主题配置已安装')
+      return this.getStatus()
+    } catch (reason) { throw this.fail(reason) }
+  }
+
+  async start(themeId: string, restartExisting: boolean): Promise<RuntimeStatus> {
+    try {
+      await this.installTheme(themeId)
+      this.patch('starting', '正在启动 Codex 本地主题会话')
+      const args = ['-Port', String(this.status.port)]
+      if (restartExisting) args.push('-RestartExisting')
+      const result = await this.bridge<StartResult>('Start', args, 65_000)
+      this.status.port = result.port
+      this.status.codexVersion = result.version
+      await this.replaceWatcher(result.browserId, await this.readRuntimePayload())
+      this.patch('active', `主题已注入 ${result.targetCount} 个 Codex 页面`)
+      return this.getStatus()
+    } catch (reason) { throw this.fail(reason) }
+  }
+
+  async reinject(themeId: string): Promise<RuntimeStatus> {
+    if (!this.watcher) throw this.fail(new Error('当前没有活动的 Codex 主题会话。'))
+    try {
+      this.patch('injecting', '正在重新编译并注入主题')
+      const payload = await this.buildPayload(themeId)
+      await this.writeRuntimePayload(payload)
+      this.watcher.setPayload(payload)
+      const snapshot = await this.watcher.inject()
+      this.patch('active', `主题已重新注入 ${snapshot.targetCount} 个页面`)
+      return this.getStatus()
+    } catch (reason) { throw this.fail(reason) }
+  }
+
+  async verify(): Promise<RuntimeStatus> {
+    if (!this.watcher) throw this.fail(new Error('当前没有活动的 Codex 主题会话。'))
+    try {
+      const snapshot = await this.watcher.verify()
+      this.patch(snapshot.connected ? 'active' : 'error', snapshot.connected ? `验证通过，共 ${snapshot.targetCount} 个页面` : '主题验证失败')
+      return this.getStatus()
+    } catch (reason) { throw this.fail(reason) }
+  }
+
+  async stop(): Promise<RuntimeStatus> {
+    if (this.watcher) await this.watcher.stop(true)
+    this.watcher = null
+    this.patch('stopped', '已停止注入并移除当前页面主题')
+    return this.getStatus()
+  }
+
+  async restore(restartCodex: boolean): Promise<RuntimeStatus> {
+    this.patch('restoring', '正在恢复 Codex 原始配置')
+    try {
+      if (this.watcher) await this.watcher.stop(true)
+      this.watcher = null
+      const args = restartCodex ? ['-RestartCodex'] : []
+      await this.bridge('Restore', args, 65_000)
+      this.status.backupAvailable = false
+      this.patch('stopped', restartCodex ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置')
+      return this.getStatus()
+    } catch (reason) { throw this.fail(reason) }
+  }
+
+  private async replaceWatcher(browserId: string, payload: string): Promise<void> {
+    if (this.watcher) await this.watcher.stop(true)
+    this.patch('injecting', '已连接 Codex，正在注入主题')
+    this.watcher = new CdpWatcher(this.status.port, browserId,
+      (snapshot) => {
+        this.status.connected = snapshot.connected
+        this.status.targetCount = snapshot.targetCount
+        this.emit()
+      },
+      (error) => { this.status.lastError = error.message; this.status.message = '注入监视等待 Codex 页面恢复'; this.emit() }
+    )
+    this.watcher.setPayload(payload)
+    await this.watcher.start()
+  }
+
+  private async buildPayload(themeId: string): Promise<string> {
+    const [profile, compiled, baseCss, renderer] = await Promise.all([
+      this.store.get(themeId), this.store.compile(themeId),
+      readFile(join(this.resourcesRoot, 'dream-skin.css'), 'utf8'),
+      readFile(join(this.resourcesRoot, 'renderer-inject.js'), 'utf8')
+    ])
+    const hero = profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
+    const css = `${baseCss}\n${this.dynamicCss(profile, compiled.assets)}\n`
+    const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
+      source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
+    ]))
+    return renderer
+      .replace('__DREAM_VERSION_JSON__', JSON.stringify(`studio-${profile.updatedAt}`))
+      .replace('__DREAM_CSS_JSON__', JSON.stringify(css))
+      .replace('__DREAM_ART_JSON__', JSON.stringify(hero ?? TRANSPARENT_PNG))
+      .replace('__DREAM_CONFIG_JSON__', JSON.stringify({ icons }))
+  }
+
+  private dynamicCss(profile: ThemeProfile, assets: Record<string, string>): string {
+    const c = profile.colors
+    const rules = [`:root.codex-dream-skin { --dream-ink: ${c.ink}; --dream-deep: ${c.accent}; --dream-cyan: ${c.accent}; --dream-pink: ${c.pink}; --dream-lavender: ${c.lavender}; --dream-line: ${c.border}; }`,
+      `html.codex-dream-skin body { color: ${c.ink} !important; background-color: ${c.surface} !important; }`,
+      `.dream-home .dream-hero { background-size: 100% 100%, ${Math.round(profile.hero.scale * 100)}% auto !important; background-position: center, ${profile.hero.position.x * 100}% ${profile.hero.position.y * 100}% !important; }`]
+    const source = profile.polaroid.sourceImage
+    const fence = profile.polaroid.fence as Fence
+    if (source && profile.polaroid.sourceSize && assets[source] && isFenceValid(fence)) {
+      const bounds = fenceBounds(fence)
+      const ratio = (bounds.width * profile.polaroid.sourceSize.width) / (bounds.height * profile.polaroid.sourceSize.height)
+      const positionX = bounds.width === 1 ? 0 : bounds.minX / (1 - bounds.width) * 100
+      const positionY = bounds.height === 1 ? 0 : bounds.minY / (1 - bounds.height) * 100
+      const p = profile.polaroid.placement
+      rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${ratio}; transform: rotate(${p.rotation}deg); transform-origin: center; background-image: url("${assets[source]}") !important; background-size: ${100 / bounds.width}% ${100 / bounds.height}% !important; background-position: ${positionX}% ${positionY}% !important; clip-path: ${fenceClipPath(fence)} !important; }`)
+      rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
+    } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
+    return rules.join('\n')
+  }
+
+  private async writeRuntimePayload(payload: string): Promise<void> {
+    const directory = join(this.store.root, 'runtime')
+    await mkdir(directory, { recursive: true })
+    const temporary = join(directory, 'payload.js.tmp')
+    const target = join(directory, 'payload.js')
+    await writeFile(temporary, payload, 'utf8')
+    await rename(temporary, target).catch(async () => { await writeFile(target, payload, 'utf8') })
+  }
+  private readRuntimePayload(): Promise<string> { return readFile(join(this.store.root, 'runtime', 'payload.js'), 'utf8') }
+
+  private bridge<T>(action: string, extra: string[] = [], timeoutMs?: number): Promise<T> {
+    return runPowerShell<T>(join(this.resourcesRoot, 'studio-bridge.ps1'), ['-Action', action, '-StudioRoot', this.store.root, ...extra], timeoutMs)
+  }
+  private patch(phase: RuntimePhase, message: string): void { this.status.phase = phase; this.status.message = message; if (phase !== 'error') this.status.lastError = null; this.emit() }
+  private fail(reason: unknown): Error { const error = reason instanceof Error ? reason : new Error(String(reason)); this.status.phase = 'error'; this.status.connected = false; this.status.lastError = error.message; this.status.message = '操作失败'; this.emit(); return error }
+  private emit(): void { this.onStatus(this.getStatus()) }
+}

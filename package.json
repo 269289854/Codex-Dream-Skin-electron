@@ -11,6 +11,7 @@
     "build": "npm run typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
+    "test:config": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests/config-utf8.ps1",
     "package:dir": "npm run build && electron-builder --win --x64 --dir",
     "package:win": "npm run build && electron-builder --win nsis --x64"
   },
@@ -19,12 +20,14 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.35.3",
+    "ws": "^8.21.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^35.0.0",
     "electron-builder": "^26.0.12",
@@ -43,6 +46,15 @@
       "dist-electron/**/*",
       "dist/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/windows",
+        "to": "windows",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "win": {
       "target": [

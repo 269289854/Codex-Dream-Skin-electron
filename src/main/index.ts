@@ -1,9 +1,35 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, type OpenDialogOptions } from 'electron'
 import { join } from 'node:path'
 import { ProfileStore } from './profile-store'
+import { CodexService } from './codex-service'
 
 let mainWindow: BrowserWindow | null = null
 let store: ProfileStore
+let codexService: CodexService
+let tray: Tray | null = null
+let quitting = false
+
+function showWindow(): void {
+  mainWindow?.show()
+  mainWindow?.focus()
+}
+
+function updateTray(): void {
+  if (codexService.isActive() && !tray) {
+    tray = new Tray(process.execPath)
+    tray.setToolTip('Codex Dream Skin Studio')
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: '显示主题工作台', click: showWindow },
+      { label: '验证当前主题', click: () => void codexService.verify().catch(() => showWindow()) },
+      { type: 'separator' },
+      { label: '恢复 Codex 并退出', click: () => void codexService.restore(true).finally(() => { quitting = true; app.quit() }) }
+    ]))
+    tray.on('double-click', showWindow)
+  } else if (!codexService.isActive() && tray) {
+    tray.destroy()
+    tray = null
+  }
+}
 
 function registerIpc(): void {
   ipcMain.handle('app:get-info', () => ({ version: app.getVersion(), platform: process.platform }))
@@ -27,6 +53,14 @@ function registerIpc(): void {
     if (result.canceled || !result.filePaths[0]) return null
     return store.importAsset(themeId, result.filePaths[0], purpose)
   })
+  ipcMain.handle('codex:detect', () => codexService.detect())
+  ipcMain.handle('codex:install-theme', (_event, themeId: string) => codexService.installTheme(themeId))
+  ipcMain.handle('codex:start', (_event, themeId: string, restartExisting: boolean) => codexService.start(themeId, restartExisting === true))
+  ipcMain.handle('codex:verify', () => codexService.verify())
+  ipcMain.handle('codex:reinject', (_event, themeId: string) => codexService.reinject(themeId))
+  ipcMain.handle('codex:stop', () => codexService.stop())
+  ipcMain.handle('codex:restore', (_event, restartCodex: boolean) => codexService.restore(restartCodex === true))
+  ipcMain.handle('runtime:get-status', () => codexService.getStatus())
 }
 
 function createWindow(): void {
@@ -52,6 +86,12 @@ function createWindow(): void {
   })
 
   mainWindow.once('ready-to-show', () => mainWindow?.show())
+  mainWindow.on('close', (event) => {
+    if (codexService.isActive() && !quitting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) void shell.openExternal(url)
     return { action: 'deny' }
@@ -69,6 +109,11 @@ app.whenReady().then(async () => {
   const localAppData = process.env.LOCALAPPDATA ?? app.getPath('userData')
   store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'))
   await store.initialize()
+  const resourcesRoot = app.isPackaged ? join(process.resourcesPath, 'windows') : join(app.getAppPath(), 'resources', 'windows')
+  codexService = new CodexService(store, resourcesRoot, (status) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
+    updateTray()
+  })
   registerIpc()
   createWindow()
   app.on('activate', () => {
@@ -76,4 +121,5 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('window-all-closed', () => app.quit())
+app.on('window-all-closed', () => { if (!codexService?.isActive()) app.quit() })
+app.on('before-quit', () => { quitting = true })

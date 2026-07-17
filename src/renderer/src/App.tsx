@@ -3,7 +3,7 @@ import {
   Box, Check, ChevronDown, CircleHelp, Copy, Image, MonitorPlay, Palette, Play,
   Plus, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload
 } from 'lucide-react'
-import type { CompiledTheme } from '../../shared/contracts'
+import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { FenceEditor } from './FenceEditor'
@@ -27,6 +27,8 @@ export function App(): React.JSX.Element {
   const [activeInspector, setActiveInspector] = useState<'visual' | 'icons' | 'runtime'>('visual')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [runtimeBusy, setRuntimeBusy] = useState(false)
+  const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
   const [draggingPlacement, setDraggingPlacement] = useState(false)
   const previewRef = useRef<HTMLDivElement>(null)
   const historyRef = useRef<ThemeProfile[]>([])
@@ -53,6 +55,11 @@ export function App(): React.JSX.Element {
       if (selected) void loadTheme(selected.id)
     }).catch((reason) => setError(messageOf(reason)))
   }, [loadTheme, refreshThemes])
+
+  useEffect(() => {
+    void window.studio.runtime.getStatus().then(setRuntime)
+    return window.studio.runtime.subscribeStatus(setRuntime)
+  }, [])
 
   const change = (mutator: (profile: ThemeProfile) => void): void => {
     setDraft((current) => {
@@ -142,6 +149,25 @@ export function App(): React.JSX.Element {
     if (previous) setDraft(previous)
   }
 
+  const runRuntime = async (operation: () => Promise<RuntimeStatus>): Promise<void> => {
+    setRuntimeBusy(true)
+    setError(null)
+    try { setRuntime(await operation()) } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
+  }
+
+  const startTheme = async (): Promise<void> => {
+    if (!draft) return
+    setRuntimeBusy(true)
+    setError(null)
+    try {
+      await save()
+      const detection = await window.studio.codex.detect()
+      const restart = detection.running && window.confirm('Codex 需要重启一次以启用本地主题端口。未提交的输入可能丢失，继续吗？')
+      if (detection.running && !restart) return
+      setRuntime(await window.studio.codex.start(draft.id, restart))
+    } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
+  }
+
   const beginPlacementDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (!draft) return
     historyRef.current.push(structuredClone(draft))
@@ -224,7 +250,19 @@ export function App(): React.JSX.Element {
             <Property title="主题颜色"><div className="color-grid">{(Object.keys(colorLabels) as (keyof ThemeProfile['colors'])[]).map((key) => <label key={key}><input type="color" value={draft.colors[key]} onChange={(event) => change((profile) => { profile.colors[key] = event.target.value.toUpperCase() })} /><span>{colorLabels[key]}</span><code>{draft.colors[key]}</code></label>)}</div></Property>
           </>}
           {activeInspector === 'icons' && <Property title="图标槽位"><div className="icon-editor">{(Object.keys(iconLabels) as IconSlot[]).map((slot) => <div className="icon-slot" key={slot}><span className="icon-preview"><RenderIcon slot={slot} profile={draft} assets={assets} /></span><label>{iconLabels[slot]}<select value={draft.icons[slot].kind === 'builtin' ? draft.icons[slot].name : '__asset'} onChange={(event) => { if (event.target.value !== '__asset') change((profile) => { profile.icons[slot] = { kind: 'builtin', name: event.target.value } }) }}><option value="__asset">自定义图片</option>{builtinIconOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="tool-button" title="导入图标" onClick={() => void importIcon(slot)}><Upload size={14} /></button></div>)}</div></Property>}
-          {activeInspector === 'runtime' && <><Property title="预览状态"><div className="runtime-state"><span><Check size={14} />主题配置有效</span><span><MonitorPlay size={14} />等待接入 Codex</span></div></Property><button className="primary-button wide" disabled><Play size={15} />阶段四接入运行控制</button></>}
+          {activeInspector === 'runtime' && <>
+            <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{runtime.message}</strong><dl><div><dt>阶段</dt><dd>{runtime.phase}</dd></div><div><dt>端口</dt><dd>{runtime.port}</dd></div><div><dt>页面</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{runtime.lastError}</p>}</div></Property>
+            <Property title="Codex 控制"><div className="runtime-commands">
+              <button onClick={() => void runRuntime(async () => { await window.studio.codex.detect(); return window.studio.runtime.getStatus() })}><MonitorPlay size={15} />检测 Codex</button>
+              <button onClick={() => void runRuntime(() => window.studio.codex.installTheme(draft.id))}><Save size={15} />安装配置</button>
+              <button className="accent" onClick={() => void startTheme()}><Play size={15} />启动并应用</button>
+              <button onClick={() => void runRuntime(() => window.studio.codex.reinject(draft.id))}><RotateCcw size={15} />重新注入</button>
+              <button onClick={() => void runRuntime(() => window.studio.codex.verify())}><Check size={15} />验证主题</button>
+              <button onClick={() => void runRuntime(() => window.studio.codex.stop())}><Box size={15} />停止注入</button>
+            </div></Property>
+            <button className="danger-command" disabled={runtimeBusy} onClick={() => { if (window.confirm('恢复 Codex 原始配置并正常重启 Codex？')) void runRuntime(() => window.studio.codex.restore(true)) }}><Undo2 size={15} />恢复并重启 Codex</button>
+            {runtimeBusy && <div className="runtime-progress">操作进行中</div>}
+          </>}
         </aside>
       </section>
     </main>
