@@ -32,9 +32,6 @@ async function buildBuiltinFontFace(id: BuiltinFontId, resourcesRoot: string): P
   const absolute = join(resourcesRoot, resource)
   if (resource.endsWith('.css')) {
     let css = await readFile(absolute, 'utf8')
-    const sourceFamily = id === 'noto-sans-sc' ? 'Noto Sans SC Variable' : 'Noto Serif SC Variable'
-    const targetFamily = id === 'noto-sans-sc' ? 'Dream Noto Sans SC' : 'Dream Noto Serif SC'
-    css = css.replaceAll(sourceFamily, targetFamily)
     const references = [...new Set([...css.matchAll(/url\((\.\/files\/[A-Za-z0-9._-]+\.woff2)\)/g)].map((match) => match[1]!))]
     for (const reference of references) {
       const data = await readFile(join(dirname(absolute), reference))

@@ -3,8 +3,8 @@ import { z } from 'zod'
 export const BUILTIN_FONTS = {
   'system-ui': { label: '系统界面字体', family: 'system-ui, -apple-system, "Segoe UI", sans-serif', resource: null },
   'segoe-script': { label: 'Segoe Script', family: '"Segoe Script", "Segoe Print", cursive', resource: null },
-  'noto-sans-sc': { label: '思源黑体', family: '"Dream Noto Sans SC", sans-serif', resource: 'fonts/noto-sans-sc/wght.css' },
-  'noto-serif-sc': { label: '思源宋体', family: '"Dream Noto Serif SC", serif', resource: 'fonts/noto-serif-sc/wght.css' },
+  'noto-sans-sc': { label: '思源黑体', family: '"Noto Sans SC Variable", sans-serif', resource: 'fonts/noto-sans-sc/wght.css' },
+  'noto-serif-sc': { label: '思源宋体', family: '"Noto Serif SC Variable", serif', resource: 'fonts/noto-serif-sc/wght.css' },
   'lxgw-wenkai': { label: '霞鹜文楷', family: '"Dream LXGW WenKai", serif', resource: 'fonts/lxgw-wenkai/lxgw-wenkai-latin-500-normal.woff2' },
   'jetbrains-mono': { label: 'JetBrains Mono', family: '"Dream JetBrains Mono", monospace', resource: 'fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2' }
 } as const

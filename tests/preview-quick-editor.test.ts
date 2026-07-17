@@ -59,19 +59,23 @@ describe('preview quick editor', () => {
       position: { left: 20, top: 30, placement: 'right' },
       popoverRef: createRef<HTMLDivElement>(),
       onChange,
+      onInteractionEnd: vi.fn(),
       onSelectImage: vi.fn(),
       onImportIcon: vi.fn(),
+      onImportFont: vi.fn(),
+      onStateChange: vi.fn(),
       onMore,
       onClose: vi.fn()
     })))
   }
 
-  it('shows only the colors used by the selected region and opens full settings', () => {
+  it('shows only the appearance tokens used by the selected region and opens full settings', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     const onMore = vi.fn()
     renderEditor(PREVIEW_TARGETS['palette-project-bar'], profile, onMore)
 
-    expect([...container.querySelectorAll('[data-color-key]')].map((node) => node.getAttribute('data-color-key'))).toEqual(['ink', 'accent'])
+    expect([...container.querySelectorAll('[data-color-token]')].map((node) => node.getAttribute('data-color-token'))).toEqual(['projectBarText'])
+    expect([...container.querySelectorAll('[data-paint-token]')].map((node) => node.getAttribute('data-paint-token'))).toEqual(['projectBar'])
     const more = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('更多设置'))
     act(() => more?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onMore).toHaveBeenCalledOnce()

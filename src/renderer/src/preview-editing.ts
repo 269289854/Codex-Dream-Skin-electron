@@ -1,15 +1,23 @@
-import type { IconSlot, ThemeColors, ThemeProfile } from '../../shared/theme'
+import type { AppearanceColorToken, AppearanceGroup, AppearancePaintToken } from '../../shared/appearance'
+import type { IconSlot, ThemeProfile } from '../../shared/theme'
 
 export type InspectorTab = 'visual' | 'icons'
-export type PreviewPaletteRegion = 'sidebar' | 'brand' | 'canvas' | 'action-card' | 'project-bar' | 'composer'
 export type PreviewCopyField = keyof ThemeProfile['copy']
+export type TypographySlot = keyof ThemeProfile['typography']['slots']
+
+export interface PreviewStyleEditor {
+  kind: 'style'
+  colors: readonly AppearanceColorToken[]
+  paints: readonly AppearancePaintToken[]
+  copyField?: PreviewCopyField
+  iconSlot?: IconSlot
+  fontSlot?: TypographySlot
+}
 
 export type PreviewEditor =
-  | { kind: 'copy'; field: PreviewCopyField }
+  | PreviewStyleEditor
   | { kind: 'hero' }
   | { kind: 'polaroid' }
-  | { kind: 'palette'; region: PreviewPaletteRegion; colors: readonly (keyof ThemeColors)[] }
-  | { kind: 'icon'; slot: IconSlot }
 
 export interface PreviewTargetDefinition {
   label: string
@@ -18,85 +26,75 @@ export interface PreviewTargetDefinition {
   editor: PreviewEditor
 }
 
-const paletteTarget = (
-  label: string,
-  region: PreviewPaletteRegion,
-  colors: readonly (keyof ThemeColors)[]
-): PreviewTargetDefinition => ({
+interface StyleTargetOptions {
+  colors?: readonly AppearanceColorToken[]
+  paints?: readonly AppearancePaintToken[]
+  copyField?: PreviewCopyField
+  iconSlot?: IconSlot
+  fontSlot?: TypographySlot
+}
+
+const styleTarget = (label: string, group: AppearanceGroup, options: StyleTargetOptions): PreviewTargetDefinition => ({
   label,
   inspector: 'visual',
-  inspectorAnchor: 'visual-colors',
-  editor: { kind: 'palette', region, colors }
-})
-
-const iconTarget = (label: string, slot: IconSlot): PreviewTargetDefinition => ({
-  label,
-  inspector: 'icons',
-  inspectorAnchor: `icon-${slot}`,
-  editor: { kind: 'icon', slot }
+  inspectorAnchor: `appearance-${group}`,
+  editor: { kind: 'style', colors: options.colors ?? [], paints: options.paints ?? [], copyField: options.copyField, iconSlot: options.iconSlot, fontSlot: options.fontSlot }
 })
 
 export const PREVIEW_TARGETS = {
-  'copy-brand-title': {
-    label: '品牌主标题',
-    inspector: 'visual',
-    inspectorAnchor: 'visual-brand-copy',
-    editor: { kind: 'copy', field: 'brandTitle' }
-  },
-  'copy-brand-subtitle': {
-    label: '品牌副标题',
-    inspector: 'visual',
-    inspectorAnchor: 'visual-brand-copy',
-    editor: { kind: 'copy', field: 'brandSubtitle' }
-  },
-  'copy-brand-signature': {
-    label: '品牌签名',
-    inspector: 'visual',
-    inspectorAnchor: 'visual-brand-copy',
-    editor: { kind: 'copy', field: 'brandSignature' }
-  },
-  'copy-heading': {
-    label: '首页标题',
-    inspector: 'visual',
-    inspectorAnchor: 'visual-copy',
-    editor: { kind: 'copy', field: 'headingTemplate' }
-  },
-  'copy-subtitle': {
-    label: '副标题',
-    inspector: 'visual',
-    inspectorAnchor: 'visual-copy',
-    editor: { kind: 'copy', field: 'subtitle' }
-  },
-  hero: {
-    label: '主视觉',
-    inspector: 'visual',
-    inspectorAnchor: 'visual-hero',
-    editor: { kind: 'hero' }
-  },
-  polaroid: {
-    label: '拍立得',
-    inspector: 'visual',
-    inspectorAnchor: 'visual-polaroid',
-    editor: { kind: 'polaroid' }
-  },
-  'palette-sidebar': paletteTarget('侧边栏颜色', 'sidebar', ['surface', 'ink', 'accent', 'pink', 'lavender', 'border']),
-  'palette-brand': paletteTarget('品牌栏颜色', 'brand', ['surface', 'ink', 'accent', 'pink', 'border']),
-  'palette-canvas': paletteTarget('主背景颜色', 'canvas', ['surface', 'ink', 'pink']),
-  'palette-action-card': paletteTarget('操作卡片颜色', 'action-card', ['ink', 'accent', 'pink', 'lavender', 'border']),
-  'palette-project-bar': paletteTarget('项目栏颜色', 'project-bar', ['ink', 'accent']),
-  'palette-composer': paletteTarget('输入框颜色', 'composer', ['ink', 'accent', 'pink']),
-  'icon-sidebar-mode': iconTarget('侧边栏模式图标', 'sidebarMode'),
-  'icon-branding': iconTarget('品牌图标', 'branding'),
-  'icon-card-primary': iconTarget('主卡片图标', 'cardPrimary'),
-  'icon-card-secondary': iconTarget('副卡片图标', 'cardSecondary'),
-  'icon-composer': iconTarget('输入框图标', 'composer'),
-  'icon-project': iconTarget('项目图标', 'project'),
-  'icon-decoration': iconTarget('装饰图标', 'decoration'),
-  'icon-polaroid-pin': iconTarget('图钉图标', 'polaroidPin')
+  'surface-canvas': styleTarget('全局画布', 'global', { colors: ['globalText', 'globalMutedText', 'globalLink', 'globalCaret', 'globalScrollbar', 'globalBorder'], paints: ['canvas'], fontSlot: 'ui' }),
+  'surface-main': styleTarget('主区域', 'global', { colors: ['globalText', 'globalBorder'], paints: ['mainSurface'], fontSlot: 'ui' }),
+  'conversation-message': styleTarget('会话消息', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationMessage', 'conversationMessageHover'], fontSlot: 'ui' }),
+  'primary-button': styleTarget('主要按钮', 'conversation', { colors: ['primaryButtonText'], paints: ['primaryButton', 'primaryButtonHover', 'primaryButtonSelected'], fontSlot: 'ui' }),
+
+  'palette-sidebar': styleTarget('侧边栏', 'sidebar', { colors: ['sidebarBorder', 'sidebarText', 'sidebarMutedText'], paints: ['sidebarSurface'], fontSlot: 'ui' }),
+  'sidebar-header': styleTarget('侧边栏头部', 'sidebar', { colors: ['sidebarHeaderText'], paints: ['sidebarHeader'], fontSlot: 'ui' }),
+  'sidebar-codex': styleTarget('Codex 标题', 'sidebar', { colors: ['sidebarCodexText'], fontSlot: 'ui' }),
+  'sidebar-arrow': styleTarget('Codex 箭头', 'sidebar', { colors: ['sidebarArrow'] }),
+  'sidebar-search': styleTarget('搜索按钮', 'sidebar', { colors: ['sidebarSearchIcon'], paints: ['sidebarSearchButton', 'sidebarSearchButtonHover'] }),
+  'sidebar-nav': styleTarget('导航项', 'sidebar', { colors: ['sidebarNavText', 'sidebarNavHoverText', 'sidebarNavSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], fontSlot: 'ui' }),
+  'sidebar-project': styleTarget('项目行', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText', 'sidebarProjectSelectedText'], paints: ['sidebarProjectRow', 'sidebarProjectRowHover', 'sidebarProjectRowSelected'], fontSlot: 'ui' }),
+  'sidebar-task': styleTarget('任务行', 'sidebar', { colors: ['sidebarTaskText'], paints: ['sidebarTaskRow', 'sidebarTaskRowHover'], fontSlot: 'ui' }),
+  'sidebar-footer': styleTarget('侧边栏页脚', 'sidebar', { colors: ['sidebarFooterText'], paints: ['sidebarFooter'], fontSlot: 'ui' }),
+  'sidebar-avatar': styleTarget('头像', 'sidebar', { colors: ['sidebarAvatarText'], paints: ['sidebarAvatar'], fontSlot: 'ui' }),
+  'icon-sidebar-mode': styleTarget('侧边栏模式图标', 'sidebar', { colors: ['sidebarModeIcon'], paints: ['sidebarModeBadge'], iconSlot: 'sidebarMode' }),
+
+  'palette-brand': styleTarget('品牌栏', 'brand', { colors: ['brandBorder'], paints: ['brandSurface'] }),
+  'copy-brand-title': styleTarget('品牌主标题', 'brand', { colors: ['brandTitle'], copyField: 'brandTitle', fontSlot: 'brandTitle' }),
+  'copy-brand-subtitle': styleTarget('品牌副标题', 'brand', { colors: ['brandSubtitle'], copyField: 'brandSubtitle', fontSlot: 'brandSubtitle' }),
+  'copy-brand-signature': styleTarget('品牌签名', 'brand', { colors: ['brandSignature'], copyField: 'brandSignature', fontSlot: 'brandSignature' }),
+  'icon-branding': styleTarget('品牌图标', 'brand', { colors: ['brandIcon'], iconSlot: 'branding' }),
+
+  'copy-heading': styleTarget('首页标题', 'home', { colors: ['homeHeading'], paints: ['homeHeadingBackdrop'], copyField: 'headingTemplate', fontSlot: 'ui' }),
+  'copy-subtitle': styleTarget('副标题', 'home', { colors: ['homeSubtitle'], copyField: 'subtitle', fontSlot: 'ui' }),
+  'project-selector': styleTarget('项目选择器', 'home', { colors: ['projectSelectorText', 'projectSelectorBorder'], paints: ['projectSelector', 'projectSelectorHover', 'projectSelectorSelected'], fontSlot: 'ui' }),
+  hero: { label: '主视觉', inspector: 'visual', inspectorAnchor: 'visual-hero', editor: { kind: 'hero' } },
+
+  'palette-action-card': styleTarget('操作卡片', 'cards', { colors: ['actionCardText', 'actionCardMutedText', 'actionCardBorder'], paints: ['actionCard', 'actionCardHover', 'actionCardSelected'], fontSlot: 'ui' }),
+  'action-card-text': styleTarget('操作卡片文字', 'cards', { colors: ['actionCardText', 'actionCardMutedText'], fontSlot: 'ui' }),
+  'icon-card-primary': styleTarget('主卡片图标', 'cards', { colors: ['actionCardIcon'], paints: ['actionCardIconBadge'], iconSlot: 'cardPrimary' }),
+  'icon-card-secondary': styleTarget('副卡片图标', 'cards', { colors: ['actionCardIcon'], paints: ['actionCardIconBadge'], iconSlot: 'cardSecondary' }),
+  'icon-decoration': styleTarget('卡片装饰图标', 'cards', { colors: ['actionCardDecoration'], iconSlot: 'decoration' }),
+
+  'palette-project-bar': styleTarget('项目栏', 'projects', { colors: ['projectBarText'], paints: ['projectBar'], fontSlot: 'ui' }),
+  'project-chip': styleTarget('项目标签', 'projects', { colors: ['projectChipText', 'projectChipBorder'], paints: ['projectChip', 'projectChipHover', 'projectChipSelected'], fontSlot: 'ui' }),
+  'icon-project': styleTarget('项目图标', 'projects', { colors: ['projectChipText'], iconSlot: 'project' }),
+  'icon-project-sidebar': styleTarget('侧边栏项目图标', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText', 'sidebarProjectSelectedText'], iconSlot: 'project' }),
+
+  'palette-composer': styleTarget('输入框', 'composer', { colors: ['composerBorder', 'composerText'], paints: ['composer'], fontSlot: 'ui' }),
+  'composer-placeholder': styleTarget('输入框占位文案', 'composer', { colors: ['composerPlaceholder'], fontSlot: 'ui' }),
+  'composer-tool': styleTarget('输入框工具按钮', 'composer', { colors: ['composerToolIcon'], paints: ['composerToolButton', 'composerToolButtonHover', 'composerToolButtonSelected'] }),
+  'composer-permission': styleTarget('权限提示', 'composer', { colors: ['composerPermissionText'], fontSlot: 'ui' }),
+  'composer-model': styleTarget('模型文字', 'composer', { colors: ['composerModelText'], fontSlot: 'ui' }),
+  'icon-composer': styleTarget('发送按钮', 'composer', { colors: ['composerSendIcon'], paints: ['composerSendButton', 'composerSendButtonHover', 'composerSendButtonSelected'], iconSlot: 'composer' }),
+
+  wave: styleTarget('波形装饰', 'decoration', { colors: ['wave'] }),
+  sparkle: styleTarget('闪光装饰', 'decoration', { colors: ['sparkle'] }),
+  polaroid: { label: '拍立得', inspector: 'visual', inspectorAnchor: 'visual-polaroid', editor: { kind: 'polaroid' } },
+  'icon-polaroid-pin': styleTarget('图钉图标', 'decoration', { colors: ['polaroidPin'], iconSlot: 'polaroidPin' })
 } as const satisfies Record<string, PreviewTargetDefinition>
 
 export type PreviewTargetId = keyof typeof PREVIEW_TARGETS
-
 export const PREVIEW_TARGET_ATTRIBUTE = 'data-preview-target'
 
 export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
@@ -114,10 +112,7 @@ export function isPreviewTargetId(value: string | undefined): value is PreviewTa
   return Boolean(value && Object.prototype.hasOwnProperty.call(PREVIEW_TARGETS, value))
 }
 
-export interface PreviewTargetMatch {
-  id: PreviewTargetId
-  anchor: HTMLElement
-}
+export interface PreviewTargetMatch { id: PreviewTargetId; anchor: HTMLElement }
 
 export function findPreviewTarget(source: EventTarget | null, root: Element): PreviewTargetMatch | null {
   const candidate = source as Element | null
@@ -127,39 +122,13 @@ export function findPreviewTarget(source: EventTarget | null, root: Element): Pr
   return { id: anchor.dataset.previewTarget, anchor }
 }
 
-export interface RectLike {
-  left: number
-  top: number
-  right: number
-  bottom: number
-  width: number
-  height: number
-}
-
-export interface SizeLike {
-  width: number
-  height: number
-}
-
+export interface RectLike { left: number; top: number; right: number; bottom: number; width: number; height: number }
+export interface SizeLike { width: number; height: number }
 export type PopoverPlacement = 'right' | 'left' | 'bottom' | 'top'
+export interface PopoverPosition { left: number; top: number; placement: PopoverPlacement }
+interface Candidate extends PopoverPosition { overflow: number }
 
-export interface PopoverPosition {
-  left: number
-  top: number
-  placement: PopoverPlacement
-}
-
-interface Candidate extends PopoverPosition {
-  overflow: number
-}
-
-export function placePreviewPopover(
-  anchor: RectLike,
-  container: RectLike,
-  popover: SizeLike,
-  gap = 10,
-  padding = 8
-): PopoverPosition {
+export function placePreviewPopover(anchor: RectLike, container: RectLike, popover: SizeLike, gap = 10, padding = 8): PopoverPosition {
   const anchorLeft = anchor.left - container.left
   const anchorTop = anchor.top - container.top
   const anchorRight = anchor.right - container.left
@@ -179,17 +148,8 @@ export function placePreviewPopover(
     overflow: overflow(candidate.left, padding, maxLeft) + overflow(candidate.top, padding, maxTop)
   }))
   const selected = scored.find((candidate) => candidate.overflow === 0) ?? scored.reduce((best, candidate) => candidate.overflow < best.overflow ? candidate : best)
-  return {
-    placement: selected.placement,
-    left: clamp(selected.left, padding, maxLeft),
-    top: clamp(selected.top, padding, maxTop)
-  }
+  return { placement: selected.placement, left: clamp(selected.left, padding, maxLeft), top: clamp(selected.top, padding, maxTop) }
 }
 
-function overflow(value: number, min: number, max: number): number {
-  return value < min ? min - value : value > max ? value - max : 0
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
+function overflow(value: number, min: number, max: number): number { return value < min ? min - value : value > max ? value - max : 0 }
+function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)) }

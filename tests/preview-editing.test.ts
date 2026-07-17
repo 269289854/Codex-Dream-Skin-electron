@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { IconSlot } from '../src/shared/theme'
+import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS } from '../src/shared/appearance'
 import {
   findPreviewTarget,
   isPreviewTargetId,
@@ -21,41 +22,53 @@ describe('preview editing registry', () => {
   it('maps every theme icon slot to a preview target and inspector anchor', () => {
     const slots: IconSlot[] = ['sidebarMode', 'branding', 'cardPrimary', 'cardSecondary', 'composer', 'project', 'decoration', 'polaroidPin']
     const mapped = Object.values(PREVIEW_TARGETS)
-      .filter((target) => target.editor.kind === 'icon')
-      .map((target) => target.editor.kind === 'icon' ? target.editor.slot : null)
+      .filter((target) => target.editor.kind === 'style' && target.editor.iconSlot)
+      .map((target) => target.editor.kind === 'style' ? target.editor.iconSlot : null)
 
-    expect(mapped).toEqual(slots)
+    expect(new Set(mapped)).toEqual(new Set(slots))
     for (const slot of slots) {
-      const target = Object.values(PREVIEW_TARGETS).find((candidate) => candidate.editor.kind === 'icon' && candidate.editor.slot === slot)
-      expect(target).toMatchObject({ inspector: 'icons', inspectorAnchor: `icon-${slot}` })
+      const target = Object.values(PREVIEW_TARGETS).find((candidate) => candidate.editor.kind === 'style' && candidate.editor.iconSlot === slot)
+      expect(target?.editor).toMatchObject({ kind: 'style', iconSlot: slot })
     }
   })
 
-  it('only exposes colors that participate in each preview region', () => {
+  it('only exposes appearance tokens that participate in each preview region', () => {
     expect(PREVIEW_TARGETS['palette-sidebar'].editor).toEqual({
-      kind: 'palette',
-      region: 'sidebar',
-      colors: ['surface', 'ink', 'accent', 'pink', 'lavender', 'border']
+      kind: 'style',
+      colors: ['sidebarBorder', 'sidebarText', 'sidebarMutedText'],
+      paints: ['sidebarSurface'],
+      copyField: undefined,
+      iconSlot: undefined,
+      fontSlot: 'ui'
     })
-    expect(PREVIEW_TARGETS['palette-project-bar'].editor).toEqual({ kind: 'palette', region: 'project-bar', colors: ['ink', 'accent'] })
-    expect(PREVIEW_TARGETS['palette-composer'].editor).toEqual({ kind: 'palette', region: 'composer', colors: ['ink', 'accent', 'pink'] })
+    expect(PREVIEW_TARGETS['palette-project-bar'].editor).toMatchObject({ kind: 'style', colors: ['projectBarText'], paints: ['projectBar'] })
+    expect(PREVIEW_TARGETS['palette-composer'].editor).toMatchObject({ kind: 'style', colors: ['composerBorder', 'composerText'], paints: ['composer'] })
     expect(isPreviewTargetId('palette-composer')).toBe(true)
     expect(isPreviewTargetId('unknown-target')).toBe(false)
   })
 
   it('maps each brand copy target to the shared brand inspector group', () => {
     expect(PREVIEW_TARGETS['copy-brand-title']).toMatchObject({
-      inspectorAnchor: 'visual-brand-copy',
-      editor: { kind: 'copy', field: 'brandTitle' }
+      inspectorAnchor: 'appearance-brand',
+      editor: { kind: 'style', copyField: 'brandTitle', fontSlot: 'brandTitle' }
     })
     expect(PREVIEW_TARGETS['copy-brand-subtitle']).toMatchObject({
-      inspectorAnchor: 'visual-brand-copy',
-      editor: { kind: 'copy', field: 'brandSubtitle' }
+      inspectorAnchor: 'appearance-brand',
+      editor: { kind: 'style', copyField: 'brandSubtitle', fontSlot: 'brandSubtitle' }
     })
     expect(PREVIEW_TARGETS['copy-brand-signature']).toMatchObject({
-      inspectorAnchor: 'visual-brand-copy',
-      editor: { kind: 'copy', field: 'brandSignature' }
+      inspectorAnchor: 'appearance-brand',
+      editor: { kind: 'style', copyField: 'brandSignature', fontSlot: 'brandSignature' }
     })
+  })
+
+  it('exposes every appearance token and the global UI font through preview targets', () => {
+    const styleEditors = Object.values(PREVIEW_TARGETS).flatMap((target) => target.editor.kind === 'style' ? [target.editor] : [])
+    expect(new Set(styleEditors.flatMap((editor) => editor.colors))).toEqual(new Set(Object.keys(APPEARANCE_COLOR_TOKENS)))
+    expect(new Set(styleEditors.flatMap((editor) => editor.paints))).toEqual(new Set(Object.keys(APPEARANCE_PAINT_TOKENS)))
+    for (const target of ['conversation-message', 'primary-button', 'sidebar-nav', 'sidebar-project', 'sidebar-task', 'action-card-text', 'project-chip', 'composer-model'] as const) {
+      expect(PREVIEW_TARGETS[target].editor).toMatchObject({ kind: 'style', fontSlot: 'ui' })
+    }
   })
 
   it('resolves the most specific nested target inside the preview root', () => {

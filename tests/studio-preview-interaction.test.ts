@@ -3,14 +3,14 @@ import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeStatus, StudioApi } from '../src/shared/contracts'
+import type { ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 import { App } from '../src/renderer/src/App'
-import { ICON_PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
+import { ICON_PREVIEW_TARGETS, PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
 
 const GLOBAL_KEYS = [
   'window', 'document', 'navigator', 'Element', 'HTMLElement', 'Node', 'Event',
-  'MouseEvent', 'PointerEvent', 'KeyboardEvent', 'ResizeObserver'
+  'InputEvent', 'MouseEvent', 'PointerEvent', 'KeyboardEvent', 'ResizeObserver'
 ] as const
 
 const runtimeStatus: RuntimeStatus = {
@@ -31,19 +31,26 @@ describe('Studio preview editing interaction', () => {
   let previous: Map<string, PropertyDescriptor | undefined>
   let scrollIntoView: ReturnType<typeof vi.fn>
   let savedProfiles: ThemeProfile[]
+  let alternateProfile: ThemeProfile
+  let selectedFontAsset: ImportedFontAsset | null
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
     previous = new Map(GLOBAL_KEYS.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    alternateProfile = createDefaultTheme('00000000-0000-4000-8000-000000000001', '备用主题')
     profile.polaroid.sourceImage = 'assets/polaroid.png'
     profile.polaroid.sourceSize = { width: 1000, height: 800 }
     savedProfiles = []
+    selectedFontAsset = null
     const studio: StudioApi = {
       app: { getInfo: async () => ({ version: 'test', platform: 'win32' }) },
       themes: {
-        list: async () => [{ id: profile.id, name: profile.name, updatedAt: profile.updatedAt, active: true }],
-        get: async () => profile,
+        list: async () => [
+          { id: profile.id, name: profile.name, updatedAt: profile.updatedAt, active: true },
+          { id: alternateProfile.id, name: alternateProfile.name, updatedAt: alternateProfile.updatedAt, active: false }
+        ],
+        get: async (id) => id === alternateProfile.id ? alternateProfile : profile,
         create: async () => profile,
         duplicate: async () => profile,
         update: async (next) => {
@@ -51,14 +58,14 @@ describe('Studio preview editing interaction', () => {
           return next
         },
         delete: async () => undefined,
-        activate: async () => profile,
+        activate: async (id) => id === alternateProfile.id ? alternateProfile : profile,
         compile: async () => ({ css: '', rendererPayload: '', assets: { 'assets/polaroid.png': 'data:image/png;base64,AA==' } }),
         subscribePolaroidPlacement: () => () => undefined
       },
     assets: {
       selectImage: async () => null,
       selectIcon: async () => null,
-      selectFont: async () => null
+      selectFont: async () => selectedFontAsset
     },
       codex: {
         detect: async () => ({ found: true, version: 'test', executable: '', packageFamilyName: '', running: false, backupAvailable: false }),
@@ -91,6 +98,7 @@ describe('Studio preview editing interaction', () => {
       HTMLElement: browserWindow.HTMLElement,
       Node: browserWindow.Node,
       Event: browserWindow.Event,
+      InputEvent: browserWindow.InputEvent,
       MouseEvent: browserWindow.MouseEvent,
       PointerEvent: browserWindow.PointerEvent,
       KeyboardEvent: browserWindow.KeyboardEvent,
@@ -152,10 +160,32 @@ describe('Studio preview editing interaction', () => {
     })
   }
 
+  const setInputValue = (control: HTMLInputElement, value: string): void => {
+    control.focus()
+    Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(control, value)
+    control.dispatchEvent(new browserWindow.InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }) as unknown as InputEvent)
+    control.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+  }
+
+  const clickDialogButton = (label: string): void => {
+    const button = [...container.querySelectorAll('[role="dialog"] button')].find((candidate) => candidate.textContent?.trim() === label)
+    if (!button) throw new Error(`Dialog button ${label} is missing.`)
+    button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+  }
+
   it('opens the most specific nested target and closes with Escape or outside click', () => {
     for (const targetId of Object.values(ICON_PREVIEW_TARGETS)) {
       expect(container.querySelector(`[data-preview-target="${targetId}"]`), `${targetId} should be rendered`).not.toBeNull()
     }
+    const renderedTargets = new Set([...container.querySelectorAll('[data-preview-target]')].map((node) => node.getAttribute('data-preview-target')))
+    const conversationSwitch = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    const homeSwitch = container.querySelector<HTMLButtonElement>('button[title="首页预览"]')
+    if (!conversationSwitch || !homeSwitch) throw new Error('Preview page switch is missing.')
+    act(() => conversationSwitch.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    for (const node of container.querySelectorAll('[data-preview-target]')) renderedTargets.add(node.getAttribute('data-preview-target'))
+    for (const targetId of Object.keys(PREVIEW_TARGETS)) expect(renderedTargets.has(targetId), `${targetId} should have a rendered target`).toBe(true)
+    act(() => homeSwitch.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
     const cardIcon = container.querySelector('[data-preview-target="icon-card-primary"]')
     if (!cardIcon) throw new Error('Primary card icon target is missing.')
     pointerDown(cardIcon)
@@ -167,19 +197,53 @@ describe('Studio preview editing interaction', () => {
     const card = container.querySelector('[data-preview-target="palette-action-card"]')
     if (!card) throw new Error('Action card target is missing.')
     pointerDown(card)
-    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('操作卡片颜色快捷配置')
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('操作卡片快捷配置')
     pointerDown(browserWindow.document.body as unknown as Element)
     expect(container.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('previews normal, hover, and selected paints and groups continuous drag into one undo step', () => {
+    const selector = container.querySelector<HTMLElement>('[data-preview-target="project-selector"]')
+    const canvas = container.querySelector<HTMLElement>('.codex-preview')
+    if (!selector || !canvas) throw new Error('Project selector preview is missing.')
+    pointerDown(selector)
+
+    act(() => clickDialogButton('线性'))
+    expect(canvas.style.getPropertyValue('--dream-project-selector')).toContain('linear-gradient(135deg')
+    let angle = container.querySelector<HTMLInputElement>('[role="dialog"] .paint-control > .range-row input')
+    if (!angle) throw new Error('Gradient angle control is missing.')
+    act(() => setInputValue(angle!, '210'))
+    angle = container.querySelector<HTMLInputElement>('[role="dialog"] .paint-control > .range-row input')
+    if (!angle) throw new Error('Gradient angle control disappeared.')
+    act(() => setInputValue(angle!, '240'))
+    act(() => angle!.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent))
+    expect(canvas.style.getPropertyValue('--dream-project-selector')).toContain('linear-gradient(240deg')
+
+    const undo = container.querySelector<HTMLButtonElement>('button[title="撤销"]')
+    if (!undo) throw new Error('Undo command is missing.')
+    act(() => undo.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(canvas.style.getPropertyValue('--dream-project-selector')).toContain('linear-gradient(135deg')
+    act(() => undo.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(canvas.style.getPropertyValue('--dream-project-selector')).not.toContain('gradient(')
+
+    act(() => clickDialogButton('悬停'))
+    expect(selector.getAttribute('data-preview-state')).toBe('hover')
+    act(() => clickDialogButton('径向'))
+    expect(canvas.style.getPropertyValue('--dream-project-selector-hover')).toContain('radial-gradient(')
+    act(() => clickDialogButton('选中'))
+    expect(selector.getAttribute('data-preview-state')).toBe('selected')
+    act(() => clickDialogButton('普通'))
+    expect(selector.getAttribute('data-preview-state')).toBe('normal')
   })
 
   it('supports keyboard selection and links quick editing to the full inspector', async () => {
     const brand = container.querySelector<HTMLElement>('[data-preview-target="palette-brand"]')
     if (!brand) throw new Error('Brand palette target is missing.')
     pointerDown(brand)
-    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('品牌栏颜色快捷配置')
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('品牌栏快捷配置')
     act(() => browserWindow.document.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     act(() => brand.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }) as unknown as KeyboardEvent))
-    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('品牌栏颜色快捷配置')
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('品牌栏快捷配置')
 
     const composerIcon = container.querySelector('[data-preview-target="icon-composer"]')
     if (!composerIcon) throw new Error('Composer icon target is missing.')
@@ -192,8 +256,28 @@ describe('Studio preview editing interaction', () => {
     })
 
     expect(container.querySelector('[role="dialog"]')).toBeNull()
-    expect(container.querySelector('[data-inspector-anchor="icon-composer"]')?.classList.contains('inspector-highlight')).toBe(true)
+    expect(container.querySelector('[data-inspector-anchor="appearance-composer"]')?.classList.contains('inspector-highlight')).toBe(true)
     expect(scrollIntoView).toHaveBeenCalled()
+
+    pointerDown(composerIcon)
+    const iconSettings = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('图标设置'))
+    if (!iconSettings) throw new Error('Icon settings command is missing.')
+    await act(async () => {
+      iconSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(container.querySelector('[data-inspector-anchor="icon-composer"]')?.classList.contains('inspector-highlight')).toBe(true)
+
+    const brandTitle = container.querySelector('[data-preview-target="copy-brand-title"]')
+    if (!brandTitle) throw new Error('Brand title target is missing.')
+    pointerDown(brandTitle)
+    const fontSettings = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('字体管理'))
+    if (!fontSettings) throw new Error('Font management command is missing.')
+    await act(async () => {
+      fontSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(container.querySelector('[data-inspector-anchor="typography"]')?.classList.contains('inspector-highlight')).toBe(true)
   })
 
   it('edits, validates, undoes, saves, and links each brand copy target', async () => {
@@ -232,7 +316,7 @@ describe('Studio preview editing interaction', () => {
       more.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
-    expect(container.querySelector('[data-inspector-anchor="visual-brand-copy"]')?.classList.contains('inspector-highlight')).toBe(true)
+    expect(container.querySelector('[data-inspector-anchor="appearance-brand"]')?.classList.contains('inspector-highlight')).toBe(true)
     expect(scrollIntoView).toHaveBeenCalled()
 
     const savedTitle = container.querySelector('[data-preview-target="copy-brand-title"]')
@@ -276,6 +360,83 @@ describe('Studio preview editing interaction', () => {
       expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(dialogLabel)
       act(() => browserWindow.document.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     }
+  })
+
+  it('imports a font once, reuses it across slots, saves it, and restores defaults', async () => {
+    selectedFontAsset = {
+      id: 'font-test',
+      relativePath: 'assets/font-test.woff2',
+      dataUrl: 'data:font/woff2;base64,d09GMg==',
+      mediaType: 'font/woff2',
+      originalName: 'test.woff2',
+      family: 'Test Font',
+      format: 'woff2'
+    }
+    const title = container.querySelector('[data-preview-target="copy-brand-title"]')
+    const canvas = container.querySelector<HTMLElement>('.codex-preview')
+    if (!title || !canvas) throw new Error('Brand title preview is missing.')
+    pointerDown(title)
+    const importButton = container.querySelector<HTMLButtonElement>('[role="dialog"] button[title="为品牌主标题导入字体"]')
+    if (!importButton) throw new Error('Brand title font import command is missing.')
+    await act(async () => {
+      importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(canvas.style.getPropertyValue('--dream-font-brand-title')).toContain('Dream Imported font-test')
+    expect(container.querySelector('.codex-preview style')?.textContent).toContain('data:font/woff2;base64,d09GMg==')
+
+    const subtitle = container.querySelector('[data-preview-target="copy-brand-subtitle"]')
+    if (!subtitle) throw new Error('Brand subtitle preview is missing.')
+    pointerDown(subtitle)
+    const select = container.querySelector<HTMLSelectElement>('[role="dialog"] .font-control select')
+    if (!select) throw new Error('Brand subtitle font selector is missing.')
+    expect(select.querySelector('option[value="imported:font-test"]')?.textContent).toBe('Test Font')
+    act(() => {
+      select.value = 'imported:font-test'
+      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(canvas.style.getPropertyValue('--dream-font-brand-subtitle')).toContain('Dream Imported font-test')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.typography).toMatchObject({
+      slots: { brandTitle: { kind: 'imported', id: 'font-test' }, brandSubtitle: { kind: 'imported', id: 'font-test' } },
+      importedFonts: [{ id: 'font-test', family: 'Test Font' }]
+    })
+
+    const reset = container.querySelector<HTMLButtonElement>('button[title="恢复默认"]')
+    if (!reset) throw new Error('Restore defaults command is missing.')
+    act(() => reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(canvas.style.getPropertyValue('--dream-font-brand-title')).toBe('var(--dream-font-ui)')
+    expect(container.querySelector('.codex-preview style')).toBeNull()
+  })
+
+  it('clears the popover and invalid local color input when switching themes', async () => {
+    const colorInput = container.querySelector<HTMLInputElement>('[data-color-token="globalText"] .color-text-input')
+    const brand = container.querySelector('[data-preview-target="palette-brand"]')
+    if (!colorInput || !brand) throw new Error('Theme-switch fixtures are missing.')
+    act(() => setInputValue(colorInput, 'url(https://example.com/not-a-color)'))
+    expect(colorInput.getAttribute('aria-invalid')).toBe('true')
+    pointerDown(brand)
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+
+    const alternateLabel = [...container.querySelectorAll('.theme-item strong')].find((node) => node.textContent === '备用主题')
+    const alternateButton = alternateLabel?.closest('button')
+    if (!alternateButton) throw new Error('Alternate theme is missing.')
+    await act(async () => {
+      alternateButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+    const nextInput = container.querySelector<HTMLInputElement>('[data-color-token="globalText"] .color-text-input')
+    expect(nextInput?.value).toBe(alternateProfile.colors.ink)
+    expect(nextInput?.getAttribute('aria-invalid')).toBe('false')
   })
 
   it('keeps pin selection separate from polaroid dragging', () => {

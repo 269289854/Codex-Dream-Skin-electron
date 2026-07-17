@@ -2,15 +2,17 @@ import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy,
-  GitBranch, GitPullRequest, Grid2X2, Image, Laptop, Mic, MonitorPlay, Palette, Play,
+  GitBranch, GitPullRequest, Grid2X2, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
+import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
+import type { AppearanceState } from '../../shared/appearance'
 import { clampNormalized, type Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
-import { buildThemeStyleVariables } from '../../shared/runtime-theme'
+import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
-import { colorLabels, iconLabels, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
+import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { FenceEditor } from './FenceEditor'
 import { PolaroidPreview } from './PolaroidPreview'
 import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
@@ -23,7 +25,8 @@ import {
   PREVIEW_TARGETS,
   type InspectorTab,
   type PopoverPosition,
-  type PreviewTargetId
+  type PreviewTargetId,
+  type TypographySlot
 } from './preview-editing'
 
 interface PreviewSelection {
@@ -43,6 +46,8 @@ export function App(): React.JSX.Element {
   const [draggingPlacement, setDraggingPlacement] = useState(false)
   const [previewScale, setPreviewScale] = useState(1)
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null)
+  const [previewMode, setPreviewMode] = useState<'home' | 'conversation'>('home')
+  const [previewComponentState, setPreviewComponentState] = useState<AppearanceState>('normal')
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null)
   const [inspectorAnchor, setInspectorAnchor] = useState<string | null>(null)
   const previewStageRef = useRef<HTMLDivElement>(null)
@@ -51,6 +56,7 @@ export function App(): React.JSX.Element {
   const popoverRef = useRef<HTMLDivElement>(null)
   const inspectorRef = useRef<HTMLElement>(null)
   const historyRef = useRef<ThemeProfile[]>([])
+  const historyGroupRef = useRef<string | null>(null)
 
   const loadTheme = useCallback(async (id: string) => {
     try {
@@ -61,6 +67,7 @@ export function App(): React.JSX.Element {
       setPreviewSelection(null)
       setInspectorAnchor(null)
       historyRef.current = []
+      historyGroupRef.current = null
     } catch (reason) { setError(messageOf(reason)) }
   }, [])
 
@@ -149,8 +156,9 @@ export function App(): React.JSX.Element {
     const anchor = previewSelection?.anchor
     if (!anchor) return
     anchor.setAttribute('data-preview-selected', 'true')
-    return () => anchor.removeAttribute('data-preview-selected')
-  }, [previewSelection])
+    anchor.setAttribute('data-preview-state', previewComponentState)
+    return () => { anchor.removeAttribute('data-preview-selected'); anchor.removeAttribute('data-preview-state') }
+  }, [previewSelection, previewComponentState])
 
   useEffect(() => {
     if (!previewSelection) return
@@ -185,16 +193,21 @@ export function App(): React.JSX.Element {
     }
   }, [activeInspector, inspectorAnchor])
 
-  const change = (mutator: (profile: ThemeProfile) => void): void => {
+  const change = (mutator: (profile: ThemeProfile) => void, historyGroup?: string): void => {
     setDraft((current) => {
       if (!current) return current
-      historyRef.current.push(structuredClone(current))
-      if (historyRef.current.length > 60) historyRef.current.shift()
+      if (!historyGroup || historyGroupRef.current !== historyGroup) {
+        historyRef.current.push(structuredClone(current))
+        if (historyRef.current.length > 60) historyRef.current.shift()
+      }
+      historyGroupRef.current = historyGroup ?? null
       const next = structuredClone(current)
       mutator(next)
       return next
     })
   }
+
+  const endHistoryGroup = (): void => { historyGroupRef.current = null }
 
   const save = async (): Promise<boolean> => {
     if (!draft) return false
@@ -212,6 +225,7 @@ export function App(): React.JSX.Element {
       await window.studio.themes.activate(saved.id)
       setDraft(saved)
       historyRef.current = []
+      historyGroupRef.current = null
       await refreshThemes()
       return true
     } catch (reason) {
@@ -279,7 +293,31 @@ export function App(): React.JSX.Element {
     } catch (reason) { setError(messageOf(reason)) }
   }
 
+  const importFont = async (slot: TypographySlot): Promise<void> => {
+    if (!draft) return
+    try {
+      const imported = await window.studio.assets.selectFont(draft.id)
+      if (!imported) return
+      setAssets((current) => ({ ...current, [imported.relativePath]: imported.dataUrl }))
+      change((profile) => {
+        profile.typography.importedFonts.push({ id: imported.id, family: imported.family, asset: imported.relativePath, originalName: imported.originalName, format: imported.format })
+        assignFontSlot(profile, slot, { kind: 'imported', id: imported.id })
+      })
+    } catch (reason) { setError(messageOf(reason)) }
+  }
+
+  const removeImportedFont = (fontId: string): void => change((profile) => {
+    profile.typography.importedFonts = profile.typography.importedFonts.filter((font) => font.id !== fontId)
+    for (const slot of Object.keys(profile.typography.slots) as TypographySlot[]) {
+      const selection = profile.typography.slots[slot]
+      if (selection.kind === 'imported' && selection.id === fontId) {
+        assignFontSlot(profile, slot, slot === 'ui' ? { kind: 'builtin', id: 'system-ui' } : { kind: 'inherit' })
+      }
+    }
+  })
+
   const undo = (): void => {
+    endHistoryGroup()
     const previous = historyRef.current.pop()
     if (previous) setDraft(previous)
   }
@@ -289,6 +327,7 @@ export function App(): React.JSX.Element {
     if (!match) return
     setPopoverPosition(null)
     setInspectorAnchor(null)
+    setPreviewComponentState('normal')
     setPreviewSelection(match)
   }
 
@@ -299,6 +338,7 @@ export function App(): React.JSX.Element {
     if (event.key === ' ') event.preventDefault()
     setPopoverPosition(null)
     setInspectorAnchor(null)
+    setPreviewComponentState('normal')
     setPreviewSelection(match)
   }
 
@@ -308,9 +348,21 @@ export function App(): React.JSX.Element {
     setInspectorAnchor(null)
   }
 
-  const showSelectedInspector = (): void => {
+  const showSelectedInspector = (destination?: 'font' | 'icon'): void => {
     if (!previewSelection) return
     const target = PREVIEW_TARGETS[previewSelection.id]
+    if (destination === 'font' && target.editor.kind === 'style' && target.editor.fontSlot) {
+      setActiveInspector('visual')
+      setInspectorAnchor('typography')
+      setPreviewSelection(null)
+      return
+    }
+    if (destination === 'icon' && target.editor.kind === 'style' && target.editor.iconSlot) {
+      setActiveInspector('icons')
+      setInspectorAnchor(`icon-${target.editor.iconSlot}`)
+      setPreviewSelection(null)
+      return
+    }
     setActiveInspector(target.inspector)
     setInspectorAnchor(target.inspectorAnchor)
     setPreviewSelection(null)
@@ -364,6 +416,7 @@ export function App(): React.JSX.Element {
   const copyValidationError = homeCopyValidationError ?? brandValidationError
   const selectedTarget = previewSelection ? PREVIEW_TARGETS[previewSelection.id] : null
   const previewStyle = buildThemeStyleVariables(draft) as React.CSSProperties
+  const previewFontCss = buildPreviewImportedFontCss(draft, assets)
   const heroImage = buildPreviewHeroImageProps(heroUrl, draft.hero)
 
   return (
@@ -386,12 +439,13 @@ export function App(): React.JSX.Element {
         </aside>
 
         <section className="preview-panel">
-          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><button className="tool-button" title="撤销" onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" onClick={() => change((profile) => Object.assign(profile, createDefaultTheme(profile.id, profile.name)))}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
+          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><div className="preview-view-switch segmented-control" aria-label="预览页面"><button type="button" className={previewMode === 'home' ? 'active' : ''} title="首页预览" onClick={() => { setPreviewMode('home'); setPreviewSelection(null) }}><Home size={14} /></button><button type="button" className={previewMode === 'conversation' ? 'active' : ''} title="会话预览" onClick={() => { setPreviewMode('conversation'); setPreviewSelection(null) }}><MessageSquare size={14} /></button></div><button className="tool-button" title="撤销" onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" onClick={() => change((profile) => Object.assign(profile, createDefaultTheme(profile.id, profile.name)))}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
           <div className="preview-stage" ref={previewStageRef}>
             <div className="preview-frame" style={{ width: HOME_PREVIEW_VIEWPORT.width * previewScale, height: HOME_PREVIEW_VIEWPORT.height * previewScale }}>
               <div
                 ref={previewCanvasRef}
                 className="codex-preview"
+                data-preview-target="surface-canvas"
                 onPointerDownCapture={selectPreviewTarget}
                 onKeyDownCapture={selectPreviewTargetWithKeyboard}
                 onPointerMove={movePlacement}
@@ -399,10 +453,11 @@ export function App(): React.JSX.Element {
                 onPointerLeave={() => setDraggingPlacement(false)}
                 style={{ ...previewStyle, transform: `scale(${previewScale})` }}
               >
+                {previewFontCss && <style>{previewFontCss}</style>}
                 <CodexSidebarPreview profile={draft} assets={assets} />
-                <section className="codex-main" ref={previewRef} data-preview-target="palette-canvas">
+                <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
                   <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
-                  <div className="preview-home-content">
+                  {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
                         ? <img className="preview-hero-art" src={heroImage.src} style={heroImage.style} alt="" draggable={false} />
@@ -410,39 +465,28 @@ export function App(): React.JSX.Element {
                       <div className="dream-heading-region" data-preview-target="copy-heading">
                         <h1 className="dream-heading">
                           <span className="dream-copy-node dream-copy-before">{headingParts.before}</span>
-                          <button className="dream-project-selector dream-project-proxy" type="button">{PREVIEW_HOME_CONTEXT.projectName}</button>
+                          <button className="dream-project-selector dream-project-proxy" data-preview-target="project-selector" type="button">{PREVIEW_HOME_CONTEXT.projectName}</button>
                           <span className="dream-copy-node dream-copy-after">{headingParts.after}</span>
                           <span className="dream-copy-node dream-copy-subtitle" data-preview-target="copy-subtitle" tabIndex={0} role="button" aria-label="编辑副标题">{draft.copy.subtitle}</span>
                         </h1>
                       </div>
                       <div className="dream-action-grid">
-                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={`编辑${action.label}卡片颜色`}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={assets} injected /></span></button>)}
+                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={`编辑${action.label}卡片样式`}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label" data-preview-target="action-card-text">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={assets} injected /></span></button>)}
                       </div>
+                      <span className="preview-sparkle" data-preview-target="sparkle" tabIndex={0} role="button" aria-label="编辑闪光颜色">✦</span>
+                      <span className="preview-wave" data-preview-target="wave" tabIndex={0} role="button" aria-label="编辑波形颜色">♫ · · ♡ · · ♪</span>
                     </section>
                     <div className="preview-lower-region">
                       <div className="dream-project-bar preview-project-bar" data-preview-target="palette-project-bar">
                         <div className="preview-project-chips">
-                          <button type="button" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={assets} /></span><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
-                          <button type="button" data-preview-context="environment"><Laptop size={15} /><span>{PREVIEW_HOME_CONTEXT.environment}</span></button>
-                          <button type="button" data-preview-context="branch"><GitBranch size={15} /><span>{PREVIEW_HOME_CONTEXT.branch}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={assets} /></span><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="environment"><Laptop size={15} /><span>{PREVIEW_HOME_CONTEXT.environment}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="branch"><GitBranch size={15} /><span>{PREVIEW_HOME_CONTEXT.branch}</span></button>
                         </div>
                       </div>
-                      <div className="dream-composer preview-composer" data-preview-target="palette-composer">
-                        <span className="preview-composer-placeholder">随心输入，让灵感与代码一起起飞吧～</span>
-                        <div className="preview-composer-footer">
-                          <div className="preview-composer-tools">
-                            <button className="preview-icon-command" type="button" title="添加"><Plus size={18} /></button>
-                            <button className="preview-access-command" type="button"><span aria-hidden="true">!</span>完全访问</button>
-                          </div>
-                          <div className="preview-composer-tools">
-                            <button className="preview-model-command" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button>
-                            <button className="preview-icon-command" type="button" title="语音输入"><Mic size={17} /></button>
-                            <button className="preview-send-command" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送图标"><RenderIcon slot="composer" profile={draft} assets={assets} /></button>
-                          </div>
-                        </div>
-                      </div>
+                      <PreviewComposer profile={draft} assets={assets} />
                     </div>
-                  </div>
+                  </div> : <ConversationPreview profile={draft} assets={assets} />}
                   {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
@@ -456,8 +500,11 @@ export function App(): React.JSX.Element {
               position={popoverPosition}
               popoverRef={popoverRef}
               onChange={change}
+              onInteractionEnd={endHistoryGroup}
               onSelectImage={(purpose) => { void selectImage(purpose) }}
               onImportIcon={(slot) => { void importIcon(slot) }}
+              onImportFont={(slot) => { void importFont(slot) }}
+              onStateChange={setPreviewComponentState}
               onMore={showSelectedInspector}
               onClose={() => setPreviewSelection(null)}
             />}
@@ -492,7 +539,12 @@ export function App(): React.JSX.Element {
               <Range label="旋转" min={-45} max={45} step={1} value={draft.polaroid.placement.rotation} onChange={(value) => change((profile) => { profile.polaroid.placement.rotation = value })} suffix="°" />
               <Range label="隐藏阈值" min={320} max={1600} step={10} value={draft.polaroid.placement.hideBelowWidth} onChange={(value) => change((profile) => { profile.polaroid.placement.hideBelowWidth = value })} suffix="px" />
             </Property>
-            <Property title="主题颜色" anchor="visual-colors" highlighted={inspectorAnchor === 'visual-colors'}><div className="color-grid">{(Object.keys(colorLabels) as (keyof ThemeProfile['colors'])[]).map((key) => <ThemeColorControl key={key} colorKey={key} value={draft.colors[key]} onChange={(value) => change((profile) => { profile.colors[key] = value })} />)}</div></Property>
+            <Property title="字体" anchor="typography" highlighted={inspectorAnchor === 'typography'}>
+              <div className="font-editor">{(Object.keys(draft.typography.slots) as TypographySlot[]).map((slot) => <FontControl key={slot} slot={slot} profile={draft} onChange={(selection) => change((profile) => assignFontSlot(profile, slot, selection))} onImport={() => void importFont(slot)} />)}</div>
+              {draft.typography.importedFonts.length > 0 && <div className="font-library">{draft.typography.importedFonts.map((font) => <div key={font.id}><span><strong>{font.family}</strong><small>{font.originalName}</small></span><button className="mini-icon-button" type="button" title="移除字体" onClick={() => removeImportedFont(font.id)}><Trash2 size={13} /></button></div>)}</div>}
+            </Property>
+            {appearanceGroups.map((group) => <AppearanceInspectorGroup key={`${draft.id}-${group}`} group={group} profile={draft} highlighted={inspectorAnchor === `appearance-${group}`} onChange={change} onInteractionEnd={endHistoryGroup} />)}
+            <Property title="兼容主题色" anchor="visual-colors" highlighted={inspectorAnchor === 'visual-colors'}><div className="legacy-color-grid">{(Object.keys(colorLabels) as (keyof ThemeProfile['colors'])[]).map((key) => <ThemeColorControl key={`${draft.id}-${key}`} colorKey={key} value={draft.colors[key]} onChange={(value) => change((profile) => { profile.colors[key] = value }, `legacy-color-${key}`)} onChangeEnd={endHistoryGroup} />)}</div></Property>
           </>}
           {activeInspector === 'icons' && <Property title="图标槽位"><div className="icon-editor">{(Object.keys(iconLabels) as IconSlot[]).map((slot) => <ThemeIconControl key={slot} slot={slot} profile={draft} assets={assets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property>}
           {activeInspector === 'runtime' && <>
@@ -522,39 +574,67 @@ const previewNavigation = [
   { label: '插件', icon: AtSign }
 ] as const
 
+const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
+const appearanceGroupLabels: Record<AppearanceGroup, string> = {
+  global: '全局与画布', conversation: '会话与按钮', sidebar: '侧边栏', brand: '品牌栏', home: '首页', cards: '操作卡片', projects: '项目栏', composer: '输入框', decoration: '装饰'
+}
+
+function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+  return <div className="dream-composer preview-composer" data-preview-target="palette-composer"><span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="添加"><Plus size={18} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="语音输入"><Mic size={17} /></button><button className="preview-send-command" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
+}
+
+function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+  return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>完善主题编辑器</strong><span>Codex-Dream-Skin-electron · Miku</span></div></header><div className="preview-message-list"><article className="preview-message user" data-preview-target="conversation-message" tabIndex={0}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article><article className="preview-message assistant" data-preview-target="conversation-message" tabIndex={0}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p><button className="preview-primary-command" data-preview-target="primary-button" type="button">查看改动</button></article></div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div></div>
+}
+
 function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
   return (
     <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
-      <div className="codex-sidebar-header">
-        <div className="codex-mode-button"><strong>Codex</strong><ChevronDown size={16} /><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} /></span></div>
-        <button className="codex-sidebar-icon-button" type="button" title="搜索"><Search size={19} /></button>
+      <div className="codex-sidebar-header" data-preview-target="sidebar-header">
+        <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">Codex</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} /></span></div>
+        <button className="codex-sidebar-icon-button" data-preview-target="sidebar-search" type="button" title="搜索"><Search size={19} /></button>
       </div>
       <nav className="codex-primary-nav" aria-label="主要导航">
-        {previewNavigation.map(({ label, icon: Icon }) => <button type="button" key={label}><Icon size={18} /><span>{label}</span></button>)}
+        {previewNavigation.map(({ label, icon: Icon }) => <button type="button" data-preview-target="sidebar-nav" key={label}><Icon size={18} /><span>{label}</span></button>)}
       </nav>
       <section className="codex-project-section">
         <div className="codex-project-heading">项目</div>
         <div className="codex-project-scroll">
           {PREVIEW_SIDEBAR_PROJECTS.map((project) => (
             <div className="codex-project-group" key={project.name}>
-              <button className={project.active ? 'codex-project-row active' : 'codex-project-row'} type="button">
-                <span className="codex-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={profile} assets={assets} /></span>
+              <button className={project.active ? 'codex-project-row active' : 'codex-project-row'} data-preview-target="sidebar-project" type="button">
+                <span className="codex-project-icon" data-preview-target="icon-project-sidebar"><RenderIcon slot="project" profile={profile} assets={assets} /></span>
                 <span>{project.name}</span>
                 {project.active && <ChevronsUpDown size={16} />}
               </button>
-              {project.tasks.map((task) => <button className="codex-task-row" type="button" key={task}>{task}</button>)}
+              {project.tasks.map((task) => <button className="codex-task-row" data-preview-target="sidebar-task" type="button" key={task}>{task}</button>)}
               {'emptyLabel' in project && <div className="codex-task-empty">{project.emptyLabel}</div>}
             </div>
           ))}
         </div>
       </section>
-      <footer className="codex-sidebar-footer"><span className="codex-team-avatar">{PREVIEW_SIDEBAR_TEAM.avatar}</span><span>{PREVIEW_SIDEBAR_TEAM.label}</span><CircleHelp size={18} /></footer>
+      <footer className="codex-sidebar-footer" data-preview-target="sidebar-footer"><span className="codex-team-avatar" data-preview-target="sidebar-avatar" tabIndex={0} role="button">{PREVIEW_SIDEBAR_TEAM.avatar}</span><span>{PREVIEW_SIDEBAR_TEAM.label}</span><CircleHelp size={18} /></footer>
     </aside>
   )
 }
 
 function Property({ title, children, anchor, highlighted = false }: { title: string; children: React.ReactNode; anchor?: string; highlighted?: boolean }): React.JSX.Element {
   return <section className={highlighted ? 'property-group inspector-highlight' : 'property-group'} data-inspector-anchor={anchor}><h3>{title}</h3>{children}</section>
+}
+
+function AppearanceInspectorGroup({ group, profile, highlighted, onChange, onInteractionEnd }: { group: AppearanceGroup; profile: ThemeProfile; highlighted: boolean; onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void; onInteractionEnd: () => void }): React.JSX.Element {
+  const colorTokens = (Object.keys(APPEARANCE_COLOR_TOKENS) as AppearanceColorToken[]).filter((token) => APPEARANCE_COLOR_TOKENS[token].group === group)
+  const paintTokens = (Object.keys(APPEARANCE_PAINT_TOKENS) as AppearancePaintToken[]).filter((token) => APPEARANCE_PAINT_TOKENS[token].group === group)
+  return <Property title={appearanceGroupLabels[group]} anchor={`appearance-${group}`} highlighted={highlighted}><div className="appearance-editor">
+    {colorTokens.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
+    {paintTokens.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
+  </div></Property>
+}
+
+function assignFontSlot(profile: ThemeProfile, slot: TypographySlot, selection: ThemeProfile['typography']['slots'][TypographySlot]): void {
+  if (slot === 'ui' && selection.kind === 'inherit') return
+  if (slot === 'ui') profile.typography.slots.ui = selection as ThemeProfile['typography']['slots']['ui']
+  else profile.typography.slots[slot] = selection
 }
 
 function messageOf(reason: unknown): string {

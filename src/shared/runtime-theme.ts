@@ -50,3 +50,11 @@ export function resolveFontFamily(profile: ThemeProfile, selection: FontSelectio
   const record = profile.typography.importedFonts.find((font) => font.id === selection.id)
   return record ? `"${safeImportedFontFamily(record.id)}", sans-serif` : 'var(--dream-font-ui)'
 }
+
+export function buildPreviewImportedFontCss(profile: ThemeProfile, assets: Record<string, string>): string {
+  const selected = new Set(Object.values(profile.typography.slots).filter((slot) => slot.kind === 'imported').map((slot) => slot.kind === 'imported' ? slot.id : ''))
+  return profile.typography.importedFonts.filter((font) => selected.has(font.id) && assets[font.asset]).map((font) => {
+    const format = font.format === 'ttf' ? 'truetype' : font.format === 'otf' ? 'opentype' : font.format
+    return `@font-face { font-family: "${safeImportedFontFamily(font.id)}"; src: url("${assets[font.asset]}") format("${format}"); font-style: normal; font-weight: 100 900; font-display: swap; }`
+  }).join('\n')
+}
