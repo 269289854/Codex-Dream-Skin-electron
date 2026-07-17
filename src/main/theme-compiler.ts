@@ -22,12 +22,12 @@ export async function compileTheme(
     `  --dream-pink: ${c.pink};\n  --dream-lavender: ${c.lavender};\n  --dream-border: ${c.border};\n` +
     `  --dream-success: ${c.success};\n  --dream-danger: ${c.danger};\n}\n` +
     `html.codex-dream-skin body { color: var(--dream-ink); background-color: var(--dream-surface);${hero ? ` background-image: url("${escapeCssUrl(hero)}");` : ''} background-position: ${percent(profile.hero.position.x)} ${percent(profile.hero.position.y)}; background-size: ${Math.round(profile.hero.scale * 100)}% auto; }\n` +
-    `.dream-polaroid { position: fixed; left: ${percent(profile.polaroid.placement.x)}; top: ${percent(profile.polaroid.placement.y)}; width: ${percent(profile.polaroid.placement.width)}; transform: rotate(${profile.polaroid.placement.rotation}deg);${polaroid ? ` background-image: url("${escapeCssUrl(polaroid)}");` : ''} }\n` +
+    `.dream-polaroid { position: fixed; left: ${percent(profile.polaroid.placement.x)}; top: ${percent(profile.polaroid.placement.y)}; width: ${percent(profile.polaroid.placement.width)}; transform: rotate(${profile.polaroid.placement.rotation}deg);${polaroid ? ` background-image: url("${escapeCssUrl(polaroid)}");` : ''}${profile.polaroid.visible ? '' : ' display: none !important;'} }\n` +
     `@media (max-width: ${profile.polaroid.placement.hideBelowWidth}px) { .dream-polaroid { display: none !important; } }\n`
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 2, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 3, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
     assets
   }
 }

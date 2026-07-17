@@ -11,6 +11,25 @@ import type { ProfileStore } from './profile-store'
 interface StartResult { port: number; browserId: string; version: string }
 const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
 
+export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<string, string>): string {
+  const c = profile.colors
+  const rules = [`:root.codex-dream-skin { --dream-ink: ${c.ink}; --dream-deep: ${c.accent}; --dream-cyan: ${c.accent}; --dream-accent: ${c.accent}; --dream-pink: ${c.pink}; --dream-lavender: ${c.lavender}; --dream-line: ${c.border}; --dream-border: ${c.border}; --dream-surface: ${c.surface}; }`,
+    `html.codex-dream-skin body { color: ${c.ink} !important; background-color: ${c.surface} !important; }`,
+    `.dream-layout-root { --dream-art-scale: ${Math.round(profile.hero.scale * 100)}%; --dream-art-x: ${profile.hero.position.x * 100}%; --dream-art-y: ${profile.hero.position.y * 100}%; }`]
+  const source = profile.polaroid.sourceImage
+  const fence = profile.polaroid.fence as Fence
+  if (profile.polaroid.visible && source && profile.polaroid.sourceSize && assets[source] && isFenceValid(fence)) {
+    const bounds = fenceBounds(fence)
+    const ratio = (bounds.width * profile.polaroid.sourceSize.width) / (bounds.height * profile.polaroid.sourceSize.height)
+    const positionX = bounds.width === 1 ? 0 : bounds.minX / (1 - bounds.width) * 100
+    const positionY = bounds.height === 1 ? 0 : bounds.minY / (1 - bounds.height) * 100
+    const p = profile.polaroid.placement
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${ratio}; transform: rotate(${p.rotation}deg); transform-origin: center; background-image: url("${assets[source]}") !important; background-size: ${100 / bounds.width}% ${100 / bounds.height}% !important; background-position: ${positionX}% ${positionY}% !important; clip-path: ${fenceClipPath(fence)} !important; }`)
+    rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
+  } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
+  return rules.join('\n')
+}
+
 export class CodexService {
   private watcher: CdpWatcher | null = null
   private activeThemeId: string | null = null
@@ -189,7 +208,7 @@ export class CodexService {
       readFile(join(this.resourcesRoot, 'renderer-inject.js'), 'utf8')
     ])
     const hero = profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
-    const css = `${baseCss}\n${homeLayoutCss}\n${this.dynamicCss(profile, compiled.assets)}\n`
+    const css = `${baseCss}\n${homeLayoutCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
       source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
     ]))
@@ -202,25 +221,6 @@ export class CodexService {
         copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
         actions: HOME_ACTIONS
       }))
-  }
-
-  private dynamicCss(profile: ThemeProfile, assets: Record<string, string>): string {
-    const c = profile.colors
-    const rules = [`:root.codex-dream-skin { --dream-ink: ${c.ink}; --dream-deep: ${c.accent}; --dream-cyan: ${c.accent}; --dream-accent: ${c.accent}; --dream-pink: ${c.pink}; --dream-lavender: ${c.lavender}; --dream-line: ${c.border}; --dream-border: ${c.border}; --dream-surface: ${c.surface}; }`,
-      `html.codex-dream-skin body { color: ${c.ink} !important; background-color: ${c.surface} !important; }`,
-      `.dream-layout-root { --dream-art-scale: ${Math.round(profile.hero.scale * 100)}%; --dream-art-x: ${profile.hero.position.x * 100}%; --dream-art-y: ${profile.hero.position.y * 100}%; }`]
-    const source = profile.polaroid.sourceImage
-    const fence = profile.polaroid.fence as Fence
-    if (source && profile.polaroid.sourceSize && assets[source] && isFenceValid(fence)) {
-      const bounds = fenceBounds(fence)
-      const ratio = (bounds.width * profile.polaroid.sourceSize.width) / (bounds.height * profile.polaroid.sourceSize.height)
-      const positionX = bounds.width === 1 ? 0 : bounds.minX / (1 - bounds.width) * 100
-      const positionY = bounds.height === 1 ? 0 : bounds.minY / (1 - bounds.height) * 100
-      const p = profile.polaroid.placement
-      rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${ratio}; transform: rotate(${p.rotation}deg); transform-origin: center; background-image: url("${assets[source]}") !important; background-size: ${100 / bounds.width}% ${100 / bounds.height}% !important; background-position: ${positionX}% ${positionY}% !important; clip-path: ${fenceClipPath(fence)} !important; }`)
-      rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
-    } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
-    return rules.join('\n')
   }
 
   private async writeRuntimePayload(payload: string): Promise<void> {

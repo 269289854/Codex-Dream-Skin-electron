@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Box, Check, ChevronDown, CircleHelp, Copy, Image, MonitorPlay, Palette, Play,
-  Plus, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload
+  Box, Check, ChevronDown, CircleHelp, Copy, Folder, GitBranch, Image, Laptop, Mic,
+  MonitorPlay, Palette, Play, Plus, RotateCcw, Save, Settings2, Sparkles, Trash2,
+  Undo2, Upload
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
@@ -10,6 +11,7 @@ import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary
 import { FenceEditor } from './FenceEditor'
 import { builtinIconOptions, builtinIcons } from './icons'
 import { PolaroidPreview } from './PolaroidPreview'
+import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT } from './preview-home'
 
 const colorLabels: Record<keyof ThemeProfile['colors'], string> = {
   surface: '背景', ink: '正文', accent: '强调', pink: '粉色', lavender: '淡紫',
@@ -224,12 +226,9 @@ export function App(): React.JSX.Element {
     '--dream-accent': draft.colors.accent,
     '--dream-pink': draft.colors.pink,
     '--dream-lavender': draft.colors.lavender,
-    '--dream-border': draft.colors.border,
-    '--dream-art': heroUrl ? `url(${JSON.stringify(heroUrl)})` : 'linear-gradient(135deg, #d9fbfc, #fff4fb 52%, #e7ddff)',
-    '--dream-art-scale': `${draft.hero.scale * 100}%`,
-    '--dream-art-x': `${draft.hero.position.x * 100}%`,
-    '--dream-art-y': `${draft.hero.position.y * 100}%`
+    '--dream-border': draft.colors.border
   } as React.CSSProperties
+  const heroImage = buildPreviewHeroImageProps(heroUrl, draft.hero)
 
   return (
     <main className="studio-shell">
@@ -266,11 +265,14 @@ export function App(): React.JSX.Element {
                 <section className="codex-main" ref={previewRef}>
                   <header className="preview-brand"><span>✦</span><div><strong>初音未来主题 Codex App</strong><small>你的专属 AI 编程与创作伙伴</small></div><em>MIKU ✦ 01</em></header>
                   <div className="preview-home-content">
-                    <section className="dream-layout-root dream-hero">
+                    <section className="dream-layout-root dream-hero preview-hero-explicit">
+                      {heroImage
+                        ? <img className="preview-hero-art" src={heroImage.src} style={heroImage.style} alt="" draggable={false} />
+                        : <div className="preview-hero-fallback" aria-hidden="true" />}
                       <div className="dream-heading-region">
                         <h1 className="dream-heading">
                           <span className="dream-copy-node dream-copy-before">{headingParts.before}</span>
-                          <button className="dream-project-selector dream-project-proxy" type="button">Codex-Dream-Skin</button>
+                          <button className="dream-project-selector dream-project-proxy" type="button">{PREVIEW_HOME_CONTEXT.projectName}</button>
                           <span className="dream-copy-node dream-copy-after">{headingParts.after}</span>
                           <span className="dream-copy-node dream-copy-subtitle">{draft.copy.subtitle}</span>
                         </h1>
@@ -279,10 +281,31 @@ export function App(): React.JSX.Element {
                         {HOME_ACTIONS.map((action) => <button className="dream-action-card" type="button" key={action.label}><span className="dream-action-icon"><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} /></span><span className="dream-action-label">{action.label}</span><span className="dream-action-heart"><RenderIcon slot="decoration" profile={draft} assets={assets} /></span></button>)}
                       </div>
                     </section>
-                    <div className="dream-project-bar preview-project-bar"><button type="button"><RenderIcon slot="project" profile={draft} assets={assets} />Codex-Dream-Skin</button></div>
-                    <div className="dream-composer preview-composer"><span>随心输入，让灵感与代码一起起飞吧～</span><div><span>完全访问</span><RenderIcon slot="composer" profile={draft} assets={assets} /></div></div>
+                    <div className="preview-lower-region">
+                      <div className="dream-project-bar preview-project-bar">
+                        <div className="preview-project-chips">
+                          <button type="button" data-preview-context="project"><Folder size={16} /><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
+                          <button type="button" data-preview-context="environment"><Laptop size={15} /><span>{PREVIEW_HOME_CONTEXT.environment}</span></button>
+                          <button type="button" data-preview-context="branch"><GitBranch size={15} /><span>{PREVIEW_HOME_CONTEXT.branch}</span></button>
+                        </div>
+                      </div>
+                      <div className="dream-composer preview-composer">
+                        <span className="preview-composer-placeholder">随心输入，让灵感与代码一起起飞吧～</span>
+                        <div className="preview-composer-footer">
+                          <div className="preview-composer-tools">
+                            <button className="preview-icon-command" type="button" title="添加"><Plus size={18} /></button>
+                            <button className="preview-access-command" type="button"><span aria-hidden="true">!</span>完全访问</button>
+                          </div>
+                          <div className="preview-composer-tools">
+                            <button className="preview-model-command" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button>
+                            <button className="preview-icon-command" type="button" title="语音输入"><Mic size={17} /></button>
+                            <button className="preview-send-command" type="button" title="发送"><RenderIcon slot="composer" profile={draft} assets={assets} /></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  {polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
@@ -304,6 +327,7 @@ export function App(): React.JSX.Element {
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="拍立得">
+              <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={draft.polaroid.visible} onChange={(event) => change((profile) => { profile.polaroid.visible = event.target.checked })} /></label>
               <button className="secondary-command" onClick={() => void selectImage('polaroid')}><Image size={15} />{polaroidUrl ? '更换拍立得原图' : '选择拍立得原图'}</button>
               {polaroidUrl && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
               <Range label="宽度" min={.08} max={.6} step={.01} value={draft.polaroid.placement.width} onChange={(value) => change((profile) => { profile.polaroid.placement.width = value })} />

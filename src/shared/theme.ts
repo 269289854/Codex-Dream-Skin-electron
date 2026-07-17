@@ -28,6 +28,7 @@ const profileFields = {
     position: pointSchema
   }).strict(),
   polaroid: z.object({
+    visible: z.boolean().default(true),
     sourceImage: z.string().max(260).nullable(),
     sourceSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).strict().nullable().default(null),
     fence: z.tuple([pointSchema, pointSchema, pointSchema, pointSchema]),
@@ -62,6 +63,12 @@ const profileFields = {
 
 export const themeProfileSchema = z.object({
   ...profileFields,
+  version: z.literal(3),
+  copy: homeCopySchema
+}).strict()
+
+const versionTwoThemeSchema = z.object({
+  ...profileFields,
   version: z.literal(2),
   copy: homeCopySchema
 }).strict()
@@ -95,7 +102,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 2,
+    version: 3,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY },
     hero: {
@@ -105,6 +112,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       position: { x: 0.5, y: 0.5 }
     },
     polaroid: {
+      visible: true,
       sourceImage: null,
       sourceSize: null,
       fence: [
@@ -138,12 +146,16 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 2) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 3) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 2) {
+    const legacy = versionTwoThemeSchema.parse(input)
+    return themeProfileSchema.parse({ ...legacy, version: 3 })
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 1) {
     const legacy = versionOneThemeSchema.parse(input)
-    return themeProfileSchema.parse({ ...legacy, version: 2, copy: { ...DEFAULT_HOME_COPY } })
+    return themeProfileSchema.parse({ ...legacy, version: 3, copy: { ...DEFAULT_HOME_COPY } })
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 0) {
     const legacy = legacyThemeSchema.parse(input)
