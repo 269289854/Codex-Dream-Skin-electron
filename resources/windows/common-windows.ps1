@@ -5,7 +5,8 @@ function Enter-DreamSkinOperationLock {
   $mutex = [System.Threading.Mutex]::new($false, "Local\CodexDreamSkin.$sid.Operation")
   $acquired = $false
   try {
-    $acquired = $mutex.WaitOne(0)
+    # Startup recovery and a user-triggered operation can overlap briefly while the renderer loads.
+    $acquired = $mutex.WaitOne(10000)
   } catch [System.Threading.AbandonedMutexException] {
     $acquired = $true
   }

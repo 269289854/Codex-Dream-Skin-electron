@@ -10,6 +10,7 @@ let codexService: CodexService
 let tray: Tray | null = null
 let trayIcon: NativeImage | null = null
 let quitting = false
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 function showWindow(): void {
   mainWindow?.show()
@@ -110,24 +111,30 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(async () => {
-  if (process.platform !== 'win32') throw new Error('Codex Dream Skin Studio only supports Windows.')
-  trayIcon = await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
-  const localAppData = process.env.LOCALAPPDATA ?? app.getPath('userData')
-  const resourcesRoot = app.isPackaged ? join(process.resourcesPath, 'windows') : join(app.getAppPath(), 'resources', 'windows')
-  store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), join(resourcesRoot, 'dream-reference.png'))
-  await store.initialize()
-  codexService = new CodexService(store, resourcesRoot, (status) => {
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
-    try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => showWindow())
+
+  app.whenReady().then(async () => {
+    if (process.platform !== 'win32') throw new Error('Codex Dream Skin Studio only supports Windows.')
+    trayIcon = await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
+    const localAppData = process.env.LOCALAPPDATA ?? app.getPath('userData')
+    const resourcesRoot = app.isPackaged ? join(process.resourcesPath, 'windows') : join(app.getAppPath(), 'resources', 'windows')
+    store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), join(resourcesRoot, 'dream-reference.png'))
+    await store.initialize()
+    codexService = new CodexService(store, resourcesRoot, (status) => {
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
+      try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
+    })
+    registerIpc()
+    createWindow()
+    void codexService.resume()
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-  registerIpc()
-  createWindow()
-  void codexService.resume()
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+}
 
 app.on('window-all-closed', () => { if (!codexService?.isActive()) app.quit() })
 app.on('before-quit', () => { quitting = true })

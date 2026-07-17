@@ -34,6 +34,7 @@ export class CodexService {
   private watcher: CdpWatcher | null = null
   private activeThemeId: string | null = null
   private recovering = false
+  private operationTail: Promise<void> = Promise.resolve()
   private status: RuntimeStatus = {
     phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null,
     backupAvailable: false, lastError: null, message: '等待检测 Codex'
@@ -48,7 +49,9 @@ export class CodexService {
   getStatus(): RuntimeStatus { return { ...this.status } }
   isActive(): boolean { return this.status.phase === 'active' || this.status.phase === 'injecting' || this.status.phase === 'starting' }
 
-  async resume(): Promise<void> {
+  async resume(): Promise<void> { return this.enqueueOperation(() => this.resumeInternal()) }
+
+  private async resumeInternal(): Promise<void> {
     let detection: CodexDetection
     try {
       detection = await this.bridge<CodexDetection>('Detect')
@@ -94,7 +97,9 @@ export class CodexService {
     }
   }
 
-  async detect(): Promise<CodexDetection> {
+  async detect(): Promise<CodexDetection> { return this.enqueueOperation(() => this.detectInternal()) }
+
+  private async detectInternal(): Promise<CodexDetection> {
     this.patch('detecting', '正在检测 Microsoft Store Codex')
     try {
       const detection = await this.bridge<CodexDetection>('Detect')
@@ -106,6 +111,10 @@ export class CodexService {
   }
 
   async installTheme(themeId: string): Promise<RuntimeStatus> {
+    return this.enqueueOperation(() => this.installThemeInternal(themeId))
+  }
+
+  private async installThemeInternal(themeId: string): Promise<RuntimeStatus> {
     this.patch('installing', '正在生成并安装主题配置')
     try {
       const payload = await this.buildPayload(themeId)
@@ -118,8 +127,12 @@ export class CodexService {
   }
 
   async start(themeId: string, restartExisting: boolean): Promise<RuntimeStatus> {
+    return this.enqueueOperation(() => this.startInternal(themeId, restartExisting))
+  }
+
+  private async startInternal(themeId: string, restartExisting: boolean): Promise<RuntimeStatus> {
     try {
-      await this.installTheme(themeId)
+      await this.installThemeInternal(themeId)
       this.patch('starting', '正在启动 Codex 本地主题会话')
       const args = ['-Port', String(this.status.port)]
       if (restartExisting) args.push('-RestartExisting')
@@ -135,6 +148,10 @@ export class CodexService {
   }
 
   async reinject(themeId: string): Promise<RuntimeStatus> {
+    return this.enqueueOperation(() => this.reinjectInternal(themeId))
+  }
+
+  private async reinjectInternal(themeId: string): Promise<RuntimeStatus> {
     if (!this.watcher) throw this.fail(new Error('当前没有活动的 Codex 主题会话。'))
     try {
       this.patch('injecting', '正在重新编译并注入主题')
@@ -148,6 +165,10 @@ export class CodexService {
   }
 
   async verify(): Promise<RuntimeStatus> {
+    return this.enqueueOperation(() => this.verifyInternal())
+  }
+
+  private async verifyInternal(): Promise<RuntimeStatus> {
     if (!this.watcher) throw this.fail(new Error('当前没有活动的 Codex 主题会话。'))
     try {
       const snapshot = await this.watcher.verify()
@@ -156,7 +177,9 @@ export class CodexService {
     } catch (reason) { throw this.fail(reason) }
   }
 
-  async stop(): Promise<RuntimeStatus> {
+  async stop(): Promise<RuntimeStatus> { return this.enqueueOperation(() => this.stopInternal()) }
+
+  private async stopInternal(): Promise<RuntimeStatus> {
     this.activeThemeId = null
     await rm(this.sessionPath(), { force: true })
     if (this.watcher) await this.watcher.stop(true)
@@ -166,6 +189,10 @@ export class CodexService {
   }
 
   async restore(restartCodex: boolean): Promise<RuntimeStatus> {
+    return this.enqueueOperation(() => this.restoreInternal(restartCodex))
+  }
+
+  private async restoreInternal(restartCodex: boolean): Promise<RuntimeStatus> {
     this.patch('restoring', '正在恢复 Codex 原始配置')
     try {
       if (this.watcher) await this.watcher.stop(true)
@@ -248,6 +275,12 @@ export class CodexService {
     this.recovering = true
     const themeId = this.activeThemeId
     try {
+      await this.enqueueOperation(() => this.recoverActiveSessionInternal(themeId))
+    } finally { this.recovering = false }
+  }
+
+  private async recoverActiveSessionInternal(themeId: string): Promise<void> {
+    try {
       this.patch('starting', '正在恢复 Codex 主题会话')
       const result = await this.bridge<StartResult>('Start', ['-Port', String(this.status.port), '-RestartExisting'], 65_000)
       const payload = await this.buildPayload(themeId)
@@ -260,7 +293,7 @@ export class CodexService {
       this.status.phase = 'error'
       this.status.message = '自动恢复失败，请重新启动主题'
       this.emit()
-    } finally { this.recovering = false }
+    }
   }
 
   private sessionPath(): string { return join(this.store.root, 'runtime', 'session.json') }
@@ -272,6 +305,11 @@ export class CodexService {
 
   private bridge<T>(action: string, extra: string[] = [], timeoutMs?: number): Promise<T> {
     return runPowerShell<T>(join(this.resourcesRoot, 'studio-bridge.ps1'), ['-Action', action, '-StudioRoot', this.store.root, ...extra], timeoutMs)
+  }
+  private enqueueOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.operationTail.then(operation)
+    this.operationTail = next.then(() => undefined, () => undefined)
+    return next
   }
   private patch(phase: RuntimePhase, message: string): void { this.status.phase = phase; this.status.message = message; if (phase !== 'error') this.status.lastError = null; this.emit() }
   private fail(reason: unknown): Error { const error = reason instanceof Error ? reason : new Error(String(reason)); this.status.phase = 'error'; this.status.connected = false; this.status.lastError = error.message; this.status.message = '操作失败'; this.emit(); return error }
