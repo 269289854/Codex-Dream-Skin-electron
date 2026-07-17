@@ -1,7 +1,33 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron'
 import { join } from 'node:path'
+import { ProfileStore } from './profile-store'
 
 let mainWindow: BrowserWindow | null = null
+let store: ProfileStore
+
+function registerIpc(): void {
+  ipcMain.handle('app:get-info', () => ({ version: app.getVersion(), platform: process.platform }))
+  ipcMain.handle('themes:list', () => store.list())
+  ipcMain.handle('themes:get', (_event, id: string) => store.get(id))
+  ipcMain.handle('themes:create', (_event, name: string) => store.create(name))
+  ipcMain.handle('themes:duplicate', (_event, id: string, name: string) => store.duplicate(id, name))
+  ipcMain.handle('themes:update', (_event, profile: unknown) => store.update(profile))
+  ipcMain.handle('themes:delete', (_event, id: string) => store.delete(id))
+  ipcMain.handle('themes:activate', (_event, id: string) => store.activate(id))
+  ipcMain.handle('themes:compile', (_event, id: string) => store.compile(id))
+  ipcMain.handle('assets:select', async (_event, themeId: string, purpose: 'hero' | 'polaroid' | 'icon') => {
+    const options: OpenDialogOptions = {
+      title: purpose === 'icon' ? '选择图标' : '选择主题图片',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return null
+    return store.importAsset(themeId, result.filePaths[0], purpose)
+  })
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -38,11 +64,12 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
-  ipcMain.handle('app:get-info', () => ({
-    version: app.getVersion(),
-    platform: process.platform
-  }))
+app.whenReady().then(async () => {
+  if (process.platform !== 'win32') throw new Error('Codex Dream Skin Studio only supports Windows.')
+  const localAppData = process.env.LOCALAPPDATA ?? app.getPath('userData')
+  store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'))
+  await store.initialize()
+  registerIpc()
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
