@@ -93,6 +93,19 @@ export function isPreviewTargetId(value: string | undefined): value is PreviewTa
   return Boolean(value && Object.prototype.hasOwnProperty.call(PREVIEW_TARGETS, value))
 }
 
+export interface PreviewTargetMatch {
+  id: PreviewTargetId
+  anchor: HTMLElement
+}
+
+export function findPreviewTarget(source: EventTarget | null, root: Element): PreviewTargetMatch | null {
+  const candidate = source as Element | null
+  if (!candidate || typeof candidate.closest !== 'function') return null
+  const anchor = candidate.closest<HTMLElement>(`[${PREVIEW_TARGET_ATTRIBUTE}]`)
+  if (!anchor || !root.contains(anchor) || !isPreviewTargetId(anchor.dataset.previewTarget)) return null
+  return { id: anchor.dataset.previewTarget, anchor }
+}
+
 export interface RectLike {
   left: number
   top: number

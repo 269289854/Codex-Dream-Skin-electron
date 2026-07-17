@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { IconSlot } from '../src/shared/theme'
 import {
+  findPreviewTarget,
   isPreviewTargetId,
   placePreviewPopover,
   PREVIEW_TARGETS,
@@ -40,6 +41,23 @@ describe('preview editing registry', () => {
     expect(PREVIEW_TARGETS['palette-composer'].editor).toEqual({ kind: 'palette', region: 'composer', colors: ['ink', 'accent', 'pink'] })
     expect(isPreviewTargetId('palette-composer')).toBe(true)
     expect(isPreviewTargetId('unknown-target')).toBe(false)
+  })
+
+  it('resolves the most specific nested target inside the preview root', () => {
+    const root = {
+      contains: () => true
+    } as unknown as Element
+    const card = { dataset: { previewTarget: 'palette-action-card' } } as unknown as HTMLElement
+    const icon = { dataset: { previewTarget: 'icon-card-primary' } } as unknown as HTMLElement
+    const iconSource = {
+      closest: () => icon
+    } as unknown as Element
+    const cardSource = {
+      closest: () => card
+    } as unknown as Element
+
+    expect(findPreviewTarget(iconSource, root)).toEqual({ id: 'icon-card-primary', anchor: icon })
+    expect(findPreviewTarget(cardSource, root)).toEqual({ id: 'palette-action-card', anchor: card })
   })
 })
 

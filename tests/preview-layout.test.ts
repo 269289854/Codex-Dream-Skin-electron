@@ -70,7 +70,7 @@ describe('Studio home preview', () => {
     const previewRule = css.match(/\.codex-preview\s*\{[^}]+\}/)?.[0]
     const sidebarRule = css.match(/\.codex-sidebar\s*\{[^}]+\}/)?.[0]
 
-    expect(source).toContain('<CodexSidebarPreview />')
+    expect(source).toContain('<CodexSidebarPreview profile={draft} assets={assets} />')
     expect(source).not.toContain('className="codex-rail"')
     expect(source).toContain('className="codex-project-scroll"')
     expect(source).toContain('className="codex-sidebar-footer"')

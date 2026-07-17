@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { useRef, useState } from 'react'
 import { Check, MousePointer2, RotateCcw } from 'lucide-react'
 import { isFenceValid, type Fence } from '../../shared/geometry'

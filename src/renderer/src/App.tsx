@@ -1,6 +1,7 @@
+import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy, Folder,
+  AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy,
   GitBranch, GitPullRequest, Grid2X2, Image, Laptop, Mic, MonitorPlay, Palette, Play,
   Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload
 } from 'lucide-react'
@@ -15,7 +16,7 @@ import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJE
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import {
   ICON_PREVIEW_TARGETS,
-  isPreviewTargetId,
+  findPreviewTarget,
   placePreviewPopover,
   PREVIEW_TARGET_ATTRIBUTE,
   PREVIEW_TARGETS,
@@ -57,6 +58,7 @@ export function App(): React.JSX.Element {
       setDraft(profile)
       setAssets(compiled.assets)
       setPreviewSelection(null)
+      setInspectorAnchor(null)
       historyRef.current = []
     } catch (reason) { setError(messageOf(reason)) }
   }, [])
@@ -280,14 +282,21 @@ export function App(): React.JSX.Element {
   }
 
   const selectPreviewTarget = (event: React.PointerEvent<HTMLDivElement>): void => {
-    const source = event.target
-    if (!(source instanceof Element)) return
-    const anchor = source.closest<HTMLElement>(`[${PREVIEW_TARGET_ATTRIBUTE}]`)
-    if (!anchor || !event.currentTarget.contains(anchor)) return
-    const id = anchor.dataset.previewTarget
-    if (!isPreviewTargetId(id)) return
+    const match = findPreviewTarget(event.target, event.currentTarget)
+    if (!match) return
     setPopoverPosition(null)
-    setPreviewSelection({ id, anchor })
+    setInspectorAnchor(null)
+    setPreviewSelection(match)
+  }
+
+  const selectPreviewTargetWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    const match = findPreviewTarget(event.target, event.currentTarget)
+    if (!match) return
+    if (event.key === ' ') event.preventDefault()
+    setPopoverPosition(null)
+    setInspectorAnchor(null)
+    setPreviewSelection(match)
   }
 
   const showInspector = (tab: InspectorTab | 'runtime'): void => {
@@ -386,14 +395,15 @@ export function App(): React.JSX.Element {
                 ref={previewCanvasRef}
                 className="codex-preview"
                 onPointerDownCapture={selectPreviewTarget}
+                onKeyDownCapture={selectPreviewTargetWithKeyboard}
                 onPointerMove={movePlacement}
                 onPointerUp={() => setDraggingPlacement(false)}
                 onPointerLeave={() => setDraggingPlacement(false)}
                 style={{ ...previewStyle, transform: `scale(${previewScale})` }}
               >
-                <CodexSidebarPreview />
+                <CodexSidebarPreview profile={draft} assets={assets} />
                 <section className="codex-main" ref={previewRef} data-preview-target="palette-canvas">
-                  <header className="preview-brand" data-preview-target="palette-brand"><span className="preview-brand-icon" data-preview-target="icon-branding"><RenderIcon slot="branding" profile={draft} assets={assets} /></span><div><strong>初音未来主题 Codex App</strong><small>你的专属 AI 编程与创作伙伴</small></div><em>MIKU ✦ 01</em></header>
+                  <header className="preview-brand" data-preview-target="palette-brand" tabIndex={0} role="button" aria-label="编辑品牌栏颜色"><span className="preview-brand-icon" data-preview-target="icon-branding"><RenderIcon slot="branding" profile={draft} assets={assets} /></span><div><strong>初音未来主题 Codex App</strong><small>你的专属 AI 编程与创作伙伴</small></div><em>MIKU ✦ 01</em></header>
                   <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
@@ -404,17 +414,17 @@ export function App(): React.JSX.Element {
                           <span className="dream-copy-node dream-copy-before">{headingParts.before}</span>
                           <button className="dream-project-selector dream-project-proxy" type="button">{PREVIEW_HOME_CONTEXT.projectName}</button>
                           <span className="dream-copy-node dream-copy-after">{headingParts.after}</span>
-                          <span className="dream-copy-node dream-copy-subtitle" data-preview-target="copy-subtitle">{draft.copy.subtitle}</span>
+                          <span className="dream-copy-node dream-copy-subtitle" data-preview-target="copy-subtitle" tabIndex={0} role="button" aria-label="编辑副标题">{draft.copy.subtitle}</span>
                         </h1>
                       </div>
                       <div className="dream-action-grid">
-                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={assets} injected /></span></button>)}
+                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={`编辑${action.label}卡片颜色`}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={assets} injected /></span></button>)}
                       </div>
                     </section>
                     <div className="preview-lower-region">
                       <div className="dream-project-bar preview-project-bar" data-preview-target="palette-project-bar">
                         <div className="preview-project-chips">
-                          <button type="button" data-preview-context="project"><Folder size={16} /><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
+                          <button type="button" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={assets} /></span><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
                           <button type="button" data-preview-context="environment"><Laptop size={15} /><span>{PREVIEW_HOME_CONTEXT.environment}</span></button>
                           <button type="button" data-preview-context="branch"><GitBranch size={15} /><span>{PREVIEW_HOME_CONTEXT.branch}</span></button>
                         </div>
@@ -429,13 +439,13 @@ export function App(): React.JSX.Element {
                           <div className="preview-composer-tools">
                             <button className="preview-model-command" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button>
                             <button className="preview-icon-command" type="button" title="语音输入"><Mic size={17} /></button>
-                            <button className="preview-send-command" data-preview-target="icon-composer" type="button" title="发送"><RenderIcon slot="composer" profile={draft} assets={assets} /></button>
+                            <button className="preview-send-command" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送图标"><RenderIcon slot="composer" profile={draft} assets={assets} /></button>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
@@ -508,7 +518,7 @@ const previewNavigation = [
   { label: '插件', icon: AtSign }
 ] as const
 
-function CodexSidebarPreview(): React.JSX.Element {
+function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
   return (
     <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
       <div className="codex-sidebar-header">
@@ -524,7 +534,7 @@ function CodexSidebarPreview(): React.JSX.Element {
           {PREVIEW_SIDEBAR_PROJECTS.map((project) => (
             <div className="codex-project-group" key={project.name}>
               <button className={project.active ? 'codex-project-row active' : 'codex-project-row'} type="button">
-                <Folder size={18} />
+                <span className="codex-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={profile} assets={assets} /></span>
                 <span>{project.name}</span>
                 {project.active && <ChevronsUpDown size={16} />}
               </button>

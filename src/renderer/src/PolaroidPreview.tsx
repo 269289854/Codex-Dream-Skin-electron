@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../../shared/geometry'
 
 interface PolaroidPreviewProps {
@@ -5,10 +6,11 @@ interface PolaroidPreviewProps {
   fence: Fence
   sourceSize: { width: number; height: number } | null
   placement: { x: number; y: number; width: number; rotation: number }
+  pin: React.ReactNode
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
 }
 
-export function PolaroidPreview({ imageUrl, fence, sourceSize, placement, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
+export function PolaroidPreview({ imageUrl, fence, sourceSize, placement, pin, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
   if (!sourceSize || !isFenceValid(fence)) return null
   const bounds = fenceBounds(fence)
   const aspectRatio = (bounds.width * sourceSize.width) / (bounds.height * sourceSize.height)
@@ -16,6 +18,9 @@ export function PolaroidPreview({ imageUrl, fence, sourceSize, placement, onPoin
     <div
       className="preview-polaroid dream-layout-polaroid"
       data-preview-target="polaroid"
+      tabIndex={0}
+      role="button"
+      aria-label="编辑拍立得"
       onPointerDown={onPointerDown}
       style={{
         left: `${placement.x * 100}%`,
@@ -37,6 +42,7 @@ export function PolaroidPreview({ imageUrl, fence, sourceSize, placement, onPoin
           top: `${-bounds.minY / bounds.height * 100}%`
         }}
       />
+      <span className="preview-polaroid-pin" data-preview-target="icon-polaroid-pin" onPointerDown={(event) => event.stopPropagation()}>{pin}</span>
     </div>
   )
 }
