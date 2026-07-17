@@ -1,5 +1,6 @@
 import type { CompiledTheme } from '../shared/contracts'
 import { HOME_ACTIONS } from '../shared/home-layout'
+import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import type { ThemeProfile } from '../shared/theme'
 
 export async function compileTheme(
@@ -16,13 +17,8 @@ export async function compileTheme(
   for (const asset of assetNames) assets[asset] = await readAsset(asset)
   const hero = profile.hero.sourceImage ? assets[profile.hero.sourceImage] : null
   const polaroid = profile.polaroid.sourceImage ? assets[profile.polaroid.sourceImage] : null
-  const c = profile.colors
-
-  const css = `:root {\n` +
-    `  --dream-surface: ${c.surface};\n  --dream-ink: ${c.ink};\n  --dream-accent: ${c.accent};\n` +
-    `  --dream-pink: ${c.pink};\n  --dream-lavender: ${c.lavender};\n  --dream-border: ${c.border};\n` +
-    `  --dream-success: ${c.success};\n  --dream-danger: ${c.danger};\n}\n` +
-    `html.codex-dream-skin body { color: var(--dream-ink); background-color: var(--dream-surface);${hero ? ` background-image: url("${escapeCssUrl(hero)}");` : ''} background-position: ${percent(profile.hero.position.x)} ${percent(profile.hero.position.y)}; background-size: ${Math.round(profile.hero.scale * 100)}% auto; }\n` +
+  const css = `:root { ${buildThemeVariableDeclarations(profile)} }\n` +
+    `html.codex-dream-skin body { color: var(--dream-global-text); background: var(--dream-canvas);${hero ? ` background-image: url("${escapeCssUrl(hero)}");` : ''} background-position: ${percent(profile.hero.position.x)} ${percent(profile.hero.position.y)}; background-size: ${Math.round(profile.hero.scale * 100)}% auto; font-family: var(--dream-font-ui); }\n` +
     `.dream-polaroid { position: fixed; left: ${percent(profile.polaroid.placement.x)}; top: ${percent(profile.polaroid.placement.y)}; width: ${percent(profile.polaroid.placement.width)}; transform: rotate(${profile.polaroid.placement.rotation}deg);${polaroid ? ` background-image: url("${escapeCssUrl(polaroid)}");` : ''}${profile.polaroid.visible ? '' : ' display: none !important;'} }\n` +
     `@media (max-width: ${profile.polaroid.placement.hideBelowWidth}px) { .dream-polaroid { display: none !important; } }\n`
 

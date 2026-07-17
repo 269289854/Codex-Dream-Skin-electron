@@ -60,6 +60,9 @@ describe('CodexService operation queue', () => {
     const summary = (await store.list())[0]
     if (!summary) throw new Error('Default theme was not created.')
     const original = await store.get(summary.id)
+    original.typography.slots.ui = { kind: 'builtin', id: 'jetbrains-mono' }
+    original.appearance.paints.canvas = { kind: 'linear', angle: 90, stops: [{ color: 'red', position: 0 }, { color: 'blue', position: 1 }] }
+    await store.update(original)
     const placementListener = vi.fn()
     const service = new CodexService(store, join(process.cwd(), 'resources', 'windows'), () => undefined, placementListener)
     const internal = service as unknown as {
@@ -79,6 +82,9 @@ describe('CodexService operation queue', () => {
     expect(payload).toContain(JSON.stringify(summary.id))
     expect(payload).toContain(JSON.stringify(BUILTIN_ICON_GLYPHS))
     expect(payload).toContain(JSON.stringify(HOME_ACTION_FALLBACK_BUILTINS))
+    expect(payload).toContain('Dream JetBrains Mono')
+    expect(payload).toContain('@font-face')
+    expect(payload).toContain('linear-gradient(90deg, red 0%, blue 100%)')
 
     internal.queuePolaroidPlacement({ themeId: '22222222-2222-4222-8222-222222222222', x: 0.4, y: 0.5 })
     await internal.operationTail

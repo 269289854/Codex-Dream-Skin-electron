@@ -5,17 +5,18 @@ import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
+import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CdpWatcher, type CdpSnapshot } from './cdp-watcher'
 import { runPowerShell } from './powershell'
 import type { ProfileStore } from './profile-store'
+import { buildRuntimeFontCss } from './theme-fonts'
 
 interface StartResult { port: number; browserId: string; version: string }
 const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
 
 export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<string, string>): string {
-  const c = profile.colors
-  const rules = [`:root.codex-dream-skin { --dream-ink: ${c.ink}; --dream-deep: ${c.accent}; --dream-cyan: ${c.accent}; --dream-accent: ${c.accent}; --dream-pink: ${c.pink}; --dream-lavender: ${c.lavender}; --dream-line: ${c.border}; --dream-border: ${c.border}; --dream-surface: ${c.surface}; }`,
-    `html.codex-dream-skin body { color: ${c.ink} !important; background-color: ${c.surface} !important; }`,
+  const rules = [`:root.codex-dream-skin { ${buildThemeVariableDeclarations(profile)} }`,
+    'html.codex-dream-skin body { color: var(--dream-global-text) !important; background: var(--dream-canvas) !important; font-family: var(--dream-font-ui) !important; }',
     `.dream-layout-root { --dream-art-scale: ${Math.round(profile.hero.scale * 100)}%; --dream-art-x: ${profile.hero.position.x * 100}%; --dream-art-y: ${profile.hero.position.y * 100}%; }`]
   const source = profile.polaroid.sourceImage
   const fence = profile.polaroid.fence as Fence
@@ -238,7 +239,8 @@ export class CodexService {
       readFile(join(this.resourcesRoot, 'renderer-inject.js'), 'utf8')
     ])
     const hero = profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
-    const css = `${baseCss}\n${homeLayoutCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
+    const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot)
+    const css = `${baseCss}\n${homeLayoutCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
       source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
     ]))

@@ -7,16 +7,16 @@
   min-height: 390px !important;
   flex: 0 1 auto !important;
   padding: 0 !important;
-  border: 2px solid color-mix(in srgb, var(--dream-accent, #20bcc3) 76%, white) !important;
+  border: 2px solid var(--dream-global-border) !important;
   border-radius: 22px !important;
   overflow: hidden !important;
   background-image:
-    linear-gradient(90deg, rgba(247, 255, 255, .16), rgba(255, 246, 251, .04)),
+    linear-gradient(90deg, color-mix(in srgb, var(--dream-home-heading-backdrop) 16%, transparent), transparent),
     var(--dream-art) !important;
   background-repeat: no-repeat !important;
   background-size: 100% 100%, var(--dream-art-scale, 100%) auto !important;
   background-position: center, var(--dream-art-x, 50%) var(--dream-art-y, 50%) !important;
-  box-shadow: 0 14px 32px rgba(40, 145, 154, .18), inset 0 0 0 4px rgba(255, 255, 255, .24) !important;
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--dream-global-border) 32%, transparent) !important;
   box-sizing: border-box;
 }
 
@@ -59,7 +59,7 @@
   width: 55%;
   border-radius: 20px 0 0 20px;
   pointer-events: none;
-  background: linear-gradient(90deg, rgba(240, 255, 255, .98) 0%, rgba(235, 254, 255, .88) 48%, rgba(252, 240, 249, .58) 76%, transparent 100%);
+  background: linear-gradient(90deg, var(--dream-home-heading-backdrop) 0%, color-mix(in srgb, var(--dream-home-heading-backdrop) 88%, transparent) 48%, transparent 100%);
 }
 
 .dream-layout-root::after {
@@ -68,7 +68,7 @@
   z-index: 1;
   left: 36px;
   top: 28px;
-  color: color-mix(in srgb, var(--dream-accent, #20bcc3) 70%, transparent);
+  color: color-mix(in srgb, var(--dream-action-card-decoration) 70%, transparent);
   font-size: 17px;
   letter-spacing: 0;
   pointer-events: none;
@@ -99,12 +99,13 @@
   align-items: center !important;
   justify-content: flex-start !important;
   gap: 0 !important;
-  color: var(--dream-ink, #164b59) !important;
+  color: var(--dream-home-heading) !important;
+  font-family: var(--dream-font-ui) !important;
   font-size: 0 !important;
   line-height: 1.28 !important;
   font-weight: 750 !important;
   text-align: left !important;
-  text-shadow: 0 2px 10px rgba(255, 255, 255, .86);
+  text-shadow: 0 2px 10px color-mix(in srgb, var(--dream-home-heading-backdrop) 86%, transparent);
   opacity: 1 !important;
   pointer-events: auto !important;
 }
@@ -127,7 +128,7 @@
   flex: 0 0 100%;
   display: block;
   margin-top: 12px;
-  color: color-mix(in srgb, var(--dream-ink, #164b59) 74%, white);
+  color: var(--dream-home-subtitle);
   font-size: 15px;
   line-height: 1.5;
   font-weight: 500;
@@ -141,16 +142,25 @@
 .dream-project-selector {
   margin: 0 5px !important;
   padding: 2px 9px 3px !important;
-  border: 1px solid color-mix(in srgb, var(--dream-accent, #20bcc3) 42%, transparent) !important;
+  border: 1px solid var(--dream-project-selector-border) !important;
   border-radius: 999px !important;
-  background: color-mix(in srgb, var(--dream-accent, #20bcc3) 12%, rgba(255, 255, 255, .82)) !important;
-  color: color-mix(in srgb, var(--dream-accent, #20bcc3) 72%, #164b59) !important;
+  background: var(--dream-project-selector) !important;
+  color: var(--dream-project-selector-text) !important;
   font-size: 30px !important;
   font-weight: 750 !important;
   line-height: 1.28 !important;
-  text-decoration-color: color-mix(in srgb, var(--dream-accent, #20bcc3) 56%, transparent) !important;
+  text-decoration-color: color-mix(in srgb, var(--dream-project-selector-text) 56%, transparent) !important;
   text-underline-offset: 5px;
-  box-shadow: inset 0 0 12px rgba(255, 255, 255, .56) !important;
+  box-shadow: inset 0 0 12px color-mix(in srgb, var(--dream-project-selector-border) 20%, transparent) !important;
+}
+
+.dream-project-selector:hover {
+  background: var(--dream-project-selector-hover) !important;
+}
+
+.dream-project-selector:active,
+.dream-project-selector[aria-pressed="true"] {
+  background: var(--dream-project-selector-selected) !important;
 }
 
 .dream-project-proxy {
@@ -190,16 +200,14 @@
   justify-content: center;
   gap: 8px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--dream-accent, #20bcc3) 54%, white);
+  border: 1px solid var(--dream-action-card-border);
   border-radius: 18px;
-  background:
-    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, .98), transparent 35%),
-    linear-gradient(145deg, rgba(250, 255, 255, .94), rgba(255, 242, 250, .92));
-  color: var(--dream-ink, #164b59);
+  background: var(--dream-action-card);
+  color: var(--dream-action-card-text);
   font: inherit;
   line-height: 1.35;
   text-align: center;
-  box-shadow: 0 8px 18px rgba(37, 118, 128, .13), inset 0 0 0 3px rgba(255, 255, 255, .48);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--dream-action-card-border) 30%, transparent);
   cursor: pointer;
   transform: translateY(0);
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
@@ -210,19 +218,21 @@
   position: absolute;
   right: 10px;
   top: 7px;
-  color: color-mix(in srgb, var(--dream-lavender, #b9a7e8) 68%, transparent);
+  color: var(--dream-action-card-decoration);
   font-size: 13px;
 }
 
 .dream-action-card:hover {
-  border-color: color-mix(in srgb, var(--dream-pink, #f06ea9) 72%, white);
-  box-shadow: 0 13px 25px rgba(37, 118, 128, .18), 0 0 0 2px color-mix(in srgb, var(--dream-pink, #f06ea9) 14%, transparent);
+  background: var(--dream-action-card-hover);
+  border-color: var(--dream-action-card-border);
+  box-shadow: 0 13px 25px color-mix(in srgb, var(--dream-action-card-border) 36%, transparent);
   transform: translateY(-3px);
 }
 
 .dream-action-card:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--dream-accent, #20bcc3) 48%, transparent);
+  outline: 3px solid color-mix(in srgb, var(--dream-action-card-border) 72%, transparent);
   outline-offset: 2px;
+  background: var(--dream-action-card-selected);
 }
 
 .dream-action-icon {
@@ -232,16 +242,16 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(145deg, var(--dream-accent, #20bcc3), var(--dream-lavender, #b9a7e8) 58%, var(--dream-pink, #f06ea9));
-  color: white;
+  background: var(--dream-action-card-icon-badge);
+  color: var(--dream-action-card-icon);
   font-size: 17px;
   font-weight: 750;
-  box-shadow: 0 0 0 7px rgba(213, 250, 250, .66), 0 5px 12px rgba(37, 118, 128, .20);
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--dream-action-card-border) 42%, transparent);
 }
 
 .dream-action-label {
   max-width: 100%;
-  color: var(--dream-ink, #164b59);
+  color: var(--dream-action-card-text);
   font-size: 14px;
   font-weight: 700;
   overflow-wrap: anywhere;
@@ -250,16 +260,16 @@
 .dream-action-heart {
   position: absolute;
   bottom: 5px;
-  color: var(--dream-pink, #f06ea9);
+  color: var(--dream-action-card-decoration);
   font-size: 11px;
 }
 
 .dream-project-bar {
   position: relative;
   padding-top: 28px !important;
-  border: 1px solid color-mix(in srgb, var(--dream-accent, #20bcc3) 38%, transparent) !important;
+  border: 1px solid var(--dream-project-chip-border) !important;
   border-bottom: 0 !important;
-  background: linear-gradient(180deg, rgba(248, 255, 255, .95), rgba(255, 240, 249, .88)) !important;
+  background: var(--dream-project-bar) !important;
 }
 
 .dream-project-bar::before {
@@ -268,32 +278,39 @@
   left: 13px;
   top: 6px;
   z-index: 2;
-  color: color-mix(in srgb, var(--dream-accent, #20bcc3) 72%, #164b59);
+  color: var(--dream-project-bar-text);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
-  text-shadow: 0 1px white;
+  text-shadow: none;
   white-space: nowrap;
 }
 
 .dream-project-bar button {
-  border-color: color-mix(in srgb, var(--dream-accent, #20bcc3) 34%, transparent) !important;
-  background: linear-gradient(135deg, rgba(255, 255, 255, .94), color-mix(in srgb, var(--dream-accent, #20bcc3) 12%, white)) !important;
-  color: color-mix(in srgb, var(--dream-accent, #20bcc3) 68%, #164b59) !important;
-  box-shadow: 0 3px 10px rgba(37, 118, 128, .10) !important;
+  border-color: var(--dream-project-chip-border) !important;
+  background: var(--dream-project-chip) !important;
+  color: var(--dream-project-chip-text) !important;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--dream-project-chip-border) 24%, transparent) !important;
 }
+
+.dream-action-card :is(small, p) {
+  color: var(--dream-action-card-muted-text);
+}
+
+.dream-project-bar button:hover { background: var(--dream-project-chip-hover) !important; }
+.dream-project-bar button:active,
+.dream-project-bar button[aria-pressed="true"] { background: var(--dream-project-chip-selected) !important; }
 
 .dream-native-suggestions {
   display: none !important;
 }
 
 .dream-composer {
-  border: 2px solid color-mix(in srgb, var(--dream-accent, #20bcc3) 48%, transparent) !important;
+  border: 2px solid var(--dream-composer-border) !important;
   border-radius: 22px !important;
-  background:
-    radial-gradient(circle at 88% 22%, rgba(255, 255, 255, .94), transparent 24%),
-    linear-gradient(145deg, rgba(250, 255, 255, .97), rgba(255, 241, 249, .94)) !important;
-  box-shadow: 0 10px 24px rgba(37, 118, 128, .14), inset 0 0 0 4px rgba(255, 255, 255, .48) !important;
+  background: var(--dream-composer) !important;
+  color: var(--dream-composer-text) !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--dream-composer-border) 32%, transparent) !important;
   backdrop-filter: none !important;
   overflow: visible !important;
 }
@@ -309,9 +326,40 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: white;
-  background: linear-gradient(145deg, var(--dream-accent, #20bcc3), var(--dream-pink, #f06ea9));
-  box-shadow: 0 4px 12px rgba(37, 118, 128, .22);
+  color: var(--dream-composer-send-icon);
+  background: var(--dream-composer-send-button);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--dream-composer-border) 44%, transparent);
+}
+
+.dream-composer button {
+  background: var(--dream-composer-tool-button) !important;
+  color: var(--dream-composer-tool-icon) !important;
+}
+
+.dream-composer button:hover { background: var(--dream-composer-tool-button-hover) !important; }
+.dream-composer button:active,
+.dream-composer button[aria-pressed="true"] { background: var(--dream-composer-tool-button-selected) !important; }
+
+.dream-composer :is([data-testid*="permission"], [class*="text-token-description"]) {
+  color: var(--dream-composer-permission-text) !important;
+}
+
+.dream-composer :is([data-testid*="model"], [aria-label*="model" i], [aria-label*="模型"]) {
+  color: var(--dream-composer-model-text) !important;
+}
+
+.dream-composer button[class~="bg-token-foreground"] {
+  background: var(--dream-composer-send-button) !important;
+  color: var(--dream-composer-send-icon) !important;
+}
+
+.dream-composer button[class~="bg-token-foreground"]:hover {
+  background: var(--dream-composer-send-button-hover) !important;
+}
+
+.dream-composer button[class~="bg-token-foreground"]:active,
+.dream-composer button[class~="bg-token-foreground"][aria-pressed="true"] {
+  background: var(--dream-composer-send-button-selected) !important;
 }
 
 /* The real Codex DOM carries stronger utility selectors than the preview fixture. */
@@ -320,7 +368,7 @@
   height: 390px !important;
   min-height: 390px !important;
   background-image:
-    linear-gradient(90deg, rgba(247, 255, 255, .16), rgba(255, 246, 251, .04)),
+    linear-gradient(90deg, color-mix(in srgb, var(--dream-home-heading-backdrop) 16%, transparent), transparent),
     var(--dream-art) !important;
   background-size: 100% 100%, var(--dream-art-scale, 100%) auto !important;
   background-position: center, var(--dream-art-x, 50%) var(--dream-art-y, 50%) !important;

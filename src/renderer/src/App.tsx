@@ -8,6 +8,7 @@ import {
 import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
+import { buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { colorLabels, iconLabels, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { FenceEditor } from './FenceEditor'
@@ -362,14 +363,7 @@ export function App(): React.JSX.Element {
   const brandValidationError = brandCopyError(draft.copy)
   const copyValidationError = homeCopyValidationError ?? brandValidationError
   const selectedTarget = previewSelection ? PREVIEW_TARGETS[previewSelection.id] : null
-  const previewStyle = {
-    '--dream-surface': draft.colors.surface,
-    '--dream-ink': draft.colors.ink,
-    '--dream-accent': draft.colors.accent,
-    '--dream-pink': draft.colors.pink,
-    '--dream-lavender': draft.colors.lavender,
-    '--dream-border': draft.colors.border
-  } as React.CSSProperties
+  const previewStyle = buildThemeStyleVariables(draft) as React.CSSProperties
   const heroImage = buildPreviewHeroImageProps(heroUrl, draft.hero)
 
   return (

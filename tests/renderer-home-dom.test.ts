@@ -41,7 +41,14 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
     ? `<span class="group/title">我们应该在 <button type="button">${projectName}</button> 中构建什么？</span>`
     : '<span class="group/title">我们该构建什么？</span>'
   return `
-    <aside class="app-shell-left-panel"><button type="button" aria-label="切换模式：Codex">Codex</button></aside>
+    <aside class="app-shell-left-panel">
+      <button type="button" aria-label="切换模式：Codex">Codex</button>
+      <header>Sidebar header</header>
+      <button type="button" aria-label="搜索">Search</button>
+      <button type="button" data-project-id="sample">Project</button>
+      <button type="button" data-task-id="sample">Task</button>
+      <footer><span data-testid="team-avatar">DT</span></footer>
+    </aside>
     <main class="main-surface">
       <div role="main">
         <div class="home-page">
@@ -69,10 +76,10 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardPrimary: { name: 'wand-sparkles' },
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }'): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
-    .replace('__DREAM_CSS_JSON__', JSON.stringify('.dream-layout-root { display: block; }'))
+    .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
     .replace('__DREAM_ART_JSON__', JSON.stringify('data:image/png;base64,AA=='))
     .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
       themeId,
@@ -113,12 +120,19 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-brand b img')).toBeNull()
     expect(window.document.querySelector('.dream-brand small')?.textContent).toBe('自定义品牌副标题')
     expect(window.document.querySelector('.dream-signature')?.textContent).toBe('MIKU TEST')
+    expect(window.document.querySelector('aside header')?.classList.contains('dream-sidebar-header')).toBe(true)
+    expect(window.document.querySelector('button[aria-label="搜索"]')?.classList.contains('dream-sidebar-search-button')).toBe(true)
+    expect(window.document.querySelector('[data-project-id]')?.classList.contains('dream-sidebar-project-row')).toBe(true)
+    expect(window.document.querySelector('[data-task-id]')?.classList.contains('dream-sidebar-task-row')).toBe(true)
+    expect(window.document.querySelector('aside footer')?.classList.contains('dream-sidebar-footer')).toBe(true)
+    expect(window.document.querySelector('[data-testid="team-avatar"]')?.classList.contains('dream-sidebar-avatar')).toBe(true)
 
     stateOf(window).ensure()
     expect(modeButton?.querySelectorAll(':scope > .dream-sidebar-mode-icon')).toHaveLength(1)
     stateOf(window).cleanup()
     expect(modeButton?.classList.contains('dream-sidebar-mode-button')).toBe(false)
     expect(modeButton?.querySelector('.dream-sidebar-mode-icon')).toBeNull()
+    expect(window.document.querySelector('.dream-sidebar-project-row')).toBeNull()
   })
 
   it('supports the English native mode button label', () => {
@@ -259,6 +273,25 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-home')).toBeNull()
     expect(window.document.querySelector('.dream-heading')).toBeNull()
     expect(window.document.getElementById('codex-dream-skin-actions')).toBeNull()
+  })
+
+  it('keeps conversation injection idempotent and removes gradient and font styles during cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div role="main"><article data-message-author-role="assistant">Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></main>'
+    const css = ':root.codex-dream-skin { --dream-canvas: linear-gradient(90deg, red, blue); --dream-font-ui: "Dream Imported font-used"; } @font-face { font-family: "Dream Imported font-used"; src: url("data:font/woff2;base64,d09GMg=="); font-display: swap; }'
+    inject(window, {}, { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, css)
+
+    expect(window.document.querySelectorAll('#codex-dream-skin-style')).toHaveLength(1)
+    expect(window.document.getElementById('codex-dream-skin-style')?.textContent).toContain('linear-gradient(90deg, red, blue)')
+    expect(window.document.getElementById('codex-dream-skin-style')?.textContent).toContain('font-display: swap')
+    expect(window.document.querySelector('.dream-home')).toBeNull()
+    stateOf(window).ensure()
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('#codex-dream-skin-style')).toHaveLength(1)
+
+    stateOf(window).cleanup()
+    expect(window.document.getElementById('codex-dream-skin-style')).toBeNull()
+    expect(window.document.documentElement.classList.contains('codex-dream-skin')).toBe(false)
   })
 
   it('falls back without partial layout when the project selector contract drifts', () => {
