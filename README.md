@@ -13,6 +13,8 @@
 
 本项目迁移自 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin)，不是 OpenAI 官方产品。
 
+项目中的预览数据、测试夹具、文档和截图必须遵守 [隐私与示例数据约束](docs/PRIVACY.md)，不得包含开发者本机的真实项目、任务、账号或团队信息。
+
 ## 使用
 
 1. 安装 Microsoft Store 版本 Codex。

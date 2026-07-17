@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Box, Check, ChevronDown, CircleHelp, Copy, Folder, GitBranch, Image, Laptop, Mic,
-  MonitorPlay, Palette, Play, Plus, RotateCcw, Save, Settings2, Sparkles, Trash2,
-  Undo2, Upload
+  AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy, Folder,
+  GitBranch, GitPullRequest, Grid2X2, Image, Laptop, Mic, MonitorPlay, Palette, Play,
+  Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
@@ -11,7 +11,7 @@ import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary
 import { FenceEditor } from './FenceEditor'
 import { builtinIconOptions, builtinIcons } from './icons'
 import { PolaroidPreview } from './PolaroidPreview'
-import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT } from './preview-home'
+import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 
 const colorLabels: Record<keyof ThemeProfile['colors'], string> = {
   surface: '背景', ink: '正文', accent: '强调', pink: '粉色', lavender: '淡紫',
@@ -260,10 +260,9 @@ export function App(): React.JSX.Element {
                 onPointerLeave={() => setDraggingPlacement(false)}
                 style={{ ...previewStyle, transform: `scale(${previewScale})` }}
               >
-                <aside className="codex-rail"><RenderIcon slot="branding" profile={draft} assets={assets} /><span className="rail-line active" /><span className="rail-line" /><span className="rail-line" /><span className="rail-avatar" /></aside>
-                <aside className="codex-nav"><strong>Codex</strong><button>新任务</button><button>拉取请求</button><button>站点</button><button>已安排</button><button>插件</button><small>项目</small><button className="project-row"><RenderIcon slot="project" profile={draft} assets={assets} />Codex-Dream-Skin</button></aside>
+                <CodexSidebarPreview />
                 <section className="codex-main" ref={previewRef}>
-                  <header className="preview-brand"><span>✦</span><div><strong>初音未来主题 Codex App</strong><small>你的专属 AI 编程与创作伙伴</small></div><em>MIKU ✦ 01</em></header>
+                  <header className="preview-brand"><span className="preview-brand-icon"><RenderIcon slot="branding" profile={draft} assets={assets} /></span><div><strong>初音未来主题 Codex App</strong><small>你的专属 AI 编程与创作伙伴</small></div><em>MIKU ✦ 01</em></header>
                   <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit">
                       {heroImage
@@ -353,6 +352,45 @@ export function App(): React.JSX.Element {
         </aside>
       </section>
     </main>
+  )
+}
+
+const previewNavigation = [
+  { label: '新建任务', icon: SquarePen },
+  { label: '拉取请求', icon: GitPullRequest },
+  { label: '站点', icon: Grid2X2 },
+  { label: '已安排', icon: Clock3 },
+  { label: '插件', icon: AtSign }
+] as const
+
+function CodexSidebarPreview(): React.JSX.Element {
+  return (
+    <aside className="codex-sidebar" aria-label="Codex 侧边栏预览">
+      <div className="codex-sidebar-header">
+        <button className="codex-mode-button" type="button"><strong>Codex</strong><ChevronDown size={16} /><span aria-hidden="true">♫</span></button>
+        <button className="codex-sidebar-icon-button" type="button" title="搜索"><Search size={19} /></button>
+      </div>
+      <nav className="codex-primary-nav" aria-label="主要导航">
+        {previewNavigation.map(({ label, icon: Icon }) => <button type="button" key={label}><Icon size={18} /><span>{label}</span></button>)}
+      </nav>
+      <section className="codex-project-section">
+        <div className="codex-project-heading">项目</div>
+        <div className="codex-project-scroll">
+          {PREVIEW_SIDEBAR_PROJECTS.map((project) => (
+            <div className="codex-project-group" key={project.name}>
+              <button className={project.active ? 'codex-project-row active' : 'codex-project-row'} type="button">
+                <Folder size={18} />
+                <span>{project.name}</span>
+                {project.active && <ChevronsUpDown size={16} />}
+              </button>
+              {project.tasks.map((task) => <button className="codex-task-row" type="button" key={task}>{task}</button>)}
+              {'emptyLabel' in project && <div className="codex-task-empty">{project.emptyLabel}</div>}
+            </div>
+          ))}
+        </div>
+      </section>
+      <footer className="codex-sidebar-footer"><span className="codex-team-avatar">{PREVIEW_SIDEBAR_TEAM.avatar}</span><span>{PREVIEW_SIDEBAR_TEAM.label}</span><CircleHelp size={18} /></footer>
+    </aside>
   )
 }
 
