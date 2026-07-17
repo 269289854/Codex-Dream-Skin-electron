@@ -6,23 +6,12 @@ import {
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
-import { headingTemplateError, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
-import { resolveBuiltinIconGlyph } from '../../shared/icon-glyphs'
+import { headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
+import { colorLabels, iconLabels, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { FenceEditor } from './FenceEditor'
-import { builtinIconOptions, builtinIcons } from './icons'
 import { PolaroidPreview } from './PolaroidPreview'
 import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
-
-const colorLabels: Record<keyof ThemeProfile['colors'], string> = {
-  surface: '背景', ink: '正文', accent: '强调', pink: '粉色', lavender: '淡紫',
-  border: '边框', success: '成功', danger: '危险'
-}
-
-const iconLabels: Record<IconSlot, string> = {
-  branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composer: '输入框',
-  project: '项目', decoration: '装饰', polaroidPin: '图钉'
-}
 
 export function App(): React.JSX.Element {
   const [themes, setThemes] = useState<ThemeSummary[]>([])
@@ -345,9 +334,9 @@ export function App(): React.JSX.Element {
               <Range label="旋转" min={-45} max={45} step={1} value={draft.polaroid.placement.rotation} onChange={(value) => change((profile) => { profile.polaroid.placement.rotation = value })} suffix="°" />
               <Range label="隐藏阈值" min={320} max={1600} step={10} value={draft.polaroid.placement.hideBelowWidth} onChange={(value) => change((profile) => { profile.polaroid.placement.hideBelowWidth = value })} suffix="px" />
             </Property>
-            <Property title="主题颜色"><div className="color-grid">{(Object.keys(colorLabels) as (keyof ThemeProfile['colors'])[]).map((key) => <label key={key}><input type="color" value={draft.colors[key]} onChange={(event) => change((profile) => { profile.colors[key] = event.target.value.toUpperCase() })} /><span>{colorLabels[key]}</span><code>{draft.colors[key]}</code></label>)}</div></Property>
+            <Property title="主题颜色"><div className="color-grid">{(Object.keys(colorLabels) as (keyof ThemeProfile['colors'])[]).map((key) => <ThemeColorControl key={key} colorKey={key} value={draft.colors[key]} onChange={(value) => change((profile) => { profile.colors[key] = value })} />)}</div></Property>
           </>}
-          {activeInspector === 'icons' && <Property title="图标槽位"><div className="icon-editor">{(Object.keys(iconLabels) as IconSlot[]).map((slot) => <div className="icon-slot" key={slot}><span className="icon-preview"><RenderIcon slot={slot} profile={draft} assets={assets} /></span><label>{iconLabels[slot]}<select value={draft.icons[slot].kind === 'builtin' ? draft.icons[slot].name : '__asset'} onChange={(event) => { if (event.target.value !== '__asset') change((profile) => { profile.icons[slot] = { kind: 'builtin', name: event.target.value } }) }}><option value="__asset">自定义图片</option>{builtinIconOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="tool-button" title="导入图标" onClick={() => void importIcon(slot)}><Upload size={14} /></button></div>)}</div></Property>}
+          {activeInspector === 'icons' && <Property title="图标槽位"><div className="icon-editor">{(Object.keys(iconLabels) as IconSlot[]).map((slot) => <ThemeIconControl key={slot} slot={slot} profile={draft} assets={assets} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property>}
           {activeInspector === 'runtime' && <>
             <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{runtime.message}</strong><dl><div><dt>阶段</dt><dd>{runtime.phase}</dd></div><div><dt>端口</dt><dd>{runtime.port}</dd></div><div><dt>页面</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{runtime.lastError}</p>}</div></Property>
             <Property title="Codex 控制"><div className="runtime-commands">
@@ -408,20 +397,6 @@ function CodexSidebarPreview(): React.JSX.Element {
 
 function Property({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
   return <section className="property-group"><h3>{title}</h3>{children}</section>
-}
-
-function Range({ label, value, onChange, min, max, step, suffix = '' }: { label: string; value: number; onChange: (value: number) => void; min: number; max: number; step: number; suffix?: string }): React.JSX.Element {
-  return <label className="range-row"><span>{label}</span><input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} /><output>{Number.isInteger(step) ? value : value.toFixed(2)}{suffix}</output></label>
-}
-
-function RenderIcon({ slot, profile, assets, injected = false, fallbackGlyph }: { slot: IconSlot; profile: ThemeProfile; assets: Record<string, string>; injected?: boolean; fallbackGlyph?: string }): React.JSX.Element {
-  const source = profile.icons[slot]
-  if (source.kind === 'asset') return <img className="custom-icon" src={assets[source.asset]} alt="" />
-  const fallbackBuiltin = HOME_ACTION_FALLBACK_BUILTINS[slot as keyof typeof HOME_ACTION_FALLBACK_BUILTINS]
-  if (fallbackGlyph && source.name === fallbackBuiltin) return <span className="builtin-icon-glyph" aria-hidden="true">{fallbackGlyph}</span>
-  if (injected) return <span className="builtin-icon-glyph" aria-hidden="true">{resolveBuiltinIconGlyph(source.name)}</span>
-  const Icon = builtinIcons[source.name] ?? Sparkles
-  return <Icon size={18} />
 }
 
 function messageOf(reason: unknown): string {
