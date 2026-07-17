@@ -22,6 +22,7 @@ export const themeProfileSchema = z.object({
   }).strict(),
   polaroid: z.object({
     sourceImage: z.string().max(260).nullable(),
+    sourceSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).strict().nullable().default(null),
     fence: z.tuple([pointSchema, pointSchema, pointSchema, pointSchema]),
     placement: z.object({
       x: normalized,
@@ -86,6 +87,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
     },
     polaroid: {
       sourceImage: null,
+      sourceSize: null,
       fence: [
         { x: 0.12, y: 0.12 },
         { x: 0.88, y: 0.12 },

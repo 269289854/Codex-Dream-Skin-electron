@@ -10,6 +10,8 @@ export interface ImportedAsset {
   dataUrl: string
   mediaType: string
   originalName: string
+  width: number
+  height: number
 }
 
 export interface CompiledTheme {

@@ -123,11 +123,15 @@ export class ProfileStore {
       await copyFile(sourcePath, destination)
     }
 
+    const metadata = await sharp(destination).metadata()
+    if (!metadata.width || !metadata.height) throw new Error('Imported image dimensions are unavailable.')
     return {
       relativePath,
       dataUrl: await this.readAssetDataUrl(themeId, relativePath),
       mediaType: this.mediaType(outputExtension),
-      originalName: basename(sourcePath)
+      originalName: basename(sourcePath),
+      width: metadata.width,
+      height: metadata.height
     }
   }
 
