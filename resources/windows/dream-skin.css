@@ -70,10 +70,33 @@ html.codex-dream-skin aside.app-shell-left-panel button[aria-label^="切换模�
   text-shadow: 0 2px 10px rgba(242, 143, 200, .22);
 }
 
-html.codex-dream-skin aside.app-shell-left-panel button[aria-label^="切换模式"]::after {
+html.codex-dream-skin aside.app-shell-left-panel button[aria-label^="切换模式"]::after,
+html.codex-dream-skin aside.app-shell-left-panel button[aria-label^="Switch mode"]::after {
   content: "♫";
   margin-left: 4px;
   color: #ee82bc;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel button.dream-sidebar-mode-button::after {
+  content: none;
+}
+
+html.codex-dream-skin .dream-sidebar-mode-icon {
+  width: 21px;
+  height: 21px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-left: 4px;
+  color: var(--dream-pink, #ee82bc);
+  font-size: 19px;
+  line-height: 1;
+}
+
+html.codex-dream-skin .dream-sidebar-mode-icon .dream-custom-icon {
+  width: 19px;
+  height: 19px;
+  object-fit: contain;
 }
 
 html.codex-dream-skin aside.app-shell-left-panel [class~="bg-token-list-hover-background"],

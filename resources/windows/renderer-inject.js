@@ -33,6 +33,32 @@
     }
   };
 
+  const clearSidebarModeIcon = (button) => {
+    button?.classList.remove("dream-sidebar-mode-button");
+    button?.querySelector(":scope > .dream-sidebar-mode-icon")?.remove();
+  };
+
+  const ensureSidebarModeIcon = () => {
+    const selector = [
+      'aside.app-shell-left-panel button[aria-label^="切换模式"]',
+      'aside.app-shell-left-panel button[aria-label^="Switch mode"]'
+    ].join(",");
+    const button = findVisible(document, selector);
+    document.querySelectorAll(".dream-sidebar-mode-button").forEach((current) => {
+      if (current !== button) clearSidebarModeIcon(current);
+    });
+    if (!button) return;
+    button.classList.add("dream-sidebar-mode-button");
+    let icon = button.querySelector(":scope > .dream-sidebar-mode-icon");
+    if (!icon) {
+      icon = document.createElement("span");
+      icon.className = "dream-sidebar-mode-icon";
+      icon.setAttribute("aria-hidden", "true");
+      button.appendChild(icon);
+    }
+    renderSlot(icon, "sidebarMode", "♫");
+  };
+
   const previous = window[STATE_KEY];
   if (previous?.observer) previous.observer.disconnect();
   if (previous?.timer) clearInterval(previous.timer);
@@ -371,6 +397,8 @@
       style.dataset.dreamVersion = VERSION;
     }
 
+    ensureSidebarModeIcon();
+
     const shellMain = document.querySelector("main.main-surface") || document.querySelector("main");
     const context = findHomeContext();
     const heading = context ? ensureHeading(context) : null;
@@ -406,14 +434,21 @@
       chrome.id = CHROME_ID;
       chrome.setAttribute("aria-hidden", "true");
       chrome.innerHTML = `
-        <div class="dream-brand"><span class="dream-note">♫</span><span><b>初音未来主题 Codex App</b><small>你的专属 AI 编程与创作伙伴</small></span></div>
-        <div class="dream-signature">MIKU ✦ 01</div>
+        <div class="dream-brand"><span class="dream-note">♫</span><span><b></b><small></small></span></div>
+        <div class="dream-signature"></div>
         <div class="dream-sparkles"><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <div class="dream-wave">♫ · · · ♡ · · · ♪</div>
         <div class="dream-polaroid"></div>`;
       document.body.appendChild(chrome);
     }
     renderSlot(chrome.querySelector(".dream-note"), "branding", "♫");
+    const copy = themeConfig?.copy || {};
+    const brandTitle = chrome.querySelector(".dream-brand b");
+    const brandSubtitle = chrome.querySelector(".dream-brand small");
+    const brandSignature = chrome.querySelector(".dream-signature");
+    if (brandTitle) brandTitle.textContent = typeof copy.brandTitle === "string" ? copy.brandTitle : "初音未来主题 Codex App";
+    if (brandSubtitle) brandSubtitle.textContent = typeof copy.brandSubtitle === "string" ? copy.brandSubtitle : "你的专属 AI 编程与创作伙伴";
+    if (brandSignature) brandSignature.textContent = typeof copy.brandSignature === "string" ? copy.brandSignature : "MIKU ✦ 01";
     let pin = chrome.querySelector(".dream-polaroid-pin");
     if (!pin) {
       pin = document.createElement("span");
@@ -452,6 +487,7 @@
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
+    document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
     document.getElementById(PROJECT_PROXY_ID)?.remove();
     document.getElementById(CARD_GRID_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();

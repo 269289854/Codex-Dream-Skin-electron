@@ -66,6 +66,7 @@ export const PREVIEW_TARGETS = {
   'palette-action-card': paletteTarget('操作卡片颜色', 'action-card', ['ink', 'accent', 'pink', 'lavender', 'border']),
   'palette-project-bar': paletteTarget('项目栏颜色', 'project-bar', ['ink', 'accent']),
   'palette-composer': paletteTarget('输入框颜色', 'composer', ['ink', 'accent', 'pink']),
+  'icon-sidebar-mode': iconTarget('侧边栏模式图标', 'sidebarMode'),
   'icon-branding': iconTarget('品牌图标', 'branding'),
   'icon-card-primary': iconTarget('主卡片图标', 'cardPrimary'),
   'icon-card-secondary': iconTarget('副卡片图标', 'cardSecondary'),
@@ -80,6 +81,7 @@ export type PreviewTargetId = keyof typeof PREVIEW_TARGETS
 export const PREVIEW_TARGET_ATTRIBUTE = 'data-preview-target'
 
 export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
+  sidebarMode: 'icon-sidebar-mode',
   branding: 'icon-branding',
   cardPrimary: 'icon-card-primary',
   cardSecondary: 'icon-card-secondary',

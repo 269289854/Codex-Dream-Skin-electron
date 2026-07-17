@@ -1,4 +1,5 @@
 const glyphs: Record<string, string> = {
+  music: '♫',
   sparkles: '✦',
   'wand-sparkles': '✧',
   image: '▣',

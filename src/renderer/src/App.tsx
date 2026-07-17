@@ -522,7 +522,7 @@ function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; asset
   return (
     <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
       <div className="codex-sidebar-header">
-        <button className="codex-mode-button" type="button"><strong>Codex</strong><ChevronDown size={16} /><span aria-hidden="true">♫</span></button>
+        <div className="codex-mode-button"><strong>Codex</strong><ChevronDown size={16} /><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} /></span></div>
         <button className="codex-sidebar-icon-button" type="button" title="搜索"><Search size={19} /></button>
       </div>
       <nav className="codex-primary-nav" aria-label="主要导航">

@@ -17,6 +17,7 @@ export const colorLabels: Record<keyof ThemeColors, string> = {
 }
 
 export const iconLabels: Record<IconSlot, string> = {
+  sidebarMode: '侧边栏模式',
   branding: '品牌',
   cardPrimary: '主卡片',
   cardSecondary: '副卡片',

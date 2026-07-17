@@ -27,7 +27,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 3, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 4, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
     assets
   }
 }

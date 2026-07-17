@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_HOME_COPY, HOME_ACTIONS } from '../src/shared/home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTIONS } from '../src/shared/home-layout'
 
 describe('renderer injection template', () => {
   it('produces valid JavaScript with no unresolved markers', async () => {
@@ -10,7 +10,7 @@ describe('renderer injection template', () => {
       .replace('__DREAM_VERSION_JSON__', JSON.stringify('test-version'))
       .replace('__DREAM_CSS_JSON__', JSON.stringify(':root { --test: 1; }'))
       .replace('__DREAM_ART_JSON__', JSON.stringify('data:image/png;base64,AA=='))
-      .replace('__DREAM_CONFIG_JSON__', JSON.stringify({ icons: {}, copy: { ...DEFAULT_HOME_COPY, parts: { before: '在 ', after: ' 中构建什么？' } }, actions: HOME_ACTIONS }))
+      .replace('__DREAM_CONFIG_JSON__', JSON.stringify({ icons: {}, copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, parts: { before: '在 ', after: ' 中构建什么？' } }, actions: HOME_ACTIONS }))
     expect(payload).not.toMatch(/__DREAM_[A-Z_]+__/)
     expect(() => new Function(payload)).not.toThrow()
     expect(template).toContain('data-dream-copy-version')

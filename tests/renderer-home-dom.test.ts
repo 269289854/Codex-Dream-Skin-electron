@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 
 let template = ''
@@ -41,6 +41,7 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
     ? `<span class="group/title">我们应该在 <button type="button">${projectName}</button> 中构建什么？</span>`
     : '<span class="group/title">我们该构建什么？</span>'
   return `
+    <aside class="app-shell-left-panel"><button type="button" aria-label="切换模式：Codex">Codex</button></aside>
     <main class="main-surface">
       <div role="main">
         <div class="home-page">
@@ -68,7 +69,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardPrimary: { name: 'wand-sparkles' },
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' }
-}): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify('.dream-layout-root { display: block; }'))
@@ -78,7 +79,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
       icons,
       builtinGlyphs: BUILTIN_ICON_GLYPHS,
       actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
-      copy: { ...DEFAULT_HOME_COPY, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
+      copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
       actions: HOME_ACTIONS
     }))
   window.eval(payload)
@@ -91,6 +92,44 @@ function stateOf(window: Window): { ensure: () => void; cleanup: () => void; tak
 }
 
 describe('renderer home DOM adaptation', () => {
+  it('renders brand copy as text and keeps the sidebar mode icon idempotent and removable', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const title = '<img src=x onerror=alert(1)> 初音未来'
+    inject(window, {
+      sidebarMode: { dataUrl: 'data:image/png;base64,AA==' },
+      branding: { name: 'sparkles' }
+    }, {
+      ...DEFAULT_HOME_COPY,
+      brandTitle: title,
+      brandSubtitle: '自定义品牌副标题',
+      brandSignature: 'MIKU TEST'
+    })
+
+    const modeButton = window.document.querySelector('aside.app-shell-left-panel button')
+    expect(modeButton?.classList.contains('dream-sidebar-mode-button')).toBe(true)
+    expect(modeButton?.querySelector('.dream-sidebar-mode-icon img')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+    expect(window.document.querySelector('.dream-brand b')?.textContent).toBe(title)
+    expect(window.document.querySelector('.dream-brand b img')).toBeNull()
+    expect(window.document.querySelector('.dream-brand small')?.textContent).toBe('自定义品牌副标题')
+    expect(window.document.querySelector('.dream-signature')?.textContent).toBe('MIKU TEST')
+
+    stateOf(window).ensure()
+    expect(modeButton?.querySelectorAll(':scope > .dream-sidebar-mode-icon')).toHaveLength(1)
+    stateOf(window).cleanup()
+    expect(modeButton?.classList.contains('dream-sidebar-mode-button')).toBe(false)
+    expect(modeButton?.querySelector('.dream-sidebar-mode-icon')).toBeNull()
+  })
+
+  it('supports the English native mode button label', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project').replace('切换模式：Codex', 'Switch mode: Codex')
+    inject(window, { sidebarMode: { name: 'music' } })
+
+    const icon = window.document.querySelector('aside.app-shell-left-panel .dream-sidebar-mode-icon')
+    expect(icon?.textContent).toBe('♫')
+  })
+
   it('drags the polaroid within the shell and exposes the final position once', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')

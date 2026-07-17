@@ -19,7 +19,7 @@ const rect = (left: number, top: number, width: number, height: number): RectLik
 
 describe('preview editing registry', () => {
   it('maps every theme icon slot to a preview target and inspector anchor', () => {
-    const slots: IconSlot[] = ['branding', 'cardPrimary', 'cardSecondary', 'composer', 'project', 'decoration', 'polaroidPin']
+    const slots: IconSlot[] = ['sidebarMode', 'branding', 'cardPrimary', 'cardSecondary', 'composer', 'project', 'decoration', 'polaroidPin']
     const mapped = Object.values(PREVIEW_TARGETS)
       .filter((target) => target.editor.kind === 'icon')
       .map((target) => target.editor.kind === 'icon' ? target.editor.slot : null)

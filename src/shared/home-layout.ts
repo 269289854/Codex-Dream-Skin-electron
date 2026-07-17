@@ -6,6 +6,12 @@ export const DEFAULT_HOME_COPY = {
   subtitle: '和初音未来一起，把灵感写成代码与旋律 ♫'
 } as const
 
+export const DEFAULT_BRAND_COPY = {
+  brandTitle: '初音未来主题 Codex App',
+  brandSubtitle: '你的专属 AI 编程与创作伙伴',
+  brandSignature: 'MIKU ✦ 01'
+} as const
+
 export const HOME_ACTION_FALLBACK_BUILTINS = {
   cardPrimary: 'wand-sparkles',
   cardSecondary: 'image'

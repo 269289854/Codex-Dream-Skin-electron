@@ -1,9 +1,10 @@
 import {
-  FolderCode, Heart, Image, Pin, Send, Sparkles, WandSparkles,
+  FolderCode, Heart, Image, Music, Pin, Send, Sparkles, WandSparkles,
   type LucideIcon
 } from 'lucide-react'
 
 export const builtinIcons: Record<string, LucideIcon> = {
+  music: Music,
   sparkles: Sparkles,
   'wand-sparkles': WandSparkles,
   image: Image,

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DEFAULT_HOME_COPY, splitHeadingTemplate } from './home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, splitHeadingTemplate } from './home-layout'
 
 const normalized = z.number().finite().min(0).max(1)
 
@@ -10,14 +10,34 @@ const iconSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('asset'), asset: z.string().min(1).max(260) }).strict()
 ])
 
-const homeCopySchema = z.object({
+const legacyHomeCopySchema = z.object({
   headingTemplate: z.string().trim().min(1).max(120).refine((value) => splitHeadingTemplate(value) !== null, {
     message: 'Heading template must contain exactly one {project} placeholder.'
   }),
   subtitle: z.string().trim().max(160)
 }).strict()
 
-const profileFields = {
+const themeCopySchema = legacyHomeCopySchema.extend({
+  brandTitle: z.string().trim().min(1).max(80),
+  brandSubtitle: z.string().trim().max(120),
+  brandSignature: z.string().trim().max(32)
+}).strict()
+
+const legacyIconsSchema = z.object({
+  branding: iconSourceSchema,
+  cardPrimary: iconSourceSchema,
+  cardSecondary: iconSourceSchema,
+  composer: iconSourceSchema,
+  project: iconSourceSchema,
+  decoration: iconSourceSchema,
+  polaroidPin: iconSourceSchema
+}).strict()
+
+const iconsSchema = legacyIconsSchema.extend({
+  sidebarMode: iconSourceSchema
+}).strict()
+
+const baseProfileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   updatedAt: z.string().datetime(),
@@ -49,33 +69,34 @@ const profileFields = {
     border: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
     success: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
     danger: z.string().regex(/^#[0-9A-Fa-f]{6}$/)
-  }).strict(),
-  icons: z.object({
-    branding: iconSourceSchema,
-    cardPrimary: iconSourceSchema,
-    cardSecondary: iconSourceSchema,
-    composer: iconSourceSchema,
-    project: iconSourceSchema,
-    decoration: iconSourceSchema,
-    polaroidPin: iconSourceSchema
   }).strict()
 }
 
 export const themeProfileSchema = z.object({
-  ...profileFields,
+  ...baseProfileFields,
+  version: z.literal(4),
+  copy: themeCopySchema,
+  icons: iconsSchema
+}).strict()
+
+const versionThreeThemeSchema = z.object({
+  ...baseProfileFields,
   version: z.literal(3),
-  copy: homeCopySchema
+  copy: legacyHomeCopySchema,
+  icons: legacyIconsSchema
 }).strict()
 
 const versionTwoThemeSchema = z.object({
-  ...profileFields,
+  ...baseProfileFields,
   version: z.literal(2),
-  copy: homeCopySchema
+  copy: legacyHomeCopySchema,
+  icons: legacyIconsSchema
 }).strict()
 
 const versionOneThemeSchema = z.object({
-  ...profileFields,
-  version: z.literal(1)
+  ...baseProfileFields,
+  version: z.literal(1),
+  icons: legacyIconsSchema
 }).strict()
 
 const legacyThemeSchema = z.object({
@@ -102,9 +123,9 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 3,
+    version: 4,
     updatedAt: new Date().toISOString(),
-    copy: { ...DEFAULT_HOME_COPY },
+    copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
       sourceImage: null,
       focus: { x: 0.62, y: 0.42 },
@@ -134,6 +155,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       danger: '#D84A5D'
     },
     icons: {
+      sidebarMode: { kind: 'builtin', name: 'music' },
       branding: { kind: 'builtin', name: 'sparkles' },
       cardPrimary: { kind: 'builtin', name: 'wand-sparkles' },
       cardSecondary: { kind: 'builtin', name: 'image' },
@@ -146,16 +168,20 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 3) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 4) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 3) {
+    const legacy = versionThreeThemeSchema.parse(input)
+    return migrateLegacyTheme(legacy, legacy.copy)
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 2) {
     const legacy = versionTwoThemeSchema.parse(input)
-    return themeProfileSchema.parse({ ...legacy, version: 3 })
+    return migrateLegacyTheme(legacy, legacy.copy)
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 1) {
     const legacy = versionOneThemeSchema.parse(input)
-    return themeProfileSchema.parse({ ...legacy, version: 3, copy: { ...DEFAULT_HOME_COPY } })
+    return migrateLegacyTheme(legacy, DEFAULT_HOME_COPY)
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 0) {
     const legacy = legacyThemeSchema.parse(input)
@@ -164,4 +190,16 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     return themeProfileSchema.parse(migrated)
   }
   throw new Error('Unsupported theme profile version.')
+}
+
+function migrateLegacyTheme(
+  legacy: z.infer<typeof versionThreeThemeSchema> | z.infer<typeof versionTwoThemeSchema> | z.infer<typeof versionOneThemeSchema>,
+  copy: z.infer<typeof legacyHomeCopySchema>
+): ThemeProfile {
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 4,
+    copy: { ...copy, ...DEFAULT_BRAND_COPY },
+    icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' } }
+  })
 }

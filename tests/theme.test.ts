@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_HOME_COPY, HOME_ACTIONS, PROJECT_PLACEHOLDER, splitHeadingTemplate } from '../src/shared/home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTIONS, PROJECT_PLACEHOLDER, splitHeadingTemplate } from '../src/shared/home-layout'
 import { createDefaultTheme, parseThemeProfile } from '../src/shared/theme'
 import { compileTheme } from '../src/main/theme-compiler'
 import { buildDynamicThemeCss } from '../src/main/codex-service'
@@ -7,30 +7,44 @@ import { buildDynamicThemeCss } from '../src/main/codex-service'
 const id = '11111111-1111-4111-8111-111111111111'
 
 describe('theme schema and compiler', () => {
-  it('validates current themes and migrates version zero, one, and two profiles', () => {
+  it('validates current themes and migrates version zero through three profiles', () => {
     const current = createDefaultTheme(id)
-    expect(parseThemeProfile(current).version).toBe(3)
+    const expectedCopy = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }
+    expect(parseThemeProfile(current).version).toBe(4)
+
+    const {
+      brandTitle: _brandTitle,
+      brandSubtitle: _brandSubtitle,
+      brandSignature: _brandSignature,
+      ...legacyCopy
+    } = current.copy
+    const { sidebarMode: _sidebarMode, ...legacyIcons } = current.icons
+    const versionThree = { ...current, version: 3, copy: legacyCopy, icons: legacyIcons }
+    const migratedThree = parseThemeProfile(versionThree)
+    expect(migratedThree.version).toBe(4)
+    expect(migratedThree.copy).toEqual(expectedCopy)
+    expect(migratedThree.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
 
     const { visible: _visibleTwo, ...versionTwoPolaroid } = current.polaroid
-    const versionTwo = { ...current, version: 2, polaroid: versionTwoPolaroid }
+    const versionTwo = { ...versionThree, version: 2, polaroid: versionTwoPolaroid }
     const migratedTwo = parseThemeProfile(versionTwo)
-    expect(migratedTwo.version).toBe(3)
+    expect(migratedTwo.version).toBe(4)
     expect(migratedTwo.polaroid.visible).toBe(true)
 
-    const { copy: _copy, ...versionOneFields } = current
-    const { visible: _visibleOne, ...versionOnePolaroid } = versionOneFields.polaroid
-    const versionOne = { ...versionOneFields, version: 1, name: '已有主题', polaroid: versionOnePolaroid }
+    const { copy: _copy, ...versionOneFields } = versionTwo
+    const versionOne = { ...versionOneFields, version: 1, name: '已有主题' }
     const migratedOne = parseThemeProfile(versionOne)
-    expect(migratedOne.version).toBe(3)
+    expect(migratedOne.version).toBe(4)
     expect(migratedOne.name).toBe('已有主题')
-    expect(migratedOne.copy).toEqual(DEFAULT_HOME_COPY)
+    expect(migratedOne.copy).toEqual(expectedCopy)
     expect(migratedOne.hero).toEqual(current.hero)
 
     const migratedZero = parseThemeProfile({ id, name: '旧主题', version: 0, colors: { accent: '#123456' } })
-    expect(migratedZero.version).toBe(3)
+    expect(migratedZero.version).toBe(4)
     expect(migratedZero.colors.accent).toBe('#123456')
     expect(migratedZero.colors.surface).toBe('#F7FFFF')
-    expect(migratedZero.copy).toEqual(DEFAULT_HOME_COPY)
+    expect(migratedZero.copy).toEqual(expectedCopy)
+    expect(migratedZero.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
     expect(migratedZero.polaroid.visible).toBe(true)
     expect(() => parseThemeProfile({ ...migratedZero, colors: { ...migratedZero.colors, accent: 'red' } })).toThrow()
   })
@@ -46,6 +60,18 @@ describe('theme schema and compiler', () => {
     expect(() => parseThemeProfile({ ...profile, copy: { ...profile.copy, headingTemplate: `${PROJECT_PLACEHOLDER}${'字'.repeat(121)}` } })).toThrow()
   })
 
+  it('validates brand copy limits while permitting optional empty values', () => {
+    const profile = createDefaultTheme(id)
+    profile.copy.brandSubtitle = ''
+    profile.copy.brandSignature = ''
+    expect(parseThemeProfile(profile).copy).toEqual(profile.copy)
+
+    expect(() => parseThemeProfile({ ...profile, copy: { ...profile.copy, brandTitle: ' ' } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, copy: { ...profile.copy, brandTitle: '字'.repeat(81) } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, copy: { ...profile.copy, brandSubtitle: '字'.repeat(121) } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, copy: { ...profile.copy, brandSignature: '字'.repeat(33) } })).toThrow()
+  })
+
   it('compiles deterministic CSS and escapes payload markup', async () => {
     const profile = createDefaultTheme(id)
     profile.hero.sourceImage = 'assets/hero.png'
@@ -55,6 +81,7 @@ describe('theme schema and compiler', () => {
     expect(compiled.css).toContain('background-image: url("data:image/png;base64,PHNjcmlwdD4=")')
     expect(compiled.rendererPayload).not.toContain('<')
     expect(compiled.rendererPayload).toContain('headingTemplate')
+    expect(JSON.parse(compiled.rendererPayload).version).toBe(4)
     expect(compiled.rendererPayload).toContain('\\u003cb>')
     expect(compiled.rendererPayload).toContain(JSON.stringify(HOME_ACTIONS[0].label).slice(1, -1))
     expect(await compileTheme(profile, async () => 'data:image/png;base64,PHNjcmlwdD4=')).toEqual(compiled)
