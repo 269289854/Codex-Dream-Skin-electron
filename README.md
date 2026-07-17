@@ -23,7 +23,7 @@
 4. 在“运行设置”中点击“检测 Codex”，然后点击“启动并应用”。
 5. 不再使用主题时，点击“恢复并重启 Codex”。
 
-完整说明见 [Windows 使用指南](docs/USER_GUIDE.md)，本版本的真实环境验收记录见 [Windows 验收结果](docs/QA_RESULTS.md)。
+完整说明见 [Windows 使用指南](docs/USER_GUIDE.md)，本版本的真实环境验收记录见 [Windows 验收结果](docs/QA_RESULTS.md)，侧边栏预览改造记录见 [侧边栏预览对齐说明](docs/SIDEBAR_PREVIEW_ALIGNMENT.md)。
 
 ## 开发
 
