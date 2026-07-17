@@ -228,8 +228,10 @@ html.codex-dream-skin main.main-surface > header.app-header-tint {
   background-repeat: no-repeat;
   background-size: 672% auto;
   background-position: right bottom;
+  background-color: transparent !important;
+  box-shadow: none !important;
   clip-path: polygon(6% 0, 100% 8%, 92% 100%, 0 89%);
-  filter: drop-shadow(0 10px 12px rgba(37, 111, 121, .20));
+  filter: none !important;
 }
 
 .dream-custom-icon {

@@ -13,4 +13,13 @@ describe('renderer injection template', () => {
     expect(payload).not.toMatch(/__DREAM_[A-Z_]+__/)
     expect(() => new Function(payload)).not.toThrow()
   })
+
+  it('keeps the custom polaroid container transparent', async () => {
+    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const rule = css.match(/\.dream-polaroid\s*\{[^}]+\}/)?.[0]
+
+    expect(rule).toContain('background-color: transparent !important')
+    expect(rule).toContain('box-shadow: none !important')
+    expect(rule).toContain('filter: none !important')
+  })
 })
