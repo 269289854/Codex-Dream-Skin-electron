@@ -10,6 +10,7 @@ export async function compileTheme(
   if (profile.hero.sourceImage) assetNames.add(profile.hero.sourceImage)
   if (profile.polaroid.sourceImage) assetNames.add(profile.polaroid.sourceImage)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
+  for (const font of profile.typography.importedFonts) assetNames.add(font.asset)
 
   const assets: Record<string, string> = {}
   for (const asset of assetNames) assets[asset] = await readAsset(asset)
@@ -27,7 +28,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 4, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 5, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
     assets
   }
 }

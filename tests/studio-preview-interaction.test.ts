@@ -55,10 +55,11 @@ describe('Studio preview editing interaction', () => {
         compile: async () => ({ css: '', rendererPayload: '', assets: { 'assets/polaroid.png': 'data:image/png;base64,AA==' } }),
         subscribePolaroidPlacement: () => () => undefined
       },
-      assets: {
-        selectImage: async () => null,
-        selectIcon: async () => null
-      },
+    assets: {
+      selectImage: async () => null,
+      selectIcon: async () => null,
+      selectFont: async () => null
+    },
       codex: {
         detect: async () => ({ found: true, version: 'test', executable: '', packageFamilyName: '', running: false, backupAvailable: false }),
         installTheme: async () => runtimeStatus,

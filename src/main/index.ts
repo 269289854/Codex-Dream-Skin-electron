@@ -44,16 +44,19 @@ function registerIpc(): void {
   ipcMain.handle('themes:delete', (_event, id: string) => store.delete(id))
   ipcMain.handle('themes:activate', (_event, id: string) => store.activate(id))
   ipcMain.handle('themes:compile', (_event, id: string) => store.compile(id))
-  ipcMain.handle('assets:select', async (_event, themeId: string, purpose: 'hero' | 'polaroid' | 'icon') => {
+  ipcMain.handle('assets:select', async (_event, themeId: string, purpose: 'hero' | 'polaroid' | 'icon' | 'font') => {
     const options: OpenDialogOptions = {
-      title: purpose === 'icon' ? '选择图标' : '选择主题图片',
+      title: purpose === 'font' ? '选择字体' : purpose === 'icon' ? '选择图标' : '选择主题图片',
       properties: ['openFile'],
-      filters: [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
+      filters: purpose === 'font'
+        ? [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff', 'woff2'] }]
+        : [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
     }
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, options)
       : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return null
+    if (purpose === 'font') return store.importFontAsset(themeId, result.filePaths[0])
     return store.importAsset(themeId, result.filePaths[0], purpose)
   })
   ipcMain.handle('codex:detect', () => captureIpcResult(() => codexService.detect()))

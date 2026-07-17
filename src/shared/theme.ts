@@ -1,5 +1,7 @@
 import { z } from 'zod'
+import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema } from './appearance'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, splitHeadingTemplate } from './home-layout'
+import { createDefaultTypography, themeTypographySchema } from './typography'
 
 const normalized = z.number().finite().min(0).max(1)
 
@@ -37,7 +39,30 @@ const iconsSchema = legacyIconsSchema.extend({
   sidebarMode: iconSourceSchema
 }).strict()
 
-const baseProfileFields = {
+const legacyColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/)
+const legacyColorsSchema = z.object({
+  surface: legacyColor,
+  ink: legacyColor,
+  accent: legacyColor,
+  pink: legacyColor,
+  lavender: legacyColor,
+  border: legacyColor,
+  success: legacyColor,
+  danger: legacyColor
+}).strict()
+
+const colorsSchema = z.object({
+  surface: cssColorSchema,
+  ink: cssColorSchema,
+  accent: cssColorSchema,
+  pink: cssColorSchema,
+  lavender: cssColorSchema,
+  border: cssColorSchema,
+  success: cssColorSchema,
+  danger: cssColorSchema
+}).strict()
+
+const commonProfileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   updatedAt: z.string().datetime(),
@@ -59,43 +84,47 @@ const baseProfileFields = {
       rotation: z.number().finite().min(-180).max(180),
       hideBelowWidth: z.number().int().min(320).max(3840)
     }).strict()
-  }).strict(),
-  colors: z.object({
-    surface: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    ink: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    accent: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    pink: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    lavender: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    border: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    success: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    danger: z.string().regex(/^#[0-9A-Fa-f]{6}$/)
   }).strict()
 }
 
 export const themeProfileSchema = z.object({
-  ...baseProfileFields,
+  ...commonProfileFields,
+  version: z.literal(5),
+  colors: colorsSchema,
+  copy: themeCopySchema,
+  icons: iconsSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict()
+
+const versionFourThemeSchema = z.object({
+  ...commonProfileFields,
   version: z.literal(4),
+  colors: legacyColorsSchema,
   copy: themeCopySchema,
   icons: iconsSchema
 }).strict()
 
 const versionThreeThemeSchema = z.object({
-  ...baseProfileFields,
+  ...commonProfileFields,
   version: z.literal(3),
+  colors: legacyColorsSchema,
   copy: legacyHomeCopySchema,
   icons: legacyIconsSchema
 }).strict()
 
 const versionTwoThemeSchema = z.object({
-  ...baseProfileFields,
+  ...commonProfileFields,
   version: z.literal(2),
+  colors: legacyColorsSchema,
   copy: legacyHomeCopySchema,
   icons: legacyIconsSchema
 }).strict()
 
 const versionOneThemeSchema = z.object({
-  ...baseProfileFields,
+  ...commonProfileFields,
   version: z.literal(1),
+  colors: legacyColorsSchema,
   icons: legacyIconsSchema
 }).strict()
 
@@ -103,7 +132,7 @@ const legacyThemeSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   version: z.literal(0),
-  colors: themeProfileSchema.shape.colors.partial().optional()
+  colors: legacyColorsSchema.partial().optional()
 }).passthrough()
 
 export type Point = z.infer<typeof pointSchema>
@@ -123,7 +152,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 4,
+    version: 5,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
@@ -163,13 +192,18 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       project: { kind: 'builtin', name: 'folder-code' },
       decoration: { kind: 'builtin', name: 'heart' },
       polaroidPin: { kind: 'builtin', name: 'pin' }
-    }
+    },
+    appearance: createEmptyAppearance(),
+    typography: createDefaultTypography()
   }
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 4) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 5) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 4) {
+    return migrateVersionFour(versionFourThemeSchema.parse(input))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 3) {
     const legacy = versionThreeThemeSchema.parse(input)
@@ -198,8 +232,19 @@ function migrateLegacyTheme(
 ): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 4,
+    version: 5,
     copy: { ...copy, ...DEFAULT_BRAND_COPY },
-    icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' } }
+    icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' } },
+    appearance: createEmptyAppearance(),
+    typography: createDefaultTypography()
+  })
+}
+
+function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): ThemeProfile {
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 5,
+    appearance: createEmptyAppearance(),
+    typography: createDefaultTypography()
   })
 }

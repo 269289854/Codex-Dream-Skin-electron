@@ -1,4 +1,5 @@
 import type { ThemeProfile, ThemeSummary } from './theme'
+import type { ImportedFontFormat } from './typography'
 
 export interface AppInfo {
   version: string
@@ -14,13 +15,23 @@ export interface ImportedAsset {
   height: number
 }
 
+export interface ImportedFontAsset {
+  id: string
+  relativePath: string
+  dataUrl: string
+  mediaType: string
+  originalName: string
+  family: string
+  format: ImportedFontFormat
+}
+
 export interface CompiledTheme {
   css: string
   rendererPayload: string
   assets: Record<string, string>
 }
 
-export type AssetPurpose = 'hero' | 'polaroid' | 'icon'
+export type AssetPurpose = 'hero' | 'polaroid' | 'icon' | 'font'
 
 export type RuntimePhase = 'idle' | 'detecting' | 'ready' | 'installing' | 'starting' | 'injecting' | 'active' | 'stopped' | 'restoring' | 'error'
 
@@ -66,8 +77,9 @@ export interface StudioApi {
     subscribePolaroidPlacement: (listener: (update: PolaroidPlacementUpdate) => void) => () => void
   }
   assets: {
-    selectImage: (themeId: string, purpose: Exclude<AssetPurpose, 'icon'>) => Promise<ImportedAsset | null>
+    selectImage: (themeId: string, purpose: Exclude<AssetPurpose, 'icon' | 'font'>) => Promise<ImportedAsset | null>
     selectIcon: (themeId: string) => Promise<ImportedAsset | null>
+    selectFont: (themeId: string) => Promise<ImportedFontAsset | null>
   }
   codex: {
     detect: () => Promise<CodexDetection>

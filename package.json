@@ -16,6 +16,7 @@
     "package:win": "npm run build && electron-builder --win nsis --x64"
   },
   "dependencies": {
+    "culori": "^4.0.2",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

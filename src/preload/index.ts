@@ -28,7 +28,8 @@ const api: StudioApi = {
   },
   assets: {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),
-    selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon')
+    selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon'),
+    selectFont: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'font')
   },
   codex: {
     detect: () => invokeCodex('codex:detect'),

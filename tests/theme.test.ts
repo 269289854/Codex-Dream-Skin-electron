@@ -7,10 +7,17 @@ import { buildDynamicThemeCss } from '../src/main/codex-service'
 const id = '11111111-1111-4111-8111-111111111111'
 
 describe('theme schema and compiler', () => {
-  it('validates current themes and migrates version zero through three profiles', () => {
+  it('validates current themes and migrates version zero through four profiles', () => {
     const current = createDefaultTheme(id)
     const expectedCopy = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }
-    expect(parseThemeProfile(current).version).toBe(4)
+    expect(parseThemeProfile(current).version).toBe(5)
+
+    const { appearance: _appearance, typography: _typography, ...versionFiveFields } = current
+    const versionFour = { ...versionFiveFields, version: 4 }
+    const migratedFour = parseThemeProfile(versionFour)
+    expect(migratedFour.version).toBe(5)
+    expect(migratedFour.appearance).toEqual({ colors: {}, paints: {} })
+    expect(migratedFour.typography.slots.brandSignature).toEqual({ kind: 'builtin', id: 'segoe-script' })
 
     const {
       brandTitle: _brandTitle,
@@ -19,34 +26,35 @@ describe('theme schema and compiler', () => {
       ...legacyCopy
     } = current.copy
     const { sidebarMode: _sidebarMode, ...legacyIcons } = current.icons
-    const versionThree = { ...current, version: 3, copy: legacyCopy, icons: legacyIcons }
+    const versionThree = { ...versionFour, version: 3, copy: legacyCopy, icons: legacyIcons }
     const migratedThree = parseThemeProfile(versionThree)
-    expect(migratedThree.version).toBe(4)
+    expect(migratedThree.version).toBe(5)
     expect(migratedThree.copy).toEqual(expectedCopy)
     expect(migratedThree.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
 
     const { visible: _visibleTwo, ...versionTwoPolaroid } = current.polaroid
     const versionTwo = { ...versionThree, version: 2, polaroid: versionTwoPolaroid }
     const migratedTwo = parseThemeProfile(versionTwo)
-    expect(migratedTwo.version).toBe(4)
+    expect(migratedTwo.version).toBe(5)
     expect(migratedTwo.polaroid.visible).toBe(true)
 
     const { copy: _copy, ...versionOneFields } = versionTwo
     const versionOne = { ...versionOneFields, version: 1, name: '已有主题' }
     const migratedOne = parseThemeProfile(versionOne)
-    expect(migratedOne.version).toBe(4)
+    expect(migratedOne.version).toBe(5)
     expect(migratedOne.name).toBe('已有主题')
     expect(migratedOne.copy).toEqual(expectedCopy)
     expect(migratedOne.hero).toEqual(current.hero)
 
     const migratedZero = parseThemeProfile({ id, name: '旧主题', version: 0, colors: { accent: '#123456' } })
-    expect(migratedZero.version).toBe(4)
+    expect(migratedZero.version).toBe(5)
     expect(migratedZero.colors.accent).toBe('#123456')
     expect(migratedZero.colors.surface).toBe('#F7FFFF')
     expect(migratedZero.copy).toEqual(expectedCopy)
     expect(migratedZero.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
     expect(migratedZero.polaroid.visible).toBe(true)
-    expect(() => parseThemeProfile({ ...migratedZero, colors: { ...migratedZero.colors, accent: 'red' } })).toThrow()
+    expect(parseThemeProfile({ ...migratedZero, colors: { ...migratedZero.colors, accent: 'red' } }).colors.accent).toBe('red')
+    expect(() => parseThemeProfile({ ...migratedZero, colors: { ...migratedZero.colors, accent: 'red; background: black' } })).toThrow()
   })
 
   it('requires exactly one project placeholder and permits an empty subtitle', () => {
@@ -81,7 +89,7 @@ describe('theme schema and compiler', () => {
     expect(compiled.css).toContain('background-image: url("data:image/png;base64,PHNjcmlwdD4=")')
     expect(compiled.rendererPayload).not.toContain('<')
     expect(compiled.rendererPayload).toContain('headingTemplate')
-    expect(JSON.parse(compiled.rendererPayload).version).toBe(4)
+    expect(JSON.parse(compiled.rendererPayload).version).toBe(5)
     expect(compiled.rendererPayload).toContain('\\u003cb>')
     expect(compiled.rendererPayload).toContain(JSON.stringify(HOME_ACTIONS[0].label).slice(1, -1))
     expect(await compileTheme(profile, async () => 'data:image/png;base64,PHNjcmlwdD4=')).toEqual(compiled)

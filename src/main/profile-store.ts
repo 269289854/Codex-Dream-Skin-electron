@@ -3,7 +3,8 @@ import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'no
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import sharp from 'sharp'
 import { createDefaultTheme, parseThemeProfile, type ThemeProfile, type ThemeSummary } from '../shared/theme'
-import type { AssetPurpose, CompiledTheme, ImportedAsset } from '../shared/contracts'
+import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset } from '../shared/contracts'
+import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
 
 interface StudioSettings {
@@ -12,7 +13,9 @@ interface StudioSettings {
 }
 
 const MAX_ASSET_BYTES = 30 * 1024 * 1024
+const MAX_FONT_BYTES = 12 * 1024 * 1024
 const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg'])
+const FONT_EXTENSIONS = new Set<ImportedFontFormat>(['ttf', 'otf', 'woff', 'woff2'])
 
 export class ProfileStore {
   readonly themesRoot: string
@@ -127,6 +130,7 @@ export class ProfileStore {
   }
 
   async importAsset(themeId: string, sourcePath: string, purpose: AssetPurpose): Promise<ImportedAsset> {
+    if (purpose === 'font') throw new Error('Fonts must be imported through the font importer.')
     await this.get(themeId)
     if (!isAbsolute(sourcePath)) throw new Error('The selected asset path must be absolute.')
     const sourceStat = await stat(sourcePath)
@@ -160,6 +164,34 @@ export class ProfileStore {
     }
   }
 
+  async importFontAsset(themeId: string, sourcePath: string): Promise<ImportedFontAsset> {
+    await this.get(themeId)
+    if (!isAbsolute(sourcePath)) throw new Error('The selected font path must be absolute.')
+    const sourceStat = await stat(sourcePath)
+    if (!sourceStat.isFile() || sourceStat.size > MAX_FONT_BYTES) throw new Error('Font must be a file no larger than 12 MB.')
+
+    const extension = extname(sourcePath).toLowerCase().slice(1) as ImportedFontFormat
+    if (!FONT_EXTENSIONS.has(extension)) throw new Error('Unsupported font format.')
+    const header = await readFile(sourcePath).then((data) => data.subarray(0, 4))
+    this.assertFontHeader(extension, header)
+
+    const relativePath = `assets/font-${randomUUID()}.${extension}`
+    const destination = this.resolveAsset(themeId, relativePath)
+    await mkdir(dirname(destination), { recursive: true })
+    await copyFile(sourcePath, destination)
+    const originalName = basename(sourcePath)
+    const family = basename(sourcePath, extname(sourcePath)).trim().slice(0, 80) || 'Imported font'
+    return {
+      id: `font-${randomUUID()}`,
+      relativePath,
+      dataUrl: await this.readAssetDataUrl(themeId, relativePath),
+      mediaType: this.fontMediaType(extension),
+      originalName,
+      family,
+      format: extension
+    }
+  }
+
   async compile(id: string): Promise<CompiledTheme> {
     const profile = await this.get(id)
     return compileTheme(profile, (asset) => this.readAssetDataUrl(id, asset))
@@ -186,6 +218,7 @@ export class ProfileStore {
   private collectAssets(profile: ThemeProfile): string[] {
     const assets = [profile.hero.sourceImage, profile.polaroid.sourceImage]
     for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assets.push(icon.asset)
+    for (const font of profile.typography.importedFonts) assets.push(font.asset)
     return [...new Set(assets.filter((value): value is string => Boolean(value)))]
   }
 
@@ -230,7 +263,27 @@ export class ProfileStore {
   private assetRoot(id: string): string { return join(this.themeRoot(id), 'assets') }
   private assertId(id: string): void { if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)) throw new Error('Theme ID is invalid.') }
   private cleanName(name: string): string { const result = name.trim(); if (!result || result.length > 80) throw new Error('Theme name must be 1-80 characters.'); return result }
-  private mediaType(extension: string): string { return extension === '.png' ? 'image/png' : extension === '.webp' ? 'image/webp' : 'image/jpeg' }
+  private mediaType(extension: string): string {
+    if (extension === '.png') return 'image/png'
+    if (extension === '.webp') return 'image/webp'
+    if (extension === '.ttf') return 'font/ttf'
+    if (extension === '.otf') return 'font/otf'
+    if (extension === '.woff') return 'font/woff'
+    if (extension === '.woff2') return 'font/woff2'
+    return 'image/jpeg'
+  }
+  private fontMediaType(format: ImportedFontFormat): string { return this.mediaType(`.${format}`) }
+  private assertFontHeader(format: ImportedFontFormat, header: Buffer): void {
+    const signature = header.toString('latin1')
+    const valid = format === 'ttf'
+      ? header.equals(Buffer.from([0x00, 0x01, 0x00, 0x00])) || signature === 'true'
+      : format === 'otf'
+        ? signature === 'OTTO'
+        : format === 'woff'
+          ? signature === 'wOFF'
+          : signature === 'wOF2'
+    if (!valid || signature === 'ttcf') throw new Error('Font file header does not match its extension or is a font collection.')
+  }
   private assertSafeSvg(source: string): void {
     if (source.length > 2_000_000 || /<(?:script|foreignObject|iframe|object|embed)\b|<!DOCTYPE|<!ENTITY|(?:href|src)\s*=\s*["']\s*(?:https?:|file:|javascript:)/i.test(source)) {
       throw new Error('SVG contains unsupported or external content.')
