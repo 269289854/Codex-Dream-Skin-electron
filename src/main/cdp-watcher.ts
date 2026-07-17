@@ -3,6 +3,17 @@ import WebSocket from 'ws'
 interface CdpVersion { webSocketDebuggerUrl: string }
 interface CdpTarget { id: string; type: string; url: string; webSocketDebuggerUrl: string }
 
+const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); return true; })()'
+
+export function isThemeCdpTargetUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'app:' && url.searchParams.get('initialRoute') !== '/avatar-overlay'
+  } catch {
+    return false
+  }
+}
+
 export function isSafeCdpWebSocketUrl(value: string, port: number, kind: 'page' | 'browser', id: string): boolean {
   if (!Number.isInteger(port) || port < 1024 || port > 65535 || !/^[A-Za-z0-9._-]{1,200}$/.test(id)) return false
   try {
@@ -40,6 +51,7 @@ export class CdpWatcher {
 
   async start(): Promise<CdpSnapshot> {
     if (!this.payload) throw new Error('Theme payload is not ready.')
+    await this.cleanupExcludedTargets()
     const snapshot = await this.inject()
     if (!this.timer) this.timer = setInterval(() => void this.tick(), 2500)
     return snapshot
@@ -69,9 +81,9 @@ export class CdpWatcher {
     this.timer = null
     if (removeTheme) {
       try {
-        const targets = await this.targets()
+        const targets = await this.targets(true)
         await Promise.all(targets.map((target) => this.evaluate(target,
-          '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); return true; })()'
+          CLEANUP_EXPRESSION
         )))
       } catch {
         // Codex may already be closed.
@@ -93,15 +105,23 @@ export class CdpWatcher {
     } finally { this.busy = false }
   }
 
-  private async targets(): Promise<CdpTarget[]> {
+  private async cleanupExcludedTargets(): Promise<void> {
+    const targets = await this.targets(true)
+    await Promise.all(targets
+      .filter((target) => !isThemeCdpTargetUrl(target.url))
+      .map((target) => this.evaluate(target, CLEANUP_EXPRESSION)))
+  }
+
+  private async targets(includeExcluded = false): Promise<CdpTarget[]> {
     const version = await this.fetchJson<CdpVersion>('/json/version')
     const browserUrl = this.validateWebSocketUrl(version.webSocketDebuggerUrl, 'browser', this.browserId)
     if (!browserUrl) throw new Error('CDP browser identity changed or is not loopback-only.')
     const targets = await this.fetchJson<CdpTarget[]>('/json/list')
     const valid = targets.filter((target) => target.type === 'page' && target.url.startsWith('app://') &&
       /^[A-Za-z0-9._-]{1,200}$/.test(target.id) && this.validateWebSocketUrl(target.webSocketDebuggerUrl, 'page', target.id))
-    if (valid.length === 0) throw new Error('No verified Codex page target is available.')
-    return valid
+    const selected = includeExcluded ? valid : valid.filter((target) => isThemeCdpTargetUrl(target.url))
+    if (selected.length === 0) throw new Error('No verified Codex page target is available.')
+    return selected
   }
 
   private validateWebSocketUrl(value: string, kind: 'page' | 'browser', id: string): boolean {
