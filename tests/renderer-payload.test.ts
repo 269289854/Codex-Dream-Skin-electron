@@ -30,10 +30,27 @@ describe('renderer injection template', () => {
     expect(layoutCss).toContain('.dream-heading')
     expect(layoutCss).toContain('.dream-action-grid')
     expect(layoutCss).toContain('.dream-composer')
+    expect(layoutCss).toContain('.dream-project-proxy')
+    expect(layoutCss).toContain('.dream-native-suggestions')
+    expect(layoutCss).toContain('[data-testid="home-icon"]')
     expect(rendererEntry).toContain("dream-home-layout.css")
     expect(studio).toContain('HOME_ACTIONS.map')
     expect(codexService).toContain("dream-home-layout.css")
     expect(codexService).toContain('actions: HOME_ACTIONS')
+  })
+
+  it('keeps legacy home layout rules out of the base theme', async () => {
+    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    expect(css).not.toContain('.dream-home .dream-hero')
+    expect(css).not.toContain('.dream-action-grid')
+    expect(css).not.toContain('.dream-home .dream-composer')
+  })
+
+  it('reports the watcher injection count after startup', async () => {
+    const codexService = await readFile(join(process.cwd(), 'src', 'main', 'codex-service.ts'), 'utf8')
+    expect(codexService).toContain('const snapshot = await this.replaceWatcher')
+    expect(codexService).toContain('主题已注入 ${snapshot.targetCount} 个 Codex 页面')
+    expect(codexService).not.toContain('主题已注入 ${result.targetCount} 个 Codex 页面')
   })
 
   it('keeps the custom polaroid container transparent', async () => {

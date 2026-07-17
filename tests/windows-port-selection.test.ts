@@ -30,4 +30,18 @@ describe('Windows CDP port selection', () => {
   it('reports an error when the candidate range is occupied', async () => {
     await expect(selectPort('return $false')).rejects.toThrow('No free loopback port was found between 9335 and 9435.')
   })
+
+  it('returns a numeric target count when PowerShell emits one target object', async () => {
+    const command = [
+      `. '${commonScript}'`,
+      'function Test-DreamSkinCodexPortOwner { return $true }',
+      'function Get-DreamSkinCdpBrowserIdentity { return [pscustomobject]@{ BrowserId = "browser"; WebSocketDebuggerUrl = "ws://127.0.0.1"; Browser = "Codex" } }',
+      'function Get-DreamSkinCdpTargets { return [pscustomobject]@{ id = "page" } }',
+      '(Get-DreamSkinVerifiedCdpIdentity -Port 9335 -Codex ([pscustomobject]@{ Executable = "Codex.exe" })).TargetCount'
+    ].join('; ')
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command
+    ])
+    expect(Number(stdout.trim())).toBe(1)
+  })
 })

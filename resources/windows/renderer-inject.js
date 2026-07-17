@@ -4,6 +4,7 @@
   const STYLE_ID = "codex-dream-skin-style";
   const CHROME_ID = "codex-dream-skin-chrome";
   const CARD_GRID_ID = "codex-dream-skin-actions";
+  const PROJECT_PROXY_ID = "codex-dream-skin-project-proxy";
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
@@ -51,6 +52,34 @@
   const findComposer = (home = document) => {
     const candidates = [...home.querySelectorAll('.ProseMirror[contenteditable="true"]')];
     return candidates.find(isVisible) || null;
+  };
+
+  const findVisible = (root, selector) =>
+    [...root.querySelectorAll(selector)].find(isVisible) || null;
+
+  const findHomeContext = () => {
+    const headings = [...document.querySelectorAll('[data-feature="game-source"]')].filter(isVisible);
+    for (const heading of headings) {
+      const home = heading.closest('[role="main"]');
+      if (!home || !isVisible(home)) continue;
+      const composerSurface = findVisible(home, ".composer-surface-chrome");
+      const composer = findComposer(home);
+      if (!composerSurface || !composer || !composerSurface.contains(composer)) continue;
+      const projectButton = findVisible(home, '[data-composer-navigation-target="workspace-project"]');
+      return { home, heading, composerSurface, projectButton };
+    }
+    return null;
+  };
+
+  const findHero = ({ home, heading, composerSurface }) => {
+    let candidate = heading;
+    let parent = heading.parentElement;
+    while (parent && parent !== home) {
+      if (parent.contains(composerSurface)) break;
+      candidate = parent;
+      parent = parent.parentElement;
+    }
+    return candidate !== heading && candidate instanceof HTMLElement && isVisible(candidate) ? candidate : null;
   };
 
   const populateComposer = (prompt) => {
@@ -153,17 +182,43 @@
 
   const clearHeading = (heading) => {
     heading?.querySelectorAll(":scope > .dream-copy-node").forEach((node) => node.remove());
+    heading?.querySelectorAll('[data-dream-project-proxy="true"]').forEach((node) => node.remove());
     heading?.classList.remove("dream-heading");
     heading?.removeAttribute("data-dream-copy-version");
     heading?.querySelectorAll(".dream-project-selector").forEach((node) => node.classList.remove("dream-project-selector"));
     heading?.parentElement?.classList.remove("dream-heading-region");
   };
 
-  const ensureHeading = (home) => {
-    const heading = home.querySelector('[data-feature="game-source"]');
-    const projectButton = heading?.querySelector("button");
+  const projectLabel = (button) => button?.textContent?.replace(/\s+/g, " ").trim() || "";
+
+  const ensureProjectProxy = (heading, sourceButton) => {
+    const label = projectLabel(sourceButton);
+    if (!label) return null;
+    let proxy = document.getElementById(PROJECT_PROXY_ID);
+    if (proxy && proxy.parentElement !== heading) {
+      proxy.remove();
+      proxy = null;
+    }
+    if (!proxy) {
+      proxy = document.createElement("button");
+      proxy.id = PROJECT_PROXY_ID;
+      proxy.type = "button";
+      proxy.dataset.dreamProjectProxy = "true";
+      proxy.className = "dream-copy-node dream-project-selector dream-project-proxy";
+      proxy.addEventListener("click", () => {
+        findVisible(document, '[data-composer-navigation-target="workspace-project"]')?.click();
+      });
+    }
+    if (proxy.textContent !== label) proxy.textContent = label;
+    return proxy;
+  };
+
+  const ensureHeading = (context) => {
+    const { heading, projectButton: composerProjectButton } = context;
+    const nativeProjectButton = heading.querySelector('button:not([data-dream-project-proxy="true"])');
     const parts = themeConfig?.copy?.parts;
-    if (!heading || !projectButton || typeof parts?.before !== "string" || typeof parts?.after !== "string") {
+    if (!heading || (!nativeProjectButton && !composerProjectButton) ||
+        typeof parts?.before !== "string" || typeof parts?.after !== "string") {
       document.querySelectorAll(".dream-heading").forEach(clearHeading);
       return null;
     }
@@ -173,7 +228,14 @@
     }
     heading.classList.add("dream-heading");
     heading.parentElement?.classList.add("dream-heading-region");
-    projectButton.classList.add("dream-project-selector");
+    nativeProjectButton?.classList.add("dream-project-selector");
+
+    const proxy = nativeProjectButton ? null : ensureProjectProxy(heading, composerProjectButton);
+    if (!nativeProjectButton && !proxy) {
+      clearHeading(heading);
+      return null;
+    }
+    if (nativeProjectButton) document.getElementById(PROJECT_PROXY_ID)?.remove();
 
     if (heading.dataset.dreamCopyVersion !== VERSION) {
       heading.querySelectorAll(":scope > .dream-copy-node").forEach((node) => node.remove());
@@ -193,7 +255,21 @@
       heading.appendChild(subtitle);
       heading.dataset.dreamCopyVersion = VERSION;
     }
+    const before = heading.querySelector(":scope > .dream-copy-before");
+    if (proxy && proxy.previousElementSibling !== before) before?.after(proxy);
     return heading;
+  };
+
+  const clearHomeLayout = () => {
+    document.querySelectorAll(".dream-heading").forEach(clearHeading);
+    markCurrentNode("[role=main].dream-home", null, "dream-home");
+    markCurrentNode(".dream-hero", null, "dream-hero");
+    markCurrentNode(".dream-layout-root", null, "dream-layout-root");
+    markCurrentNode(".dream-project-bar", null, "dream-project-bar");
+    markCurrentNode(".dream-quick-mode-banner", null, "dream-quick-mode-banner");
+    markCurrentNode(".dream-native-suggestions", null, "dream-native-suggestions");
+    document.getElementById(PROJECT_PROXY_ID)?.remove();
+    document.getElementById(CARD_GRID_ID)?.remove();
   };
 
   const ensure = () => {
@@ -215,35 +291,30 @@
     }
 
     const shellMain = document.querySelector("main.main-surface") || document.querySelector("main");
-    const home = document.querySelector('[role="main"]:has([data-testid="home-icon"])');
+    const context = findHomeContext();
+    const heading = context ? ensureHeading(context) : null;
+    const hero = context && heading ? findHero(context) : null;
+    const home = hero ? context.home : null;
     markCurrentNode("[role=main].dream-home", home, "dream-home");
     shellMain?.classList.toggle("dream-home-shell", Boolean(home));
 
-    let hero = null;
-    if (home) {
-      const heading = ensureHeading(home);
-      const candidate = heading ? home.firstElementChild?.firstElementChild?.firstElementChild || null : null;
-      hero = candidate?.contains(heading) ? candidate : null;
+    if (home && context && hero) {
       markCurrentNode(".dream-hero", hero, "dream-hero");
       markCurrentNode(".dream-layout-root", hero, "dream-layout-root");
-      if (hero) ensureActionGrid(hero);
-      else document.getElementById(CARD_GRID_ID)?.remove();
+      ensureActionGrid(hero);
       const quickBanner = findQuickModeBanner(home);
       markCurrentNode(".dream-quick-mode-banner", quickBanner, "dream-quick-mode-banner");
 
-      const projectGroup = home.querySelector(".horizontal-scroll-fade-mask .group\\/project-selector");
-      const projectBar = projectGroup?.closest(".horizontal-scroll-fade-mask")?.parentElement || null;
+      const projectBar = context.projectButton?.closest(".horizontal-scroll-fade-mask")?.parentElement ||
+        context.projectButton?.parentElement || null;
       markCurrentNode(".dream-project-bar", projectBar, "dream-project-bar");
+      const nativeSuggestions = home.querySelector('[data-home-ambient-suggestions="true"], [data-home-ambient-suggestions]');
+      markCurrentNode(".dream-native-suggestions", nativeSuggestions, "dream-native-suggestions");
     } else {
-      document.querySelectorAll(".dream-heading").forEach(clearHeading);
-      markCurrentNode(".dream-hero", null, "dream-hero");
-      markCurrentNode(".dream-layout-root", null, "dream-layout-root");
-      markCurrentNode(".dream-project-bar", null, "dream-project-bar");
-      markCurrentNode(".dream-quick-mode-banner", null, "dream-quick-mode-banner");
-      document.getElementById(CARD_GRID_ID)?.remove();
+      clearHomeLayout();
     }
 
-    const composerSurface = document.querySelector(".composer-surface-chrome");
+    const composerSurface = context?.composerSurface || findVisible(document, ".composer-surface-chrome");
     markCurrentNode(".composer-surface-chrome.dream-composer", composerSurface, "dream-composer");
 
     if (!shellMain || !document.body) return;
@@ -298,6 +369,8 @@
     document.querySelectorAll(".dream-project-bar").forEach((node) => node.classList.remove("dream-project-bar"));
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
+    document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
+    document.getElementById(PROJECT_PROXY_ID)?.remove();
     document.getElementById(CARD_GRID_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
     document.getElementById(CHROME_ID)?.remove();

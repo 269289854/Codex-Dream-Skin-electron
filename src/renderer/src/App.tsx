@@ -270,7 +270,7 @@ export function App(): React.JSX.Element {
                       <div className="dream-heading-region">
                         <h1 className="dream-heading">
                           <span className="dream-copy-node dream-copy-before">{headingParts.before}</span>
-                          <button className="dream-project-selector" type="button">Codex-Dream-Skin</button>
+                          <button className="dream-project-selector dream-project-proxy" type="button">Codex-Dream-Skin</button>
                           <span className="dream-copy-node dream-copy-after">{headingParts.after}</span>
                           <span className="dream-copy-node dream-copy-subtitle">{draft.copy.subtitle}</span>
                         </h1>

@@ -4,11 +4,11 @@ import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/cont
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
 import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
-import { CdpWatcher } from './cdp-watcher'
+import { CdpWatcher, type CdpSnapshot } from './cdp-watcher'
 import { runPowerShell } from './powershell'
 import type { ProfileStore } from './profile-store'
 
-interface StartResult { port: number; browserId: string; targetCount: number; version: string }
+interface StartResult { port: number; browserId: string; version: string }
 const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
 
 export class CodexService {
@@ -108,9 +108,9 @@ export class CodexService {
       this.status.port = result.port
       this.status.codexVersion = result.version
       this.activeThemeId = themeId
-      await this.replaceWatcher(result.browserId, await this.readRuntimePayload())
+      const snapshot = await this.replaceWatcher(result.browserId, await this.readRuntimePayload())
       await this.writeSession(themeId, result.browserId)
-      this.patch('active', `主题已注入 ${result.targetCount} 个 Codex 页面`)
+      this.patch('active', `主题已注入 ${snapshot.targetCount} 个 Codex 页面`)
       return this.getStatus()
     } catch (reason) { throw this.fail(reason) }
   }
@@ -161,7 +161,7 @@ export class CodexService {
     } catch (reason) { throw this.fail(reason) }
   }
 
-  private async replaceWatcher(browserId: string, payload: string): Promise<void> {
+  private async replaceWatcher(browserId: string, payload: string): Promise<CdpSnapshot> {
     if (this.watcher) await this.watcher.stop(true)
     this.patch('injecting', '已连接 Codex，正在注入主题')
     this.watcher = new CdpWatcher(this.status.port, browserId,
@@ -178,7 +178,7 @@ export class CodexService {
       }
     )
     this.watcher.setPayload(payload)
-    await this.watcher.start()
+    return await this.watcher.start()
   }
 
   private async buildPayload(themeId: string): Promise<string> {

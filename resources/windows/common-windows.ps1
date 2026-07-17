@@ -367,7 +367,7 @@ function Get-DreamSkinVerifiedCdpIdentity {
   if (-not (Test-DreamSkinCodexPortOwner -Port $Port -Codex $Codex)) { return $null }
   $browser = Get-DreamSkinCdpBrowserIdentity -Port $Port
   if ($null -eq $browser) { return $null }
-  $targets = Get-DreamSkinCdpTargets -Port $Port
+  $targets = @(Get-DreamSkinCdpTargets -Port $Port)
   if ($targets.Count -eq 0) { return $null }
   if (-not (Test-DreamSkinCodexPortOwner -Port $Port -Codex $Codex)) { return $null }
   return [pscustomobject]@{
