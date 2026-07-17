@@ -6,7 +6,8 @@ import {
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
 import { clampNormalized, type Fence } from '../../shared/geometry'
-import { headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
+import { headingTemplateError, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
+import { resolveBuiltinIconGlyph } from '../../shared/icon-glyphs'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { FenceEditor } from './FenceEditor'
 import { builtinIconOptions, builtinIcons } from './icons'
@@ -288,7 +289,7 @@ export function App(): React.JSX.Element {
                         </h1>
                       </div>
                       <div className="dream-action-grid">
-                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" type="button" key={action.label}><span className="dream-action-icon"><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} /></span><span className="dream-action-label">{action.label}</span><span className="dream-action-heart"><RenderIcon slot="decoration" profile={draft} assets={assets} /></span></button>)}
+                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" type="button" key={action.label}><span className="dream-action-icon"><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label">{action.label}</span><span className="dream-action-heart"><RenderIcon slot="decoration" profile={draft} assets={assets} injected /></span></button>)}
                       </div>
                     </section>
                     <div className="preview-lower-region">
@@ -413,9 +414,12 @@ function Range({ label, value, onChange, min, max, step, suffix = '' }: { label:
   return <label className="range-row"><span>{label}</span><input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} /><output>{Number.isInteger(step) ? value : value.toFixed(2)}{suffix}</output></label>
 }
 
-function RenderIcon({ slot, profile, assets }: { slot: IconSlot; profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+function RenderIcon({ slot, profile, assets, injected = false, fallbackGlyph }: { slot: IconSlot; profile: ThemeProfile; assets: Record<string, string>; injected?: boolean; fallbackGlyph?: string }): React.JSX.Element {
   const source = profile.icons[slot]
   if (source.kind === 'asset') return <img className="custom-icon" src={assets[source.asset]} alt="" />
+  const fallbackBuiltin = HOME_ACTION_FALLBACK_BUILTINS[slot as keyof typeof HOME_ACTION_FALLBACK_BUILTINS]
+  if (fallbackGlyph && source.name === fallbackBuiltin) return <span className="builtin-icon-glyph" aria-hidden="true">{fallbackGlyph}</span>
+  if (injected) return <span className="builtin-icon-glyph" aria-hidden="true">{resolveBuiltinIconGlyph(source.name)}</span>
   const Icon = builtinIcons[source.name] ?? Sparkles
   return <Icon size={18} />
 }

@@ -2,8 +2,9 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CodexDetection, PolaroidPlacementUpdate, RuntimePhase, RuntimeStatus } from '../shared/contracts'
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
+import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import type { ThemeProfile } from '../shared/theme'
-import { HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
+import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { CdpWatcher, type CdpSnapshot } from './cdp-watcher'
 import { runPowerShell } from './powershell'
 import type { ProfileStore } from './profile-store'
@@ -248,6 +249,8 @@ export class CodexService {
       .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
         themeId: profile.id,
         icons,
+        builtinGlyphs: BUILTIN_ICON_GLYPHS,
+        actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
         copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
         actions: HOME_ACTIONS
       }))

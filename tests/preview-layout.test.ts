@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { BUILTIN_ICON_GLYPHS, resolveBuiltinIconGlyph } from '../src/shared/icon-glyphs'
+import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { createDefaultTheme } from '../src/shared/theme'
 import { buildPreviewHeroImageProps, PREVIEW_HERO_FALLBACK, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from '../src/renderer/src/preview-home'
 
@@ -47,6 +49,17 @@ describe('Studio home preview', () => {
       branch: 'Miku',
       model: '5.6 Luna 极高'
     })
+  })
+
+  it('renders the four default action glyphs with the same fallback rules as the Codex injection', async () => {
+    const source = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'App.tsx'), 'utf8')
+
+    expect(HOME_ACTIONS.map((action) => action.icon)).toEqual(['</>', '+', '✓', '✦'])
+    expect(HOME_ACTION_FALLBACK_BUILTINS).toEqual({ cardPrimary: 'wand-sparkles', cardSecondary: 'image' })
+    expect(resolveBuiltinIconGlyph('heart')).toBe('♥')
+    expect(BUILTIN_ICON_GLYPHS).toEqual(expect.objectContaining({ heart: '♥' }))
+    expect(source).toContain('slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon}')
+    expect(source).toContain('slot="decoration" profile={draft} assets={assets} injected')
   })
 
   it('models the current single-column Codex sidebar', async () => {

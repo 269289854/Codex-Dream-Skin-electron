@@ -15,6 +15,8 @@ describe('renderer injection template', () => {
     expect(() => new Function(payload)).not.toThrow()
     expect(template).toContain('data-dream-copy-version')
     expect(template).toContain('document.querySelectorAll(".dream-heading").forEach(clearHeading)')
+    expect(template).toContain('themeConfig?.builtinGlyphs')
+    expect(template).not.toContain('const builtinGlyphs = {')
     for (const action of HOME_ACTIONS) expect(template).not.toContain(action.label)
   })
 

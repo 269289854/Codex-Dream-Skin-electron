@@ -16,11 +16,8 @@
   };
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
-  const builtinGlyphs = {
-    sparkles: "✦", "wand-sparkles": "✧", image: "▣", send: "➤",
-    "folder-code": "⌘", heart: "♥", pin: "●",
-  };
-  const renderSlot = (node, slot, fallback) => {
+  const builtinGlyphs = themeConfig?.builtinGlyphs || {};
+  const renderSlot = (node, slot, fallback, useActionFallback = false) => {
     if (!node) return;
     const source = themeConfig?.icons?.[slot];
     node.textContent = "";
@@ -31,7 +28,8 @@
       image.className = "dream-custom-icon";
       node.appendChild(image);
     } else {
-      node.textContent = builtinGlyphs[source?.name] || fallback;
+      const usesDefaultActionBuiltin = useActionFallback && themeConfig?.actionFallbackBuiltins?.[slot] === source?.name;
+      node.textContent = usesDefaultActionBuiltin ? fallback : (builtinGlyphs[source?.name] || fallback);
     }
   };
 
@@ -228,7 +226,7 @@
       button.dataset.dreamPrompt = action.prompt;
       button.setAttribute("aria-label", action.label);
       button.innerHTML = `<span class="dream-action-icon" aria-hidden="true"></span><span class="dream-action-label"></span><span class="dream-action-heart" aria-hidden="true">♥</span>`;
-      renderSlot(button.querySelector(".dream-action-icon"), action.iconSlot, action.icon);
+      renderSlot(button.querySelector(".dream-action-icon"), action.iconSlot, action.icon, true);
       button.querySelector(".dream-action-label").textContent = action.label;
       renderSlot(button.querySelector(".dream-action-heart"), "decoration", "♥");
       button.addEventListener("click", () => populateComposer(action.prompt));

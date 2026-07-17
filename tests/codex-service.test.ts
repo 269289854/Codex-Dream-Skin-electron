@@ -9,6 +9,8 @@ vi.mock('../src/main/powershell', () => ({ runPowerShell: runPowerShellMock }))
 
 import { CodexService } from '../src/main/codex-service'
 import { ProfileStore } from '../src/main/profile-store'
+import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
+import { HOME_ACTION_FALLBACK_BUILTINS } from '../src/shared/home-layout'
 
 const roots: string[] = []
 
@@ -75,6 +77,8 @@ describe('CodexService operation queue', () => {
     expect(placementListener).toHaveBeenCalledWith({ themeId: summary.id, x: 0.27, y: 0.64 })
     const payload = await readFile(join(root, 'runtime', 'payload.js'), 'utf8')
     expect(payload).toContain(JSON.stringify(summary.id))
+    expect(payload).toContain(JSON.stringify(BUILTIN_ICON_GLYPHS))
+    expect(payload).toContain(JSON.stringify(HOME_ACTION_FALLBACK_BUILTINS))
 
     internal.queuePolaroidPlacement({ themeId: '22222222-2222-4222-8222-222222222222', x: 0.4, y: 0.5 })
     await internal.operationTail

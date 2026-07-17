@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_HOME_COPY, HOME_ACTIONS } from '../src/shared/home-layout'
+import { DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
+import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 
 let template = ''
 const themeId = '11111111-1111-4111-8111-111111111111'
@@ -63,14 +64,20 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
     </main>`
 }
 
-function inject(window: Window): void {
+function inject(window: Window, icons: Record<string, { name?: string; dataUrl?: string }> = {
+  cardPrimary: { name: 'wand-sparkles' },
+  cardSecondary: { name: 'image' },
+  decoration: { name: 'heart' }
+}): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify('.dream-layout-root { display: block; }'))
     .replace('__DREAM_ART_JSON__', JSON.stringify('data:image/png;base64,AA=='))
     .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
       themeId,
-      icons: {},
+      icons,
+      builtinGlyphs: BUILTIN_ICON_GLYPHS,
+      actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
       copy: { ...DEFAULT_HOME_COPY, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
       actions: HOME_ACTIONS
     }))
@@ -144,6 +151,8 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.hero-row')?.classList.contains('dream-layout-root')).toBe(true)
     expect(window.document.querySelector('[data-home-ambient-suggestions]')?.classList.contains('dream-native-suggestions')).toBe(true)
     expect(window.document.querySelectorAll('.dream-action-card')).toHaveLength(HOME_ACTIONS.length)
+    expect([...window.document.querySelectorAll('.dream-action-icon')].map((node) => node.textContent)).toEqual(HOME_ACTIONS.map((action) => action.icon))
+    expect([...window.document.querySelectorAll('.dream-action-heart')].map((node) => node.textContent)).toEqual(['♥', '♥', '♥', '♥'])
 
     proxy.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     expect(click).toHaveBeenCalledTimes(1)
@@ -166,6 +175,21 @@ describe('renderer home DOM adaptation', () => {
     expect(headingButton?.classList.contains('dream-project-selector')).toBe(true)
     expect(window.document.getElementById('codex-dream-skin-project-proxy')).toBeNull()
     expect(window.document.querySelectorAll('.dream-action-card')).toHaveLength(HOME_ACTIONS.length)
+  })
+
+  it('keeps a custom card image above the default action glyph', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+
+    inject(window, {
+      cardPrimary: { dataUrl: 'data:image/png;base64,AA==' },
+      cardSecondary: { name: 'image' },
+      decoration: { name: 'heart' }
+    })
+
+    const icons = window.document.querySelectorAll('.dream-action-icon')
+    expect(icons[0]?.querySelector('.dream-custom-icon')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+    expect([...icons].slice(1).map((node) => node.textContent)).toEqual(['+', '✓', '✦'])
   })
 
   it('cleans the custom layout when the page stops matching the home contract', () => {
