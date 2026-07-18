@@ -380,13 +380,63 @@
   color: var(--dream-composer-send-icon) !important;
 }
 
+/* Codex's global foreground-button rule includes html and otherwise outranks this composer rule. */
+html.codex-dream-skin .dream-composer button[class~="bg-token-foreground"] {
+  background: var(--dream-composer-send-button) !important;
+  color: var(--dream-composer-send-icon) !important;
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--dream-composer-border) 34%, transparent) !important;
+}
+
 .dream-composer button[class~="bg-token-foreground"]:hover {
+  background: var(--dream-composer-send-button-hover) !important;
+}
+
+html.codex-dream-skin .dream-composer button[class~="bg-token-foreground"]:hover {
   background: var(--dream-composer-send-button-hover) !important;
 }
 
 .dream-composer button[class~="bg-token-foreground"]:active,
 .dream-composer button[class~="bg-token-foreground"][aria-pressed="true"] {
   background: var(--dream-composer-send-button-selected) !important;
+}
+
+html.codex-dream-skin .dream-composer button[class~="bg-token-foreground"]:active,
+html.codex-dream-skin .dream-composer button[class~="bg-token-foreground"][aria-pressed="true"] {
+  background: var(--dream-composer-send-button-selected) !important;
+}
+
+/* Studio uses data-preview-state to render the same three states without browser interaction. */
+.dream-composer button[class~="bg-token-foreground"][data-preview-state="hover"] {
+  background: var(--dream-composer-send-button-hover) !important;
+}
+
+.dream-composer button[class~="bg-token-foreground"][data-preview-state="selected"] {
+  background: var(--dream-composer-send-button-selected) !important;
+}
+
+.dream-composer-send-button {
+  position: relative !important;
+}
+
+.dream-composer-send-button-customized > :not(.dream-composer-send-icon) {
+  visibility: hidden !important;
+}
+
+.dream-composer-send-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: currentColor;
+  font-size: 20px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.dream-composer-send-icon .dream-custom-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 /* The real Codex DOM carries stronger utility selectors than the preview fixture. */

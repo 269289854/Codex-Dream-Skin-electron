@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppearanceColorControl, FontControl, PaintControl, RenderIcon } from '../src/renderer/src/editor-controls'
 import type { ThemePaint } from '../src/shared/appearance'
+import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { createDefaultTheme } from '../src/shared/theme'
 
 const GLOBAL_KEYS = ['window', 'document', 'navigator', 'Element', 'HTMLElement', 'Node', 'Event', 'InputEvent', 'MouseEvent', 'PointerEvent'] as const
@@ -171,5 +172,13 @@ describe('editor appearance controls', () => {
     )))
 
     expect([...container.querySelectorAll('.builtin-icon-glyph')].map((node) => node.textContent)).toEqual(['♫', '✦'])
+  })
+
+  it('renders the native Codex-style upward arrow for the default composer icon', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    act(() => root.render(React.createElement(RenderIcon, { slot: 'composer', profile, assets: {} })))
+
+    expect(container.querySelector('svg')?.classList.contains('lucide-arrow-up')).toBe(true)
+    expect(BUILTIN_ICON_GLYPHS.send).toBe('↑')
   })
 })

@@ -306,6 +306,51 @@
   const findVisible = (root, selector) =>
     [...root.querySelectorAll(selector)].find(isVisible) || null;
 
+  const clearComposerSendIcon = (button) => {
+    button?.classList.remove("dream-composer-send-button", "dream-composer-send-button-customized");
+    button?.querySelector(":scope > .dream-composer-send-icon")?.remove();
+  };
+
+  const composerButtonLabel = (button) =>
+    [button?.getAttribute("aria-label"), button?.getAttribute("title")]
+      .filter((value) => typeof value === "string")
+      .join(" ")
+      .trim();
+
+  const isComposerStopButton = (button) =>
+    /(?:停止|取消|stop|cancel)/i.test(composerButtonLabel(button));
+
+  const ensureComposerSendIcon = (composer) => {
+    const buttons = composer ? [...composer.querySelectorAll("button")].filter(isVisible) : [];
+    const labeledButton = buttons.find((button) => /^(?:发送|提交|停止|send|submit|stop)/i.test(composerButtonLabel(button)));
+    const button = labeledButton || buttons.find((candidate) => candidate.classList.contains("bg-token-foreground")) || null;
+    document.querySelectorAll(".dream-composer-send-button").forEach((current) => {
+      if (current !== button) clearComposerSendIcon(current);
+    });
+    if (!(button instanceof HTMLElement) || isComposerStopButton(button)) {
+      clearComposerSendIcon(button);
+      return;
+    }
+
+    button.classList.add("dream-composer-send-button");
+    const source = themeConfig?.icons?.composer;
+    if (!source?.dataUrl && (!source?.name || source.name === "send")) {
+      button.classList.remove("dream-composer-send-button-customized");
+      button.querySelector(":scope > .dream-composer-send-icon")?.remove();
+      return;
+    }
+
+    let icon = button.querySelector(":scope > .dream-composer-send-icon");
+    if (!icon) {
+      icon = document.createElement("span");
+      icon.className = "dream-composer-send-icon";
+      icon.setAttribute("aria-hidden", "true");
+      button.appendChild(icon);
+    }
+    button.classList.add("dream-composer-send-button-customized");
+    renderSlot(icon, "composer", "↑");
+  };
+
   const installPolaroidDragging = (chrome, polaroid) => {
     if (!(chrome instanceof HTMLElement) || !(polaroid instanceof HTMLElement)) return;
     const themeId = typeof themeConfig?.themeId === "string" ? themeConfig.themeId : "";
@@ -646,6 +691,7 @@
     markCurrentNode(".composer-surface-chrome.dream-composer", composerSurface, "dream-composer");
     ensureComposerBadge(composerSurface);
     ensureComposerMelody(composerSurface);
+    ensureComposerSendIcon(composerSurface);
 
     if (!shellMain || !document.body) return;
     let chrome = document.getElementById(CHROME_ID);
@@ -709,6 +755,7 @@
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
     document.querySelectorAll(".dream-composer-badge").forEach((node) => node.remove());
     document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
+    document.querySelectorAll(".dream-composer-send-button").forEach(clearComposerSendIcon);
     document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
     document.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));

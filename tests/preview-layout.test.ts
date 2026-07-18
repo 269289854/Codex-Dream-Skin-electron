@@ -31,7 +31,12 @@ describe('Studio home preview', () => {
   })
 
   it('models the current Codex project toolbar and composer controls', async () => {
-    const source = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'App.tsx'), 'utf8')
+    const [source, css] = await Promise.all([
+      readFile(join(process.cwd(), 'src', 'renderer', 'src', 'App.tsx'), 'utf8'),
+      readFile(join(process.cwd(), 'src', 'renderer', 'src', 'styles.css'), 'utf8')
+    ])
+    const sendButtonRule = css.match(/\.preview-send-command\s*\{[^}]+\}/)?.[0]
+    const sendIconRule = css.match(/\.preview-send-command \.custom-icon, \.preview-send-command svg\s*\{[^}]+\}/)?.[0]
     expect(source).toContain('className="dream-layout-root dream-hero preview-hero-explicit"')
     expect(source).toContain('className="preview-hero-art"')
     expect(source).toContain('className="preview-hero-fallback"')
@@ -41,8 +46,13 @@ describe('Studio home preview', () => {
     expect(source).toContain('data-preview-context="branch"')
     expect(source).toContain('className="preview-access-command"')
     expect(source).toContain('className="preview-model-command"')
+    expect(source).toContain('className="preview-send-command bg-token-foreground"')
     expect(source).toContain('title="语音输入"')
     expect(source).toContain('title="发送"')
+    expect(sendButtonRule).toContain('width: 28px')
+    expect(sendButtonRule).toContain('height: 28px')
+    expect(sendIconRule).toContain('width: 20px')
+    expect(sendIconRule).toContain('height: 20px')
     expect(PREVIEW_HOME_CONTEXT).toEqual({
       projectName: 'Codex-Dream-Skin-electron',
       environment: '本地',

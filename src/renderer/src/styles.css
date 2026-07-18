@@ -75,8 +75,8 @@ button { cursor: pointer; }
 .preview-access-command { color: #f05d16 !important; }
 .preview-access-command > span { width: 15px; height: 15px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; font-weight: 700; }
 .preview-model-command { max-width: 170px; }
-.preview-send-command { width: 34px; height: 34px !important; border-radius: 50% !important; color: white !important; background: color-mix(in srgb, var(--dream-accent) 54%, white) !important; }
-.preview-send-command .custom-icon, .preview-send-command svg { width: 18px; height: 18px; }
+.preview-send-command { width: 28px; height: 28px !important; border-radius: 50% !important; color: white !important; background: color-mix(in srgb, var(--dream-accent) 54%, white) !important; }
+.preview-send-command .custom-icon, .preview-send-command svg { width: 20px; height: 20px; }
 .preview-polaroid { z-index: 8; }
 .preview-polaroid-pin { position: absolute; z-index: 3; left: 50%; top: 8%; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--dream-pink); transform: translate(-50%,-50%); filter: drop-shadow(0 2px 2px rgba(30,70,78,.26)); cursor: pointer; }
 .preview-polaroid-pin .custom-icon { width: 18px; height: 18px; }

@@ -81,7 +81,10 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
             <div class="project-bar"><div class="horizontal-scroll-fade-mask">
               <button type="button" data-composer-navigation-target="workspace-project">${projectName}</button>
             </div></div>
-            <div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div>
+            <div class="composer-surface-chrome">
+              <div class="ProseMirror" contenteditable="true"></div>
+              <button type="button" aria-label="发送" class="size-token-button-composer rounded-full bg-token-foreground"><svg viewBox="0 0 20 20" width="20" height="20"><path d="M10 16V4"></path></svg></button>
+            </div>
           </div>
         </div>
       </div>
@@ -296,6 +299,46 @@ describe('renderer home DOM adaptation', () => {
     inject(window, {}, undefined, undefined, { visible: false })
 
     expect(window.document.querySelector('.dream-composer-badge')).toBeNull()
+  })
+
+  it('keeps the native send arrow by default and restores native stop state', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    inject(window, { composer: { name: 'send' } })
+
+    const button = window.document.querySelector('button[aria-label="发送"]') as unknown as HTMLButtonElement | null
+    expect(button?.classList.contains('dream-composer-send-button')).toBe(true)
+    expect(button?.classList.contains('dream-composer-send-button-customized')).toBe(false)
+    expect(button?.querySelector(':scope > svg')).not.toBeNull()
+    expect(button?.querySelector('.dream-composer-send-icon')).toBeNull()
+
+    button?.setAttribute('aria-label', '停止')
+    stateOf(window).ensure()
+    expect(button?.classList.contains('dream-composer-send-button')).toBe(false)
+    expect(button?.querySelector(':scope > svg')).not.toBeNull()
+
+    button?.setAttribute('aria-label', '发送')
+    stateOf(window).ensure()
+    expect(button?.classList.contains('dream-composer-send-button')).toBe(true)
+    stateOf(window).cleanup()
+    expect(button?.classList.contains('dream-composer-send-button')).toBe(false)
+  })
+
+  it('applies configured composer icons idempotently without removing the native icon', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    inject(window, { composer: { dataUrl: 'data:image/png;base64,AA==' } })
+
+    const button = window.document.querySelector('button[aria-label="发送"]') as unknown as HTMLButtonElement | null
+    expect(button?.classList.contains('dream-composer-send-button-customized')).toBe(true)
+    expect(button?.querySelector(':scope > svg')).not.toBeNull()
+    expect(button?.querySelector('.dream-composer-send-icon img')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+    stateOf(window).ensure()
+    expect(button?.querySelectorAll(':scope > .dream-composer-send-icon')).toHaveLength(1)
+
+    stateOf(window).cleanup()
+    expect(button?.querySelector('.dream-composer-send-icon')).toBeNull()
+    expect(button?.querySelector(':scope > svg')).not.toBeNull()
   })
 
   it('renders configured multi-color sparkle images idempotently and removes them during cleanup', () => {

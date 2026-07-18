@@ -3,7 +3,7 @@ const glyphs: Record<string, string> = {
   sparkles: '✦',
   'wand-sparkles': '✧',
   image: '▣',
-  send: '➤',
+  send: '↑',
   'folder-code': '⌘',
   heart: '♥',
   droplet: '●',

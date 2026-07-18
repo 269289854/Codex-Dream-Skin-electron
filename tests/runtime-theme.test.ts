@@ -59,6 +59,14 @@ describe('runtime appearance compilation', () => {
     expect(css).toMatch(/\.dream-sidebar-mode-icon\s*\{[^}]*background:\s*var\(--dream-sidebar-mode-badge\);/)
   })
 
+  it('keeps composer send colors above the global foreground button rule', async () => {
+    const css = await readFile(join(resourcesRoot, 'dream-home-layout.css'), 'utf8')
+    expect(css).toContain('html.codex-dream-skin .dream-composer button[class~="bg-token-foreground"]')
+    expect(css).toMatch(/html\.codex-dream-skin \.dream-composer button\[class~="bg-token-foreground"\]\s*\{[^}]*background:\s*var\(--dream-composer-send-button\) !important;/)
+    expect(css).toMatch(/html\.codex-dream-skin \.dream-composer button\[class~="bg-token-foreground"\]:hover\s*\{[^}]*background:\s*var\(--dream-composer-send-button-hover\) !important;/)
+    expect(css).toContain('button[class~="bg-token-foreground"][data-preview-state="selected"]')
+  })
+
   it('keeps native sidebar navigation items rounded in every state', async () => {
     const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
     expect(css).toMatch(/aside\.app-shell-left-panel nav > :is\(a, button\)\s*\{[^}]*border-radius:\s*10px !important;/)
