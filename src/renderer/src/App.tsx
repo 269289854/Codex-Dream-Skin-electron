@@ -8,11 +8,13 @@ import {
 import type { RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
+import { createSparkleParticles } from '../../shared/decorations'
 import { clampNormalized, type Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
+import { ComposerMelodyControls, SparkleControls } from './DecorationControls'
 import { FenceEditor } from './FenceEditor'
 import { PolaroidPreview } from './PolaroidPreview'
 import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
@@ -454,10 +456,10 @@ export function App(): React.JSX.Element {
                 style={{ ...previewStyle, transform: `scale(${previewScale})` }}
                 >
                   {previewFontCss && <style>{previewFontCss}</style>}
-                  <span className="preview-background-dust-target" data-preview-target="background-dust" tabIndex={0} role="button" aria-label="编辑背景光点" />
                   <CodexSidebarPreview profile={draft} assets={assets} />
                 <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
                   <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
+                  <PreviewSparkles profile={draft} assets={assets} />
                   {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
@@ -474,8 +476,6 @@ export function App(): React.JSX.Element {
                       <div className="dream-action-grid">
                         {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={`编辑${action.label}卡片样式`}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label" data-preview-target="action-card-text">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={assets} injected /></span></button>)}
                       </div>
-                      <span className="preview-sparkle" data-preview-target="sparkle" tabIndex={0} role="button" aria-label="编辑闪光颜色"><span data-preview-target="icon-background-sparkle" aria-hidden="true">✦</span></span>
-                      <span className="preview-wave" data-preview-target="wave" tabIndex={0} role="button" aria-label="编辑波形颜色">♫ · · ♡ · · ♪</span>
                     </section>
                     <div className="preview-lower-region">
                       <div className="dream-project-bar preview-project-bar" data-preview-target="palette-project-bar">
@@ -540,6 +540,8 @@ export function App(): React.JSX.Element {
               <Range label="旋转" min={-45} max={45} step={1} value={draft.polaroid.placement.rotation} onChange={(value) => change((profile) => { profile.polaroid.placement.rotation = value })} suffix="°" />
               <Range label="隐藏阈值" min={320} max={1600} step={10} value={draft.polaroid.placement.hideBelowWidth} onChange={(value) => change((profile) => { profile.polaroid.placement.hideBelowWidth = value })} suffix="px" />
             </Property>
+            <Property title="背景粒子" anchor="visual-sparkles" highlighted={inspectorAnchor === 'visual-sparkles'}><SparkleControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
+            <Property title="输入框旋律" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
             <Property title="字体" anchor="typography" highlighted={inspectorAnchor === 'typography'}>
               <div className="font-editor">{(Object.keys(draft.typography.slots) as TypographySlot[]).map((slot) => <FontControl key={slot} slot={slot} profile={draft} onChange={(selection) => change((profile) => assignFontSlot(profile, slot, selection))} onImport={() => void importFont(slot)} />)}</div>
               {draft.typography.importedFonts.length > 0 && <div className="font-library">{draft.typography.importedFonts.map((font) => <div key={font.id}><span><strong>{font.family}</strong><small>{font.originalName}</small></span><button className="mini-icon-button" type="button" title="移除字体" onClick={() => removeImportedFont(font.id)}><Trash2 size={13} /></button></div>)}</div>}
@@ -582,8 +584,34 @@ const appearanceGroupLabels: Record<AppearanceGroup, string> = {
   global: '全局与画布', conversation: '会话与按钮', sidebar: '侧边栏', brand: '品牌栏', home: '首页', cards: '操作卡片', projects: '项目栏', composer: '输入框', decoration: '装饰'
 }
 
+function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element | null {
+  const config = profile.decorations.sparkles
+  if (!config.visible) return null
+  const particles = createSparkleParticles(config)
+  const colors = [resolveAppearanceColor(profile.appearance, profile.colors, 'sparkle'), ...config.extraColors]
+  return <div className="preview-sparkles" aria-label="背景粒子">
+    {particles.map((particle, index) => <button
+      className="preview-sparkle-particle"
+      data-preview-target="sparkles"
+      type="button"
+      aria-label={`编辑背景粒子 ${index + 1}`}
+      key={index}
+      style={{
+        left: `${particle.x}%`,
+        top: `${particle.y}%`,
+        '--dream-sparkle-size': `${particle.size}px`,
+        '--dream-sparkle-opacity': particle.opacity * config.opacity,
+        '--dream-sparkle-rotation': `${particle.rotation}deg`,
+        '--dream-sparkle-color': colors[particle.colorIndex % colors.length],
+        '--dream-sparkle-glow': `${config.glow}px`
+      } as React.CSSProperties}
+    ><RenderIcon slot="backgroundSparkle" profile={profile} assets={assets} injected /></button>)}
+  </div>
+}
+
 function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
-  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{profile.decorations.composerMelody.visible && <span className="preview-composer-melody" data-preview-target="composer-melody" tabIndex={0} role="button" aria-label="编辑输入框旋律">{profile.decorations.composerMelody.text}</span>}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="添加"><Plus size={18} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="语音输入"><Mic size={17} /></button><button className="preview-send-command" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
+  const melody = profile.decorations.composerMelody
+  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <span className="dream-composer-melody preview-composer-melody" data-preview-target="composer-melody" tabIndex={0} role="button" aria-label="编辑输入框旋律" style={{ left: `${melody.position.x * 100}%`, top: `${melody.position.y * 100}%`, fontSize: `${melody.fontSize}px` }}>{melody.text}</span>}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="添加"><Plus size={18} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="语音输入"><Mic size={17} /></button><button className="preview-send-command" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
 }
 
 function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {

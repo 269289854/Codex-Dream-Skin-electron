@@ -62,6 +62,19 @@ describe('preview editing registry', () => {
     })
   })
 
+  it('maps shared decorations to dedicated full-setting groups', () => {
+    expect(PREVIEW_TARGETS.sparkles).toMatchObject({
+      inspectorAnchor: 'visual-sparkles',
+      editor: { kind: 'style', colors: ['sparkle'], iconSlot: 'backgroundSparkle', decoration: 'sparkles' }
+    })
+    expect(PREVIEW_TARGETS['composer-melody']).toMatchObject({
+      inspectorAnchor: 'visual-composer-melody',
+      editor: { kind: 'style', colors: ['wave'], fontSlot: 'composerMelody', decoration: 'composerMelody' }
+    })
+    expect(isPreviewTargetId('background-dust')).toBe(false)
+    expect(isPreviewTargetId('wave')).toBe(false)
+  })
+
   it('exposes every appearance token and the global UI font through preview targets', () => {
     const styleEditors = Object.values(PREVIEW_TARGETS).flatMap((target) => target.editor.kind === 'style' ? [target.editor] : [])
     expect(new Set(styleEditors.flatMap((editor) => editor.colors))).toEqual(new Set(Object.keys(APPEARANCE_COLOR_TOKENS)))

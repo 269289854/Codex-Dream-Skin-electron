@@ -105,7 +105,6 @@ export const APPEARANCE_COLOR_TOKENS = {
   composerBadgeIcon: colorToken('输入框装饰图标', 'composer', '--dream-composer-badge-icon', 'surface', ['icon-composer-badge']),
   wave: colorToken('波形', 'decoration', '--dream-wave', 'accent', ['wave']),
   sparkle: colorToken('闪光', 'decoration', '--dream-sparkle', 'pink', ['icon-decoration']),
-  backgroundDust: colorToken('背景光点', 'decoration', '--dream-background-dust', 'pink', ['background-dust']),
   polaroidPin: colorToken('拍立得图钉', 'decoration', '--dream-polaroid-pin', 'pink', ['icon-polaroid-pin'])
 } as const satisfies Record<string, AppearanceTokenDefinition>
 

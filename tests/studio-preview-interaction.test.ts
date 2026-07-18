@@ -300,6 +300,94 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('[data-inspector-anchor="typography"]')?.classList.contains('inspector-highlight')).toBe(true)
   })
 
+  it('keeps particles and composer melody synchronized across home and conversation previews', async () => {
+    expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(6)
+    const firstParticle = container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')
+    if (!firstParticle) throw new Error('Background particle target is missing.')
+    pointerDown(firstParticle)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('背景粒子快捷配置')
+    const count = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '数量')?.querySelector<HTMLInputElement>('input')
+    if (!count) throw new Error('Particle count control is missing.')
+    act(() => {
+      setInputValue(count, '10')
+      count.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    })
+    expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(10)
+
+    const undo = container.querySelector<HTMLButtonElement>('button[title="撤销"]')
+    if (!undo) throw new Error('Undo command is missing.')
+    act(() => undo.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(6)
+
+    const particleBeforeShuffle = container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')
+    if (!particleBeforeShuffle) throw new Error('Particle disappeared after undo.')
+    const originalLeft = particleBeforeShuffle.style.left
+    pointerDown(particleBeforeShuffle)
+    const shuffle = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('重新排列'))
+    const addColor = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('添加颜色'))
+    if (!shuffle || !addColor) throw new Error('Particle arrangement controls are missing.')
+    act(() => {
+      shuffle.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      addColor.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+    })
+    expect(container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')?.style.left).not.toBe(originalLeft)
+    expect(container.querySelectorAll<HTMLElement>('[data-preview-target="sparkles"]')[1]?.style.getPropertyValue('--dream-sparkle-color')).toBe('#20bcc3')
+
+    const more = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('更多设置'))
+    if (!more) throw new Error('Particle more settings command is missing.')
+    await act(async () => {
+      more.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(container.querySelector('[data-inspector-anchor="visual-sparkles"]')?.classList.contains('inspector-highlight')).toBe(true)
+
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(6)
+    const melody = container.querySelector<HTMLElement>('[data-preview-target="composer-melody"]')
+    if (!melody) throw new Error('Conversation melody target is missing.')
+    pointerDown(melody)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('输入框旋律快捷配置')
+    enterQuickCopy('<b>自定义旋律 ♪</b>')
+    const fontSize = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '字号')?.querySelector<HTMLInputElement>('input')
+    const positionX = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '水平位置')?.querySelector<HTMLInputElement>('input')
+    if (!fontSize || !positionX) throw new Error('Melody geometry controls are missing.')
+    act(() => {
+      setInputValue(fontSize, '22')
+      fontSize.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+      setInputValue(positionX, '0.7')
+      positionX.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    })
+    const updatedMelody = container.querySelector<HTMLElement>('[data-preview-target="composer-melody"]')
+    expect(updatedMelody?.textContent).toBe('<b>自定义旋律 ♪</b>')
+    expect(updatedMelody?.querySelector('b')).toBeNull()
+    expect(updatedMelody?.style.fontSize).toBe('22px')
+    expect(updatedMelody?.style.left).toBe('70%')
+
+    const home = container.querySelector<HTMLButtonElement>('button[title="首页预览"]')
+    if (!home) throw new Error('Home preview command is missing.')
+    act(() => home.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelector('[data-preview-target="composer-melody"]')?.textContent).toBe('<b>自定义旋律 ♪</b>')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.decorations).toMatchObject({
+      sparkles: { seed: 1, extraColors: ['#20bcc3'] },
+      composerMelody: { text: '<b>自定义旋律 ♪</b>', fontSize: 22, position: { x: 0.7, y: 0.35 } }
+    })
+
+    const reset = container.querySelector<HTMLButtonElement>('button[title="恢复默认"]')
+    if (!reset) throw new Error('Restore defaults command is missing.')
+    act(() => reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(6)
+    expect(container.querySelector('[data-preview-target="composer-melody"]')?.textContent).toBe('♫ · · · ♡ · · · ♪')
+  })
+
   it('edits, validates, undoes, saves, and links each brand copy target', async () => {
     const title = container.querySelector('[data-preview-target="copy-brand-title"]')
     if (!title) throw new Error('Brand title target is missing.')
@@ -418,6 +506,18 @@ describe('Studio preview editing interaction', () => {
     })
     expect(canvas.style.getPropertyValue('--dream-font-brand-subtitle')).toContain('Dream Imported font-test')
 
+    const melody = container.querySelector('[data-preview-target="composer-melody"]')
+    if (!melody) throw new Error('Composer melody preview is missing.')
+    pointerDown(melody)
+    const melodyFont = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="composerMelody"] select')
+    if (!melodyFont) throw new Error('Composer melody font selector is missing.')
+    expect(melodyFont.querySelector('option[value="imported:font-test"]')?.textContent).toBe('Test Font')
+    act(() => {
+      melodyFont.value = 'imported:font-test'
+      melodyFont.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(canvas.style.getPropertyValue('--dream-font-composer-melody')).toContain('Dream Imported font-test')
+
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
     await act(async () => {
@@ -425,7 +525,7 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.typography).toMatchObject({
-      slots: { brandTitle: { kind: 'imported', id: 'font-test' }, brandSubtitle: { kind: 'imported', id: 'font-test' } },
+      slots: { brandTitle: { kind: 'imported', id: 'font-test' }, brandSubtitle: { kind: 'imported', id: 'font-test' }, composerMelody: { kind: 'imported', id: 'font-test' } },
       importedFonts: [{ id: 'font-test', family: 'Test Font' }]
     })
 

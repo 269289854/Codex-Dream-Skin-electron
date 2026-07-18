@@ -162,4 +162,50 @@ describe('preview quick editor', () => {
     expect(() => queuedChange?.(profile)).not.toThrow()
     expect(profile.copy.brandSignature).toBe('QUEUED VALUE')
   })
+
+  it('edits the complete sparkle configuration from one target', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    renderEditor(PREVIEW_TARGETS.sparkles, profile)
+
+    const icon = container.querySelector<HTMLSelectElement>('[data-icon-slot="backgroundSparkle"] select')
+    const count = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '数量')?.querySelector<HTMLInputElement>('input')
+    const addColor = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('添加颜色'))
+    const shuffle = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('重新排列'))
+    if (!icon || !count || !addColor || !shuffle) throw new Error('Sparkle controls are missing.')
+    act(() => {
+      icon.value = 'heart'
+      icon.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(count, '12')
+      count.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+      addColor.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      shuffle.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+    })
+
+    expect(profile.icons.backgroundSparkle).toEqual({ kind: 'builtin', name: 'heart' })
+    expect(profile.decorations.sparkles).toMatchObject({ count: 12, seed: 1, extraColors: ['#20bcc3'] })
+  })
+
+  it('edits composer melody presets, text, font, position, and typing behavior', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    renderEditor(PREVIEW_TARGETS['composer-melody'], profile)
+    const starWish = [...container.querySelectorAll('button')].find((button) => button.textContent === '星愿')
+    const text = container.querySelector<HTMLTextAreaElement>('[data-decoration-controls="composer-melody"] textarea')
+    const font = container.querySelector<HTMLSelectElement>('[data-font-slot="composerMelody"] select')
+    const x = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '水平位置')?.querySelector<HTMLInputElement>('input')
+    const toggles = container.querySelectorAll<HTMLInputElement>('[data-decoration-controls="composer-melody"] .toggle-row input')
+    if (!starWish || !text || !font || !x || toggles.length !== 2) throw new Error('Composer melody controls are missing.')
+    act(() => {
+      starWish.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLTextAreaElement.prototype, 'value')?.set?.call(text, '自定义旋律 ♪')
+      text.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+      font.value = 'builtin:jetbrains-mono'
+      font.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(x, '0.7')
+      x.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+      toggles[1]!.click()
+    })
+
+    expect(profile.decorations.composerMelody).toMatchObject({ text: '自定义旋律 ♪', position: { x: 0.7, y: 0.35 }, hideWhenTyping: false })
+    expect(profile.typography.slots.composerMelody).toEqual({ kind: 'builtin', id: 'jetbrains-mono' })
+  })
 })
