@@ -28,7 +28,8 @@ export function buildThemeStyleVariables(profile: ThemeProfile): ThemeStyleVaria
     '--dream-font-ui': resolveFontFamily(profile, profile.typography.slots.ui),
     '--dream-font-brand-title': resolveFontFamily(profile, profile.typography.slots.brandTitle),
     '--dream-font-brand-subtitle': resolveFontFamily(profile, profile.typography.slots.brandSubtitle),
-    '--dream-font-brand-signature': resolveFontFamily(profile, profile.typography.slots.brandSignature)
+    '--dream-font-brand-signature': resolveFontFamily(profile, profile.typography.slots.brandSignature),
+    '--dream-font-composer-melody': resolveFontFamily(profile, profile.typography.slots.composerMelody)
   }
 
   for (const [token, definition] of Object.entries(APPEARANCE_COLOR_TOKENS)) {

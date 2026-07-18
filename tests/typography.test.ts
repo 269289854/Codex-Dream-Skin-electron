@@ -11,7 +11,8 @@ describe('typography model', () => {
         ui: { kind: 'builtin', id: 'system-ui' },
         brandTitle: { kind: 'inherit' },
         brandSubtitle: { kind: 'inherit' },
-        brandSignature: { kind: 'builtin', id: 'segoe-script' }
+        brandSignature: { kind: 'builtin', id: 'segoe-script' },
+        composerMelody: { kind: 'inherit' }
       },
       importedFonts: []
     })

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema } from './appearance'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, splitHeadingTemplate } from './home-layout'
-import { createDefaultTypography, themeTypographySchema } from './typography'
+import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
 
 const normalized = z.number().finite().min(0).max(1)
 
@@ -43,7 +43,40 @@ const currentIconsSchema = versionFiveIconsSchema.extend({
   composerBadge: iconSourceSchema
 }).strict()
 
+const versionSevenIconsSchema = currentIconsSchema.extend({
+  backgroundSparkle: iconSourceSchema
+}).strict()
+
 const composerBadgeSchema = z.object({ visible: z.boolean() }).strict()
+
+const sparklesSchema = z.object({
+  visible: z.boolean(),
+  count: z.number().int().min(1).max(24),
+  minSize: z.number().int().min(8).max(32),
+  maxSize: z.number().int().min(8).max(32),
+  opacity: z.number().finite().min(0).max(1),
+  glow: z.number().int().min(0).max(24),
+  seed: z.number().int().min(0).max(4294967295),
+  extraColors: z.array(cssColorSchema).max(3)
+}).strict().superRefine((sparkles, context) => {
+  if (sparkles.minSize > sparkles.maxSize) context.addIssue({ code: 'custom', path: ['maxSize'], message: 'Sparkle maxSize must be greater than or equal to minSize.' })
+})
+
+const composerMelodySchema = z.object({
+  visible: z.boolean(),
+  text: z.string().max(64),
+  fontSize: z.number().int().min(10).max(32),
+  position: z.object({
+    x: z.number().finite().min(0.1).max(0.9),
+    y: z.number().finite().min(0.1).max(0.65)
+  }).strict(),
+  hideWhenTyping: z.boolean()
+}).strict()
+
+const decorationsSchema = z.object({
+  sparkles: sparklesSchema,
+  composerMelody: composerMelodySchema
+}).strict()
 
 const legacyColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/)
 const legacyColorsSchema = z.object({
@@ -95,13 +128,25 @@ const commonProfileFields = {
 
 export const themeProfileSchema = z.object({
   ...commonProfileFields,
+  version: z.literal(7),
+  colors: colorsSchema,
+  copy: themeCopySchema,
+  icons: versionSevenIconsSchema,
+  composerBadge: composerBadgeSchema,
+  decorations: decorationsSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict()
+
+const versionSixThemeSchema = z.object({
+  ...commonProfileFields,
   version: z.literal(6),
   colors: colorsSchema,
   copy: themeCopySchema,
   icons: currentIconsSchema,
   composerBadge: composerBadgeSchema,
   appearance: themeAppearanceSchema,
-  typography: themeTypographySchema
+  typography: legacyThemeTypographySchema
 }).strict()
 
 const versionFiveThemeSchema = z.object({
@@ -111,7 +156,7 @@ const versionFiveThemeSchema = z.object({
   copy: themeCopySchema,
   icons: versionFiveIconsSchema,
   appearance: themeAppearanceSchema,
-  typography: themeTypographySchema
+  typography: legacyThemeTypographySchema
 }).strict()
 
 const versionFourThemeSchema = z.object({
@@ -169,7 +214,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 6,
+    version: 7,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
@@ -207,19 +252,24 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       cardSecondary: { kind: 'builtin', name: 'image' },
       composer: { kind: 'builtin', name: 'send' },
       composerBadge: { kind: 'builtin', name: 'music' },
+      backgroundSparkle: { kind: 'builtin', name: 'sparkles' },
       project: { kind: 'builtin', name: 'folder-code' },
       decoration: { kind: 'builtin', name: 'heart' },
       polaroidPin: { kind: 'builtin', name: 'pin' }
     },
     composerBadge: { visible: true },
+    decorations: createDefaultDecorations(),
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   }
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 6) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 7) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 6) {
+    return migrateVersionSix(versionSixThemeSchema.parse(input))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 5) {
     return migrateVersionFive(versionFiveThemeSchema.parse(input))
@@ -254,10 +304,11 @@ function migrateLegacyTheme(
 ): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 6,
+    version: 7,
     copy: { ...copy, ...DEFAULT_BRAND_COPY },
-    icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' }, composerBadge: { kind: 'builtin', name: 'music' } },
+    icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' }, composerBadge: { kind: 'builtin', name: 'music' }, backgroundSparkle: { kind: 'builtin', name: 'sparkles' } },
     composerBadge: { visible: true },
+    decorations: createDefaultDecorations(),
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   })
@@ -266,22 +317,59 @@ function migrateLegacyTheme(
 function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 6,
-    icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' } },
+    version: 7,
+    icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' }, backgroundSparkle: { kind: 'builtin', name: 'sparkles' } },
     composerBadge: { visible: true },
+    decorations: createDefaultDecorations(),
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   })
 }
 
 function migrateVersionFive(legacy: z.infer<typeof versionFiveThemeSchema>): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionSix({
     ...legacy,
     version: 6,
     icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' } },
     composerBadge: { visible: true },
-    appearance: migrateComposerBadgeAppearance(legacy.appearance)
+    appearance: migrateComposerBadgeAppearance(legacy.appearance),
+    typography: legacy.typography
   })
+}
+
+function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): ThemeProfile {
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 7,
+    icons: { ...legacy.icons, backgroundSparkle: { kind: 'builtin', name: 'sparkles' } },
+    decorations: createDefaultDecorations(),
+    typography: {
+      ...legacy.typography,
+      slots: { ...legacy.typography.slots, composerMelody: { kind: 'inherit' } }
+    }
+  })
+}
+
+function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
+  return {
+    sparkles: {
+      visible: true,
+      count: 6,
+      minSize: 14,
+      maxSize: 18,
+      opacity: 0.72,
+      glow: 10,
+      seed: 0,
+      extraColors: []
+    },
+    composerMelody: {
+      visible: true,
+      text: '♫ · · · ♡ · · · ♪',
+      fontSize: 16,
+      position: { x: 0.5, y: 0.35 },
+      hideWhenTyping: true
+    }
+  }
 }
 
 function migrateComposerBadgeAppearance(appearance: z.infer<typeof themeAppearanceSchema>): z.infer<typeof themeAppearanceSchema> {

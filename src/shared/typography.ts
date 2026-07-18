@@ -31,6 +31,7 @@ export interface ThemeTypography {
     brandTitle: FontSelection
     brandSubtitle: FontSelection
     brandSignature: FontSelection
+    composerMelody: FontSelection
   }
   importedFonts: ImportedFontRecord[]
 }
@@ -54,15 +55,19 @@ export const importedFontRecordSchema = z.object({
   format: z.enum(['ttf', 'otf', 'woff', 'woff2'])
 }).strict()
 
-export const themeTypographySchema: z.ZodType<ThemeTypography> = z.object({
-  slots: z.object({
+const importedFontsSchema = z.array(importedFontRecordSchema).max(64)
+
+const typographySlotsV6Schema = z.object({
     ui: concreteFontSchema,
     brandTitle: fontSelectionSchema,
     brandSubtitle: fontSelectionSchema,
     brandSignature: fontSelectionSchema
-  }).strict(),
-  importedFonts: z.array(importedFontRecordSchema).max(64)
-}).strict().superRefine((typography, context) => {
+}).strict()
+
+const typographySlotsV7Schema = typographySlotsV6Schema.extend({ composerMelody: fontSelectionSchema }).strict()
+
+function validateTypography<T extends { slots: Record<string, FontSelection>; importedFonts: ImportedFontRecord[] }>(schema: z.ZodType<T>): z.ZodType<T> {
+  return schema.superRefine((typography, context) => {
   const ids = new Set<string>()
   for (let index = 0; index < typography.importedFonts.length; index += 1) {
     const record = typography.importedFonts[index]!
@@ -74,7 +79,18 @@ export const themeTypographySchema: z.ZodType<ThemeTypography> = z.object({
       context.addIssue({ code: 'custom', path: ['slots', slot, 'id'], message: 'Imported font selection does not exist.' })
     }
   }
-})
+  })
+}
+
+export const legacyThemeTypographySchema = validateTypography(z.object({
+  slots: typographySlotsV6Schema,
+  importedFonts: importedFontsSchema
+}).strict())
+
+export const themeTypographySchema: z.ZodType<ThemeTypography> = validateTypography(z.object({
+  slots: typographySlotsV7Schema,
+  importedFonts: importedFontsSchema
+}).strict())
 
 export function createDefaultTypography(): ThemeTypography {
   return {
@@ -82,7 +98,8 @@ export function createDefaultTypography(): ThemeTypography {
       ui: { kind: 'builtin', id: 'system-ui' },
       brandTitle: { kind: 'inherit' },
       brandSubtitle: { kind: 'inherit' },
-      brandSignature: { kind: 'builtin', id: 'segoe-script' }
+      brandSignature: { kind: 'builtin', id: 'segoe-script' },
+      composerMelody: { kind: 'inherit' }
     },
     importedFonts: []
   }

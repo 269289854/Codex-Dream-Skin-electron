@@ -91,9 +91,12 @@ export const PREVIEW_TARGETS = {
   'composer-model': styleTarget('模型文字', 'composer', { colors: ['composerModelText'], fontSlot: 'ui' }),
   'icon-composer': styleTarget('发送按钮', 'composer', { colors: ['composerSendIcon'], paints: ['composerSendButton', 'composerSendButtonHover', 'composerSendButtonSelected'], iconSlot: 'composer' }),
   'icon-composer-badge': styleTarget('输入框装饰', 'composer', { colors: ['composerBadgeIcon'], paints: ['composerBadgeBackground'], iconSlot: 'composerBadge', visibility: 'composerBadge' }),
+  'composer-melody': styleTarget('输入框旋律', 'composer', { colors: ['wave'], fontSlot: 'composerMelody' }),
 
   wave: styleTarget('波形装饰', 'decoration', { colors: ['wave'] }),
   sparkle: styleTarget('闪光装饰', 'decoration', { colors: ['sparkle'] }),
+  'background-dust': styleTarget('背景光点', 'decoration', { colors: ['backgroundDust'] }),
+  'icon-background-sparkle': styleTarget('背景星芒', 'decoration', { colors: ['sparkle'], iconSlot: 'backgroundSparkle' }),
   polaroid: { label: '拍立得', inspector: 'visual', inspectorAnchor: 'visual-polaroid', editor: { kind: 'polaroid' } },
   'icon-polaroid-pin': styleTarget('图钉图标', 'decoration', { colors: ['polaroidPin'], iconSlot: 'polaroidPin' })
 } as const satisfies Record<string, PreviewTargetDefinition>
@@ -108,6 +111,7 @@ export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
   cardSecondary: 'icon-card-secondary',
   composer: 'icon-composer',
   composerBadge: 'icon-composer-badge',
+  backgroundSparkle: 'icon-background-sparkle',
   project: 'icon-project',
   decoration: 'icon-decoration',
   polaroidPin: 'icon-polaroid-pin'

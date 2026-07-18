@@ -18,7 +18,7 @@ html.codex-dream-skin body::before {
   background-image:
     radial-gradient(circle, color-mix(in srgb, var(--dream-sparkle) 18%, transparent) 0 1px, transparent 2px),
     radial-gradient(circle, color-mix(in srgb, var(--dream-wave) 60%, transparent) 0 1px, transparent 2px),
-    radial-gradient(circle, color-mix(in srgb, var(--dream-polaroid-pin) 50%, transparent) 0 1px, transparent 2px);
+    radial-gradient(circle, color-mix(in srgb, var(--dream-background-dust) 50%, transparent) 0 1px, transparent 2px);
   background-position: 0 0, 23px 31px, 41px 13px;
   background-size: 53px 53px, 67px 67px, 79px 79px;
 }
