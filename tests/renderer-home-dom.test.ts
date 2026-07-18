@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createSparkleParticles, type SparkleParticle } from '../src/shared/decorations'
+import { createSparkleParticles, type SparkleParticle } from '../src/shared/particle-effects'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
@@ -261,9 +261,9 @@ describe('renderer home DOM adaptation', () => {
       extraColors: ['rgb(255 0 128 / 60%)', 'oklch(70% 0.18 210)']
     }
     const particles: SparkleParticle[] = [
-      { x: 10, y: 20, size: 12, opacity: 0.8, rotation: 5, colorIndex: 0 },
-      { x: 30, y: 40, size: 18, opacity: 0.6, rotation: 15, colorIndex: 1 },
-      { x: 50, y: 60, size: 24, opacity: 0.4, rotation: 25, colorIndex: 2 }
+      { x: 10, y: 20, size: 12, opacity: 0.8, rotation: 5, colorIndex: 0, duration: 3, delay: -1, drift: 4, phase: 0.2 },
+      { x: 30, y: 40, size: 18, opacity: 0.6, rotation: 15, colorIndex: 1, duration: 4, delay: -2, drift: -8, phase: 0.5 },
+      { x: 50, y: 60, size: 24, opacity: 0.4, rotation: 25, colorIndex: 2, duration: 5, delay: -3, drift: 12, phase: 0.8 }
     ]
     inject(window, { backgroundSparkle: { dataUrl: 'data:image/png;base64,AA==' } }, undefined, undefined, undefined, decorations, particles)
 

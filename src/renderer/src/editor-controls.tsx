@@ -22,7 +22,7 @@ export const colorLabels: Record<keyof ThemeColors, string> = {
 }
 
 export const iconLabels: Record<IconSlot, string> = {
-  sidebarMode: '侧边栏模式', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '背景星芒', project: '项目', decoration: '装饰', polaroidPin: '图钉'
+  sidebarMode: '侧边栏模式', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '呼吸闪烁', backgroundFloat: '轻盈漂浮', backgroundRain: '垂直雨落', backgroundMeteor: '斜向流星', backgroundSnow: '摇曳飘雪', project: '项目', decoration: '装饰', polaroidPin: '图钉'
 }
 
 export const typographyLabels: Record<TypographySlot, string> = {

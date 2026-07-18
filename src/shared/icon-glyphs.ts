@@ -6,6 +6,9 @@ const glyphs: Record<string, string> = {
   send: '➤',
   'folder-code': '⌘',
   heart: '♥',
+  droplet: '●',
+  star: '★',
+  snowflake: '❄',
   pin: '●'
 }
 

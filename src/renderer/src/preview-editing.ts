@@ -113,6 +113,10 @@ export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
   composer: 'icon-composer',
   composerBadge: 'icon-composer-badge',
   backgroundSparkle: 'sparkles',
+  backgroundFloat: 'sparkles',
+  backgroundRain: 'sparkles',
+  backgroundMeteor: 'sparkles',
+  backgroundSnow: 'sparkles',
   project: 'icon-project',
   decoration: 'icon-decoration',
   polaroidPin: 'icon-polaroid-pin'

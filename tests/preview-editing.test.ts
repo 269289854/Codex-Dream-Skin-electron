@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { IconSlot } from '../src/shared/theme'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS } from '../src/shared/appearance'
+import { PARTICLE_EFFECT_IDS, particleEffectIconSlot } from '../src/shared/particle-effects'
 import {
+  ICON_PREVIEW_TARGETS,
   findPreviewTarget,
   isPreviewTargetId,
   placePreviewPopover,
@@ -20,15 +22,21 @@ const rect = (left: number, top: number, width: number, height: number): RectLik
 
 describe('preview editing registry', () => {
   it('maps every theme icon slot to a preview target and inspector anchor', () => {
-    const slots: IconSlot[] = ['sidebarMode', 'branding', 'cardPrimary', 'cardSecondary', 'composer', 'composerBadge', 'backgroundSparkle', 'project', 'decoration', 'polaroidPin']
-    const mapped = Object.values(PREVIEW_TARGETS)
+    const slots: IconSlot[] = ['sidebarMode', 'branding', 'cardPrimary', 'cardSecondary', 'composer', 'composerBadge', 'backgroundSparkle', 'backgroundFloat', 'backgroundRain', 'backgroundMeteor', 'backgroundSnow', 'project', 'decoration', 'polaroidPin']
+    const directlyMapped = Object.values(PREVIEW_TARGETS)
       .filter((target) => target.editor.kind === 'style' && target.editor.iconSlot)
       .map((target) => target.editor.kind === 'style' ? target.editor.iconSlot : null)
+    const particleSlots: IconSlot[] = PARTICLE_EFFECT_IDS.map(particleEffectIconSlot)
 
-    expect(new Set(mapped)).toEqual(new Set(slots))
+    expect(new Set([...directlyMapped, ...particleSlots])).toEqual(new Set(slots))
     for (const slot of slots) {
-      const target = Object.values(PREVIEW_TARGETS).find((candidate) => candidate.editor.kind === 'style' && candidate.editor.iconSlot === slot)
-      expect(target?.editor).toMatchObject({ kind: 'style', iconSlot: slot })
+      if (particleSlots.includes(slot)) {
+        expect(ICON_PREVIEW_TARGETS[slot]).toBe('sparkles')
+        expect(PREVIEW_TARGETS.sparkles).toMatchObject({ inspector: 'visual', inspectorAnchor: 'visual-sparkles' })
+      } else {
+        const target = Object.values(PREVIEW_TARGETS).find((candidate) => candidate.editor.kind === 'style' && candidate.editor.iconSlot === slot)
+        expect(target?.editor).toMatchObject({ kind: 'style', iconSlot: slot })
+      }
     }
   })
 

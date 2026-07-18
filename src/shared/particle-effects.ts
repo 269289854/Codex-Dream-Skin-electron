@@ -1,0 +1,98 @@
+export const PARTICLE_EFFECT_IDS = ['twinkle', 'float', 'rain', 'meteor', 'snow'] as const
+
+export type ParticleEffect = typeof PARTICLE_EFFECT_IDS[number]
+export type ParticleEffectIconSlot = 'backgroundSparkle' | 'backgroundFloat' | 'backgroundRain' | 'backgroundMeteor' | 'backgroundSnow'
+
+export interface ParticleEffectDefinition {
+  label: string
+  iconSlot: ParticleEffectIconSlot
+  baseDuration: number
+  maxDrift: number
+}
+
+export const PARTICLE_EFFECTS: Readonly<Record<ParticleEffect, ParticleEffectDefinition>> = Object.freeze({
+  twinkle: { label: '呼吸闪烁', iconSlot: 'backgroundSparkle', baseDuration: 3.6, maxDrift: 4 },
+  float: { label: '轻盈漂浮', iconSlot: 'backgroundFloat', baseDuration: 10, maxDrift: 52 },
+  rain: { label: '垂直雨落', iconSlot: 'backgroundRain', baseDuration: 2.8, maxDrift: 18 },
+  meteor: { label: '斜向流星', iconSlot: 'backgroundMeteor', baseDuration: 8, maxDrift: 36 },
+  snow: { label: '摇曳飘雪', iconSlot: 'backgroundSnow', baseDuration: 12, maxDrift: 70 }
+})
+
+export interface SparkleParticle {
+  x: number
+  y: number
+  size: number
+  opacity: number
+  rotation: number
+  colorIndex: number
+  duration: number
+  delay: number
+  drift: number
+  phase: number
+}
+
+export interface SparkleLayoutOptions {
+  count: number
+  minSize: number
+  maxSize: number
+  seed: number
+  effect: ParticleEffect
+  speed: number
+}
+
+const DEFAULT_POSITIONS: ReadonlyArray<readonly [number, number, number]> = [
+  [7, 11, 0.86],
+  [31, 5, 0.54],
+  [55, 17, 0.82],
+  [78, 8, 0.64],
+  [92, 27, 0.9],
+  [66, 66, 0.48]
+]
+
+export function createSparkleParticles(options: SparkleLayoutOptions): SparkleParticle[] {
+  const count = Math.max(0, Math.min(24, Math.floor(options.count)))
+  const minSize = Math.min(options.minSize, options.maxSize)
+  const maxSize = Math.max(options.minSize, options.maxSize)
+  const effect = PARTICLE_EFFECTS[options.effect]
+  const speed = Math.max(0.5, Math.min(2, options.speed))
+  const random = seededRandom(options.seed)
+  const particles: SparkleParticle[] = []
+
+  for (let index = 0; index < count; index += 1) {
+    const preset = options.seed === 0 ? DEFAULT_POSITIONS[index] : undefined
+    const factor = preset?.[2] ?? (0.35 + random() * 0.65)
+    const x = preset?.[0] ?? 5 + random() * 90
+    const y = preset?.[1] ?? 5 + random() * 86
+    const opacity = preset?.[2] ?? 0.45 + random() * 0.55
+    const rotation = preset ? 0 : Math.round(random() * 360)
+    const duration = effect.baseDuration * (0.82 + random() * 0.36) / speed
+    const phase = random()
+    particles.push({
+      x,
+      y,
+      size: minSize + (maxSize - minSize) * factor,
+      opacity,
+      rotation,
+      colorIndex: index % 4,
+      duration,
+      delay: -duration * phase,
+      drift: Math.round((random() * 2 - 1) * effect.maxDrift),
+      phase
+    })
+  }
+  return particles
+}
+
+export function particleEffectIconSlot(effect: ParticleEffect): ParticleEffectIconSlot {
+  return PARTICLE_EFFECTS[effect].iconSlot
+}
+
+function seededRandom(seed: number): () => number {
+  let state = (Math.floor(seed) >>> 0) || 1
+  return () => {
+    state = (state + 0x6D2B79F5) | 0
+    let value = Math.imul(state ^ state >>> 15, 1 | state)
+    value ^= value + Math.imul(value ^ value >>> 7, 61 | value)
+    return ((value ^ value >>> 14) >>> 0) / 4294967296
+  }
+}
