@@ -76,6 +76,7 @@ export const APPEARANCE_COLOR_TOKENS = {
   sidebarProjectHoverText: colorToken('项目行悬停文字', 'sidebar', '--dream-sidebar-project-hover-text', 'accent', ['sidebar-project'], 'hover'),
   sidebarProjectSelectedText: colorToken('项目行选中文字', 'sidebar', '--dream-sidebar-project-selected-text', 'accent', ['sidebar-project'], 'selected'),
   sidebarTaskText: colorToken('任务行文字', 'sidebar', '--dream-sidebar-task-text', 'ink', ['sidebar-task']),
+  sidebarTaskSelectedText: colorToken('任务行选中文字', 'sidebar', '--dream-sidebar-task-selected-text', 'accent', ['sidebar-task'], 'selected'),
   sidebarFooterText: colorToken('侧边栏页脚文字', 'sidebar', '--dream-sidebar-footer-text', 'ink', ['sidebar-footer']),
   sidebarAvatarText: colorToken('头像文字', 'sidebar', '--dream-sidebar-avatar-text', 'surface', ['sidebar-avatar']),
   brandBorder: colorToken('品牌栏边框', 'brand', '--dream-brand-border', 'border', ['brand']),
@@ -176,6 +177,7 @@ export const APPEARANCE_PAINT_TOKENS = {
   sidebarProjectRowSelected: paintToken('项目行选中', 'sidebar', '--dream-sidebar-project-row-selected', 'pink', ['sidebar-project'], 'selected'),
   sidebarTaskRow: paintToken('任务行', 'sidebar', '--dream-sidebar-task-row', 'surface', ['sidebar-task']),
   sidebarTaskRowHover: paintToken('任务行悬停', 'sidebar', '--dream-sidebar-task-row-hover', 'lavender', ['sidebar-task'], 'hover'),
+  sidebarTaskRowSelected: paintToken('任务行选中', 'sidebar', '--dream-sidebar-task-row-selected', 'pink', ['sidebar-task'], 'selected'),
   sidebarFooter: paintToken('侧边栏页脚', 'sidebar', '--dream-sidebar-footer', 'surface', ['sidebar-footer']),
   sidebarAvatar: paintToken('头像', 'sidebar', '--dream-sidebar-avatar', 'accent', ['sidebar-avatar']),
   brandSurface: paintToken('品牌栏背景', 'brand', '--dream-brand-surface', 'surface', ['brand']),
@@ -273,6 +275,7 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
       return linear(90, [[tint(colors.accent, 0.24), 0], [tint(colors.pink, 0.18), 1]])
     case 'sidebarNavItemSelected':
     case 'sidebarProjectRowSelected':
+    case 'sidebarTaskRowSelected':
     case 'composerToolButtonSelected':
       return linear(90, [[tint(colors.accent, 0.27), 0], [tint(colors.pink, 0.2), 1]])
     case 'sidebarAvatar':

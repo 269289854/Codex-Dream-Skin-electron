@@ -92,16 +92,9 @@ describe('Studio home preview', () => {
       active: true,
       tasks: ['调整预览侧边栏']
     })
-    expect(PREVIEW_SIDEBAR_PROJECTS.map((project) => project.name)).toEqual([
-      'Codex-Dream-Skin-electron',
-      'melody-ui-kit',
-      'starlight-notes',
-      'pixel-workbench',
-      'sample-api-service',
-      'demo-file-audit'
-    ])
-    expect(PREVIEW_SIDEBAR_PROJECTS.some((project) => project.tasks.length > 1)).toBe(true)
-    expect(PREVIEW_SIDEBAR_PROJECTS.filter((project) => 'emptyLabel' in project)).toHaveLength(2)
+    expect(PREVIEW_SIDEBAR_PROJECTS).toHaveLength(1)
+    expect(PREVIEW_SIDEBAR_PROJECTS[0]?.tasks).toEqual(['调整预览侧边栏'])
+    expect(PREVIEW_SIDEBAR_PROJECTS[0]?.emptyLabel).toBeUndefined()
     expect(PREVIEW_SIDEBAR_TEAM).toEqual({ avatar: 'DT', label: 'Demo Team' })
   })
 

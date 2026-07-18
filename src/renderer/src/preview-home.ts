@@ -16,12 +16,7 @@ export interface PreviewSidebarProject {
 }
 
 export const PREVIEW_SIDEBAR_PROJECTS: readonly PreviewSidebarProject[] = [
-  { name: 'Codex-Dream-Skin-electron', active: true, tasks: ['调整预览侧边栏'] },
-  { name: 'melody-ui-kit', tasks: ['完善主题色变量', '补充组件状态'] },
-  { name: 'starlight-notes', tasks: ['优化启动页面布局'] },
-  { name: 'pixel-workbench', tasks: ['修复项目筛选状态', '更新示例图标'] },
-  { name: 'sample-api-service', tasks: [], emptyLabel: '无任务' },
-  { name: 'demo-file-audit', tasks: [], emptyLabel: '无任务' }
+  { name: 'Codex-Dream-Skin-electron', active: true, tasks: ['调整预览侧边栏'] }
 ]
 
 export const PREVIEW_SIDEBAR_TEAM = { avatar: 'DT', label: 'Demo Team' } as const

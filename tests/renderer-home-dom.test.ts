@@ -57,6 +57,8 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
       <button type="button" aria-label="搜索">Search</button>
       <button type="button" data-project-id="sample">Project</button>
       <button type="button" data-task-id="sample">Task</button>
+      <div data-app-action-sidebar-thread-row="" aria-current="page" class="bg-token-list-hover-background"><span data-thread-title="true">Current task</span></div>
+      <div data-app-action-sidebar-thread-row=""><span data-thread-title="true">Other task</span></div>
       <footer><span data-testid="team-avatar">DT</span></footer>
       <nav aria-label="primary">
         <div class="native-new-task-row"><a aria-current="page" href="#new"><span>新建任务</span></a><button type="button" aria-label="新建任务">+</button></div>
@@ -144,19 +146,32 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('button[aria-label="搜索"]')?.classList.contains('dream-sidebar-search-button')).toBe(true)
     expect(window.document.querySelector('[data-project-id]')?.classList.contains('dream-sidebar-project-row')).toBe(true)
     expect(window.document.querySelector('[data-task-id]')?.classList.contains('dream-sidebar-task-row')).toBe(true)
+    const activeThreadRow = window.document.querySelector('[data-app-action-sidebar-thread-row]')
+    expect(activeThreadRow?.classList.contains('dream-sidebar-task-row')).toBe(true)
+    expect(activeThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(true)
+    const otherThreadRow = window.document.querySelectorAll('[data-app-action-sidebar-thread-row]')[1]
+    expect(otherThreadRow?.classList.contains('dream-sidebar-task-row')).toBe(true)
+    expect(otherThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
     expect(window.document.querySelector('aside footer')?.classList.contains('dream-sidebar-footer')).toBe(true)
     expect(window.document.querySelector('[data-testid="team-avatar"]')?.classList.contains('dream-sidebar-avatar')).toBe(true)
     const newTaskRow = window.document.querySelector('.native-new-task-row')
     expect(newTaskRow?.classList.contains('dream-sidebar-new-task-row')).toBe(true)
     expect(newTaskRow?.classList.contains('dream-sidebar-new-task-row-selected')).toBe(true)
 
+    activeThreadRow?.removeAttribute('aria-current')
+    activeThreadRow?.classList.remove('bg-token-list-hover-background')
     stateOf(window).ensure()
+    expect(activeThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
     expect(modeButton?.querySelectorAll(':scope > .dream-sidebar-mode-icon')).toHaveLength(1)
     stateOf(window).cleanup()
     expect(modeButton?.classList.contains('dream-sidebar-mode-button')).toBe(false)
     expect(modeButton?.querySelector('.dream-sidebar-mode-icon')).toBeNull()
     expect(window.document.querySelector('.dream-sidebar-project-row')).toBeNull()
     expect(newTaskRow?.classList.contains('dream-sidebar-new-task-row')).toBe(false)
+    expect(activeThreadRow?.classList.contains('dream-sidebar-task-row')).toBe(false)
+    expect(activeThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
+    expect(otherThreadRow?.classList.contains('dream-sidebar-task-row')).toBe(false)
+    expect(otherThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
   })
 
   it('supports the English native mode button label', () => {

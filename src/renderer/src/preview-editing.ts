@@ -61,7 +61,7 @@ export const PREVIEW_TARGETS = {
   'sidebar-search': styleTarget('搜索按钮', 'sidebar', { colors: ['sidebarSearchIcon'], paints: ['sidebarSearchButton', 'sidebarSearchButtonHover'] }),
   'sidebar-nav': styleTarget('导航项', 'sidebar', { colors: ['sidebarNavText', 'sidebarNavHoverText', 'sidebarNavSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], fontSlot: 'ui' }),
   'sidebar-project': styleTarget('项目行', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText', 'sidebarProjectSelectedText'], paints: ['sidebarProjectRow', 'sidebarProjectRowHover', 'sidebarProjectRowSelected'], fontSlot: 'ui' }),
-  'sidebar-task': styleTarget('任务行', 'sidebar', { colors: ['sidebarTaskText'], paints: ['sidebarTaskRow', 'sidebarTaskRowHover'], fontSlot: 'ui' }),
+  'sidebar-task': styleTarget('任务行', 'sidebar', { colors: ['sidebarTaskText', 'sidebarTaskSelectedText'], paints: ['sidebarTaskRow', 'sidebarTaskRowHover', 'sidebarTaskRowSelected'], fontSlot: 'ui' }),
   'sidebar-footer': styleTarget('侧边栏页脚', 'sidebar', { colors: ['sidebarFooterText'], paints: ['sidebarFooter'], fontSlot: 'ui' }),
   'sidebar-avatar': styleTarget('头像', 'sidebar', { colors: ['sidebarAvatarText'], paints: ['sidebarAvatar'], fontSlot: 'ui' }),
   'icon-sidebar-mode': styleTarget('侧边栏模式图标', 'sidebar', { colors: ['sidebarModeIcon'], paints: ['sidebarModeBadge'], iconSlot: 'sidebarMode' }),

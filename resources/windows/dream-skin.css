@@ -64,7 +64,6 @@ html.codex-dream-skin aside.app-shell-left-panel [class~="bg-token-list-hover-ba
 
 html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row {
   width: 100% !important;
-  min-height: 40px !important;
   display: flex !important;
   align-items: stretch !important;
   overflow: hidden !important;
@@ -75,7 +74,6 @@ html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row
 }
 
 html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row > :is(a, button) {
-  min-height: 40px !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
@@ -130,6 +128,12 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-task-row {
 
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-task-row:hover {
   background: var(--dream-sidebar-task-row-hover) !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-task-row-selected,
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-task-row-selected:hover {
+  background: var(--dream-sidebar-task-row-selected) !important;
+  color: var(--dream-sidebar-task-selected-text) !important;
 }
 
 html.codex-dream-skin aside.app-shell-left-panel :is(footer, .dream-sidebar-footer) {

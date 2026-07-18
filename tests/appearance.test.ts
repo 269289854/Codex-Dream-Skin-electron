@@ -94,6 +94,9 @@ describe('appearance model', () => {
     expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'actionCardIconBadge'))).toBe(
       'linear-gradient(145deg, #20BCC3 0%, #B9A7E8 58%, #F06EA9 100%)'
     )
+    expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'sidebarTaskRowSelected'))).toBe(
+      'linear-gradient(90deg, rgb(189, 237, 239) 0%, rgb(246, 226, 238) 100%)'
+    )
     expect(resolveAppearancePaint(appearance, legacyColors, 'sidebarHeader')).toEqual({ kind: 'solid', color: 'transparent' })
   })
 

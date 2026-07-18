@@ -13,6 +13,12 @@ describe('runtime appearance compilation', () => {
   it('emits every registered token with legacy fallbacks and structured gradients', () => {
     const profile = createDefaultTheme(id)
     profile.appearance.colors.brandTitle = 'oklch(.42 .11 210 / .8)'
+    profile.appearance.colors.sidebarTaskSelectedText = '#0b3040'
+    profile.appearance.paints.sidebarTaskRowSelected = {
+      kind: 'linear',
+      angle: 90,
+      stops: [{ color: '#102030', position: 0 }, { color: '#f0d0e0', position: 1 }]
+    }
     profile.appearance.paints.canvas = {
       kind: 'linear',
       angle: 120,
@@ -21,6 +27,8 @@ describe('runtime appearance compilation', () => {
     const variables = buildThemeStyleVariables(profile)
 
     expect(variables['--dream-brand-title']).toBe('oklch(.42 .11 210 / .8)')
+    expect(variables['--dream-sidebar-task-selected-text']).toBe('#0b3040')
+    expect(variables['--dream-sidebar-task-row-selected']).toBe('linear-gradient(90deg, #102030 0%, #f0d0e0 100%)')
     expect(variables['--dream-canvas']).toBe('linear-gradient(120deg, #fff 0%, rgb(10 20 30 / .5) 100%)')
     expect(variables['--dream-font-brand-title']).toBe('var(--dream-font-ui)')
     for (const definition of Object.values(APPEARANCE_COLOR_TOKENS)) expect(variables[definition.cssVariable]).toBeTruthy()
@@ -55,11 +63,22 @@ describe('runtime appearance compilation', () => {
     const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
     expect(css).toMatch(/aside\.app-shell-left-panel nav > :is\(a, button\)\s*\{[^}]*border-radius:\s*10px !important;/)
     expect(css).toMatch(/:is\(a, button\)\[aria-current="page"\][^}]*\{[^}]*border-radius:\s*10px !important;/)
-    expect(css).toMatch(/nav \.dream-sidebar-new-task-row\s*\{[^}]*min-height:\s*40px !important;[^}]*background:\s*var\(--dream-sidebar-nav-item\) !important;/)
+    expect(css).toMatch(/nav \.dream-sidebar-new-task-row\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item\) !important;/)
+    expect(css).not.toMatch(/nav \.dream-sidebar-new-task-row\s*\{[^}]*min-height:\s*40px !important;/)
     expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
     expect(css).toMatch(/nav \.dream-sidebar-new-task-row > :is\(a, button\)\s*\{[^}]*background:\s*transparent !important;/)
+    expect(css).not.toMatch(/nav \.dream-sidebar-new-task-row > :is\(a, button\)\s*\{[^}]*min-height:\s*40px !important;/)
     expect(css).toMatch(/nav \.dream-sidebar-new-task-row:hover\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-hover\) !important;/)
     expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected:hover\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
+    expect(css).toMatch(/\.dream-sidebar-task-row-selected[\s\S]*background:\s*var\(--dream-sidebar-task-row-selected\) !important;/)
+    expect(css).toMatch(/\.dream-sidebar-task-row-selected[\s\S]*color:\s*var\(--dream-sidebar-task-selected-text\) !important;/)
+  })
+
+  it('recognizes current Codex thread rows and assigns the selected marker', async () => {
+    const renderer = await readFile(join(resourcesRoot, 'renderer-inject.js'), 'utf8')
+    expect(renderer).toContain('[data-app-action-sidebar-thread-row]')
+    expect(renderer).toContain('dream-sidebar-task-row-selected')
+    expect(renderer).toContain('node.classList.toggle("dream-sidebar-task-row-selected", selected)')
   })
 
   it('embeds only selected imported fonts with generated family names', async () => {

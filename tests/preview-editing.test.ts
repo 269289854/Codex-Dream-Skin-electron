@@ -90,6 +90,10 @@ describe('preview editing registry', () => {
     for (const target of ['conversation-message', 'primary-button', 'sidebar-nav', 'sidebar-project', 'sidebar-task', 'action-card-text', 'project-chip', 'composer-model'] as const) {
       expect(PREVIEW_TARGETS[target].editor).toMatchObject({ kind: 'style', fontSlot: 'ui' })
     }
+    expect(PREVIEW_TARGETS['sidebar-task'].editor).toMatchObject({
+      colors: ['sidebarTaskText', 'sidebarTaskSelectedText'],
+      paints: ['sidebarTaskRow', 'sidebarTaskRowHover', 'sidebarTaskRowSelected']
+    })
   })
 
   it('resolves the most specific nested target inside the preview root', () => {

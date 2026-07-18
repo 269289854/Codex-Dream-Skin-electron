@@ -233,6 +233,22 @@ describe('Studio preview editing interaction', () => {
     expect(selector.getAttribute('data-preview-state')).toBe('normal')
   })
 
+  it('exposes an independent selected state for task rows', () => {
+    const task = container.querySelector<HTMLElement>('[data-preview-target="sidebar-task"]')
+    const canvas = container.querySelector<HTMLElement>('.codex-preview')
+    if (!task || !canvas) throw new Error('Task row preview is missing.')
+    pointerDown(task)
+
+    const stateButtons = [...container.querySelectorAll('[role="dialog"] .state-tabs button')].map((button) => button.textContent?.trim())
+    expect(stateButtons).toEqual(['普通', '悬停', '选中'])
+    act(() => clickDialogButton('选中'))
+    expect(task.getAttribute('data-preview-state')).toBe('selected')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-task-row-selected')).toContain('linear-gradient(90deg')
+
+    const selectedText = [...container.querySelectorAll<HTMLInputElement>('[role="dialog"] .color-text-input')].find((input) => input.value === '#20BCC3')
+    expect(selectedText).toBeTruthy()
+  })
+
   it('persists a user gradient edited directly from the inherited default', async () => {
     const selector = container.querySelector<HTMLElement>('[data-preview-target="project-selector"]')
     if (!selector) throw new Error('Project selector preview is missing.')

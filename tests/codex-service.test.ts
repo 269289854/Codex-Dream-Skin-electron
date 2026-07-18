@@ -62,6 +62,8 @@ describe('CodexService operation queue', () => {
     const original = await store.get(summary.id)
     original.typography.slots.ui = { kind: 'builtin', id: 'jetbrains-mono' }
     original.appearance.paints.canvas = { kind: 'linear', angle: 90, stops: [{ color: 'red', position: 0 }, { color: 'blue', position: 1 }] }
+    original.appearance.colors.sidebarTaskSelectedText = '#0b3040'
+    original.appearance.paints.sidebarTaskRowSelected = { kind: 'solid', color: '#f0d0e0' }
     await store.update(original)
     const placementListener = vi.fn()
     const service = new CodexService(store, join(process.cwd(), 'resources', 'windows'), () => undefined, placementListener)
@@ -87,6 +89,8 @@ describe('CodexService operation queue', () => {
     expect(payload).toContain('@keyframes dream-particle-twinkle')
     expect(payload).toContain('"sparkleIconSlot":"backgroundSparkle"')
     expect(payload).toContain('linear-gradient(90deg, red 0%, blue 100%)')
+    expect(payload).toContain('--dream-sidebar-task-selected-text: #0b3040;')
+    expect(payload).toContain('--dream-sidebar-task-row-selected: #f0d0e0;')
 
     internal.queuePolaroidPlacement({ themeId: '22222222-2222-4222-8222-222222222222', x: 0.4, y: 0.5 })
     await internal.operationTail
