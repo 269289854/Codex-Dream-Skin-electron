@@ -58,6 +58,8 @@ describe('runtime appearance compilation', () => {
     expect(css).toMatch(/nav \.dream-sidebar-new-task-row\s*\{[^}]*min-height:\s*40px !important;[^}]*background:\s*var\(--dream-sidebar-nav-item\) !important;/)
     expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
     expect(css).toMatch(/nav \.dream-sidebar-new-task-row > :is\(a, button\)\s*\{[^}]*background:\s*transparent !important;/)
+    expect(css).toMatch(/nav \.dream-sidebar-new-task-row:hover\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-hover\) !important;/)
+    expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected:hover\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
   })
 
   it('embeds only selected imported fonts with generated family names', async () => {

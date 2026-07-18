@@ -87,11 +87,25 @@ html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row
   flex: 1 1 auto !important;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row:hover {
+  background: var(--dream-sidebar-nav-item-hover) !important;
+  color: var(--dream-sidebar-nav-hover-text) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dream-sidebar-border) 54%, transparent) !important;
+  transform: translateX(1px);
+}
+
 html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row-selected {
   border: 1px solid var(--dream-sidebar-border) !important;
   background: var(--dream-sidebar-nav-item-selected) !important;
   color: var(--dream-sidebar-nav-selected-text) !important;
   box-shadow: 0 4px 15px color-mix(in srgb, var(--dream-sidebar-border) 24%, transparent) !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row-selected:hover {
+  background: var(--dream-sidebar-nav-item-selected) !important;
+  color: var(--dream-sidebar-nav-selected-text) !important;
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--dream-sidebar-border) 24%, transparent) !important;
+  transform: none;
 }
 
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row {

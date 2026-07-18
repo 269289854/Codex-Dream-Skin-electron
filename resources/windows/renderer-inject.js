@@ -223,10 +223,15 @@
     while (parent && parent !== nav) {
       const actions = [...parent.querySelectorAll("a, button")];
       const hasSiblingNavAction = actions.some((candidate) => candidate !== action && hasSidebarNavText(candidate));
-      if (actions.length > 1 && !hasSiblingNavAction && actions.length <= 3) return parent;
+      if (actions.length > 1 && !hasSiblingNavAction && actions.length <= 6) return parent;
       parent = parent.parentElement;
     }
     return action;
+  };
+  const isSidebarNavSelected = (node) => {
+    if (!(node instanceof HTMLElement)) return false;
+    if (node.matches('[aria-current="page"], [aria-selected="true"], [data-active="true"], [data-state="active"]')) return true;
+    return [...node.classList].some((token) => token === "bg-token-list-hover-background" || /(?:selected|active|current)/i.test(token));
   };
   const ensureSidebarNavigation = () => {
     const cleanup = () => {
@@ -245,8 +250,7 @@
     if (!(action instanceof HTMLElement)) return;
     const row = findSidebarNavRow(nav, action);
     row.classList.add("dream-sidebar-new-task-row");
-    const selected = row.matches('[aria-current="page"], [class~="bg-token-list-hover-background"]') ||
-      Boolean(row.querySelector('[aria-current="page"], [class~="bg-token-list-hover-background"]'));
+    const selected = isSidebarNavSelected(row) || [...row.querySelectorAll("*")].some(isSidebarNavSelected);
     row.classList.toggle("dream-sidebar-new-task-row-selected", selected);
   };
 
