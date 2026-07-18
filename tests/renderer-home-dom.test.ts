@@ -325,8 +325,12 @@ describe('renderer home DOM adaptation', () => {
     expect(particleEffectsCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(particleEffectsCss).toContain('pointer-events: none')
     expect(particleEffectsCss).toContain('will-change: transform, opacity')
+    expect(particleEffectsCss).toContain('animation-duration: calc(var(--dream-particle-duration, 4s) * 1.8) !important')
+    expect(particleEffectsCss).not.toContain('animation: none !important')
     expect(previewParticleEffectsCss).toContain('[data-preview-selected="true"]')
     expect(previewParticleEffectsCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(previewParticleEffectsCss).toContain('animation-duration: calc(var(--dream-particle-duration, 4s) * 1.8) !important')
+    expect(previewParticleEffectsCss).not.toContain('animation: none !important')
   })
 
   it('shows composer melody as text and hides it for text or attachments', () => {
