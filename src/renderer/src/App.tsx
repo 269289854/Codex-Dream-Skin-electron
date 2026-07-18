@@ -456,7 +456,7 @@ export function App(): React.JSX.Element {
                 {previewFontCss && <style>{previewFontCss}</style>}
                 <CodexSidebarPreview profile={draft} assets={assets} />
                 <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
-                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
+                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
                   {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
@@ -591,7 +591,7 @@ function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; asset
   return (
     <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
       <div className="codex-sidebar-header" data-preview-target="sidebar-header">
-        <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">Codex</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} /></span></div>
+        <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">Codex</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} injected /></span></div>
         <button className="codex-sidebar-icon-button" data-preview-target="sidebar-search" type="button" title="搜索"><Search size={19} /></button>
       </div>
       <nav className="codex-primary-nav" aria-label="主要导航">

@@ -69,15 +69,21 @@ describe('Studio home preview', () => {
     ])
     const previewRule = css.match(/\.codex-preview\s*\{[^}]+\}/)?.[0]
     const sidebarRule = css.match(/\.codex-sidebar\s*\{[^}]+\}/)?.[0]
+    const modeIconRule = css.match(/\.codex-mode-icon\s*\{[^}]+\}/)?.[0]
+    const brandGlyphRule = css.match(/\.preview-brand-icon \.builtin-icon-glyph\s*\{[^}]+\}/)?.[0]
 
     expect(source).toContain('<CodexSidebarPreview profile={draft} assets={assets} />')
     expect(source).not.toContain('className="codex-rail"')
     expect(source).toContain('className="codex-project-scroll"')
     expect(source).toContain('className="codex-sidebar-footer"')
-    expect(source).toContain('slot="branding"')
+    expect(source).toContain('slot="branding" profile={draft} assets={assets} injected')
+    expect(source).toContain('slot="sidebarMode" profile={profile} assets={assets} injected')
     expect(previewRule).toContain('grid-template-columns: 270px minmax(0,1fr)')
     expect(sidebarRule).toContain('display: flex')
     expect(sidebarRule).toContain('border-radius: 0 18px 18px 0')
+    expect(modeIconRule).toContain('width: 21px')
+    expect(modeIconRule).toContain('height: 21px')
+    expect(brandGlyphRule).toContain('font-size: 28px')
   })
 
   it('uses a representative project and task snapshot', () => {

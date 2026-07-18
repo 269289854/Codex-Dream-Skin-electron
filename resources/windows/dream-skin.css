@@ -115,7 +115,7 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-search-button:ho
 }
 
 html.codex-dream-skin aside.app-shell-left-panel button:is([aria-label^="切换模式"], [aria-label^="Switch mode"]) {
-  background: var(--dream-sidebar-mode-badge) !important;
+  background: transparent !important;
   border-color: transparent !important;
   color: var(--dream-sidebar-codex-text) !important;
   font-size: 19px !important;
@@ -141,6 +141,8 @@ html.codex-dream-skin .dream-sidebar-mode-icon {
   place-items: center;
   margin-left: 4px;
   color: var(--dream-sidebar-mode-icon);
+  background: var(--dream-sidebar-mode-badge);
+  border-radius: 5px;
   font-size: 19px;
   line-height: 1;
 }

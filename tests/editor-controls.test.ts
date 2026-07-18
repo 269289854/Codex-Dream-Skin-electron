@@ -3,7 +3,7 @@ import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AppearanceColorControl, FontControl, PaintControl } from '../src/renderer/src/editor-controls'
+import { AppearanceColorControl, FontControl, PaintControl, RenderIcon } from '../src/renderer/src/editor-controls'
 import type { ThemePaint } from '../src/shared/appearance'
 import { createDefaultTheme } from '../src/shared/theme'
 
@@ -161,5 +161,15 @@ describe('editor appearance controls', () => {
     if (!importButton) throw new Error('Font import command is missing.')
     act(() => importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onImport).toHaveBeenCalledOnce()
+  })
+
+  it('renders the runtime glyphs for injected sidebar and brand preview slots', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    act(() => root.render(React.createElement('div', null,
+      React.createElement(RenderIcon, { slot: 'sidebarMode', profile, assets: {}, injected: true }),
+      React.createElement(RenderIcon, { slot: 'branding', profile, assets: {}, injected: true })
+    )))
+
+    expect([...container.querySelectorAll('.builtin-icon-glyph')].map((node) => node.textContent)).toEqual(['♫', '✦'])
   })
 })

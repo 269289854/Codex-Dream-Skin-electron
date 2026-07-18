@@ -44,6 +44,12 @@ describe('runtime appearance compilation', () => {
     expect(css).not.toMatch(/\.dream-brand\s*\{[^}]*background:\s*var\(--dream-brand-surface\)/)
   })
 
+  it('applies the sidebar mode badge to the injected icon instead of the native button', async () => {
+    const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
+    expect(css).toMatch(/button:is\([^}]+\)\s*\{[^}]*background:\s*transparent !important;/)
+    expect(css).toMatch(/\.dream-sidebar-mode-icon\s*\{[^}]*background:\s*var\(--dream-sidebar-mode-badge\);/)
+  })
+
   it('embeds only selected imported fonts with generated family names', async () => {
     const profile = createDefaultTheme(id)
     profile.typography.importedFonts = [
