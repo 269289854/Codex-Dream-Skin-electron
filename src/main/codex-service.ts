@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { CodexDetection, PolaroidPlacementUpdate, RuntimePhase, RuntimeStatus } from '../shared/contracts'
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
-import { createSparkleParticles } from '../shared/particle-effects'
+import { createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
 import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
@@ -233,15 +233,16 @@ export class CodexService {
   }
 
   private async buildPayload(themeId: string): Promise<string> {
-    const [profile, compiled, baseCss, homeLayoutCss, renderer] = await Promise.all([
+    const [profile, compiled, baseCss, homeLayoutCss, particleEffectsCss, renderer] = await Promise.all([
       this.store.get(themeId), this.store.compile(themeId),
       readFile(join(this.resourcesRoot, 'dream-skin.css'), 'utf8'),
       readFile(join(this.resourcesRoot, 'dream-home-layout.css'), 'utf8'),
+      readFile(join(this.resourcesRoot, 'dream-particle-effects.css'), 'utf8'),
       readFile(join(this.resourcesRoot, 'renderer-inject.js'), 'utf8')
     ])
     const hero = profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
     const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot)
-    const css = `${baseCss}\n${homeLayoutCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
+    const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
       source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
     ]))
@@ -253,6 +254,7 @@ export class CodexService {
         themeId: profile.id,
         icons,
         decorations: profile.decorations,
+        sparkleIconSlot: particleEffectIconSlot(profile.decorations.sparkles.effect),
         sparkleParticles: createSparkleParticles(profile.decorations.sparkles),
         composerBadge: profile.composerBadge,
         builtinGlyphs: BUILTIN_ICON_GLYPHS,

@@ -31,7 +31,8 @@ describe('runtime appearance compilation', () => {
   it('consumes every registered appearance variable in the runtime stylesheets', async () => {
     const css = await Promise.all([
       readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8'),
-      readFile(join(resourcesRoot, 'dream-home-layout.css'), 'utf8')
+      readFile(join(resourcesRoot, 'dream-home-layout.css'), 'utf8'),
+      readFile(join(resourcesRoot, 'dream-particle-effects.css'), 'utf8')
     ]).then((parts) => parts.join('\n'))
     for (const definition of Object.values(APPEARANCE_COLOR_TOKENS)) expect(css, definition.cssVariable).toContain(`var(${definition.cssVariable})`)
     for (const definition of Object.values(APPEARANCE_PAINT_TOKENS)) expect(css, definition.cssVariable).toContain(`var(${definition.cssVariable})`)

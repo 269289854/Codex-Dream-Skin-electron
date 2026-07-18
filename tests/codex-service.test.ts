@@ -84,6 +84,8 @@ describe('CodexService operation queue', () => {
     expect(payload).toContain(JSON.stringify(HOME_ACTION_FALLBACK_BUILTINS))
     expect(payload).toContain('Dream JetBrains Mono')
     expect(payload).toContain('@font-face')
+    expect(payload).toContain('@keyframes dream-particle-twinkle')
+    expect(payload).toContain('"sparkleIconSlot":"backgroundSparkle"')
     expect(payload).toContain('linear-gradient(90deg, red 0%, blue 100%)')
 
     internal.queuePolaroidPlacement({ themeId: '22222222-2222-4222-8222-222222222222', x: 0.4, y: 0.5 })

@@ -96,6 +96,10 @@
       layer.setAttribute("aria-hidden", "true");
       chrome.prepend(layer);
     }
+    const supportedEffects = new Set(["twinkle", "float", "rain", "meteor", "snow"]);
+    const effect = supportedEffects.has(config?.effect) ? config.effect : "twinkle";
+    const iconSlot = typeof themeConfig?.sparkleIconSlot === "string" ? themeConfig.sparkleIconSlot : "backgroundSparkle";
+    layer.dataset.dreamEffect = effect;
     const visibleParticles = particles.slice(0, Math.max(0, Math.min(24, Math.floor(config.count ?? particles.length))));
     while (layer.children.length > visibleParticles.length) layer.lastElementChild?.remove();
     const colors = Array.isArray(config.extraColors) ? config.extraColors : [];
@@ -105,15 +109,27 @@
         node = document.createElement("i");
         layer.appendChild(node);
       }
+      node.classList.add("dream-particle");
+      let content = node.querySelector(":scope > .dream-particle-content");
+      if (!(content instanceof HTMLElement)) {
+        node.textContent = "";
+        content = document.createElement("span");
+        content.className = "dream-particle-content";
+        node.appendChild(content);
+      }
       const colorIndex = colors.length > 0 ? particle.colorIndex % (colors.length + 1) : 0;
-      node.style.left = `${particle.x}%`;
-      node.style.top = `${particle.y}%`;
+      node.style.setProperty("--dream-particle-x", `${particle.x}%`);
+      node.style.setProperty("--dream-particle-y", `${particle.y}%`);
+      node.style.setProperty("--dream-particle-start-y", `${2 + clamp(Number(particle.phase) || 0, 0, 1) * 30}%`);
+      node.style.setProperty("--dream-particle-duration", `${Math.max(0.1, Number(particle.duration) || 4)}s`);
+      node.style.setProperty("--dream-particle-delay", `${Math.min(0, Number(particle.delay) || 0)}s`);
+      node.style.setProperty("--dream-particle-drift", `${Number.isFinite(particle.drift) ? particle.drift : 0}px`);
       node.style.setProperty("--dream-sparkle-size", `${particle.size}px`);
       node.style.setProperty("--dream-sparkle-opacity", `${particle.opacity * (Number.isFinite(config.opacity) ? config.opacity : 1)}`);
       node.style.setProperty("--dream-sparkle-rotation", `${particle.rotation}deg`);
       node.style.setProperty("--dream-sparkle-color", colorIndex === 0 ? "var(--dream-sparkle)" : colors[colorIndex - 1]);
       node.style.setProperty("--dream-sparkle-glow", `${Number.isFinite(config.glow) ? config.glow : 0}px`);
-      node.classList.toggle("dream-sparkle-image", renderSlot(node, "backgroundSparkle", "✦"));
+      node.classList.toggle("dream-sparkle-image", renderSlot(content, iconSlot, "✦"));
       node.dataset.dreamIndex = `${index}`;
     });
   };

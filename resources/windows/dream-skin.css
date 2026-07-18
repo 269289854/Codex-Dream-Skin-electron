@@ -279,35 +279,6 @@ html.codex-dream-skin [aria-disabled="true"] {
   display: block;
 }
 
-.dream-sparkles {
-  position: absolute;
-  z-index: 1;
-  inset: 48px 0 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.dream-sparkles > i {
-  position: absolute;
-  width: var(--dream-sparkle-size, 16px);
-  height: var(--dream-sparkle-size, 16px);
-  display: grid;
-  place-items: center;
-  color: var(--dream-sparkle-color, var(--dream-sparkle));
-  font-size: var(--dream-sparkle-size, 16px);
-  font-style: normal;
-  line-height: 1;
-  opacity: var(--dream-sparkle-opacity, .72);
-  filter: drop-shadow(0 0 var(--dream-sparkle-glow, 10px) var(--dream-sparkle-color, var(--dream-sparkle)));
-  transform: translate(-50%, -50%) rotate(var(--dream-sparkle-rotation, 0deg));
-  transform-origin: center;
-}
-
-.dream-sparkles > i .dream-custom-icon {
-  width: 100%;
-  height: 100%;
-}
-
 .dream-polaroid {
   position: absolute;
   z-index: 4;

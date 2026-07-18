@@ -2,19 +2,23 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { createSparkleParticles, type SparkleParticle } from '../src/shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, createSparkleParticles, particleEffectIconSlot, type SparkleParticle } from '../src/shared/particle-effects'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 
 let template = ''
+let particleEffectsCss = ''
 const themeId = '11111111-1111-4111-8111-111111111111'
 const windows: Window[] = []
 const defaultProfile = createDefaultTheme(themeId)
 const defaultDecorations = defaultProfile.decorations
 
 beforeAll(async () => {
-  template = await readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8')
+  ;[template, particleEffectsCss] = await Promise.all([
+    readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8'),
+    readFile(join(process.cwd(), 'resources', 'windows', 'dream-particle-effects.css'), 'utf8')
+  ])
 })
 
 afterEach(() => {
@@ -91,6 +95,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
       icons,
       composerBadge,
       decorations,
+      sparkleIconSlot: particleEffectIconSlot(decorations.sparkles.effect),
       sparkleParticles,
       builtinGlyphs: BUILTIN_ICON_GLYPHS,
       actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
@@ -272,8 +277,13 @@ describe('renderer home DOM adaptation', () => {
     const secondSparkle = sparkleNodes[1] as unknown as HTMLElement
     const thirdSparkle = sparkleNodes[2] as unknown as HTMLElement
     expect(sparkleNodes).toHaveLength(3)
+    expect(window.document.querySelector('.dream-sparkles')?.getAttribute('data-dream-effect')).toBe('twinkle')
+    expect(firstSparkle.classList.contains('dream-particle')).toBe(true)
     expect(sparkleNodes[0]?.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
-    expect(firstSparkle.style.left).toBe('10%')
+    expect(firstSparkle.style.getPropertyValue('--dream-particle-x')).toBe('10%')
+    expect(firstSparkle.style.getPropertyValue('--dream-particle-duration')).toBe('3s')
+    expect(firstSparkle.style.getPropertyValue('--dream-particle-delay')).toBe('-1s')
+    expect(firstSparkle.style.getPropertyValue('--dream-particle-drift')).toBe('4px')
     expect(firstSparkle.style.getPropertyValue('--dream-sparkle-opacity')).toBe('0.4')
     expect(secondSparkle.style.getPropertyValue('--dream-sparkle-color')).toBe('rgb(255 0 128 / 60%)')
     expect(thirdSparkle.style.getPropertyValue('--dream-sparkle-color')).toBe('oklch(70% 0.18 210)')
@@ -282,6 +292,35 @@ describe('renderer home DOM adaptation', () => {
 
     stateOf(window).cleanup()
     expect(window.document.querySelector('.dream-sparkles')).toBeNull()
+  })
+
+  it('selects an independent material and animation state for every particle effect', () => {
+    for (const effect of PARTICLE_EFFECT_IDS) {
+      const window = createWindow()
+      window.document.body.innerHTML = homeFixture('Sample-Project')
+      const decorations = structuredClone(defaultDecorations)
+      decorations.sparkles.effect = effect
+      const slot = particleEffectIconSlot(effect)
+      const glyphName = effect === 'float' ? 'heart' : effect === 'rain' ? 'droplet' : effect === 'meteor' ? 'star' : effect === 'snow' ? 'snowflake' : 'sparkles'
+      inject(window, { [slot]: { name: glyphName } }, undefined, undefined, undefined, decorations)
+
+      const layer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
+      const particle = layer?.querySelector(':scope > .dream-particle') as HTMLElement | null
+      expect(layer?.dataset.dreamEffect).toBe(effect)
+      expect(particle?.querySelector('.dream-particle-content')?.textContent).toBe(BUILTIN_ICON_GLYPHS[glyphName])
+      expect(particle?.style.getPropertyValue('--dream-particle-duration')).toMatch(/s$/)
+      expect(particle?.style.getPropertyValue('--dream-particle-start-y')).toMatch(/%$/)
+    }
+  })
+
+  it('defines isolated keyframes, trails, and reduced-motion fallbacks for all particle effects', () => {
+    for (const effect of PARTICLE_EFFECT_IDS) {
+      expect(particleEffectsCss).toContain(`[data-dream-effect="${effect}"]`)
+      expect(particleEffectsCss).toContain(`dream-particle-${effect}`)
+    }
+    expect(particleEffectsCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(particleEffectsCss).toContain('pointer-events: none')
+    expect(particleEffectsCss).toContain('will-change: transform, opacity')
   })
 
   it('shows composer melody as text and hides it for text or attachments', () => {
