@@ -242,8 +242,8 @@ html.codex-dream-skin [aria-disabled="true"] {
   align-items: center;
   gap: 9px;
   color: var(--dream-brand-title);
-  background: var(--dream-brand-surface);
-  border-color: var(--dream-brand-border);
+  background: transparent !important;
+  border-color: transparent;
 }
 
 #codex-dream-skin-chrome.dream-home-shell .dream-brand {

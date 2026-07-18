@@ -37,6 +37,13 @@ describe('runtime appearance compilation', () => {
     for (const definition of Object.values(APPEARANCE_PAINT_TOKENS)) expect(css, definition.cssVariable).toContain(`var(${definition.cssVariable})`)
   })
 
+  it('draws the brand surface once on the native header without covering injected copy', async () => {
+    const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
+    expect(css).toMatch(/main\.main-surface > header\.app-header-tint\s*\{[^}]*background:\s*var\(--dream-brand-surface\) !important;/)
+    expect(css).toMatch(/\.dream-brand\s*\{[^}]*background:\s*transparent !important;/)
+    expect(css).not.toMatch(/\.dream-brand\s*\{[^}]*background:\s*var\(--dream-brand-surface\)/)
+  })
+
   it('embeds only selected imported fonts with generated family names', async () => {
     const profile = createDefaultTheme(id)
     profile.typography.importedFonts = [
