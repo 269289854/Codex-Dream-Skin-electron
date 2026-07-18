@@ -81,6 +81,15 @@ describe('runtime appearance compilation', () => {
     expect(renderer).toContain('node.classList.toggle("dream-sidebar-task-row-selected", selected)')
   })
 
+  it('targets real project folder rows without adding a project selected state', async () => {
+    const renderer = await readFile(join(resourcesRoot, 'renderer-inject.js'), 'utf8')
+    const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
+    expect(renderer).toContain('[role="listitem"][data-sidebar-project-kind] > span > [role="button"]')
+    expect(renderer).not.toContain('button[aria-label*="项目"]')
+    expect(css).not.toContain('.dream-sidebar-project-row[aria-current="page"]')
+    expect(css).toContain('.dream-sidebar-project-row-selected')
+  })
+
   it('embeds only selected imported fonts with generated family names', async () => {
     const profile = createDefaultTheme(id)
     profile.typography.importedFonts = [

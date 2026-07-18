@@ -116,7 +116,8 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row:hove
   color: var(--dream-sidebar-project-hover-text) !important;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row[aria-current="page"] {
+/* Kept for cleanup and older payloads; current Codex project rows have no selected state. */
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row-selected {
   background: var(--dream-sidebar-project-row-selected) !important;
   color: var(--dream-sidebar-project-selected-text) !important;
 }

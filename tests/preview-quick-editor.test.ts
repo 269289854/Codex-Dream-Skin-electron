@@ -81,6 +81,15 @@ describe('preview quick editor', () => {
     expect(onMore).toHaveBeenCalledOnce()
   })
 
+  it('shows only normal and hover states for a sidebar project row', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    renderEditor(PREVIEW_TARGETS['sidebar-project'], profile)
+
+    expect([...container.querySelectorAll('[role="dialog"] .state-tabs button')].map((button) => button.textContent?.trim())).toEqual(['普通', '悬停'])
+    expect(container.querySelector('[data-color-token="sidebarProjectSelectedText"]')).toBeNull()
+    expect(container.querySelector('[data-paint-token="sidebarProjectRowSelected"]')).toBeNull()
+  })
+
   it('changes the selected icon without exposing unrelated icon slots', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     renderEditor(PREVIEW_TARGETS['icon-composer'], profile)

@@ -85,14 +85,21 @@ describe('preview editing registry', () => {
 
   it('exposes every appearance token and the global UI font through preview targets', () => {
     const styleEditors = Object.values(PREVIEW_TARGETS).flatMap((target) => target.editor.kind === 'style' ? [target.editor] : [])
-    expect(new Set(styleEditors.flatMap((editor) => editor.colors))).toEqual(new Set(Object.keys(APPEARANCE_COLOR_TOKENS)))
-    expect(new Set(styleEditors.flatMap((editor) => editor.paints))).toEqual(new Set(Object.keys(APPEARANCE_PAINT_TOKENS)))
+    expect(new Set(styleEditors.flatMap((editor) => editor.colors))).toEqual(new Set(Object.keys(APPEARANCE_COLOR_TOKENS).filter((token) => APPEARANCE_COLOR_TOKENS[token as keyof typeof APPEARANCE_COLOR_TOKENS].editable)))
+    expect(new Set(styleEditors.flatMap((editor) => editor.paints))).toEqual(new Set(Object.keys(APPEARANCE_PAINT_TOKENS).filter((token) => APPEARANCE_PAINT_TOKENS[token as keyof typeof APPEARANCE_PAINT_TOKENS].editable)))
     for (const target of ['conversation-message', 'primary-button', 'sidebar-nav', 'sidebar-project', 'sidebar-task', 'action-card-text', 'project-chip', 'composer-model'] as const) {
       expect(PREVIEW_TARGETS[target].editor).toMatchObject({ kind: 'style', fontSlot: 'ui' })
     }
     expect(PREVIEW_TARGETS['sidebar-task'].editor).toMatchObject({
       colors: ['sidebarTaskText', 'sidebarTaskSelectedText'],
       paints: ['sidebarTaskRow', 'sidebarTaskRowHover', 'sidebarTaskRowSelected']
+    })
+    expect(PREVIEW_TARGETS['sidebar-project'].editor).toMatchObject({
+      colors: ['sidebarProjectText', 'sidebarProjectHoverText'],
+      paints: ['sidebarProjectRow', 'sidebarProjectRowHover']
+    })
+    expect(PREVIEW_TARGETS['icon-project-sidebar'].editor).toMatchObject({
+      colors: ['sidebarProjectText', 'sidebarProjectHoverText']
     })
   })
 

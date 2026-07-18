@@ -183,6 +183,24 @@ describe('renderer home DOM adaptation', () => {
     expect(icon?.textContent).toBe('♫')
   })
 
+  it('marks the real project folder row without marking its action buttons', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `
+      <div data-app-action-sidebar-section-heading="Projects">
+        <div role="listitem" data-sidebar-project-kind="local">
+          <span><div role="button" class="group/folder-row">Project folder</div></span>
+          <button type="button" aria-label="项目设置">...</button>
+        </div>
+      </div>`)
+    inject(window)
+
+    const projectRow = window.document.querySelector('[data-sidebar-project-kind] [role="button"]')
+    const projectAction = window.document.querySelector('[data-sidebar-project-kind] button[aria-label="项目设置"]')
+    expect(projectRow?.classList.contains('dream-sidebar-project-row')).toBe(true)
+    expect(projectAction?.classList.contains('dream-sidebar-project-row')).toBe(false)
+  })
+
   it('drags the polaroid within the shell and exposes the final position once', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')

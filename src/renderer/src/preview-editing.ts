@@ -60,7 +60,7 @@ export const PREVIEW_TARGETS = {
   'sidebar-arrow': styleTarget('Codex 箭头', 'sidebar', { colors: ['sidebarArrow'] }),
   'sidebar-search': styleTarget('搜索按钮', 'sidebar', { colors: ['sidebarSearchIcon'], paints: ['sidebarSearchButton', 'sidebarSearchButtonHover'] }),
   'sidebar-nav': styleTarget('导航项', 'sidebar', { colors: ['sidebarNavText', 'sidebarNavHoverText', 'sidebarNavSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], fontSlot: 'ui' }),
-  'sidebar-project': styleTarget('项目行', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText', 'sidebarProjectSelectedText'], paints: ['sidebarProjectRow', 'sidebarProjectRowHover', 'sidebarProjectRowSelected'], fontSlot: 'ui' }),
+  'sidebar-project': styleTarget('项目行', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText'], paints: ['sidebarProjectRow', 'sidebarProjectRowHover'], fontSlot: 'ui' }),
   'sidebar-task': styleTarget('任务行', 'sidebar', { colors: ['sidebarTaskText', 'sidebarTaskSelectedText'], paints: ['sidebarTaskRow', 'sidebarTaskRowHover', 'sidebarTaskRowSelected'], fontSlot: 'ui' }),
   'sidebar-footer': styleTarget('侧边栏页脚', 'sidebar', { colors: ['sidebarFooterText'], paints: ['sidebarFooter'], fontSlot: 'ui' }),
   'sidebar-avatar': styleTarget('头像', 'sidebar', { colors: ['sidebarAvatarText'], paints: ['sidebarAvatar'], fontSlot: 'ui' }),
@@ -86,7 +86,7 @@ export const PREVIEW_TARGETS = {
   'palette-project-bar': styleTarget('项目栏', 'projects', { colors: ['projectBarText'], paints: ['projectBar'], fontSlot: 'ui' }),
   'project-chip': styleTarget('项目标签', 'projects', { colors: ['projectChipText', 'projectChipBorder'], paints: ['projectChip', 'projectChipHover', 'projectChipSelected'], fontSlot: 'ui' }),
   'icon-project': styleTarget('项目图标', 'projects', { colors: ['projectChipText'], iconSlot: 'project' }),
-  'icon-project-sidebar': styleTarget('侧边栏项目图标', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText', 'sidebarProjectSelectedText'], iconSlot: 'project' }),
+  'icon-project-sidebar': styleTarget('侧边栏项目图标', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText'], iconSlot: 'project' }),
 
   'palette-composer': styleTarget('输入框', 'composer', { colors: ['composerBorder', 'composerText'], paints: ['composer'], fontSlot: 'ui' }),
   'composer-placeholder': styleTarget('输入框占位文案', 'composer', { colors: ['composerPlaceholder'], fontSlot: 'ui' }),

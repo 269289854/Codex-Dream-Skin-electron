@@ -40,6 +40,7 @@ interface AppearanceTokenDefinition {
   fallback: LegacyColorKey
   state?: AppearanceState
   targets: readonly string[]
+  editable: boolean
 }
 
 const colorToken = (
@@ -48,8 +49,9 @@ const colorToken = (
   cssVariable: `--dream-${string}`,
   fallback: LegacyColorKey,
   targets: readonly string[],
-  state?: AppearanceState
-): AppearanceTokenDefinition => ({ label, group, cssVariable, fallback, targets, state })
+  state?: AppearanceState,
+  editable = true
+): AppearanceTokenDefinition => ({ label, group, cssVariable, fallback, targets, state, editable })
 
 export const APPEARANCE_COLOR_TOKENS = {
   globalText: colorToken('全局正文', 'global', '--dream-global-text', 'ink', ['text-global']),
@@ -74,7 +76,7 @@ export const APPEARANCE_COLOR_TOKENS = {
   sidebarNavSelectedText: colorToken('导航选中文字', 'sidebar', '--dream-sidebar-nav-selected-text', 'accent', ['sidebar-nav'], 'selected'),
   sidebarProjectText: colorToken('项目行文字', 'sidebar', '--dream-sidebar-project-text', 'ink', ['sidebar-project']),
   sidebarProjectHoverText: colorToken('项目行悬停文字', 'sidebar', '--dream-sidebar-project-hover-text', 'accent', ['sidebar-project'], 'hover'),
-  sidebarProjectSelectedText: colorToken('项目行选中文字', 'sidebar', '--dream-sidebar-project-selected-text', 'accent', ['sidebar-project'], 'selected'),
+  sidebarProjectSelectedText: colorToken('项目行选中文字', 'sidebar', '--dream-sidebar-project-selected-text', 'accent', ['sidebar-project'], 'selected', false),
   sidebarTaskText: colorToken('任务行文字', 'sidebar', '--dream-sidebar-task-text', 'ink', ['sidebar-task']),
   sidebarTaskSelectedText: colorToken('任务行选中文字', 'sidebar', '--dream-sidebar-task-selected-text', 'accent', ['sidebar-task'], 'selected'),
   sidebarFooterText: colorToken('侧边栏页脚文字', 'sidebar', '--dream-sidebar-footer-text', 'ink', ['sidebar-footer']),
@@ -153,8 +155,9 @@ const paintToken = (
   cssVariable: `--dream-${string}`,
   fallback: LegacyColorKey,
   targets: readonly string[],
-  state?: AppearanceState
-): AppearanceTokenDefinition => ({ label, group, cssVariable, fallback, targets, state })
+  state?: AppearanceState,
+  editable = true
+): AppearanceTokenDefinition => ({ label, group, cssVariable, fallback, targets, state, editable })
 
 export const APPEARANCE_PAINT_TOKENS = {
   canvas: paintToken('全局画布', 'global', '--dream-canvas', 'surface', ['canvas']),
@@ -174,7 +177,7 @@ export const APPEARANCE_PAINT_TOKENS = {
   sidebarNavItemSelected: paintToken('导航项选中', 'sidebar', '--dream-sidebar-nav-item-selected', 'pink', ['sidebar-nav'], 'selected'),
   sidebarProjectRow: paintToken('项目行', 'sidebar', '--dream-sidebar-project-row', 'surface', ['sidebar-project']),
   sidebarProjectRowHover: paintToken('项目行悬停', 'sidebar', '--dream-sidebar-project-row-hover', 'lavender', ['sidebar-project'], 'hover'),
-  sidebarProjectRowSelected: paintToken('项目行选中', 'sidebar', '--dream-sidebar-project-row-selected', 'pink', ['sidebar-project'], 'selected'),
+  sidebarProjectRowSelected: paintToken('项目行选中', 'sidebar', '--dream-sidebar-project-row-selected', 'pink', ['sidebar-project'], 'selected', false),
   sidebarTaskRow: paintToken('任务行', 'sidebar', '--dream-sidebar-task-row', 'surface', ['sidebar-task']),
   sidebarTaskRowHover: paintToken('任务行悬停', 'sidebar', '--dream-sidebar-task-row-hover', 'lavender', ['sidebar-task'], 'hover'),
   sidebarTaskRowSelected: paintToken('任务行选中', 'sidebar', '--dream-sidebar-task-row-selected', 'pink', ['sidebar-task'], 'selected'),

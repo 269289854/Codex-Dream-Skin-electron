@@ -257,7 +257,7 @@
   const ensureSidebarSurfaces = () => {
     const sidebar = findVisible(document, "aside.app-shell-left-panel");
     if (!sidebar) {
-      for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar"]) {
+      for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-project-row-selected", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar"]) {
         document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
       }
       ensureSidebarNavigation();
@@ -266,7 +266,7 @@
     ensureSidebarNavigation();
     replaceMarks(".dream-sidebar-header", "dream-sidebar-header", [...sidebar.querySelectorAll(":scope > header, :scope > div > header")]);
     replaceMarks(".dream-sidebar-search-button", "dream-sidebar-search-button", [...sidebar.querySelectorAll('button[aria-label*="搜索"], button[aria-label*="Search" i]')]);
-    replaceMarks(".dream-sidebar-project-row", "dream-sidebar-project-row", [...sidebar.querySelectorAll('[data-project-id], [data-testid*="project" i], button[aria-label*="项目"], button[aria-label*="project" i]')]);
+    replaceMarks(".dream-sidebar-project-row", "dream-sidebar-project-row", [...sidebar.querySelectorAll('[role="listitem"][data-sidebar-project-kind] > span > [role="button"], [data-project-id], [data-testid*="project" i]')]);
     replaceMarks(".dream-sidebar-task-row", "dream-sidebar-task-row", [...sidebar.querySelectorAll('[data-app-action-sidebar-thread-row], [data-task-id], [data-testid*="task" i], button[aria-label*="任务"], button[aria-label*="task" i]')]);
     document.querySelectorAll(".dream-sidebar-task-row-selected").forEach((node) => node.classList.remove("dream-sidebar-task-row-selected"));
     document.querySelectorAll(".dream-sidebar-task-row").forEach((node) => {
@@ -714,7 +714,7 @@
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
-    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar", "dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected"]) {
+    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-project-row-selected", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar", "dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected"]) {
       document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
     }
     document.getElementById(PROJECT_PROXY_ID)?.remove();
