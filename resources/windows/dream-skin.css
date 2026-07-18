@@ -27,6 +27,11 @@ html.codex-dream-skin aside.app-shell-left-panel nav {
   background: transparent !important;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel nav > :is(a, button) {
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+
 html.codex-dream-skin aside.app-shell-left-panel :is(a, button) {
   background: var(--dream-sidebar-nav-item) !important;
   color: var(--dream-sidebar-nav-text) !important;
@@ -52,6 +57,7 @@ html.codex-dream-skin aside.app-shell-left-panel :is(a, button)[aria-current="pa
 html.codex-dream-skin aside.app-shell-left-panel [class~="bg-token-list-hover-background"] {
   background: var(--dream-sidebar-nav-item-selected) !important;
   border: 1px solid var(--dream-sidebar-border) !important;
+  border-radius: 10px !important;
   color: var(--dream-sidebar-nav-selected-text) !important;
   box-shadow: 0 4px 15px color-mix(in srgb, var(--dream-sidebar-border) 24%, transparent) !important;
 }

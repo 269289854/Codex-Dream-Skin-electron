@@ -51,6 +51,12 @@ describe('runtime appearance compilation', () => {
     expect(css).toMatch(/\.dream-sidebar-mode-icon\s*\{[^}]*background:\s*var\(--dream-sidebar-mode-badge\);/)
   })
 
+  it('keeps native sidebar navigation items rounded in every state', async () => {
+    const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
+    expect(css).toMatch(/aside\.app-shell-left-panel nav > :is\(a, button\)\s*\{[^}]*border-radius:\s*10px !important;/)
+    expect(css).toMatch(/:is\(a, button\)\[aria-current="page"\][^}]*\{[^}]*border-radius:\s*10px !important;/)
+  })
+
   it('embeds only selected imported fonts with generated family names', async () => {
     const profile = createDefaultTheme(id)
     profile.typography.importedFonts = [
