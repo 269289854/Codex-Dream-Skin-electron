@@ -82,7 +82,28 @@
     renderSlot(badge, "composerBadge", "♫");
   };
 
-  const ensureSparkles = (chrome) => {
+  const syncParticleViewport = (layer, shellBox) => {
+    if (!(layer instanceof HTMLElement)) return;
+    const top = Math.max(0, Number(themeConfig?.particleViewportTop) || 66);
+    const width = Math.max(0, Number(shellBox?.width) || 0);
+    const height = Math.max(0, (Number(shellBox?.height) || 0) - top);
+    const values = {
+      "--dream-particle-top": top,
+      "--dream-particle-view-width": width,
+      "--dream-particle-view-height": height,
+      "--dream-particle-width": width + 96,
+      "--dream-particle-height": height + 96,
+      "--dream-particle-negative-width": -(width + 96),
+      "--dream-particle-negative-height": -(height + 96),
+      "--dream-particle-half-height": -(height / 2 + 48),
+      "--dream-particle-meteor-height": height * .55 + 53,
+      "--dream-particle-snow-first-height": height * .28 + 27,
+      "--dream-particle-snow-second-height": height * .62 + 60,
+    };
+    for (const [name, value] of Object.entries(values)) layer.style.setProperty(name, `${value}px`);
+  };
+
+  const ensureSparkles = (chrome, shellBox) => {
     const config = themeConfig?.decorations?.sparkles;
     const particles = Array.isArray(themeConfig?.sparkleParticles) ? themeConfig.sparkleParticles : [];
     if (!chrome || config?.visible === false || particles.length === 0) {
@@ -100,6 +121,7 @@
     const effect = supportedEffects.has(config?.effect) ? config.effect : "twinkle";
     const iconSlot = typeof themeConfig?.sparkleIconSlot === "string" ? themeConfig.sparkleIconSlot : "backgroundSparkle";
     layer.dataset.dreamEffect = effect;
+    syncParticleViewport(layer, shellBox);
     const visibleParticles = particles.slice(0, Math.max(0, Math.min(24, Math.floor(config.count ?? particles.length))));
     while (layer.children.length > visibleParticles.length) layer.lastElementChild?.remove();
     const colors = Array.isArray(config.extraColors) ? config.extraColors : [];
@@ -113,6 +135,15 @@
       let content = node.querySelector(":scope > .dream-particle-content");
       if (!(content instanceof HTMLElement)) {
         node.textContent = "";
+      }
+      let trail = node.querySelector(":scope > .dream-particle-trail");
+      if (!(trail instanceof HTMLElement)) {
+        trail = document.createElement("span");
+        trail.className = "dream-particle-trail";
+        trail.setAttribute("aria-hidden", "true");
+        node.prepend(trail);
+      }
+      if (!(content instanceof HTMLElement)) {
         content = document.createElement("span");
         content.className = "dream-particle-content";
         node.appendChild(content);
@@ -120,7 +151,8 @@
       const colorIndex = colors.length > 0 ? particle.colorIndex % (colors.length + 1) : 0;
       node.style.setProperty("--dream-particle-x", `${particle.x}%`);
       node.style.setProperty("--dream-particle-y", `${particle.y}%`);
-      node.style.setProperty("--dream-particle-start-y", `${2 + clamp(Number(particle.phase) || 0, 0, 1) * 30}%`);
+      const fallbackStartY = 2 + clamp(Number(particle.phase) || 0, 0, 1) * 30;
+      node.style.setProperty("--dream-particle-start-y", `${clamp(Number(particle.startY) || fallbackStartY, 2, 32)}%`);
       node.style.setProperty("--dream-particle-duration", `${Math.max(0.1, Number(particle.duration) || 4)}s`);
       node.style.setProperty("--dream-particle-delay", `${Math.min(0, Number(particle.delay) || 0)}s`);
       node.style.setProperty("--dream-particle-drift", `${Number.isFinite(particle.drift) ? particle.drift : 0}px`);
@@ -589,7 +621,6 @@
       chrome.querySelector(".dream-polaroid")?.appendChild(pin);
     }
     renderSlot(pin, "polaroidPin", "●");
-    ensureSparkles(chrome);
     installPolaroidDragging(chrome, chrome.querySelector(".dream-polaroid"));
 
     const shellBox = shellMain.getBoundingClientRect();
@@ -598,6 +629,7 @@
     chrome.style.width = `${Math.round(shellBox.width)}px`;
     chrome.style.height = `${Math.round(shellBox.height)}px`;
     chrome.classList.toggle("dream-home-shell", Boolean(home));
+    ensureSparkles(chrome, shellBox);
 
     if (home && composerSurface) {
       const composerBox = composerSurface.getBoundingClientRect();
@@ -635,6 +667,7 @@
     document.getElementById(CHROME_ID)?.remove();
     const state = window[STATE_KEY];
     state?.observer?.disconnect();
+    if (state?.resizeHandler) window.removeEventListener("resize", state.resizeHandler);
     if (state?.timer) clearInterval(state.timer);
     if (state?.scheduler?.timeout) clearTimeout(state.scheduler.timeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
@@ -652,6 +685,8 @@
   };
   const observer = new MutationObserver(scheduleEnsure);
   observer.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
+  const resizeHandler = scheduleEnsure;
+  window.addEventListener("resize", resizeHandler);
   const timer = setInterval(ensure, 5000);
   window[STATE_KEY] = {
     ensure,
@@ -659,6 +694,7 @@
     populateComposer,
     takePlacementUpdate,
     observer,
+    resizeHandler,
     timer,
     scheduler,
     artUrl,

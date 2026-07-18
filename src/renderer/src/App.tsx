@@ -8,7 +8,7 @@ import {
 import type { RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
-import { PARTICLE_EFFECT_IDS, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
 import { clampNormalized, type Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
@@ -581,6 +581,7 @@ const previewNavigation = [
 ] as const
 
 const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
+const PREVIEW_SIDEBAR_WIDTH = 270
 const particleIconSlots: IconSlot[] = PARTICLE_EFFECT_IDS.map(particleEffectIconSlot)
 const standardIconSlots = (Object.keys(iconLabels) as IconSlot[]).filter((slot) => !particleIconSlots.includes(slot))
 const appearanceGroupLabels: Record<AppearanceGroup, string> = {
@@ -593,7 +594,21 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
   const particles = createSparkleParticles(config)
   const colors = [resolveAppearanceColor(profile.appearance, profile.colors, 'sparkle'), ...config.extraColors]
   const iconSlot = particleEffectIconSlot(config.effect)
-  return <div className="preview-sparkles" data-dream-effect={config.effect} aria-label="背景粒子">
+  const viewport = createParticleViewportMetrics(HOME_PREVIEW_VIEWPORT.width - PREVIEW_SIDEBAR_WIDTH, HOME_PREVIEW_VIEWPORT.height)
+  const viewportStyle = {
+    '--dream-particle-top': `${viewport.top}px`,
+    '--dream-particle-view-width': `${viewport.width}px`,
+    '--dream-particle-view-height': `${viewport.height}px`,
+    '--dream-particle-width': `${viewport.travelWidth}px`,
+    '--dream-particle-height': `${viewport.travelHeight}px`,
+    '--dream-particle-negative-width': `${-viewport.travelWidth}px`,
+    '--dream-particle-negative-height': `${-viewport.travelHeight}px`,
+    '--dream-particle-half-height': `${viewport.halfHeight}px`,
+    '--dream-particle-meteor-height': `${viewport.meteorHeight}px`,
+    '--dream-particle-snow-first-height': `${viewport.snowFirstHeight}px`,
+    '--dream-particle-snow-second-height': `${viewport.snowSecondHeight}px`
+  } as React.CSSProperties
+  return <div className="preview-sparkles" data-dream-effect={config.effect} aria-label="背景粒子" style={viewportStyle}>
     {particles.map((particle, index) => <button
       className="preview-sparkle-particle"
       data-preview-target="sparkles"
@@ -603,7 +618,7 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
       style={{
         '--dream-particle-x': `${particle.x}%`,
         '--dream-particle-y': `${particle.y}%`,
-        '--dream-particle-start-y': `${2 + particle.phase * 30}%`,
+        '--dream-particle-start-y': `${particle.startY}%`,
         '--dream-particle-duration': `${particle.duration}s`,
         '--dream-particle-delay': `${particle.delay}s`,
         '--dream-particle-drift': `${particle.drift}px`,
@@ -617,7 +632,7 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
         '--dream-sparkle-color': colors[particle.colorIndex % colors.length],
         '--dream-sparkle-glow': `${config.glow}px`
       } as React.CSSProperties}
-    ><span className="preview-sparkle-content"><RenderIcon slot={iconSlot} profile={profile} assets={assets} injected /></span></button>)}
+    ><span className="preview-particle-trail" aria-hidden="true" /><span className="preview-sparkle-content"><RenderIcon slot={iconSlot} profile={profile} assets={assets} injected /></span></button>)}
   </div>
 }
 

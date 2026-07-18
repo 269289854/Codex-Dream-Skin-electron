@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { CodexDetection, PolaroidPlacementUpdate, RuntimePhase, RuntimeStatus } from '../shared/contracts'
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
-import { createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
+import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
 import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
@@ -254,6 +254,7 @@ export class CodexService {
         themeId: profile.id,
         icons,
         decorations: profile.decorations,
+        particleViewportTop: PARTICLE_VIEWPORT_TOP,
         sparkleIconSlot: particleEffectIconSlot(profile.decorations.sparkles.effect),
         sparkleParticles: createSparkleParticles(profile.decorations.sparkles),
         composerBadge: profile.composerBadge,

@@ -1,4 +1,5 @@
 export const PARTICLE_EFFECT_IDS = ['twinkle', 'float', 'rain', 'meteor', 'snow'] as const
+export const PARTICLE_VIEWPORT_TOP = 66
 
 export type ParticleEffect = typeof PARTICLE_EFFECT_IDS[number]
 export type ParticleEffectIconSlot = 'backgroundSparkle' | 'backgroundFloat' | 'backgroundRain' | 'backgroundMeteor' | 'backgroundSnow'
@@ -29,6 +30,19 @@ export interface SparkleParticle {
   delay: number
   drift: number
   phase: number
+  startY: number
+}
+
+export interface ParticleViewportMetrics {
+  top: number
+  width: number
+  height: number
+  travelWidth: number
+  travelHeight: number
+  halfHeight: number
+  meteorHeight: number
+  snowFirstHeight: number
+  snowSecondHeight: number
 }
 
 export interface SparkleLayoutOptions {
@@ -66,7 +80,10 @@ export function createSparkleParticles(options: SparkleLayoutOptions): SparklePa
     const opacity = preset?.[2] ?? 0.45 + random() * 0.55
     const rotation = preset ? 0 : Math.round(random() * 360)
     const duration = effect.baseDuration * (0.82 + random() * 0.36) / speed
-    const phase = random()
+    const phase = options.effect === 'meteor'
+      ? (index / count + random() / count) % 1
+      : random()
+    const startY = 2 + random() * 30
     particles.push({
       x,
       y,
@@ -77,10 +94,28 @@ export function createSparkleParticles(options: SparkleLayoutOptions): SparklePa
       duration,
       delay: -duration * phase,
       drift: Math.round((random() * 2 - 1) * effect.maxDrift),
-      phase
+      phase,
+      startY
     })
   }
   return particles
+}
+
+export function createParticleViewportMetrics(width: number, height: number, top = PARTICLE_VIEWPORT_TOP): ParticleViewportMetrics {
+  const safeTop = Math.max(0, top)
+  const safeWidth = Math.max(0, width)
+  const safeHeight = Math.max(0, height - safeTop)
+  return {
+    top: safeTop,
+    width: safeWidth,
+    height: safeHeight,
+    travelWidth: safeWidth + 96,
+    travelHeight: safeHeight + 96,
+    halfHeight: -(safeHeight / 2 + 48),
+    meteorHeight: safeHeight * .55 + 53,
+    snowFirstHeight: safeHeight * .28 + 27,
+    snowSecondHeight: safeHeight * .62 + 60
+  }
 }
 
 export function particleEffectIconSlot(effect: ParticleEffect): ParticleEffectIconSlot {

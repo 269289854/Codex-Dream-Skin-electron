@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { PARTICLE_EFFECT_IDS, createSparkleParticles, particleEffectIconSlot, type SparkleParticle } from '../src/shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, type SparkleParticle } from '../src/shared/particle-effects'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
@@ -97,6 +97,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
       icons,
       composerBadge,
       decorations,
+      particleViewportTop: PARTICLE_VIEWPORT_TOP,
       sparkleIconSlot: particleEffectIconSlot(decorations.sparkles.effect),
       sparkleParticles,
       builtinGlyphs: BUILTIN_ICON_GLYPHS,
@@ -268,9 +269,9 @@ describe('renderer home DOM adaptation', () => {
       extraColors: ['rgb(255 0 128 / 60%)', 'oklch(70% 0.18 210)']
     }
     const particles: SparkleParticle[] = [
-      { x: 10, y: 20, size: 12, opacity: 0.8, rotation: 5, colorIndex: 0, duration: 3, delay: -1, drift: 4, phase: 0.2 },
-      { x: 30, y: 40, size: 18, opacity: 0.6, rotation: 15, colorIndex: 1, duration: 4, delay: -2, drift: -8, phase: 0.5 },
-      { x: 50, y: 60, size: 24, opacity: 0.4, rotation: 25, colorIndex: 2, duration: 5, delay: -3, drift: 12, phase: 0.8 }
+      { x: 10, y: 20, size: 12, opacity: 0.8, rotation: 5, colorIndex: 0, duration: 3, delay: -1, drift: 4, phase: 0.2, startY: 8 },
+      { x: 30, y: 40, size: 18, opacity: 0.6, rotation: 15, colorIndex: 1, duration: 4, delay: -2, drift: -8, phase: 0.5, startY: 17 },
+      { x: 50, y: 60, size: 24, opacity: 0.4, rotation: 25, colorIndex: 2, duration: 5, delay: -3, drift: 12, phase: 0.8, startY: 29 }
     ]
     inject(window, { backgroundSparkle: { dataUrl: 'data:image/png;base64,AA==' } }, undefined, undefined, undefined, decorations, particles)
 
@@ -285,15 +286,48 @@ describe('renderer home DOM adaptation', () => {
     expect(firstSparkle.style.getPropertyValue('--dream-particle-x')).toBe('10%')
     expect(firstSparkle.style.getPropertyValue('--dream-particle-duration')).toBe('3s')
     expect(firstSparkle.style.getPropertyValue('--dream-particle-delay')).toBe('-1s')
+    expect(firstSparkle.style.getPropertyValue('--dream-particle-start-y')).toBe('8%')
     expect(firstSparkle.style.getPropertyValue('--dream-particle-drift')).toBe('4px')
     expect(firstSparkle.style.getPropertyValue('--dream-sparkle-opacity')).toBe('0.4')
     expect(secondSparkle.style.getPropertyValue('--dream-sparkle-color')).toBe('rgb(255 0 128 / 60%)')
     expect(thirdSparkle.style.getPropertyValue('--dream-sparkle-color')).toBe('oklch(70% 0.18 210)')
+    const sparkleLayer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
+    expect(sparkleLayer?.style.getPropertyValue('--dream-particle-top')).toBe('66px')
+    expect(sparkleLayer?.style.getPropertyValue('--dream-particle-view-width')).toBe('1000px')
+    expect(sparkleLayer?.style.getPropertyValue('--dream-particle-view-height')).toBe('634px')
+    expect(firstSparkle.querySelectorAll(':scope > .dream-particle-trail')).toHaveLength(1)
     stateOf(window).ensure()
     expect(window.document.querySelectorAll('.dream-sparkles > i')).toHaveLength(3)
+    expect(firstSparkle.querySelectorAll(':scope > .dream-particle-trail')).toHaveLength(1)
 
     stateOf(window).cleanup()
     expect(window.document.querySelector('.dream-sparkles')).toBeNull()
+  })
+
+  it('recomputes the particle viewport when the Codex main surface is resized', async () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const shellMain = window.document.querySelector('main.main-surface') as unknown as HTMLElement | null
+    if (!shellMain) throw new Error('Main surface fixture is missing.')
+    let width = 800
+    let height = 600
+    Object.defineProperty(shellMain, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) })
+    })
+
+    inject(window)
+    const layer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
+    expect(layer?.style.getPropertyValue('--dream-particle-view-width')).toBe('800px')
+    expect(layer?.style.getPropertyValue('--dream-particle-view-height')).toBe('534px')
+
+    width = 920
+    height = 680
+    window.dispatchEvent(new window.Event('resize'))
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
+    expect(layer?.style.getPropertyValue('--dream-particle-view-width')).toBe('920px')
+    expect(layer?.style.getPropertyValue('--dream-particle-view-height')).toBe('614px')
+    expect(layer?.style.getPropertyValue('--dream-particle-negative-width')).toBe('-1016px')
   })
 
   it('selects an independent material and animation state for every particle effect', () => {
@@ -310,6 +344,7 @@ describe('renderer home DOM adaptation', () => {
       const particle = layer?.querySelector(':scope > .dream-particle') as HTMLElement | null
       expect(layer?.dataset.dreamEffect).toBe(effect)
       expect(particle?.querySelector('.dream-particle-content')?.textContent).toBe(BUILTIN_ICON_GLYPHS[glyphName])
+      expect(particle?.querySelectorAll(':scope > .dream-particle-trail')).toHaveLength(1)
       expect(particle?.style.getPropertyValue('--dream-particle-duration')).toMatch(/s$/)
       expect(particle?.style.getPropertyValue('--dream-particle-start-y')).toMatch(/%$/)
     }
@@ -325,6 +360,17 @@ describe('renderer home DOM adaptation', () => {
     expect(particleEffectsCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(particleEffectsCss).toContain('pointer-events: none')
     expect(particleEffectsCss).toContain('will-change: transform, opacity')
+    expect(particleEffectsCss).not.toMatch(/100v[wh]/)
+    expect(previewParticleEffectsCss).not.toMatch(/100v[wh]/)
+    expect(particleEffectsCss).toContain('left: 50%')
+    expect(previewParticleEffectsCss).toContain('left: 50%')
+    expect(particleEffectsCss).toContain('linear-gradient(90deg, var(--dream-sparkle-color, var(--dream-sparkle)), transparent)')
+    expect(previewParticleEffectsCss).toContain('linear-gradient(90deg, var(--dream-sparkle-color, var(--dream-sparkle)), transparent)')
+    expect(particleEffectsCss).not.toContain('left: 55%')
+    expect(previewParticleEffectsCss).not.toContain('left: 55%')
+    const runtimeKeyframes = particleEffectsCss.slice(particleEffectsCss.indexOf('@keyframes'), particleEffectsCss.indexOf('@media'))
+    const previewKeyframes = previewParticleEffectsCss.slice(previewParticleEffectsCss.indexOf('@keyframes'), previewParticleEffectsCss.indexOf('@media'))
+    expect(previewKeyframes).toBe(runtimeKeyframes)
     expect(particleEffectsCss).toContain('animation-duration: calc(var(--dream-particle-duration, 4s) * 1.8) !important')
     expect(particleEffectsCss).not.toContain('animation: none !important')
     expect(previewParticleEffectsCss).toContain('[data-preview-selected="true"]')

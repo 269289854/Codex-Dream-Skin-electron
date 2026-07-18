@@ -302,8 +302,13 @@ describe('Studio preview editing interaction', () => {
 
   it('keeps particles and composer melody synchronized across home and conversation previews', async () => {
     expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(6)
+    const particleLayer = container.querySelector<HTMLElement>('.preview-sparkles')
+    expect(particleLayer?.style.getPropertyValue('--dream-particle-top')).toBe('66px')
+    expect(particleLayer?.style.getPropertyValue('--dream-particle-view-width')).toBe('1010px')
+    expect(particleLayer?.style.getPropertyValue('--dream-particle-view-height')).toBe('754px')
     const firstParticle = container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')
     if (!firstParticle) throw new Error('Background particle target is missing.')
+    expect(firstParticle.querySelectorAll(':scope > .preview-particle-trail')).toHaveLength(1)
     pointerDown(firstParticle)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('背景粒子快捷配置')
     expect(firstParticle.getAttribute('data-preview-selected')).toBe('true')
