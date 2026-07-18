@@ -110,6 +110,7 @@ describe('Studio home preview', () => {
     const lowerRule = css.match(/\.preview-lower-region\s*\{[^}]+\}/)?.[0]
     const projectRule = css.match(/\.preview-project-bar\s*\{[^}]+\}/)?.[0]
     const composerRule = css.match(/\.preview-composer\s*\{[^}]+\}/)?.[0]
+    const composerBadgeGlyphRule = css.match(/\.dream-composer-badge \.builtin-icon-glyph\s*\{[^}]+\}/)?.[0]
 
     expect(lowerRule).toContain('flex: 1')
     expect(lowerRule).toContain('justify-content: flex-end')
@@ -118,6 +119,9 @@ describe('Studio home preview', () => {
     expect(lowerRule).toContain('padding: 0 54px 14px')
     expect(composerRule).toContain('width: 100%')
     expect(composerRule).toContain('height: 128px')
+    expect(composerBadgeGlyphRule).toContain('display: grid')
+    expect(composerBadgeGlyphRule).toContain('place-items: center')
+    expect(composerBadgeGlyphRule).toContain('line-height: 1')
     expect(projectRule).not.toMatch(/(?:background|box-shadow|border):/)
     expect(composerRule).not.toMatch(/(?:background|box-shadow|border):/)
   })

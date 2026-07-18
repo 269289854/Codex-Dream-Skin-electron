@@ -96,6 +96,25 @@ describe('preview quick editor', () => {
     expect(profile.icons.composer).toEqual({ kind: 'builtin', name: 'heart' })
   })
 
+  it('edits the composer badge independently and toggles its visibility', () => {
+    const profile = createDefaultTheme('00000000-0000-0000-0000-000000000000')
+    renderEditor(PREVIEW_TARGETS['icon-composer-badge'], profile)
+
+    expect(container.querySelector('[data-icon-slot="composerBadge"]')).not.toBeNull()
+    expect(container.querySelector('[data-icon-slot="composer"]')).toBeNull()
+    const select = container.querySelector<HTMLSelectElement>('select')
+    const toggle = container.querySelector<HTMLInputElement>('.toggle-row input')
+    if (!select || !toggle) throw new Error('Composer badge controls are missing.')
+    act(() => {
+      select.value = 'heart'
+      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      toggle.click()
+    })
+
+    expect(profile.icons.composerBadge).toEqual({ kind: 'builtin', name: 'heart' })
+    expect(profile.composerBadge.visible).toBe(false)
+  })
+
   it('edits each brand copy field independently', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     const cases = [

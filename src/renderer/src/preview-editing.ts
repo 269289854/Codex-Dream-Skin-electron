@@ -4,6 +4,7 @@ import type { IconSlot, ThemeProfile } from '../../shared/theme'
 export type InspectorTab = 'visual' | 'icons'
 export type PreviewCopyField = keyof ThemeProfile['copy']
 export type TypographySlot = keyof ThemeProfile['typography']['slots']
+export type PreviewVisibilityField = 'composerBadge'
 
 export interface PreviewStyleEditor {
   kind: 'style'
@@ -12,6 +13,7 @@ export interface PreviewStyleEditor {
   copyField?: PreviewCopyField
   iconSlot?: IconSlot
   fontSlot?: TypographySlot
+  visibility?: PreviewVisibilityField
 }
 
 export type PreviewEditor =
@@ -32,13 +34,14 @@ interface StyleTargetOptions {
   copyField?: PreviewCopyField
   iconSlot?: IconSlot
   fontSlot?: TypographySlot
+  visibility?: PreviewVisibilityField
 }
 
 const styleTarget = (label: string, group: AppearanceGroup, options: StyleTargetOptions): PreviewTargetDefinition => ({
   label,
   inspector: 'visual',
   inspectorAnchor: `appearance-${group}`,
-  editor: { kind: 'style', colors: options.colors ?? [], paints: options.paints ?? [], copyField: options.copyField, iconSlot: options.iconSlot, fontSlot: options.fontSlot }
+  editor: { kind: 'style', colors: options.colors ?? [], paints: options.paints ?? [], copyField: options.copyField, iconSlot: options.iconSlot, fontSlot: options.fontSlot, visibility: options.visibility }
 })
 
 export const PREVIEW_TARGETS = {
@@ -87,6 +90,7 @@ export const PREVIEW_TARGETS = {
   'composer-permission': styleTarget('权限提示', 'composer', { colors: ['composerPermissionText'], fontSlot: 'ui' }),
   'composer-model': styleTarget('模型文字', 'composer', { colors: ['composerModelText'], fontSlot: 'ui' }),
   'icon-composer': styleTarget('发送按钮', 'composer', { colors: ['composerSendIcon'], paints: ['composerSendButton', 'composerSendButtonHover', 'composerSendButtonSelected'], iconSlot: 'composer' }),
+  'icon-composer-badge': styleTarget('输入框装饰', 'composer', { colors: ['composerBadgeIcon'], paints: ['composerBadgeBackground'], iconSlot: 'composerBadge', visibility: 'composerBadge' }),
 
   wave: styleTarget('波形装饰', 'decoration', { colors: ['wave'] }),
   sparkle: styleTarget('闪光装饰', 'decoration', { colors: ['sparkle'] }),
@@ -103,6 +107,7 @@ export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
   cardPrimary: 'icon-card-primary',
   cardSecondary: 'icon-card-secondary',
   composer: 'icon-composer',
+  composerBadge: 'icon-composer-badge',
   project: 'icon-project',
   decoration: 'icon-decoration',
   polaroidPin: 'icon-polaroid-pin'

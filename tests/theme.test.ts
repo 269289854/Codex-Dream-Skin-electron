@@ -11,14 +11,30 @@ describe('theme schema and compiler', () => {
   it('validates current themes and migrates version zero through four profiles', () => {
     const current = createDefaultTheme(id)
     const expectedCopy = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }
-    expect(parseThemeProfile(current).version).toBe(5)
+    expect(parseThemeProfile(current).version).toBe(6)
 
-    const { appearance: _appearance, typography: _typography, ...versionFiveFields } = current
-    const versionFour = { ...versionFiveFields, version: 4 }
+    const { composerBadge: _composerBadge, ...currentWithoutBadge } = current
+    const { appearance: _appearance, typography: _typography, ...versionFiveFields } = currentWithoutBadge
+    const { composerBadge: _composerBadgeIcon, ...versionFiveIcons } = versionFiveFields.icons
+    const versionFour = { ...versionFiveFields, version: 4, icons: versionFiveIcons }
     const migratedFour = parseThemeProfile(versionFour)
-    expect(migratedFour.version).toBe(5)
+    expect(migratedFour.version).toBe(6)
     expect(migratedFour.appearance).toEqual({ colors: {}, paints: {} })
     expect(migratedFour.typography.slots.brandSignature).toEqual({ kind: 'builtin', id: 'segoe-script' })
+
+    const versionFive = {
+      ...currentWithoutBadge,
+      version: 5,
+      icons: versionFiveIcons,
+      appearance: { colors: { composerSendIcon: '#123456' }, paints: { composerSendButton: { kind: 'solid' as const, color: '#654321' } } },
+      typography: current.typography
+    }
+    const migratedFive = parseThemeProfile(versionFive)
+    expect(migratedFive.version).toBe(6)
+    expect(migratedFive.icons.composerBadge).toEqual({ kind: 'builtin', name: 'music' })
+    expect(migratedFive.composerBadge.visible).toBe(true)
+    expect(migratedFive.appearance.colors.composerBadgeIcon).toBe('#123456')
+    expect(migratedFive.appearance.paints.composerBadgeBackground).toEqual({ kind: 'solid', color: '#654321' })
 
     const {
       brandTitle: _brandTitle,
@@ -26,35 +42,35 @@ describe('theme schema and compiler', () => {
       brandSignature: _brandSignature,
       ...legacyCopy
     } = current.copy
-    const { sidebarMode: _sidebarMode, ...legacyIcons } = current.icons
+    const { sidebarMode: _sidebarMode, composerBadge: _composerBadgeLegacy, ...legacyIcons } = current.icons
     const versionThree = { ...versionFour, version: 3, copy: legacyCopy, icons: legacyIcons }
     const migratedThree = parseThemeProfile(versionThree)
-    expect(migratedThree.version).toBe(5)
+    expect(migratedThree.version).toBe(6)
     expect(migratedThree.copy).toEqual(expectedCopy)
     expect(migratedThree.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
 
     const { visible: _visibleTwo, ...versionTwoPolaroid } = current.polaroid
     const versionTwo = { ...versionThree, version: 2, polaroid: versionTwoPolaroid }
     const migratedTwo = parseThemeProfile(versionTwo)
-    expect(migratedTwo.version).toBe(5)
+    expect(migratedTwo.version).toBe(6)
     expect(migratedTwo.polaroid.visible).toBe(true)
 
     const { copy: _copy, ...versionOneFields } = versionTwo
     const versionOne = { ...versionOneFields, version: 1, name: '已有主题' }
     const migratedOne = parseThemeProfile(versionOne)
-    expect(migratedOne.version).toBe(5)
+    expect(migratedOne.version).toBe(6)
     expect(migratedOne.name).toBe('已有主题')
     expect(migratedOne.copy).toEqual(expectedCopy)
     expect(migratedOne.hero).toEqual(current.hero)
 
     const migratedZero = parseThemeProfile({ id, name: '旧主题', version: 0, colors: { accent: '#123456' } })
-    expect(migratedZero.version).toBe(5)
+    expect(migratedZero.version).toBe(6)
     expect(migratedZero.colors.accent).toBe('#123456')
     expect(migratedZero.colors.surface).toBe('#F7FFFF')
     expect(migratedZero.copy).toEqual(expectedCopy)
     expect(migratedZero.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
     expect(migratedZero.polaroid.visible).toBe(true)
-    for (const migrated of [migratedFour, migratedThree, migratedTwo, migratedOne, migratedZero]) {
+    for (const migrated of [migratedFive, migratedFour, migratedThree, migratedTwo, migratedOne, migratedZero]) {
       expect(buildThemeStyleVariables(migrated)['--dream-canvas']).toContain('linear-gradient(135deg')
     }
     expect(buildThemeStyleVariables(migratedZero)['--dream-action-card-icon-badge']).toContain('#123456')
@@ -94,7 +110,7 @@ describe('theme schema and compiler', () => {
     expect(compiled.css).toContain('background-image: url("data:image/png;base64,PHNjcmlwdD4=")')
     expect(compiled.rendererPayload).not.toContain('<')
     expect(compiled.rendererPayload).toContain('headingTemplate')
-    expect(JSON.parse(compiled.rendererPayload).version).toBe(5)
+    expect(JSON.parse(compiled.rendererPayload).version).toBe(6)
     expect(compiled.rendererPayload).toContain('\\u003cb>')
     expect(compiled.rendererPayload).toContain(JSON.stringify(HOME_ACTIONS[0].label).slice(1, -1))
     expect(await compileTheme(profile, async () => 'data:image/png;base64,PHNjcmlwdD4=')).toEqual(compiled)

@@ -59,6 +59,24 @@
     renderSlot(icon, "sidebarMode", "♫");
   };
 
+  const ensureComposerBadge = (composer) => {
+    if (!composer || themeConfig?.composerBadge?.visible === false) {
+      document.querySelectorAll(".dream-composer-badge").forEach((node) => node.remove());
+      return;
+    }
+    document.querySelectorAll(".dream-composer-badge").forEach((node) => {
+      if (!composer.contains(node)) node.remove();
+    });
+    let badge = composer.querySelector(":scope > .dream-composer-badge");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "dream-composer-badge";
+      badge.setAttribute("aria-hidden", "true");
+      composer.prepend(badge);
+    }
+    renderSlot(badge, "composerBadge", "♫");
+  };
+
   const replaceMarks = (selector, className, nodes) => {
     document.querySelectorAll(selector).forEach((node) => node.classList.remove(className));
     nodes.filter((node) => node instanceof HTMLElement).forEach((node) => node.classList.add(className));
@@ -447,6 +465,7 @@
 
     const composerSurface = context?.composerSurface || findVisible(document, ".composer-surface-chrome");
     markCurrentNode(".composer-surface-chrome.dream-composer", composerSurface, "dream-composer");
+    ensureComposerBadge(composerSurface);
 
     if (!shellMain || !document.body) return;
     let chrome = document.getElementById(CHROME_ID);
@@ -507,6 +526,7 @@
     document.querySelectorAll(".dream-project-selector").forEach((node) => node.classList.remove("dream-project-selector"));
     document.querySelectorAll(".dream-project-bar").forEach((node) => node.classList.remove("dream-project-bar"));
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
+    document.querySelectorAll(".dream-composer-badge").forEach((node) => node.remove());
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);

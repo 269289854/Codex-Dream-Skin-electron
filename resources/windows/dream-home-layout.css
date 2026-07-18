@@ -315,8 +315,7 @@
   overflow: visible !important;
 }
 
-.dream-composer::before {
-  content: "♫";
+.dream-composer-badge {
   position: absolute;
   left: -13px;
   top: -13px;
@@ -326,9 +325,18 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: var(--dream-composer-send-icon);
-  background: var(--dream-composer-send-button);
+  font-size: 18px;
+  line-height: 1;
+  color: var(--dream-composer-badge-icon);
+  background: var(--dream-composer-badge-background);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--dream-composer-border) 44%, transparent);
+  pointer-events: none;
+}
+
+.dream-composer-badge .dream-custom-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .dream-composer button {

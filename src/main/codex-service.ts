@@ -251,6 +251,7 @@ export class CodexService {
       .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
         themeId: profile.id,
         icons,
+        composerBadge: profile.composerBadge,
         builtinGlyphs: BUILTIN_ICON_GLYPHS,
         actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
         copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },

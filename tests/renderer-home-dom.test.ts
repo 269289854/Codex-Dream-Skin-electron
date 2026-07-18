@@ -76,7 +76,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardPrimary: { name: 'wand-sparkles' },
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }'): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -84,6 +84,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
     .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
       themeId,
       icons,
+      composerBadge,
       builtinGlyphs: BUILTIN_ICON_GLYPHS,
       actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
       copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
@@ -216,6 +217,29 @@ describe('renderer home DOM adaptation', () => {
     expect(proxy.textContent).toBe('Renamed-Project')
     expect(window.document.querySelectorAll('#codex-dream-skin-project-proxy')).toHaveLength(1)
     expect(window.document.querySelectorAll('#codex-dream-skin-actions')).toHaveLength(1)
+  })
+
+  it('renders one configurable composer badge and removes it during cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    inject(window, { composerBadge: { dataUrl: 'data:image/png;base64,AA==' } })
+
+    const composer = window.document.querySelector('.composer-surface-chrome')
+    expect(composer?.querySelectorAll(':scope > .dream-composer-badge')).toHaveLength(1)
+    expect(composer?.querySelector('.dream-composer-badge .dream-custom-icon')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+    stateOf(window).ensure()
+    expect(composer?.querySelectorAll(':scope > .dream-composer-badge')).toHaveLength(1)
+
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-composer-badge')).toBeNull()
+  })
+
+  it('does not create the composer badge when it is hidden', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    inject(window, {}, undefined, undefined, { visible: false })
+
+    expect(window.document.querySelector('.dream-composer-badge')).toBeNull()
   })
 
   it('reuses a native heading project button when Codex renders one', () => {

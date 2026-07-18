@@ -102,6 +102,7 @@ export const APPEARANCE_COLOR_TOKENS = {
   composerPermissionText: colorToken('权限提示', 'composer', '--dream-composer-permission-text', 'border', ['composer-permission']),
   composerModelText: colorToken('模型文字', 'composer', '--dream-composer-model-text', 'ink', ['composer-model']),
   composerSendIcon: colorToken('发送按钮图标', 'composer', '--dream-composer-send-icon', 'surface', ['icon-composer']),
+  composerBadgeIcon: colorToken('输入框装饰图标', 'composer', '--dream-composer-badge-icon', 'surface', ['icon-composer-badge']),
   wave: colorToken('波形', 'decoration', '--dream-wave', 'accent', ['wave']),
   sparkle: colorToken('闪光', 'decoration', '--dream-sparkle', 'pink', ['icon-decoration']),
   polaroidPin: colorToken('拍立得图钉', 'decoration', '--dream-polaroid-pin', 'pink', ['icon-polaroid-pin'])
@@ -196,7 +197,8 @@ export const APPEARANCE_PAINT_TOKENS = {
   composerToolButtonSelected: paintToken('工具按钮选中', 'composer', '--dream-composer-tool-button-selected', 'pink', ['composer-tool'], 'selected'),
   composerSendButton: paintToken('发送按钮', 'composer', '--dream-composer-send-button', 'accent', ['icon-composer']),
   composerSendButtonHover: paintToken('发送按钮悬停', 'composer', '--dream-composer-send-button-hover', 'pink', ['icon-composer'], 'hover'),
-  composerSendButtonSelected: paintToken('发送按钮选中', 'composer', '--dream-composer-send-button-selected', 'lavender', ['icon-composer'], 'selected')
+  composerSendButtonSelected: paintToken('发送按钮选中', 'composer', '--dream-composer-send-button-selected', 'lavender', ['icon-composer'], 'selected'),
+  composerBadgeBackground: paintToken('输入框装饰底色', 'composer', '--dream-composer-badge-background', 'accent', ['icon-composer-badge'])
 } as const satisfies Record<string, AppearanceTokenDefinition>
 
 export type AppearancePaintToken = keyof typeof APPEARANCE_PAINT_TOKENS
@@ -309,6 +311,8 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
       return linear(145, [[colors.accent, 0], [colors.lavender, 0.52], [colors.pink, 1]])
     case 'composerSendButtonSelected':
       return linear(145, [[colors.lavender, 0], [colors.pink, 1]])
+    case 'composerBadgeBackground':
+      return linear(145, [[colors.accent, 0], [colors.pink, 1]])
     default: {
       const exhaustiveToken: never = token
       return exhaustiveToken

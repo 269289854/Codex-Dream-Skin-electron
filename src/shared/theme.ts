@@ -35,9 +35,15 @@ const legacyIconsSchema = z.object({
   polaroidPin: iconSourceSchema
 }).strict()
 
-const iconsSchema = legacyIconsSchema.extend({
+const versionFiveIconsSchema = legacyIconsSchema.extend({
   sidebarMode: iconSourceSchema
 }).strict()
+
+const currentIconsSchema = versionFiveIconsSchema.extend({
+  composerBadge: iconSourceSchema
+}).strict()
+
+const composerBadgeSchema = z.object({ visible: z.boolean() }).strict()
 
 const legacyColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/)
 const legacyColorsSchema = z.object({
@@ -89,10 +95,21 @@ const commonProfileFields = {
 
 export const themeProfileSchema = z.object({
   ...commonProfileFields,
+  version: z.literal(6),
+  colors: colorsSchema,
+  copy: themeCopySchema,
+  icons: currentIconsSchema,
+  composerBadge: composerBadgeSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict()
+
+const versionFiveThemeSchema = z.object({
+  ...commonProfileFields,
   version: z.literal(5),
   colors: colorsSchema,
   copy: themeCopySchema,
-  icons: iconsSchema,
+  icons: versionFiveIconsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
 }).strict()
@@ -102,7 +119,7 @@ const versionFourThemeSchema = z.object({
   version: z.literal(4),
   colors: legacyColorsSchema,
   copy: themeCopySchema,
-  icons: iconsSchema
+  icons: versionFiveIconsSchema
 }).strict()
 
 const versionThreeThemeSchema = z.object({
@@ -152,7 +169,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 5,
+    version: 6,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
@@ -189,18 +206,23 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       cardPrimary: { kind: 'builtin', name: 'wand-sparkles' },
       cardSecondary: { kind: 'builtin', name: 'image' },
       composer: { kind: 'builtin', name: 'send' },
+      composerBadge: { kind: 'builtin', name: 'music' },
       project: { kind: 'builtin', name: 'folder-code' },
       decoration: { kind: 'builtin', name: 'heart' },
       polaroidPin: { kind: 'builtin', name: 'pin' }
     },
+    composerBadge: { visible: true },
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   }
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 5) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 6) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 5) {
+    return migrateVersionFive(versionFiveThemeSchema.parse(input))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 4) {
     return migrateVersionFour(versionFourThemeSchema.parse(input))
@@ -232,9 +254,10 @@ function migrateLegacyTheme(
 ): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 5,
+    version: 6,
     copy: { ...copy, ...DEFAULT_BRAND_COPY },
-    icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' } },
+    icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' }, composerBadge: { kind: 'builtin', name: 'music' } },
+    composerBadge: { visible: true },
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   })
@@ -243,8 +266,34 @@ function migrateLegacyTheme(
 function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 5,
+    version: 6,
+    icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' } },
+    composerBadge: { visible: true },
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   })
+}
+
+function migrateVersionFive(legacy: z.infer<typeof versionFiveThemeSchema>): ThemeProfile {
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 6,
+    icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' } },
+    composerBadge: { visible: true },
+    appearance: migrateComposerBadgeAppearance(legacy.appearance)
+  })
+}
+
+function migrateComposerBadgeAppearance(appearance: z.infer<typeof themeAppearanceSchema>): z.infer<typeof themeAppearanceSchema> {
+  return {
+    ...appearance,
+    colors: {
+      ...appearance.colors,
+      ...(appearance.colors.composerBadgeIcon ? {} : appearance.colors.composerSendIcon ? { composerBadgeIcon: appearance.colors.composerSendIcon } : {})
+    },
+    paints: {
+      ...appearance.paints,
+      ...(appearance.paints.composerBadgeBackground ? {} : appearance.paints.composerSendButton ? { composerBadgeBackground: appearance.paints.composerSendButton } : {})
+    }
+  }
 }
