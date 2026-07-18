@@ -2,12 +2,16 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { createSparkleParticles, type SparkleParticle } from '../src/shared/decorations'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
+import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 
 let template = ''
 const themeId = '11111111-1111-4111-8111-111111111111'
 const windows: Window[] = []
+const defaultProfile = createDefaultTheme(themeId)
+const defaultDecorations = defaultProfile.decorations
 
 beforeAll(async () => {
   template = await readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8')
@@ -75,8 +79,9 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
 function inject(window: Window, icons: Record<string, { name?: string; dataUrl?: string }> = {
   cardPrimary: { name: 'wand-sparkles' },
   cardSecondary: { name: 'image' },
-  decoration: { name: 'heart' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }): void {
+  decoration: { name: 'heart' },
+  backgroundSparkle: { name: 'sparkles' }
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles)): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -85,6 +90,8 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
       themeId,
       icons,
       composerBadge,
+      decorations,
+      sparkleParticles,
       builtinGlyphs: BUILTIN_ICON_GLYPHS,
       actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
       copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
@@ -240,6 +247,107 @@ describe('renderer home DOM adaptation', () => {
     inject(window, {}, undefined, undefined, { visible: false })
 
     expect(window.document.querySelector('.dream-composer-badge')).toBeNull()
+  })
+
+  it('renders configured multi-color sparkle images idempotently and removes them during cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const decorations = structuredClone(defaultDecorations)
+    decorations.sparkles = {
+      ...decorations.sparkles,
+      count: 3,
+      opacity: 0.5,
+      glow: 7,
+      extraColors: ['rgb(255 0 128 / 60%)', 'oklch(70% 0.18 210)']
+    }
+    const particles: SparkleParticle[] = [
+      { x: 10, y: 20, size: 12, opacity: 0.8, rotation: 5, colorIndex: 0 },
+      { x: 30, y: 40, size: 18, opacity: 0.6, rotation: 15, colorIndex: 1 },
+      { x: 50, y: 60, size: 24, opacity: 0.4, rotation: 25, colorIndex: 2 }
+    ]
+    inject(window, { backgroundSparkle: { dataUrl: 'data:image/png;base64,AA==' } }, undefined, undefined, undefined, decorations, particles)
+
+    const sparkleNodes = window.document.querySelectorAll('.dream-sparkles > i')
+    const firstSparkle = sparkleNodes[0] as unknown as HTMLElement
+    const secondSparkle = sparkleNodes[1] as unknown as HTMLElement
+    const thirdSparkle = sparkleNodes[2] as unknown as HTMLElement
+    expect(sparkleNodes).toHaveLength(3)
+    expect(sparkleNodes[0]?.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+    expect(firstSparkle.style.left).toBe('10%')
+    expect(firstSparkle.style.getPropertyValue('--dream-sparkle-opacity')).toBe('0.4')
+    expect(secondSparkle.style.getPropertyValue('--dream-sparkle-color')).toBe('rgb(255 0 128 / 60%)')
+    expect(thirdSparkle.style.getPropertyValue('--dream-sparkle-color')).toBe('oklch(70% 0.18 210)')
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('.dream-sparkles > i')).toHaveLength(3)
+
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-sparkles')).toBeNull()
+  })
+
+  it('shows composer melody as text and hides it for text or attachments', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const decorations = structuredClone(defaultDecorations)
+    decorations.composerMelody = {
+      visible: true,
+      text: '<b>♫</b>',
+      fontSize: 20,
+      position: { x: 0.4, y: 0.25 },
+      hideWhenTyping: true
+    }
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+
+    const composer = window.document.querySelector('.composer-surface-chrome')
+    const editor = composer?.querySelector('.ProseMirror')
+    const melody = composer?.querySelector('.dream-composer-melody') as HTMLElement | null
+    expect(melody?.textContent).toBe('<b>♫</b>')
+    expect(melody?.querySelector('b')).toBeNull()
+    expect(melody?.style.left).toBe('40%')
+    expect(melody?.style.top).toBe('25%')
+    expect(melody?.style.fontSize).toBe('20px')
+    expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(false)
+
+    if (!editor) throw new Error('Composer editor fixture is missing.')
+    editor.textContent = '正在输入'
+    stateOf(window).ensure()
+    expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(true)
+    editor.textContent = ''
+    const attachment = window.document.createElement('div')
+    attachment.setAttribute('data-attachment', 'image.png')
+    composer?.appendChild(attachment)
+    stateOf(window).ensure()
+    expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(true)
+  })
+
+  it('removes disabled sparkles and melody instead of leaving stale nodes', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const decorations = structuredClone(defaultDecorations)
+    decorations.sparkles.visible = false
+    decorations.composerMelody.visible = false
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+
+    expect(window.document.querySelector('.dream-sparkles')).toBeNull()
+    expect(window.document.querySelector('.dream-composer-melody')).toBeNull()
+    expect(window.document.querySelector('.dream-wave')).toBeNull()
+  })
+
+  it('keeps melody visible while typing when configured and supports conversation composers', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div role="main"><article>Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true">已有内容</div></div></div></main>'
+    const decorations = structuredClone(defaultDecorations)
+    decorations.composerMelody.hideWhenTyping = false
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+
+    const composer = window.document.querySelector('.composer-surface-chrome')
+    expect(window.document.querySelector('.dream-home')).toBeNull()
+    expect(composer?.classList.contains('dream-composer')).toBe(true)
+    expect(composer?.querySelectorAll(':scope > .dream-composer-melody')).toHaveLength(1)
+    expect(composer?.querySelector('.dream-composer-melody-hidden')).toBeNull()
+    stateOf(window).ensure()
+    expect(composer?.querySelectorAll(':scope > .dream-composer-melody')).toHaveLength(1)
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-composer-melody')).toBeNull()
   })
 
   it('reuses a native heading project button when Codex renders one', () => {

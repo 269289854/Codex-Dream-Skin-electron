@@ -18,18 +18,23 @@
 
   const builtinGlyphs = themeConfig?.builtinGlyphs || {};
   const renderSlot = (node, slot, fallback, useActionFallback = false) => {
-    if (!node) return;
+    if (!node) return false;
     const source = themeConfig?.icons?.[slot];
-    node.textContent = "";
     if (source?.dataUrl) {
+      const currentImage = node.querySelector(":scope > .dream-custom-icon");
+      if (currentImage?.getAttribute("src") === source.dataUrl && node.children.length === 1) return true;
+      node.textContent = "";
       const image = document.createElement("img");
       image.src = source.dataUrl;
       image.alt = "";
       image.className = "dream-custom-icon";
       node.appendChild(image);
+      return true;
     } else {
       const usesDefaultActionBuiltin = useActionFallback && themeConfig?.actionFallbackBuiltins?.[slot] === source?.name;
-      node.textContent = usesDefaultActionBuiltin ? fallback : (builtinGlyphs[source?.name] || fallback);
+      const glyph = usesDefaultActionBuiltin ? fallback : (builtinGlyphs[source?.name] || fallback);
+      if (node.textContent !== glyph || node.children.length > 0) node.textContent = glyph;
+      return false;
     }
   };
 
@@ -75,6 +80,72 @@
       composer.prepend(badge);
     }
     renderSlot(badge, "composerBadge", "♫");
+  };
+
+  const ensureSparkles = (chrome) => {
+    const config = themeConfig?.decorations?.sparkles;
+    const particles = Array.isArray(themeConfig?.sparkleParticles) ? themeConfig.sparkleParticles : [];
+    if (!chrome || config?.visible === false || particles.length === 0) {
+      document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
+      return;
+    }
+    let layer = chrome.querySelector(":scope > .dream-sparkles");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.className = "dream-sparkles";
+      layer.setAttribute("aria-hidden", "true");
+      chrome.prepend(layer);
+    }
+    const visibleParticles = particles.slice(0, Math.max(0, Math.min(24, Math.floor(config.count ?? particles.length))));
+    while (layer.children.length > visibleParticles.length) layer.lastElementChild?.remove();
+    const colors = Array.isArray(config.extraColors) ? config.extraColors : [];
+    visibleParticles.forEach((particle, index) => {
+      let node = layer.children[index];
+      if (!(node instanceof HTMLElement)) {
+        node = document.createElement("i");
+        layer.appendChild(node);
+      }
+      const colorIndex = colors.length > 0 ? particle.colorIndex % (colors.length + 1) : 0;
+      node.style.left = `${particle.x}%`;
+      node.style.top = `${particle.y}%`;
+      node.style.setProperty("--dream-sparkle-size", `${particle.size}px`);
+      node.style.setProperty("--dream-sparkle-opacity", `${particle.opacity * (Number.isFinite(config.opacity) ? config.opacity : 1)}`);
+      node.style.setProperty("--dream-sparkle-rotation", `${particle.rotation}deg`);
+      node.style.setProperty("--dream-sparkle-color", colorIndex === 0 ? "var(--dream-sparkle)" : colors[colorIndex - 1]);
+      node.style.setProperty("--dream-sparkle-glow", `${Number.isFinite(config.glow) ? config.glow : 0}px`);
+      node.classList.toggle("dream-sparkle-image", renderSlot(node, "backgroundSparkle", "✦"));
+      node.dataset.dreamIndex = `${index}`;
+    });
+  };
+
+  const composerHasContent = (composer) => {
+    const editor = composer?.querySelector(".ProseMirror");
+    if (!editor) return false;
+    if (editor.textContent?.trim()) return true;
+    return Boolean(editor.querySelector("img, video, audio") || composer.querySelector("[data-attachment], [data-testid*='attachment' i], [class*='attachment' i], [data-testid*='file' i]"));
+  };
+
+  const ensureComposerMelody = (composer) => {
+    const config = themeConfig?.decorations?.composerMelody;
+    if (!composer || config?.visible === false) {
+      document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
+      return;
+    }
+    document.querySelectorAll(".dream-composer-melody").forEach((node) => {
+      if (!composer.contains(node)) node.remove();
+    });
+    let melody = composer.querySelector(":scope > .dream-composer-melody");
+    if (!melody) {
+      melody = document.createElement("span");
+      melody.className = "dream-composer-melody";
+      melody.setAttribute("aria-hidden", "true");
+      composer.appendChild(melody);
+    }
+    melody.textContent = typeof config.text === "string" ? config.text : "♫ · · · ♡ · · · ♪";
+    melody.style.left = `${clamp(Number(config.position?.x) || 0.5, 0.1, 0.9) * 100}%`;
+    melody.style.top = `${clamp(Number(config.position?.y) || 0.35, 0.1, 0.65) * 100}%`;
+    melody.style.fontSize = `${clamp(Number(config.fontSize) || 16, 10, 32)}px`;
+    melody.classList.toggle("dream-composer-melody-hidden", Boolean(config.hideWhenTyping && composerHasContent(composer)));
   };
 
   const replaceMarks = (selector, className, nodes) => {
@@ -466,6 +537,7 @@
     const composerSurface = context?.composerSurface || findVisible(document, ".composer-surface-chrome");
     markCurrentNode(".composer-surface-chrome.dream-composer", composerSurface, "dream-composer");
     ensureComposerBadge(composerSurface);
+    ensureComposerMelody(composerSurface);
 
     if (!shellMain || !document.body) return;
     let chrome = document.getElementById(CHROME_ID);
@@ -477,8 +549,7 @@
       chrome.innerHTML = `
         <div class="dream-brand"><span class="dream-note">♫</span><span><b></b><small></small></span></div>
         <div class="dream-signature"></div>
-        <div class="dream-sparkles"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="dream-wave">♫ · · · ♡ · · · ♪</div>
+        <div class="dream-sparkles" aria-hidden="true"></div>
         <div class="dream-polaroid"></div>`;
       document.body.appendChild(chrome);
     }
@@ -490,6 +561,7 @@
     if (brandTitle) brandTitle.textContent = typeof copy.brandTitle === "string" ? copy.brandTitle : "初音未来主题 Codex App";
     if (brandSubtitle) brandSubtitle.textContent = typeof copy.brandSubtitle === "string" ? copy.brandSubtitle : "你的专属 AI 编程与创作伙伴";
     if (brandSignature) brandSignature.textContent = typeof copy.brandSignature === "string" ? copy.brandSignature : "MIKU ✦ 01";
+    chrome.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     let pin = chrome.querySelector(".dream-polaroid-pin");
     if (!pin) {
       pin = document.createElement("span");
@@ -497,6 +569,7 @@
       chrome.querySelector(".dream-polaroid")?.appendChild(pin);
     }
     renderSlot(pin, "polaroidPin", "●");
+    ensureSparkles(chrome);
     installPolaroidDragging(chrome, chrome.querySelector(".dream-polaroid"));
 
     const shellBox = shellMain.getBoundingClientRect();
@@ -527,6 +600,9 @@
     document.querySelectorAll(".dream-project-bar").forEach((node) => node.classList.remove("dream-project-bar"));
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
     document.querySelectorAll(".dream-composer-badge").forEach((node) => node.remove());
+    document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
+    document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
+    document.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
@@ -555,7 +631,7 @@
     }, 180);
   };
   const observer = new MutationObserver(scheduleEnsure);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
   const timer = setInterval(ensure, 5000);
   window[STATE_KEY] = {
     ensure,

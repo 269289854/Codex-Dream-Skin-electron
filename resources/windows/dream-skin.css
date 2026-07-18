@@ -8,21 +8,6 @@ html.codex-dream-skin body {
   font-family: var(--dream-font-ui) !important;
 }
 
-html.codex-dream-skin body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: .28;
-  background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--dream-sparkle) 18%, transparent) 0 1px, transparent 2px),
-    radial-gradient(circle, color-mix(in srgb, var(--dream-wave) 60%, transparent) 0 1px, transparent 2px),
-    radial-gradient(circle, color-mix(in srgb, var(--dream-background-dust) 50%, transparent) 0 1px, transparent 2px);
-  background-position: 0 0, 23px 31px, 41px 13px;
-  background-size: 53px 53px, 67px 67px, 79px 79px;
-}
-
 html.codex-dream-skin aside.app-shell-left-panel {
   background: var(--dream-sidebar-surface) !important;
   border: 1px solid var(--dream-sidebar-border) !important;
@@ -296,50 +281,32 @@ html.codex-dream-skin [aria-disabled="true"] {
 
 .dream-sparkles {
   position: absolute;
+  z-index: 1;
   inset: 48px 0 0;
-  opacity: .72;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.dream-sparkles i {
+.dream-sparkles > i {
   position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--dream-sparkle);
-  box-shadow: 0 0 10px 3px color-mix(in srgb, var(--dream-sparkle) 58%, transparent);
+  width: var(--dream-sparkle-size, 16px);
+  height: var(--dream-sparkle-size, 16px);
+  display: grid;
+  place-items: center;
+  color: var(--dream-sparkle-color, var(--dream-sparkle));
+  font-size: var(--dream-sparkle-size, 16px);
+  font-style: normal;
+  line-height: 1;
+  opacity: var(--dream-sparkle-opacity, .72);
+  filter: drop-shadow(0 0 var(--dream-sparkle-glow, 10px) var(--dream-sparkle-color, var(--dream-sparkle)));
+  transform: translate(-50%, -50%) rotate(var(--dream-sparkle-rotation, 0deg));
+  transform-origin: center;
 }
 
-.dream-sparkles i::before,
-.dream-sparkles i::after {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: -6px;
-  width: 1px;
-  height: 17px;
-  background: linear-gradient(transparent, var(--dream-sparkle), transparent);
+.dream-sparkles > i .dream-custom-icon {
+  width: 100%;
+  height: 100%;
 }
-
-.dream-sparkles i::after { transform: rotate(90deg); }
-.dream-sparkles i:nth-child(1) { left: 7%; top: 11%; }
-.dream-sparkles i:nth-child(2) { left: 31%; top: 5%; opacity: .54; }
-.dream-sparkles i:nth-child(3) { left: 55%; top: 17%; opacity: .82; }
-.dream-sparkles i:nth-child(4) { left: 78%; top: 8%; opacity: .64; }
-.dream-sparkles i:nth-child(5) { left: 92%; top: 27%; opacity: .90; }
-.dream-sparkles i:nth-child(6) { left: 66%; top: 66%; opacity: .48; }
-
-.dream-wave {
-  position: absolute;
-  left: 50%;
-  bottom: 72px;
-  display: none;
-  color: var(--dream-wave);
-  font-size: 16px;
-  letter-spacing: 0;
-  transform: translateX(-50%);
-}
-
-#codex-dream-skin-chrome.dream-home-shell .dream-wave { display: block; }
 
 .dream-polaroid {
   position: absolute;
@@ -394,8 +361,7 @@ html.codex-dream-skin [aria-disabled="true"] {
 }
 
 @media (max-width: 600px) {
-  .dream-brand small,
-  .dream-wave { display: none !important; }
+  .dream-brand small { display: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

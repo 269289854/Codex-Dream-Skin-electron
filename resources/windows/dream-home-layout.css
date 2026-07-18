@@ -306,6 +306,7 @@
 }
 
 .dream-composer {
+  position: relative !important;
   border: 2px solid var(--dream-composer-border) !important;
   border-radius: 22px !important;
   background: var(--dream-composer) !important;
@@ -314,6 +315,24 @@
   backdrop-filter: none !important;
   overflow: visible !important;
 }
+
+.dream-composer-melody {
+  position: absolute;
+  z-index: 1;
+  max-width: calc(100% - 96px);
+  overflow: hidden;
+  color: var(--dream-wave);
+  font-family: var(--dream-font-composer-melody);
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: .78;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.dream-composer-melody-hidden { display: none; }
 
 .dream-composer-badge {
   position: absolute;
