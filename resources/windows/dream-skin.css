@@ -32,6 +32,23 @@ html.codex-dream-skin aside.app-shell-left-panel nav > :is(a, button) {
   overflow: hidden;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel nav > :has(> :is(a, button)[aria-current="page"]),
+html.codex-dream-skin aside.app-shell-left-panel nav > :has(> [class~="bg-token-list-hover-background"]) {
+  border: 1px solid var(--dream-sidebar-border) !important;
+  border-radius: 10px !important;
+  background: var(--dream-sidebar-nav-item-selected) !important;
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--dream-sidebar-border) 24%, transparent) !important;
+  overflow: hidden;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel nav > :has(> :is(a, button)[aria-current="page"]) > :is(a, button),
+html.codex-dream-skin aside.app-shell-left-panel nav > :has(> [class~="bg-token-list-hover-background"]) > :is(a, button) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 html.codex-dream-skin aside.app-shell-left-panel :is(a, button) {
   background: var(--dream-sidebar-nav-item) !important;
   color: var(--dream-sidebar-nav-text) !important;
