@@ -306,6 +306,7 @@ describe('Studio preview editing interaction', () => {
     if (!firstParticle) throw new Error('Background particle target is missing.')
     pointerDown(firstParticle)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('背景粒子快捷配置')
+    expect(firstParticle.getAttribute('data-preview-selected')).toBe('true')
     const count = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '数量')?.querySelector<HTMLInputElement>('input')
     if (!count) throw new Error('Particle count control is missing.')
     act(() => {
@@ -321,17 +322,28 @@ describe('Studio preview editing interaction', () => {
 
     const particleBeforeShuffle = container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')
     if (!particleBeforeShuffle) throw new Error('Particle disappeared after undo.')
-    const originalLeft = particleBeforeShuffle.style.left
+    const originalX = particleBeforeShuffle.style.getPropertyValue('--dream-particle-x')
     pointerDown(particleBeforeShuffle)
+    const rainMode = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent === '垂直雨落')
+    if (!rainMode) throw new Error('Rain particle mode is missing.')
+    act(() => rainMode.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-effect')).toBe('rain')
+    const rainIcon = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-icon-slot="backgroundRain"] select')
+    const speed = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '速度')?.querySelector<HTMLInputElement>('input')
     const shuffle = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('重新排列'))
     const addColor = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('添加颜色'))
-    if (!shuffle || !addColor) throw new Error('Particle arrangement controls are missing.')
+    if (!rainIcon || !speed || !shuffle || !addColor) throw new Error('Particle arrangement controls are missing.')
     act(() => {
+      rainIcon.value = 'star'
+      rainIcon.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      setInputValue(speed, '1.5')
+      speed.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
       shuffle.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       addColor.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
     })
-    expect(container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')?.style.left).not.toBe(originalLeft)
+    expect(container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')?.style.getPropertyValue('--dream-particle-x')).not.toBe(originalX)
     expect(container.querySelectorAll<HTMLElement>('[data-preview-target="sparkles"]')[1]?.style.getPropertyValue('--dream-sparkle-color')).toBe('#20bcc3')
+    expect(container.querySelector('[data-preview-target="sparkles"] .builtin-icon-glyph')?.textContent).toBe('★')
 
     const more = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('更多设置'))
     if (!more) throw new Error('Particle more settings command is missing.')
@@ -377,15 +389,23 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.decorations).toMatchObject({
-      sparkles: { seed: 1, extraColors: ['#20bcc3'] },
+      sparkles: { effect: 'rain', speed: 1.5, seed: 1, extraColors: ['#20bcc3'] },
       composerMelody: { text: '<b>自定义旋律 ♪</b>', fontSize: 22, position: { x: 0.7, y: 0.35 } }
     })
+    expect(savedProfiles.at(-1)?.icons).toMatchObject({ backgroundSparkle: { name: 'sparkles' }, backgroundRain: { name: 'star' } })
 
     const reset = container.querySelector<HTMLButtonElement>('button[title="恢复默认"]')
     if (!reset) throw new Error('Restore defaults command is missing.')
     act(() => reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(6)
+    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-effect')).toBe('twinkle')
     expect(container.querySelector('[data-preview-target="composer-melody"]')?.textContent).toBe('♫ · · · ♡ · · · ♪')
+
+    const iconInspector = [...container.querySelectorAll('.sidebar-nav button')].find((button) => button.textContent?.includes('图标样式'))
+    if (!iconInspector) throw new Error('Icon inspector command is missing.')
+    act(() => iconInspector.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const particleGroup = [...container.querySelectorAll('.property-group')].find((group) => group.querySelector('h3')?.textContent === '粒子动效素材')
+    expect(particleGroup?.querySelectorAll('[data-icon-slot]')).toHaveLength(5)
   })
 
   it('edits, validates, undoes, saves, and links each brand copy target', async () => {

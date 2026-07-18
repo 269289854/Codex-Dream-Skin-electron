@@ -163,26 +163,41 @@ describe('preview quick editor', () => {
     expect(profile.copy.brandSignature).toBe('QUEUED VALUE')
   })
 
-  it('edits the complete sparkle configuration from one target', () => {
+  it('edits particle effects, independent materials, speed, and visibility from one target', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     renderEditor(PREVIEW_TARGETS.sparkles, profile)
 
-    const icon = container.querySelector<HTMLSelectElement>('[data-icon-slot="backgroundSparkle"] select')
+    const rainMode = [...container.querySelectorAll('button')].find((button) => button.textContent === '垂直雨落')
+    if (!rainMode) throw new Error('Rain particle mode is missing.')
+    act(() => rainMode.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    renderEditor(PREVIEW_TARGETS.sparkles, profile)
+
+    const icon = container.querySelector<HTMLSelectElement>('[data-icon-slot="backgroundRain"] select')
+    const speed = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '速度')?.querySelector<HTMLInputElement>('input')
     const count = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '数量')?.querySelector<HTMLInputElement>('input')
     const addColor = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('添加颜色'))
     const shuffle = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('重新排列'))
-    if (!icon || !count || !addColor || !shuffle) throw new Error('Sparkle controls are missing.')
+    if (!icon || !speed || !count || !addColor || !shuffle) throw new Error('Particle effect controls are missing.')
     act(() => {
-      icon.value = 'heart'
+      icon.value = 'star'
       icon.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(speed, '1.5')
+      speed.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
       Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(count, '12')
       count.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
       addColor.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       shuffle.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
     })
 
-    expect(profile.icons.backgroundSparkle).toEqual({ kind: 'builtin', name: 'heart' })
-    expect(profile.decorations.sparkles).toMatchObject({ count: 12, seed: 1, extraColors: ['#20bcc3'] })
+    expect(profile.icons.backgroundSparkle).toEqual({ kind: 'builtin', name: 'sparkles' })
+    expect(profile.icons.backgroundRain).toEqual({ kind: 'builtin', name: 'star' })
+    expect(profile.decorations.sparkles).toMatchObject({ effect: 'rain', speed: 1.5, count: 12, seed: 1, extraColors: ['#20bcc3'] })
+
+    const visibility = container.querySelector<HTMLInputElement>('[data-decoration-controls="sparkles"] > .toggle-row input')
+    if (!visibility) throw new Error('Particle visibility toggle is missing.')
+    act(() => visibility.click())
+    renderEditor(PREVIEW_TARGETS.sparkles, profile)
+    expect(container.querySelector<HTMLFieldSetElement>('.particle-effect-settings')?.disabled).toBe(true)
   })
 
   it('edits composer melody presets, text, font, position, and typing behavior', () => {

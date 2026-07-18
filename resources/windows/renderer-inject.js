@@ -124,8 +124,12 @@
       node.style.setProperty("--dream-particle-duration", `${Math.max(0.1, Number(particle.duration) || 4)}s`);
       node.style.setProperty("--dream-particle-delay", `${Math.min(0, Number(particle.delay) || 0)}s`);
       node.style.setProperty("--dream-particle-drift", `${Number.isFinite(particle.drift) ? particle.drift : 0}px`);
+      node.style.setProperty("--dream-particle-drift-reverse", `${Number.isFinite(particle.drift) ? -particle.drift : 0}px`);
+      node.style.setProperty("--dream-particle-trail-height", `${Math.max(4, particle.size * 2.8)}px`);
+      node.style.setProperty("--dream-particle-trail-width", `${Math.max(8, particle.size * 4.5)}px`);
       node.style.setProperty("--dream-sparkle-size", `${particle.size}px`);
       node.style.setProperty("--dream-sparkle-opacity", `${particle.opacity * (Number.isFinite(config.opacity) ? config.opacity : 1)}`);
+      node.style.setProperty("--dream-sparkle-dim-opacity", `${particle.opacity * (Number.isFinite(config.opacity) ? config.opacity : 1) * .42}`);
       node.style.setProperty("--dream-sparkle-rotation", `${particle.rotation}deg`);
       node.style.setProperty("--dream-sparkle-color", colorIndex === 0 ? "var(--dream-sparkle)" : colors[colorIndex - 1]);
       node.style.setProperty("--dream-sparkle-glow", `${Number.isFinite(config.glow) ? config.glow : 0}px`);

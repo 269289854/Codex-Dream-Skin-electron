@@ -8,15 +8,16 @@ import {
 import type { RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
-import { createSparkleParticles } from '../../shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
 import { clampNormalized, type Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
-import { ComposerMelodyControls, SparkleControls } from './DecorationControls'
+import { ComposerMelodyControls } from './DecorationControls'
 import { FenceEditor } from './FenceEditor'
 import { PolaroidPreview } from './PolaroidPreview'
+import { ParticleEffectControls } from './ParticleEffectControls'
 import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import {
@@ -540,7 +541,7 @@ export function App(): React.JSX.Element {
               <Range label="旋转" min={-45} max={45} step={1} value={draft.polaroid.placement.rotation} onChange={(value) => change((profile) => { profile.polaroid.placement.rotation = value })} suffix="°" />
               <Range label="隐藏阈值" min={320} max={1600} step={10} value={draft.polaroid.placement.hideBelowWidth} onChange={(value) => change((profile) => { profile.polaroid.placement.hideBelowWidth = value })} suffix="px" />
             </Property>
-            <Property title="背景粒子" anchor="visual-sparkles" highlighted={inspectorAnchor === 'visual-sparkles'}><SparkleControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
+            <Property title="背景粒子" anchor="visual-sparkles" highlighted={inspectorAnchor === 'visual-sparkles'}><ParticleEffectControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} /></Property>
             <Property title="输入框旋律" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
             <Property title="字体" anchor="typography" highlighted={inspectorAnchor === 'typography'}>
               <div className="font-editor">{(Object.keys(draft.typography.slots) as TypographySlot[]).map((slot) => <FontControl key={slot} slot={slot} profile={draft} onChange={(selection) => change((profile) => assignFontSlot(profile, slot, selection))} onImport={() => void importFont(slot)} />)}</div>
@@ -549,9 +550,9 @@ export function App(): React.JSX.Element {
             {appearanceGroups.map((group) => <AppearanceInspectorGroup key={`${draft.id}-${group}`} group={group} profile={draft} highlighted={inspectorAnchor === `appearance-${group}`} onChange={change} onInteractionEnd={endHistoryGroup} />)}
             <Property title="兼容主题色" anchor="visual-colors" highlighted={inspectorAnchor === 'visual-colors'}><div className="legacy-color-grid">{(Object.keys(colorLabels) as (keyof ThemeProfile['colors'])[]).map((key) => <ThemeColorControl key={`${draft.id}-${key}`} colorKey={key} value={draft.colors[key]} onChange={(value) => change((profile) => { profile.colors[key] = value }, `legacy-color-${key}`)} onChangeEnd={endHistoryGroup} />)}</div></Property>
           </>}
-          {activeInspector === 'icons' && <Property title="图标槽位"><div className="icon-editor">{(Object.keys(iconLabels) as IconSlot[]).map((slot) => slot === 'composerBadge'
+          {activeInspector === 'icons' && <><Property title="图标槽位"><div className="icon-editor">{standardIconSlots.map((slot) => slot === 'composerBadge'
             ? <div className="icon-slot-with-visibility" key={slot}><ThemeIconControl slot={slot} profile={draft} assets={assets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} /><label className="toggle-row"><span>显示输入框装饰</span><input type="checkbox" checked={draft.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; change((profile) => { profile.composerBadge.visible = visible }) }} /></label></div>
-            : <ThemeIconControl key={slot} slot={slot} profile={draft} assets={assets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property>}
+            : <ThemeIconControl key={slot} slot={slot} profile={draft} assets={assets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property><Property title="粒子动效素材"><div className="icon-editor">{particleIconSlots.map((slot) => <ThemeIconControl key={slot} slot={slot} profile={draft} assets={assets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property></>}
           {activeInspector === 'runtime' && <>
             <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{runtime.message}</strong><dl><div><dt>阶段</dt><dd>{runtime.phase}</dd></div><div><dt>端口</dt><dd>{runtime.port}</dd></div><div><dt>页面</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{runtime.lastError}</p>}</div></Property>
             <Property title="Codex 控制"><div className="runtime-commands">
@@ -580,6 +581,8 @@ const previewNavigation = [
 ] as const
 
 const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
+const particleIconSlots: IconSlot[] = PARTICLE_EFFECT_IDS.map(particleEffectIconSlot)
+const standardIconSlots = (Object.keys(iconLabels) as IconSlot[]).filter((slot) => !particleIconSlots.includes(slot))
 const appearanceGroupLabels: Record<AppearanceGroup, string> = {
   global: '全局与画布', conversation: '会话与按钮', sidebar: '侧边栏', brand: '品牌栏', home: '首页', cards: '操作卡片', projects: '项目栏', composer: '输入框', decoration: '装饰'
 }
@@ -589,7 +592,8 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
   if (!config.visible) return null
   const particles = createSparkleParticles(config)
   const colors = [resolveAppearanceColor(profile.appearance, profile.colors, 'sparkle'), ...config.extraColors]
-  return <div className="preview-sparkles" aria-label="背景粒子">
+  const iconSlot = particleEffectIconSlot(config.effect)
+  return <div className="preview-sparkles" data-dream-effect={config.effect} aria-label="背景粒子">
     {particles.map((particle, index) => <button
       className="preview-sparkle-particle"
       data-preview-target="sparkles"
@@ -597,15 +601,23 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
       aria-label={`编辑背景粒子 ${index + 1}`}
       key={index}
       style={{
-        left: `${particle.x}%`,
-        top: `${particle.y}%`,
+        '--dream-particle-x': `${particle.x}%`,
+        '--dream-particle-y': `${particle.y}%`,
+        '--dream-particle-start-y': `${2 + particle.phase * 30}%`,
+        '--dream-particle-duration': `${particle.duration}s`,
+        '--dream-particle-delay': `${particle.delay}s`,
+        '--dream-particle-drift': `${particle.drift}px`,
+        '--dream-particle-drift-reverse': `${-particle.drift}px`,
+        '--dream-particle-trail-height': `${Math.max(4, particle.size * 2.8)}px`,
+        '--dream-particle-trail-width': `${Math.max(8, particle.size * 4.5)}px`,
         '--dream-sparkle-size': `${particle.size}px`,
         '--dream-sparkle-opacity': particle.opacity * config.opacity,
+        '--dream-sparkle-dim-opacity': particle.opacity * config.opacity * .42,
         '--dream-sparkle-rotation': `${particle.rotation}deg`,
         '--dream-sparkle-color': colors[particle.colorIndex % colors.length],
         '--dream-sparkle-glow': `${config.glow}px`
       } as React.CSSProperties}
-    ><RenderIcon slot="backgroundSparkle" profile={profile} assets={assets} injected /></button>)}
+    ><span className="preview-sparkle-content"><RenderIcon slot={iconSlot} profile={profile} assets={assets} injected /></span></button>)}
   </div>
 }
 

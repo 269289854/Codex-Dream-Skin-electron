@@ -9,15 +9,17 @@ import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 
 let template = ''
 let particleEffectsCss = ''
+let previewParticleEffectsCss = ''
 const themeId = '11111111-1111-4111-8111-111111111111'
 const windows: Window[] = []
 const defaultProfile = createDefaultTheme(themeId)
 const defaultDecorations = defaultProfile.decorations
 
 beforeAll(async () => {
-  ;[template, particleEffectsCss] = await Promise.all([
+  ;[template, particleEffectsCss, previewParticleEffectsCss] = await Promise.all([
     readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8'),
-    readFile(join(process.cwd(), 'resources', 'windows', 'dream-particle-effects.css'), 'utf8')
+    readFile(join(process.cwd(), 'resources', 'windows', 'dream-particle-effects.css'), 'utf8'),
+    readFile(join(process.cwd(), 'src', 'renderer', 'src', 'particle-effects.css'), 'utf8')
   ])
 })
 
@@ -317,10 +319,14 @@ describe('renderer home DOM adaptation', () => {
     for (const effect of PARTICLE_EFFECT_IDS) {
       expect(particleEffectsCss).toContain(`[data-dream-effect="${effect}"]`)
       expect(particleEffectsCss).toContain(`dream-particle-${effect}`)
+      expect(previewParticleEffectsCss).toContain(`[data-dream-effect="${effect}"]`)
+      expect(previewParticleEffectsCss).toContain(`dream-particle-${effect}`)
     }
     expect(particleEffectsCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(particleEffectsCss).toContain('pointer-events: none')
     expect(particleEffectsCss).toContain('will-change: transform, opacity')
+    expect(previewParticleEffectsCss).toContain('[data-preview-selected="true"]')
+    expect(previewParticleEffectsCss).toContain('@media (prefers-reduced-motion: reduce)')
   })
 
   it('shows composer melody as text and hides it for text or attachments', () => {

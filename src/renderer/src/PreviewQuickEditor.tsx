@@ -9,8 +9,9 @@ import {
 } from '../../shared/appearance'
 import { headingTemplateError } from '../../shared/home-layout'
 import type { ThemeProfile } from '../../shared/theme'
-import { ComposerMelodyControls, SparkleControls } from './DecorationControls'
+import { ComposerMelodyControls } from './DecorationControls'
 import { AppearanceColorControl, FontControl, PaintControl, Range, ThemeIconControl } from './editor-controls'
+import { ParticleEffectControls } from './ParticleEffectControls'
 import type { PopoverPosition, PreviewCopyField, PreviewTargetDefinition, TypographySlot } from './preview-editing'
 
 const copyFieldConfig: Record<PreviewCopyField, { label: string; maxLength: number; rows?: number }> = {
@@ -71,13 +72,13 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {editor.kind === 'style' && !decoration && editor.paints.filter((token) => tokenState(APPEARANCE_PAINT_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
       {editor.kind === 'style' && !decoration && editor.fontSlot && <FontControl slot={editor.fontSlot} profile={profile} onChange={(selection) => onChange((next) => { assignFontSlot(next, editor.fontSlot!, selection) })} onImport={() => onImportFont(editor.fontSlot!)} />}
       {editor.kind === 'style' && !decoration && editor.iconSlot && <div className="icon-editor quick-icon-editor"><ThemeIconControl slot={editor.iconSlot} profile={profile} assets={assets} onChange={(name) => onChange((next) => { next.icons[editor.iconSlot!] = { kind: 'builtin', name } })} onImport={() => onImportIcon(editor.iconSlot!)} /></div>}
-      {decoration === 'sparkles' && <SparkleControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
+      {decoration === 'sparkles' && <ParticleEffectControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} />}
       {decoration === 'composerMelody' && <ComposerMelodyControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
     </div>
     <footer className="preview-edit-popover-footer">
       <button type="button" onClick={() => onMore()}><PanelRightOpen size={15} />更多设置</button>
       {editor.kind === 'style' && editor.fontSlot && <button type="button" onClick={() => onMore('font')}><Type size={15} />字体管理</button>}
-      {editor.kind === 'style' && editor.iconSlot && <button type="button" onClick={() => onMore('icon')}><Box size={15} />图标设置</button>}
+      {editor.kind === 'style' && editor.iconSlot && !decoration && <button type="button" onClick={() => onMore('icon')}><Box size={15} />图标设置</button>}
     </footer>
   </section>
 }
