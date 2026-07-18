@@ -58,6 +58,10 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
       <button type="button" data-project-id="sample">Project</button>
       <button type="button" data-task-id="sample">Task</button>
       <footer><span data-testid="team-avatar">DT</span></footer>
+      <nav aria-label="primary">
+        <div class="native-new-task-row"><a aria-current="page" href="#new"><span>新建任务</span></a><button type="button" aria-label="新建任务">+</button></div>
+        <a href="#pull"><span>拉取请求</span></a>
+      </nav>
     </aside>
     <main class="main-surface">
       <div role="main">
@@ -142,6 +146,9 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('[data-task-id]')?.classList.contains('dream-sidebar-task-row')).toBe(true)
     expect(window.document.querySelector('aside footer')?.classList.contains('dream-sidebar-footer')).toBe(true)
     expect(window.document.querySelector('[data-testid="team-avatar"]')?.classList.contains('dream-sidebar-avatar')).toBe(true)
+    const newTaskRow = window.document.querySelector('.native-new-task-row')
+    expect(newTaskRow?.classList.contains('dream-sidebar-new-task-row')).toBe(true)
+    expect(newTaskRow?.classList.contains('dream-sidebar-new-task-row-selected')).toBe(true)
 
     stateOf(window).ensure()
     expect(modeButton?.querySelectorAll(':scope > .dream-sidebar-mode-icon')).toHaveLength(1)
@@ -149,6 +156,7 @@ describe('renderer home DOM adaptation', () => {
     expect(modeButton?.classList.contains('dream-sidebar-mode-button')).toBe(false)
     expect(modeButton?.querySelector('.dream-sidebar-mode-icon')).toBeNull()
     expect(window.document.querySelector('.dream-sidebar-project-row')).toBeNull()
+    expect(newTaskRow?.classList.contains('dream-sidebar-new-task-row')).toBe(false)
   })
 
   it('supports the English native mode button label', () => {

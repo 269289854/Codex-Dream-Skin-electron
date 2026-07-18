@@ -205,14 +205,61 @@
     nodes.filter((node) => node instanceof HTMLElement).forEach((node) => node.classList.add(className));
   };
 
+  const SIDEBAR_NAV_LABELS = [
+    "新建任务", "New task", "拉取请求", "Pull requests", "站点", "Sites",
+    "已安排", "Scheduled", "插件", "Plugins"
+  ];
+  const normalizedNodeLabel = (node) => `${node.textContent || ""} ${node.getAttribute?.("aria-label") || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
+  const hasSidebarNavText = (node) => {
+    const label = `${node.textContent || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
+    return SIDEBAR_NAV_LABELS.some((candidate) => label.includes(candidate.toLowerCase()));
+  };
+  const isNewTaskNavAction = (node) => {
+    const label = normalizedNodeLabel(node);
+    return label.includes("新建任务") || label.includes("new task");
+  };
+  const findSidebarNavRow = (nav, action) => {
+    let parent = action.parentElement;
+    while (parent && parent !== nav) {
+      const actions = [...parent.querySelectorAll("a, button")];
+      const hasSiblingNavAction = actions.some((candidate) => candidate !== action && hasSidebarNavText(candidate));
+      if (actions.length > 1 && !hasSiblingNavAction && actions.length <= 3) return parent;
+      parent = parent.parentElement;
+    }
+    return action;
+  };
+  const ensureSidebarNavigation = () => {
+    const cleanup = () => {
+      for (const className of ["dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected"]) {
+        document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
+      }
+    };
+    const sidebar = findVisible(document, "aside.app-shell-left-panel");
+    const nav = sidebar && [...sidebar.querySelectorAll("nav")].find(isVisible);
+    if (!nav) {
+      cleanup();
+      return;
+    }
+    cleanup();
+    const action = [...nav.querySelectorAll("a, button")].find(isNewTaskNavAction);
+    if (!(action instanceof HTMLElement)) return;
+    const row = findSidebarNavRow(nav, action);
+    row.classList.add("dream-sidebar-new-task-row");
+    const selected = row.matches('[aria-current="page"], [class~="bg-token-list-hover-background"]') ||
+      Boolean(row.querySelector('[aria-current="page"], [class~="bg-token-list-hover-background"]'));
+    row.classList.toggle("dream-sidebar-new-task-row-selected", selected);
+  };
+
   const ensureSidebarSurfaces = () => {
     const sidebar = findVisible(document, "aside.app-shell-left-panel");
     if (!sidebar) {
       for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-task-row", "dream-sidebar-footer", "dream-sidebar-avatar"]) {
         document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
       }
+      ensureSidebarNavigation();
       return;
     }
+    ensureSidebarNavigation();
     replaceMarks(".dream-sidebar-header", "dream-sidebar-header", [...sidebar.querySelectorAll(":scope > header, :scope > div > header")]);
     replaceMarks(".dream-sidebar-search-button", "dream-sidebar-search-button", [...sidebar.querySelectorAll('button[aria-label*="搜索"], button[aria-label*="Search" i]')]);
     replaceMarks(".dream-sidebar-project-row", "dream-sidebar-project-row", [...sidebar.querySelectorAll('[data-project-id], [data-testid*="project" i], button[aria-label*="项目"], button[aria-label*="project" i]')]);
@@ -658,7 +705,7 @@
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
-    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-task-row", "dream-sidebar-footer", "dream-sidebar-avatar"]) {
+    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-task-row", "dream-sidebar-footer", "dream-sidebar-avatar", "dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected"]) {
       document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
     }
     document.getElementById(PROJECT_PROXY_ID)?.remove();
