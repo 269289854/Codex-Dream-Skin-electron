@@ -77,6 +77,7 @@ button { cursor: pointer; }
 .preview-hero-art { display: block; width: 100%; max-width: none; height: auto; transform-origin: center; }
 .preview-hero-art:is(video) { height: auto; pointer-events: none; object-fit: cover; }
 .preview-polaroid-media { position: absolute; display: block; max-width: none; object-fit: fill; transform-origin: center; }
+.preview-media-play { position: absolute; z-index: 4; left: 50%; top: 50%; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #17414a; background: rgba(255,255,255,.88); cursor: pointer; pointer-events: auto; transform: translate(-50%, -50%); }
 .media-flip-controls { display: grid; gap: 5px; margin: 8px 0; }
 .media-playback-controls { display: grid; gap: 6px; margin: 8px 0 12px; padding: 8px; border: 1px solid rgba(23,65,74,.12); background: rgba(247,255,255,.72); }
 .operation-progress { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 12px; padding: 7px 9px; color: #17414a; background: #e3f4f2; border: 1px solid #b7ded8; font-size: 12px; }

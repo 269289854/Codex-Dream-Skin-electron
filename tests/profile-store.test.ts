@@ -26,7 +26,8 @@ describe('ProfileStore', () => {
     expect(activated.name).toBe('中文主题')
     expect((await store.list()).find((item) => item.id === created.id)?.active).toBe(true)
     const originalPlacement = activated.polaroid.placement
-    const moved = await store.updatePolaroidPlacement(created.id, { x: 0.24, y: 0.68 })
+    activated.polaroid.placement = { ...originalPlacement, x: 0.24, y: 0.68 }
+    const moved = await store.update(activated)
     expect(moved.polaroid.placement).toEqual({ ...originalPlacement, x: 0.24, y: 0.68 })
     expect(moved.name).toBe('中文主题')
     expect(() => store.resolveAsset(created.id, '../outside.png')).toThrow('escapes')

@@ -91,12 +91,19 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
     </main>`
 }
 
+type RuntimeMediaConfig = {
+  kind: 'image' | 'video'
+  transform: ThemeProfile['hero']['mediaTransform']
+  playback?: ThemeProfile['hero']['playback']
+  mimeType?: string
+}
+
 function inject(window: Window, icons: Record<string, { name?: string; dataUrl?: string }> = {
   cardPrimary: { name: 'wand-sparkles' },
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: { kind: 'image' | 'video'; transform: ThemeProfile['hero']['mediaTransform'] } | null; polaroid: { kind: 'image' | 'video'; transform: ThemeProfile['polaroid']['mediaTransform'] } | null } = { hero: null, polaroid: null }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null } = { hero: null, polaroid: null }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -118,8 +125,8 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   window.eval(payload)
 }
 
-function stateOf(window: Window): { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown; applyPolaroidPlacement: (update: unknown) => boolean } {
-  const state = (window as unknown as Record<string, { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown; applyPolaroidPlacement: (update: unknown) => boolean } | undefined>).__CODEX_DREAM_SKIN_STATE__
+function stateOf(window: Window): { ensure: () => void; cleanup: () => void } {
+  const state = (window as unknown as Record<string, { ensure: () => void; cleanup: () => void } | undefined>).__CODEX_DREAM_SKIN_STATE__
   if (!state) throw new Error('Renderer injection state was not installed.')
   return state
 }
@@ -205,7 +212,7 @@ describe('renderer home DOM adaptation', () => {
     expect(projectAction?.classList.contains('dream-sidebar-project-row')).toBe(false)
   })
 
-  it('drags the polaroid within the shell and exposes the final position once', () => {
+  it('drags the polaroid within the shell without creating a preview update', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')
     inject(window)
@@ -244,17 +251,14 @@ describe('renderer home DOM adaptation', () => {
 
     expect(polaroid.style.getPropertyValue('left')).toBe('80%')
     expect(Number.parseFloat(polaroid.style.getPropertyValue('top'))).toBeCloseTo(460 / 700 * 100)
-    const update = stateOf(window).takePlacementUpdate()
-    expect(update).toEqual({ themeId, x: 0.8, y: 460 / 700 })
-    expect(stateOf(window).takePlacementUpdate()).toBeNull()
-    expect(stateOf(window).applyPolaroidPlacement({ themeId, x: 0.22, y: 0.31 })).toBe(true)
-    expect(polaroid.style.getPropertyValue('left')).toBe('22%')
-    expect(polaroid.style.getPropertyValue('top')).toBe('31%')
+    const state = (window as unknown as { __CODEX_DREAM_SKIN_STATE__?: Record<string, unknown> }).__CODEX_DREAM_SKIN_STATE__
+    expect(state?.takePlacementUpdate).toBeUndefined()
+    expect(state?.applyPolaroidPlacement).toBeUndefined()
     chrome.remove()
     stateOf(window).ensure()
     const restoredPolaroid = window.document.querySelector('.dream-polaroid') as unknown as HTMLElement | null
-    expect(restoredPolaroid?.style.getPropertyValue('left')).toBe('22%')
-    expect(restoredPolaroid?.style.getPropertyValue('top')).toBe('31%')
+    expect(restoredPolaroid?.style.getPropertyValue('left')).toBe('80%')
+    expect(Number.parseFloat(restoredPolaroid?.style.getPropertyValue('top') ?? '')).toBeCloseTo(460 / 700 * 100)
     expect(capturedPointer).toBeNull()
     expect(polaroid.classList.contains('dream-polaroid-dragging')).toBe(false)
   })
@@ -651,6 +655,73 @@ describe('renderer home DOM adaptation', () => {
     expect(hero?.firstElementChild).not.toBe(heroVideo)
     expect(hero?.firstElementChild?.classList.contains('hero-host')).toBe(true)
     expect(hero?.querySelectorAll(':scope > .dream-hero-video')).toHaveLength(1)
+  })
+
+  it('starts bound polaroid video and retries autoplay when the media becomes playable', async () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const play = vi.fn(() => Promise.resolve())
+    const load = vi.fn()
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'load', { configurable: true, value: load })
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: null,
+      polaroid: {
+        kind: 'video',
+        mimeType: 'video/mp4',
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        transform: { flipHorizontal: false, flipVertical: false }
+      }
+    })
+
+    const inputIds = (window as unknown as { __CODEX_DREAM_SKIN_PREPARE_MEDIA__: () => Record<string, string> }).__CODEX_DREAM_SKIN_PREPARE_MEDIA__()
+    const input = window.document.getElementById(inputIds.polaroid ?? '')
+    if (!(input instanceof window.HTMLInputElement)) throw new Error('Polaroid media input fixture is missing.')
+    Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['video'], 'polaroid.mp4', { type: 'video/mp4' })] })
+    ;(window as unknown as { __CODEX_DREAM_SKIN_ATTACH_MEDIA__: () => boolean }).__CODEX_DREAM_SKIN_ATTACH_MEDIA__()
+
+    const video = window.document.querySelector('.dream-polaroid-video')
+    if (!(video instanceof window.HTMLVideoElement)) throw new Error('Polaroid video fixture is missing.')
+    expect(load).toHaveBeenCalledTimes(1)
+    expect(play).toHaveBeenCalled()
+    expect(video.muted).toBe(true)
+    expect(video.loop).toBe(true)
+    expect(video.volume).toBe(0.7)
+
+    const firstVideo = video
+    const callsBeforeCanPlay = play.mock.calls.length
+    video.dispatchEvent(new window.Event('canplay'))
+    expect(play.mock.calls.length).toBeGreaterThan(callsBeforeCanPlay)
+    stateOf(window).ensure()
+    expect(window.document.querySelector('.dream-polaroid-video')).toBe(firstVideo)
+    expect(load).toHaveBeenCalledTimes(1)
+    const polaroid = video.closest('.dream-polaroid') as HTMLElement | null
+    if (!polaroid) throw new Error('Polaroid drag fixture is missing.')
+    Object.defineProperties(polaroid, {
+      offsetLeft: { configurable: true, value: 700 },
+      offsetTop: { configurable: true, value: 120 },
+      offsetWidth: { configurable: true, value: 200 },
+      offsetHeight: { configurable: true, value: 160 }
+    })
+    let capturedPointer: number | null = null
+    polaroid.setPointerCapture = (pointerId: number) => { capturedPointer = pointerId }
+    polaroid.hasPointerCapture = (pointerId: number) => capturedPointer === pointerId
+    polaroid.releasePointerCapture = () => { capturedPointer = null }
+    const pointer = (clientX: number, clientY: number): PointerEvent => ({
+      button: 0,
+      pointerId: 9,
+      clientX,
+      clientY,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn()
+    }) as unknown as PointerEvent
+
+    play.mockClear()
+    polaroid.onpointerdown?.(pointer(720, 140))
+    polaroid.onpointermove?.(pointer(740, 160))
+    polaroid.onpointerup?.(pointer(740, 160))
+    expect(play).toHaveBeenCalled()
+    await Promise.resolve()
   })
 
   it('reuses a native heading project button when Codex renders one', () => {

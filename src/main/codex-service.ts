@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { CodexDetection, PolaroidPlacementUpdate, RuntimePhase, RuntimeStatus } from '../shared/contracts'
+import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
 import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
@@ -50,8 +50,7 @@ export class CodexService {
   constructor(
     private readonly store: ProfileStore,
     private readonly resourcesRoot: string,
-    private readonly onStatus: (status: RuntimeStatus) => void,
-    private readonly onPolaroidPlacement: (update: PolaroidPlacementUpdate) => void = () => undefined
+    private readonly onStatus: (status: RuntimeStatus) => void
   ) {}
 
   getStatus(): RuntimeStatus { return { ...this.status } }
@@ -230,8 +229,7 @@ export class CodexService {
         this.status.message = 'Codex 会话中断，正在尝试恢复'
         this.emit()
         void this.recoverActiveSession()
-      },
-      (update) => this.queuePolaroidPlacement(update)
+      }
     )
     this.watcher.setPayload(payload)
     if (this.activeThemeId) this.watcher.setMediaBindings(await this.store.getRuntimeMediaBindings(this.activeThemeId))
@@ -276,32 +274,6 @@ export class CodexService {
         copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
         actions: HOME_ACTIONS
       }))
-  }
-
-  private queuePolaroidPlacement(update: PolaroidPlacementUpdate): void {
-    void this.enqueueOperation(async () => {
-      if (!this.activeThemeId || update.themeId !== this.activeThemeId) return
-      const current = await this.store.get(update.themeId)
-      const placement = current.polaroid.placement
-      if (Math.abs(placement.x - update.x) < 0.000001 && Math.abs(placement.y - update.y) < 0.000001) return
-
-      const saved = await this.store.updatePolaroidPlacement(update.themeId, { x: update.x, y: update.y })
-      const savedUpdate = { themeId: saved.id, x: saved.polaroid.placement.x, y: saved.polaroid.placement.y }
-      this.onPolaroidPlacement(savedUpdate)
-
-      const payload = await this.buildPayload(saved.id)
-      await this.writeRuntimePayload(payload)
-      const watcher = this.watcher
-      if (watcher && this.activeThemeId === saved.id) {
-        watcher.setPayload(payload)
-        await watcher.syncPolaroidPlacement(savedUpdate)
-        this.patch('active', '拍立得位置已保存并同步')
-      }
-    }).catch((reason) => {
-      this.status.lastError = reason instanceof Error ? reason.message : String(reason)
-      this.status.message = '拍立得位置保存失败'
-      this.emit()
-    })
   }
 
   private async writeRuntimePayload(payload: string): Promise<void> {

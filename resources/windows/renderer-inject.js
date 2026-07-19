@@ -9,12 +9,6 @@
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
-  let pendingPlacementUpdate = null;
-  const takePlacementUpdate = () => {
-    const update = pendingPlacementUpdate;
-    pendingPlacementUpdate = null;
-    return update;
-  };
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
   const builtinGlyphs = themeConfig?.builtinGlyphs || {};
@@ -358,10 +352,24 @@
         video.parentElement?.appendChild(button);
       }
     };
-    video.onpause = () => { if (video.ended) showPlayButton(); };
+    const resumeAutoplay = () => {
+      if (!video.isConnected || document.hidden || video.dataset.dreamAutoplay !== "true") return;
+      void video.play().catch(showPlayButton);
+    };
+    video.onpause = () => {
+      if (video.ended && !video.loop) showPlayButton();
+      else if (playback?.autoplay && !document.hidden) setTimeout(resumeAutoplay, 0);
+    };
+    video.onloadeddata = () => { if (playback?.autoplay && !document.hidden) void video.play().catch(showPlayButton); };
+    video.oncanplay = () => { if (playback?.autoplay && !document.hidden) void video.play().catch(showPlayButton); };
     video.dataset.dreamAutoplay = playback?.autoplay ? "true" : "false";
     if (!playback?.autoplay) showPlayButton();
     return showPlayButton;
+  };
+  const resumePolaroidVideo = (polaroid) => {
+    const video = polaroid?.querySelector?.(".dream-polaroid-video");
+    if (!(video instanceof HTMLVideoElement) || video.dataset.dreamAutoplay !== "true" || document.hidden) return;
+    void video.play().catch(() => undefined);
   };
   const keepHeroMediaOutOfLayoutAnchor = (hero, media) => {
     if (hero.firstElementChild === media) hero.appendChild(media);
@@ -385,10 +393,14 @@
         hero.appendChild(video);
       }
       keepHeroMediaOutOfLayoutAnchor(hero, video);
-      if (video.src !== mediaUrls.hero) video.src = mediaUrls.hero || "";
+      const sourceChanged = video.src !== (mediaUrls.hero || "");
+      if (sourceChanged) {
+        video.src = mediaUrls.hero || "";
+        video.load();
+      }
       video.style.transform = mediaTransform(mediaConfig.hero.transform);
       const showPlayButton = configureVideo(video, mediaConfig.hero.playback);
-      if (mediaConfig.hero.playback?.autoplay) video.play().catch(showPlayButton);
+      if (mediaConfig.hero.playback?.autoplay && !document.hidden) video.play().catch(showPlayButton);
       return;
     }
     video?.remove();
@@ -420,10 +432,14 @@
       video.setAttribute("aria-hidden", "true");
       surface.appendChild(video);
     }
-    if (video.src !== mediaUrls.polaroid) video.src = mediaUrls.polaroid;
+    const sourceChanged = video.src !== mediaUrls.polaroid;
+    if (sourceChanged) {
+      video.src = mediaUrls.polaroid;
+      video.load();
+    }
     video.style.transform = mediaTransform(mediaConfig.polaroid.transform);
     const showPlayButton = configureVideo(video, mediaConfig.polaroid.playback);
-    if (mediaConfig.polaroid.playback?.autoplay) video.play().catch(showPlayButton);
+    if (mediaConfig.polaroid.playback?.autoplay && !document.hidden) video.play().catch(showPlayButton);
   };
 
   const isVisible = (node) => {
@@ -512,9 +528,7 @@
       if (polaroid.hasPointerCapture?.(completed.pointerId)) polaroid.releasePointerCapture(completed.pointerId);
       event?.preventDefault?.();
       event?.stopPropagation?.();
-      if (completed.moved && themeId) {
-        pendingPlacementUpdate = { themeId, x: completed.x, y: completed.y };
-      }
+      resumePolaroidVideo(polaroid);
     };
 
     polaroid.onpointerdown = (event) => {
@@ -540,7 +554,6 @@
         maxTop: Math.max(0, shellHeight - photoHeight),
         x: clamp(startLeft / shellWidth, 0, 1),
         y: clamp(startTop / shellHeight, 0, 1),
-        moved: false,
       };
       polaroid.classList.add("dream-polaroid-dragging");
       polaroid.setPointerCapture?.(event.pointerId);
@@ -554,7 +567,6 @@
       const top = clamp(drag.startTop + event.clientY - drag.startClientY, 0, drag.maxTop);
       drag.x = left / drag.shellWidth;
       drag.y = top / drag.shellHeight;
-      drag.moved = drag.moved || left !== drag.startLeft || top !== drag.startTop;
       livePolaroidPlacement = { x: drag.x, y: drag.y };
       setPolaroidPlacement(polaroid, drag.x, drag.y);
       event.preventDefault();
@@ -564,18 +576,6 @@
     polaroid.onpointerup = finishDrag;
     polaroid.onpointercancel = finishDrag;
     polaroid.onlostpointercapture = finishDrag;
-  };
-
-  const applyPolaroidPlacement = (update) => {
-    if (!update || update.themeId !== themeConfig?.themeId) return false;
-    const x = Number(update.x);
-    const y = Number(update.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
-    livePolaroidPlacement = { x, y };
-    const polaroid = document.getElementById(CHROME_ID)?.querySelector(":scope > .dream-polaroid");
-    if (!(polaroid instanceof HTMLElement)) return false;
-    setPolaroidPlacement(polaroid, x, y);
-    return true;
   };
 
   const findHomeContext = () => {
@@ -1055,14 +1055,12 @@
     ensure,
     cleanup,
     populateComposer,
-    takePlacementUpdate,
     observer,
     resizeHandler,
     timer,
     scheduler,
     artUrl,
     mediaUrls,
-    applyPolaroidPlacement,
     visibilityHandler,
     version: VERSION,
   };

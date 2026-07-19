@@ -19,12 +19,7 @@ const api: StudioApi = {
     update: (profile) => ipcRenderer.invoke('themes:update', profile),
     delete: (id) => ipcRenderer.invoke('themes:delete', id),
     activate: (id) => ipcRenderer.invoke('themes:activate', id),
-    compile: (id) => ipcRenderer.invoke('themes:compile', id),
-    subscribePolaroidPlacement: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, update: Parameters<typeof listener>[0]) => listener(update)
-      ipcRenderer.on('themes:polaroid-placement', handler)
-      return () => ipcRenderer.removeListener('themes:polaroid-placement', handler)
-    }
+    compile: (id) => ipcRenderer.invoke('themes:compile', id)
   },
   assets: {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),

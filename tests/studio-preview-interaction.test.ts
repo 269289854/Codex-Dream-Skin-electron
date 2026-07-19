@@ -88,8 +88,7 @@ describe('Studio preview editing interaction', () => {
         },
         delete: async () => undefined,
         activate: activateTheme,
-        compile: async () => ({ css: '', rendererPayload: '', assets: { 'assets/polaroid.png': 'data:image/png;base64,AA==' } }),
-        subscribePolaroidPlacement: () => () => undefined
+        compile: async () => ({ css: '', rendererPayload: '', assets: { 'assets/polaroid.png': 'data:image/png;base64,AA==' } })
       },
     assets: {
       selectImage: async () => null,
