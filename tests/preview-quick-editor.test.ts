@@ -50,12 +50,16 @@ describe('preview quick editor', () => {
     target: PreviewTargetDefinition,
     profile: ThemeProfile,
     onMore = vi.fn(),
-    onChange = (mutator: (next: ThemeProfile) => void): void => mutator(profile)
+    onChange = (mutator: (next: ThemeProfile) => void): void => mutator(profile),
+    heroUrl?: string,
+    polaroidUrl?: string
   ): void => {
     act(() => root.render(createElement(PreviewQuickEditor, {
       target,
       profile,
       assets: {},
+      heroUrl,
+      polaroidUrl,
       position: { left: 20, top: 30, placement: 'right' },
       popoverRef: createRef<HTMLDivElement>(),
       onChange,
@@ -186,6 +190,29 @@ describe('preview quick editor', () => {
     act(() => fenceButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(profile.polaroid.mode).toBe('fence')
     expect(profile.polaroid.fence).toEqual(originalFence)
+  })
+
+  it('edits independent hero media flip settings', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    profile.hero.source = { asset: 'assets/hero.png', kind: 'image', mimeType: 'image/png' }
+    renderEditor(PREVIEW_TARGETS.hero, profile, vi.fn(), (mutator) => mutator(profile), 'hero.png')
+    const toggles = container.querySelectorAll<HTMLInputElement>('.media-flip-controls .toggle-row input')
+    expect(toggles).toHaveLength(2)
+    act(() => { toggles[0]?.click(); toggles[1]?.click() })
+    expect(profile.hero.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: true })
+    expect(profile.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
+  })
+
+  it('edits polaroid media flip settings without changing frame geometry', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    profile.polaroid.source = { asset: 'assets/photo.gif', kind: 'image', mimeType: 'image/gif' }
+    const placement = { ...profile.polaroid.placement }
+    renderEditor(PREVIEW_TARGETS.polaroid, profile, vi.fn(), (mutator) => mutator(profile), undefined, 'photo.gif')
+    const toggles = container.querySelectorAll<HTMLInputElement>('.media-flip-controls .toggle-row input')
+    expect(toggles).toHaveLength(2)
+    act(() => toggles[0]?.click())
+    expect(profile.polaroid.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: false })
+    expect(profile.polaroid.placement).toEqual(placement)
   })
 
   it('edits particle effects, independent materials, speed, and visibility from one target', () => {

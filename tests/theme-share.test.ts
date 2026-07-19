@@ -30,6 +30,8 @@ describe('theme share packages', () => {
     draft.copy.brandTitle = '尚未保存的分享标题'
     draft.hero.sourceImage = image.relativePath
     draft.polaroid.sourceImage = image.relativePath
+    draft.hero.mediaTransform = { flipHorizontal: true, flipVertical: false }
+    draft.polaroid.mediaTransform = { flipHorizontal: false, flipVertical: true }
     draft.icons.branding = { kind: 'asset', asset: image.relativePath }
     draft.typography.importedFonts.push({ id: font.id, family: font.family, asset: font.relativePath, originalName: font.originalName, format: font.format })
     draft.typography.slots.brandTitle = { kind: 'imported', id: font.id }
@@ -45,11 +47,41 @@ describe('theme share packages', () => {
     expect(imported.id).not.toBe(original.id)
     expect(imported.name).toBe(draft.name)
     expect(imported.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: false })
+    expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: true })
     expect(Date.parse(imported.updatedAt)).toBeGreaterThanOrEqual(Date.parse(original.updatedAt))
     expect((await store.get(original.id)).copy.brandTitle).not.toBe(imported.copy.brandTitle)
     expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await store.compile(imported.id)).assets[font.relativePath]).toBe(font.dataUrl)
     expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
+  })
+
+  it('imports v11 share packages with neutral flip defaults', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-v11-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const original = await store.create('旧分享主题')
+    const source = join(root, 'hero.png')
+    await writeFile(source, png)
+    const image = await store.importAsset(original.id, source, 'hero')
+    const current = structuredClone(original)
+    current.hero.sourceImage = image.relativePath
+    const { mediaTransform: _heroTransform, ...hero } = current.hero
+    const { mediaTransform: _polaroidTransform, ...polaroid } = current.polaroid
+    const legacy = { ...current, version: 11, hero, polaroid }
+    const packagePath = join(root, 'v11.cdstheme')
+    await store.exportSharePackage(legacy, packagePath)
+    const archive = unzipSync(await readFile(packagePath))
+    const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as { profileVersion: number }
+    manifest.profileVersion = 11
+    archive['theme.json'] = Buffer.from(JSON.stringify(legacy))
+    await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
+
+    const imported = await store.importSharePackage(packagePath)
+    expect(imported.version).toBe(12)
+    expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
+    expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
   })
 
   it('rejects altered manifests without creating a theme', async () => {

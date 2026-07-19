@@ -22,7 +22,8 @@ import {
   assertSharePath,
   collectThemeAssets,
   encodeJson,
-  parseThemeShareManifest
+  parseThemeShareManifest,
+  shareProfileVersionMatches
 } from './theme-share'
 
 interface StudioSettings {
@@ -191,10 +192,7 @@ export class ProfileStore {
       const manifest = parseThemeShareManifest(manifestInput)
       const source = parseThemeProfile(themeInput)
       this.validateProfileAssetReferences(source)
-      const profileVersionMatches = manifest.version === 1
-        ? (manifest.profileVersion === source.version || (manifest.profileVersion === 10 && source.version === 11))
-        : manifest.profileVersion === source.version
-      if (manifest.themeName !== source.name || !profileVersionMatches) throw new Error('分享包清单与主题配置不一致。')
+      if (manifest.themeName !== source.name || !shareProfileVersionMatches(manifest, themeInput, source.version)) throw new Error('分享包清单与主题配置不一致。')
       const listed = new Map(manifest.assets.map((asset) => [asset.path, asset]))
       const referenced = collectThemeAssets(source)
       if (referenced.length !== listed.size || referenced.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')

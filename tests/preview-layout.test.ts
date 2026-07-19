@@ -20,7 +20,8 @@ describe('Studio home preview', () => {
         left: '32%',
         top: '68%',
         transform: 'translate(-32%, -68%)'
-      }
+      },
+      mediaStyle: { transform: 'scaleX(1) scaleY(1)' }
     })
   })
 

@@ -29,7 +29,7 @@ const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(11),
+  profileVersion: z.number().int().min(0).max(12),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -81,6 +81,13 @@ export function parseThemeShareManifest(input: unknown): ThemeShareManifest {
     }
   }
   return manifest
+}
+
+export function shareProfileVersionMatches(manifest: ThemeShareManifest, serializedProfile: unknown, parsedVersion: number): boolean {
+  if (!serializedProfile || typeof serializedProfile !== 'object' || !('version' in serializedProfile)) return false
+  const serializedVersion = serializedProfile.version
+  if (typeof serializedVersion !== 'number' || manifest.profileVersion !== serializedVersion) return false
+  return serializedVersion === parsedVersion || (parsedVersion === 12 && (serializedVersion === 10 || serializedVersion === 11))
 }
 
 export function assertSharePath(path: string): void {
@@ -185,10 +192,7 @@ export function validateShareContents(entries: Map<string, Buffer>): { profile: 
   const manifest = parseThemeShareManifest(manifestInput)
   const profile = parseThemeProfile(themeInput)
   validateThemeAssetReferences(profile)
-  const profileVersionMatches = manifest.version === 1
-    ? (manifest.profileVersion === profile.version || (manifest.profileVersion === 10 && profile.version === 11))
-    : manifest.profileVersion === profile.version
-  if (manifest.themeName !== profile.name || !profileVersionMatches) throw new Error('分享包清单与主题配置不一致。')
+  if (manifest.themeName !== profile.name || !shareProfileVersionMatches(manifest, themeInput, profile.version)) throw new Error('分享包清单与主题配置不一致。')
   const listed = new Map(manifest.assets.map((asset) => [asset.path, asset]))
   const referenced = collectThemeAssets(profile)
   if (referenced.length !== listed.size || referenced.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')

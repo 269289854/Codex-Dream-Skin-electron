@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { mediaFlipCssTransform } from '../../shared/media'
 import type { ThemeProfile } from '../../shared/theme'
 
 export const PREVIEW_HOME_CONTEXT = {
@@ -26,6 +27,7 @@ export const PREVIEW_HERO_FALLBACK = 'linear-gradient(135deg, #d9fbfc, #fff4fb 5
 export interface PreviewHeroImageProps {
   src: string
   style: CSSProperties
+  mediaStyle: CSSProperties
   kind: 'image' | 'video'
   playback: ThemeProfile['hero']['playback']
 }
@@ -41,7 +43,8 @@ export function buildPreviewHeroImageProps(heroUrl: string | undefined, hero: Th
       left: `${x}%`,
       top: `${y}%`,
       transform: `translate(-${x}%, -${y}%)`
-    }
+    },
+    mediaStyle: { transform: mediaFlipCssTransform(hero.mediaTransform) }
   } as PreviewHeroImageProps
   Object.defineProperties(props, {
     kind: { value: hero.source?.kind ?? 'image', enumerable: false },

@@ -13,10 +13,12 @@ import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
+import { mediaFlipCssTransform } from '../../shared/media'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls } from './DecorationControls'
 import { FenceEditor } from './FenceEditor'
+import { MediaFlipControls } from './MediaFlipControls'
 import { PolaroidControls } from './PolaroidControls'
 import { PolaroidPreview } from './PolaroidPreview'
 import { ParticleEffectControls } from './ParticleEffectControls'
@@ -661,9 +663,11 @@ export function App(): React.JSX.Element {
                   {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
-                        ? heroImage.kind === 'video'
-                          ? <video ref={(element) => { if (element) element.volume = heroImage.playback.volume }} className="preview-hero-art" src={heroImage.src} style={heroImage.style} autoPlay={heroImage.playback.autoplay} loop={heroImage.playback.loop} muted={!heroImage.playback.sound} controls={!heroImage.playback.autoplay} playsInline />
-                          : <img className="preview-hero-art" src={heroImage.src} style={heroImage.style} alt="" draggable={false} />
+                        ? <div className="preview-hero-art-frame" style={heroImage.style}>
+                          {heroImage.kind === 'video'
+                            ? <video ref={(element) => { if (element) element.volume = heroImage.playback.volume }} className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} autoPlay={heroImage.playback.autoplay} loop={heroImage.playback.loop} muted={!heroImage.playback.sound} controls={!heroImage.playback.autoplay} playsInline />
+                            : <img className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} alt="" draggable={false} />}
+                        </div>
                         : <div className="preview-hero-fallback" aria-hidden="true" />}
                       <div className="dream-heading-region" data-preview-target="copy-heading">
                         <h1 className="dream-heading">
@@ -688,7 +692,7 @@ export function App(): React.JSX.Element {
                       <PreviewComposer profile={draft} assets={assets} />
                     </div>
                   </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
@@ -727,8 +731,9 @@ export function App(): React.JSX.Element {
               {homeCopyValidationError && <p className="field-error">{homeCopyValidationError}</p>}
             </Property>
             <Property title="主视觉" anchor="visual-hero" highlighted={inspectorAnchor === 'visual-hero'}>
-              <button className="asset-picker" disabled={mediaBusy} onClick={() => void selectImage('hero')}>{heroUrl ? (draft.hero.source?.kind === 'video' ? <video src={heroUrl} muted playsInline /> : <img src={heroUrl} alt="主视觉" />) : <Image size={20} />}<span><Upload size={13} />选择主视觉媒体</span></button>
+              <button className="asset-picker" disabled={mediaBusy} onClick={() => void selectImage('hero')}>{heroUrl ? (draft.hero.source?.kind === 'video' ? <video src={heroUrl} muted playsInline style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />选择主视觉媒体</span></button>
               {draft.hero.source?.kind === 'video' && <div className="media-playback-controls"><label className="toggle-row"><span>自动播放</span><input type="checkbox" checked={draft.hero.playback.autoplay} onChange={(event) => { const autoplay = event.currentTarget.checked; change((profile) => { profile.hero.playback.autoplay = autoplay }) }} /></label><label className="toggle-row"><span>循环播放</span><input type="checkbox" checked={draft.hero.playback.loop} onChange={(event) => { const loop = event.currentTarget.checked; change((profile) => { profile.hero.playback.loop = loop }) }} /></label><label className="toggle-row"><span>声音</span><input type="checkbox" checked={draft.hero.playback.sound} onChange={(event) => { const sound = event.currentTarget.checked; change((profile) => { profile.hero.playback.sound = sound; if (sound) profile.polaroid.playback.sound = false }) }} /></label><Range label="音量" min={0} max={1} step={.01} value={draft.hero.playback.volume} disabled={!draft.hero.playback.sound} onChange={(value) => change((profile) => { profile.hero.playback.volume = value }, 'hero-volume')} /></div>}
+              {draft.hero.source && heroUrl && <MediaFlipControls value={draft.hero.mediaTransform} onChange={(field, value) => change((profile) => { profile.hero.mediaTransform[field] = value })} />}
               <Range label="缩放" min={.5} max={3} step={.01} value={draft.hero.scale} onChange={(value) => change((profile) => { profile.hero.scale = value })} />
               <Range label="水平位置" min={0} max={1} step={.01} value={draft.hero.position.x} onChange={(value) => change((profile) => { profile.hero.position.x = value })} />
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />

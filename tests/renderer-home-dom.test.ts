@@ -96,13 +96,14 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles)): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: { kind: 'image' | 'video'; transform: ThemeProfile['hero']['mediaTransform'] } | null; polaroid: { kind: 'image' | 'video'; transform: ThemeProfile['polaroid']['mediaTransform'] } | null } = { hero: null, polaroid: null }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
     .replace('__DREAM_ART_JSON__', JSON.stringify('data:image/png;base64,AA=='))
     .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
       themeId,
+      media,
       icons,
       composerBadge,
       decorations,
@@ -566,6 +567,21 @@ describe('renderer home DOM adaptation', () => {
 
     stateOf(window).cleanup()
     expect(window.document.getElementById('codex-dream-skin-chrome')).toBeNull()
+  })
+
+  it('applies hero media flips to an isolated layer and cleans it up', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: { kind: 'image', transform: { flipHorizontal: true, flipVertical: false } },
+      polaroid: null
+    })
+
+    const heroImage = window.document.querySelector('.dream-hero-image') as HTMLElement | null
+    expect(heroImage?.style.transform).toBe('scaleX(-1) scaleY(1)')
+    expect(window.document.querySelector('.dream-heading-region')).not.toBeNull()
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-hero-image')).toBeNull()
   })
 
   it('reuses a native heading project button when Codex renders one', () => {

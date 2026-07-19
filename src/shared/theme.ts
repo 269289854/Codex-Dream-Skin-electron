@@ -161,6 +161,11 @@ const videoPlaybackSchema = z.object({
   volume: normalized
 }).strict()
 
+const mediaTransformSchema = z.object({
+  flipHorizontal: z.boolean(),
+  flipVertical: z.boolean()
+}).strict()
+
 export type MediaReference = z.infer<typeof mediaReferenceSchema>
 export type VideoPlayback = z.infer<typeof videoPlaybackSchema>
 
@@ -217,7 +222,7 @@ const versionTenThemeSchema = z.object({
   typography: themeTypographySchema
 }).strict()
 
-const currentHeroSchema = z.object({
+const versionElevenHeroSchema = z.object({
   source: mediaReferenceSchema.nullable(),
   focus: pointSchema,
   scale: z.number().finite().min(0.5).max(3),
@@ -225,7 +230,7 @@ const currentHeroSchema = z.object({
   playback: videoPlaybackSchema
 }).strict()
 
-const currentPolaroidMediaSchema = z.object({
+const versionElevenPolaroidMediaSchema = z.object({
   mode: polaroidModeSchema.default('fence'),
   visible: z.boolean().default(true),
   source: mediaReferenceSchema.nullable(),
@@ -242,10 +247,33 @@ const currentPolaroidMediaSchema = z.object({
   playback: videoPlaybackSchema
 }).strict()
 
-export const themeProfileSchema = z.object({
+const versionElevenThemeSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   version: z.literal(11),
+  updatedAt: z.string().datetime(),
+  hero: versionElevenHeroSchema,
+  polaroid: versionElevenPolaroidMediaSchema,
+  colors: colorsSchema,
+  copy: themeCopySchema,
+  icons: currentParticleIconsSchema,
+  composerBadge: composerBadgeSchema,
+  decorations: decorationsSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+const currentHeroSchema = versionElevenHeroSchema.extend({ mediaTransform: mediaTransformSchema }).strict()
+const currentPolaroidMediaSchema = versionElevenPolaroidMediaSchema.extend({ mediaTransform: mediaTransformSchema }).strict()
+
+export const themeProfileSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(80),
+  version: z.literal(12),
   updatedAt: z.string().datetime(),
   hero: currentHeroSchema,
   polaroid: currentPolaroidMediaSchema,
@@ -369,7 +397,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 11,
+    version: 12,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
@@ -377,7 +405,8 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       focus: { x: 0.62, y: 0.42 },
       scale: 1,
       position: { x: 0.5, y: 0.5 },
-      playback: createDefaultVideoPlayback()
+      playback: createDefaultVideoPlayback(),
+      mediaTransform: createDefaultMediaTransform()
     },
     polaroid: {
       mode: 'full',
@@ -392,7 +421,8 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       ],
       placement: { x: 0.72, y: 0.2, width: 0.22, rotation: 3, hideBelowWidth: 920 },
       style: createDefaultPolaroidStyle(),
-      playback: createDefaultVideoPlayback()
+      playback: createDefaultVideoPlayback(),
+      mediaTransform: createDefaultMediaTransform()
     },
     colors: {
       surface: '#F7FFFF',
@@ -434,24 +464,19 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     const polaroid = legacy.polaroid && typeof legacy.polaroid === 'object' ? legacy.polaroid as Record<string, unknown> : null
     if (hero && !('sourceImage' in hero)) hero.sourceImage = hero.source && typeof hero.source === 'object' && typeof (hero.source as Record<string, unknown>).asset === 'string' ? (hero.source as Record<string, unknown>).asset : null
     if (polaroid && !('sourceImage' in polaroid)) polaroid.sourceImage = polaroid.source && typeof polaroid.source === 'object' && typeof (polaroid.source as Record<string, unknown>).asset === 'string' ? (polaroid.source as Record<string, unknown>).asset : null
-    if (hero) { delete hero.source; delete hero.playback; legacy.hero = hero }
-    if (polaroid) { delete polaroid.source; delete polaroid.playback; legacy.polaroid = polaroid }
+    if (hero) { delete hero.source; delete hero.playback; delete hero.mediaTransform; legacy.hero = hero }
+    if (polaroid) { delete polaroid.source; delete polaroid.playback; delete polaroid.mediaTransform; legacy.polaroid = polaroid }
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 11) {
-    const candidate = structuredClone(input) as Record<string, unknown>
-    const hero = candidate.hero && typeof candidate.hero === 'object' ? candidate.hero as Record<string, unknown> : null
-    const polaroid = candidate.polaroid && typeof candidate.polaroid === 'object' ? polaroidRecord(candidate.polaroid) : null
-    if (hero && (!hero.source || !('source' in hero)) && typeof hero.sourceImage === 'string') hero.source = inferLegacyMediaReference(hero.sourceImage)
-    if (hero) delete hero.sourceImage
-    if (polaroid && (!polaroid.source || !('source' in polaroid)) && typeof polaroid.sourceImage === 'string') polaroid.source = inferLegacyMediaReference(polaroid.sourceImage)
-    if (polaroid) delete polaroid.sourceImage
-    if (hero) candidate.hero = hero
-    if (polaroid) candidate.polaroid = polaroid
+  if (input && typeof input === 'object' && 'version' in input && input.version === 12) {
+    const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     Object.defineProperty(parsed.hero, 'sourceImage', { value: parsed.hero.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
     Object.defineProperty(parsed.polaroid, 'sourceImage', { value: parsed.polaroid.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
     return parsed
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 11) {
+    return migrateVersionEleven(versionElevenThemeSchema.parse(normalizeCurrentMediaReferences(input)))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 10) {
     return migrateVersionTen(versionTenThemeSchema.parse(input))
@@ -582,7 +607,7 @@ function migrateVersionEight(legacy: z.infer<typeof versionEightThemeSchema>): T
 
 function migrateVersionTen(legacy: z.infer<typeof versionTenThemeSchema>): ThemeProfile {
   const { sourceImage: polaroidSourceImage, ...polaroid } = legacy.polaroid
-  return themeProfileSchema.parse({
+  return migrateVersionEleven(versionElevenThemeSchema.parse({
     ...legacy,
     version: 11,
     hero: {
@@ -597,6 +622,15 @@ function migrateVersionTen(legacy: z.infer<typeof versionTenThemeSchema>): Theme
       source: polaroidSourceImage ? inferLegacyMediaReference(polaroidSourceImage) : null,
       playback: createDefaultVideoPlayback()
     }
+  }))
+}
+
+function migrateVersionEleven(legacy: z.infer<typeof versionElevenThemeSchema>): ThemeProfile {
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 12,
+    hero: { ...legacy.hero, mediaTransform: createDefaultMediaTransform() },
+    polaroid: { ...legacy.polaroid, mediaTransform: createDefaultMediaTransform() }
   })
 }
 
@@ -614,6 +648,23 @@ function inferLegacyMediaReference(asset: string): MediaReference {
 
 function polaroidRecord(value: object): Record<string, unknown> {
   return value as Record<string, unknown>
+}
+
+function normalizeCurrentMediaReferences(input: object): Record<string, unknown> {
+  const candidate = structuredClone(input) as Record<string, unknown>
+  const hero = candidate.hero && typeof candidate.hero === 'object' ? candidate.hero as Record<string, unknown> : null
+  const polaroid = candidate.polaroid && typeof candidate.polaroid === 'object' ? polaroidRecord(candidate.polaroid) : null
+  if (hero && (!hero.source || !('source' in hero)) && typeof hero.sourceImage === 'string') hero.source = inferLegacyMediaReference(hero.sourceImage)
+  if (hero) delete hero.sourceImage
+  if (polaroid && (!polaroid.source || !('source' in polaroid)) && typeof polaroid.sourceImage === 'string') polaroid.source = inferLegacyMediaReference(polaroid.sourceImage)
+  if (polaroid) delete polaroid.sourceImage
+  if (hero) candidate.hero = hero
+  if (polaroid) candidate.polaroid = polaroid
+  return candidate
+}
+
+function createDefaultMediaTransform(): z.infer<typeof mediaTransformSchema> {
+  return { flipHorizontal: false, flipVertical: false }
 }
 
 function createDefaultDecorations(): z.infer<typeof decorationsSchema> {

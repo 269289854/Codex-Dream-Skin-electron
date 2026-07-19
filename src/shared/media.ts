@@ -1,4 +1,4 @@
-import type { MediaKind, MediaMimeType, MediaReference } from './theme'
+import type { MediaKind, MediaMimeType, MediaReference, ThemeProfile } from './theme'
 
 export function mediaMimeTypeForPath(path: string): MediaMimeType {
   const lower = path.toLowerCase()
@@ -25,4 +25,8 @@ export function isVideoMedia(reference: MediaReference | null | undefined): bool
 
 export function isGifMedia(reference: MediaReference | null | undefined): boolean {
   return reference?.mimeType === 'image/gif'
+}
+
+export function mediaFlipCssTransform(transform: ThemeProfile['hero']['mediaTransform']): string {
+  return `scaleX(${transform.flipHorizontal ? -1 : 1}) scaleY(${transform.flipVertical ? -1 : 1})`
 }
