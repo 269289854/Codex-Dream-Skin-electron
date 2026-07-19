@@ -1,25 +1,28 @@
-import { randomUUID } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { copyFile, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { pipeline } from 'node:stream/promises'
+import { createRequire } from 'node:module'
 import sharp from 'sharp'
-import { zipSync } from 'fflate'
+import mediaInfoFactory, { isTrackType } from 'mediainfo.js'
+const nodeRequire = createRequire(import.meta.url)
+const archiver = nodeRequire('archiver') as typeof import('archiver')
+const yauzl = nodeRequire('yauzl') as typeof import('yauzl')
 import { createDefaultTheme, parseThemeProfile, type ThemeProfile, type ThemeSummary } from '../shared/theme'
-import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset } from '../shared/contracts'
+import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset } from '../shared/contracts'
 import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
+import { mediaMimeTypeForPath, mediaReferenceForPath } from '../shared/media'
 import {
-  MAX_SHARE_COMPRESSED_BYTES,
   MAX_SHARE_ENTRIES,
   MAX_SHARE_FONT_BYTES,
   MAX_SHARE_IMAGE_BYTES,
-  MAX_SHARE_UNCOMPRESSED_BYTES,
   assetKind,
+  assertSharePath,
   collectThemeAssets,
-  decodeShareZip,
   encodeJson,
-  parseThemeShareManifest,
-  sha256,
-  validateShareContents
+  parseThemeShareManifest
 } from './theme-share'
 
 interface StudioSettings {
@@ -36,11 +39,18 @@ interface LegacyStudioSettings {
 const MAX_ASSET_BYTES = 30 * 1024 * 1024
 const MAX_FONT_BYTES = 12 * 1024 * 1024
 const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg'])
+const MEDIA_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif'])
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm'])
 const FONT_EXTENSIONS = new Set<ImportedFontFormat>(['ttf', 'otf', 'woff', 'woff2'])
+const MIN_FREE_BYTES = 10 * 1024 * 1024 * 1024
+const MIN_FREE_RATIO = 0.15
+const MAX_VIDEO_DIMENSION = 4096
+const MAX_SHARE_METADATA_BYTES = 5 * 1024 * 1024
 
 export class ProfileStore {
   readonly themesRoot: string
   private readonly settingsPath: string
+  private readonly pendingMediaAssets = new Map<string, Set<string>>()
 
   constructor(readonly root: string, private readonly bundledDefaultAsset?: string) {
     this.themesRoot = join(root, 'themes')
@@ -101,6 +111,8 @@ export class ProfileStore {
   async duplicate(input: unknown, name: unknown): Promise<ThemeProfile> {
     const source = parseThemeProfile(input)
     await this.get(source.id)
+    await this.validateProfileMedia(source)
+    await this.validateProfileAssets(source)
     const duplicate = { ...structuredClone(source), id: randomUUID(), name: this.cleanName(name), updatedAt: new Date().toISOString() }
     const duplicateRoot = this.themeRoot(duplicate.id)
     try {
@@ -108,6 +120,9 @@ export class ProfileStore {
       for (const asset of this.collectAssets(source)) {
         const sourcePath = this.resolveAsset(source.id, asset)
         const targetPath = this.resolveAsset(duplicate.id, asset)
+        const sourceStat = await stat(sourcePath)
+        if (!sourceStat.isFile()) throw new Error(`主题素材不存在: ${asset}`)
+        await this.assertDiskSpace(duplicateRoot, sourceStat.size)
         await mkdir(dirname(targetPath), { recursive: true })
         await copyFile(sourcePath, targetPath)
       }
@@ -119,25 +134,30 @@ export class ProfileStore {
     }
   }
 
-  async exportSharePackage(input: unknown, destinationPath: unknown): Promise<void> {
+  async exportSharePackage(input: unknown, destinationPath: unknown, signal?: AbortSignal): Promise<void> {
     const profile = parseThemeProfile(input)
     await this.get(profile.id)
+    await this.validateProfileMedia(profile)
+    await this.validateProfileAssets(profile)
+    this.throwIfAborted(signal, '主题导出已取消。')
     if (typeof destinationPath !== 'string' || !isAbsolute(destinationPath)) throw new Error('分享包保存路径必须是绝对路径。')
-    const assets: Record<string, Uint8Array> = {}
-    const manifestAssets = []
-    let totalAssetBytes = 0
+    const sourceAssets = new Map<string, string>()
+    const manifestAssets: Array<{ path: string; kind: 'image' | 'video' | 'font'; size: number; sha256: string }> = []
     for (const asset of collectThemeAssets(profile)) {
+      this.throwIfAborted(signal, '主题导出已取消。')
       const sourcePath = this.resolveAsset(profile.id, asset)
-      const data = await readFile(sourcePath)
+      const sourceStat = await stat(sourcePath)
+      if (!sourceStat.isFile()) throw new Error(`主题素材不存在: ${asset}`)
       const kind = assetKind(asset)
-      await this.validateShareAsset(asset, data, kind)
-      assets[asset] = data
-      totalAssetBytes += data.byteLength
-      manifestAssets.push({ path: asset, kind, size: data.byteLength, sha256: sha256(data) })
+      if (kind === 'image' && sourceStat.size > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
+      if (kind === 'font' && sourceStat.size > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
+      await this.assertDiskSpace(dirname(destinationPath), sourceStat.size)
+      sourceAssets.set(asset, sourcePath)
+      manifestAssets.push({ path: asset, kind, size: sourceStat.size, sha256: await hashFile(sourcePath, signal) })
     }
     const manifest = {
       format: 'codex-dream-skin-theme',
-      version: 1,
+      version: 2,
       themeName: profile.name,
       profileVersion: profile.version,
       assets: manifestAssets
@@ -146,33 +166,54 @@ export class ProfileStore {
     if (manifestAssets.length + 2 > MAX_SHARE_ENTRIES) throw new Error('分享包条目数量超过限制。')
     const manifestData = encodeJson(manifest)
     const profileData = encodeJson(profile)
-    if (totalAssetBytes + manifestData.byteLength + profileData.byteLength > MAX_SHARE_UNCOMPRESSED_BYTES) throw new Error('分享包解压总量超过 1 GB 限制。')
-    assets['manifest.json'] = manifestData
-    assets['theme.json'] = profileData
-    const packageData = zipSync(assets, { level: 6 })
-    if (packageData.byteLength > MAX_SHARE_COMPRESSED_BYTES) throw new Error('分享包超过 500 MB 压缩大小限制。')
-    await this.writeBinaryAtomic(destinationPath, Buffer.from(packageData))
+    if (manifestData.byteLength + profileData.byteLength > MAX_SHARE_METADATA_BYTES) throw new Error('分享包元数据过大。')
+    await this.writeShareArchiveAtomic(destinationPath, sourceAssets, manifestData, profileData, signal)
   }
 
-  async importSharePackage(sourcePath: unknown): Promise<ThemeProfile> {
+  async importSharePackage(sourcePath: unknown, signal?: AbortSignal): Promise<ThemeProfile> {
     if (typeof sourcePath !== 'string' || !isAbsolute(sourcePath)) throw new Error('分享包路径必须是绝对路径。')
     if (extname(sourcePath).toLowerCase() !== '.cdstheme') throw new Error('请选择 .cdstheme 分享文件。')
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('分享包必须是文件。')
-    if (sourceStat.size > MAX_SHARE_COMPRESSED_BYTES) throw new Error('分享包超过 500 MB 压缩大小限制。')
-    const entries = decodeShareZip(await readFile(sourcePath))
-    const { profile: source, assets } = validateShareContents(entries)
-    for (const [asset, data] of assets) await this.validateShareAsset(asset, data, assetKind(asset))
-
-    const imported = { ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString() }
     const temporaryRoot = await mkdtemp(join(this.themesRoot, '.cdstheme-import-'))
-    const importedRoot = this.themeRoot(imported.id)
     try {
-      for (const [asset, data] of assets) {
-        const destination = this.resolveWithinRoot(temporaryRoot, asset)
-        await mkdir(dirname(destination), { recursive: true })
-        await writeFile(destination, data)
+      this.throwIfAborted(signal, '主题导入已取消。')
+      const entries = await this.extractShareArchive(sourcePath, sourceStat.size, temporaryRoot, signal)
+      this.throwIfAborted(signal, '主题导入已取消。')
+      const manifestBytes = await readFile(join(temporaryRoot, 'manifest.json'))
+      const themeBytes = await readFile(join(temporaryRoot, 'theme.json'))
+      let manifestInput: unknown
+      let themeInput: unknown
+      try {
+        manifestInput = JSON.parse(manifestBytes.toString('utf8')) as unknown
+        themeInput = JSON.parse(themeBytes.toString('utf8')) as unknown
+      } catch { throw new Error('分享包中的 JSON 文件无效。') }
+      const manifest = parseThemeShareManifest(manifestInput)
+      const source = parseThemeProfile(themeInput)
+      this.validateProfileAssetReferences(source)
+      const profileVersionMatches = manifest.version === 1
+        ? (manifest.profileVersion === source.version || (manifest.profileVersion === 10 && source.version === 11))
+        : manifest.profileVersion === source.version
+      if (manifest.themeName !== source.name || !profileVersionMatches) throw new Error('分享包清单与主题配置不一致。')
+      const listed = new Map(manifest.assets.map((asset) => [asset.path, asset]))
+      const referenced = collectThemeAssets(source)
+      if (referenced.length !== listed.size || referenced.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')
+      for (const [path, entry] of entries) {
+        this.throwIfAborted(signal, '主题导入已取消。')
+        if (path !== 'manifest.json' && path !== 'theme.json' && !listed.has(path)) throw new Error('分享包包含未列出的素材。')
+        if (path.startsWith('assets/')) {
+          const file = await stat(entry.path)
+          if (file.size !== entry.size) throw new Error(`素材大小校验失败: ${path}`)
+          const manifestAsset = listed.get(path)
+          if (!manifestAsset || manifestAsset.size !== file.size || (await hashFile(entry.path)).toLowerCase() !== manifestAsset.sha256.toLowerCase()) throw new Error(`素材校验失败: ${path}`)
+          await this.validateShareAssetFile(path, entry.path, assetKind(path))
+        }
       }
+      for (const asset of manifest.assets) if (!entries.has(asset.path)) throw new Error(`分享包缺少素材: ${asset.path}`)
+
+      const imported = { ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString() }
+      const importedRoot = this.themeRoot(imported.id)
+      this.throwIfAborted(signal, '主题导入已取消。')
       await this.writeJsonAtomic(join(temporaryRoot, 'theme.json'), imported)
       await rename(temporaryRoot, importedRoot)
       return imported
@@ -185,6 +226,8 @@ export class ProfileStore {
   async update(input: unknown): Promise<ThemeProfile> {
     const profile = parseThemeProfile(input)
     await this.get(profile.id)
+    await this.validateProfileMedia(profile)
+    await this.validateProfileAssets(profile)
     const next = { ...profile, name: this.cleanName(profile.name), updatedAt: new Date().toISOString() }
     for (const asset of this.collectAssets(next)) this.resolveAsset(next.id, asset)
     await this.writeProfile(next)
@@ -237,7 +280,7 @@ export class ProfileStore {
       this.assertSafeSvg(source)
       await sharp(Buffer.from(source)).png().toFile(destination)
     } else {
-      await sharp(sourcePath).metadata()
+      await this.inspectImage(sourcePath, extension)
       await copyFile(sourcePath, destination)
     }
 
@@ -325,6 +368,99 @@ export class ProfileStore {
     throw new Error('Studio settings are invalid.')
   }
 
+  async importMediaAsset(themeId: string, sourcePath: string, purpose: 'hero' | 'polaroid', signal?: AbortSignal): Promise<ImportedMediaAsset> {
+    await this.get(themeId)
+    if (!isAbsolute(sourcePath)) throw new Error('所选媒体路径必须是绝对路径。')
+    const sourceStat = await stat(sourcePath)
+    if (!sourceStat.isFile()) throw new Error('所选媒体必须是文件。')
+    const extension = extname(sourcePath).toLowerCase()
+    if (extension !== '.svg' && !MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('仅支持 PNG、WebP、JPEG、GIF、SVG、MP4 和 WebM。')
+    if ((extension === '.svg' || MEDIA_IMAGE_EXTENSIONS.has(extension)) && sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
+    if (signal?.aborted) throw new Error('媒体导入已取消。')
+
+    let metadata: { width: number; height: number }
+    if (VIDEO_EXTENSIONS.has(extension)) {
+      metadata = await this.inspectVideo(sourcePath, extension, sourceStat.size)
+    } else if (extension === '.svg') {
+      const source = await readFile(sourcePath, 'utf8')
+      this.assertSafeSvg(source)
+      metadata = await this.inspectImage(sourcePath, extension)
+    } else {
+      metadata = await this.inspectImage(sourcePath, extension)
+    }
+    await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
+
+    const outputExtension = extension === '.svg' ? '.png' : extension
+    const relativePath = `assets/${purpose}-${randomUUID()}${outputExtension}`
+    const destination = this.resolveAsset(themeId, relativePath)
+    const temporary = `${destination}.${randomUUID()}.tmp`
+    await mkdir(dirname(destination), { recursive: true })
+    try {
+      if (extension === '.svg') {
+        const source = await readFile(sourcePath, 'utf8')
+        this.assertSafeSvg(source)
+        await sharp(Buffer.from(source)).png().toFile(temporary)
+        this.throwIfAborted(signal, '媒体导入已取消。')
+      } else {
+        await pipeline(createReadStream(sourcePath), createWriteStreamChecked(temporary), { signal })
+      }
+      const temporaryFile = await open(temporary, 'r')
+      try { await temporaryFile.sync() } finally { await temporaryFile.close() }
+      await rename(temporary, destination)
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => undefined)
+      await rm(destination, { force: true }).catch(() => undefined)
+      if (signal?.aborted) throw new Error('媒体导入已取消。')
+      throw error
+    }
+
+    const reference = mediaReferenceForPath(relativePath)
+    const pending = this.pendingMediaAssets.get(themeId) ?? new Set<string>()
+    pending.add(relativePath)
+    this.pendingMediaAssets.set(themeId, pending)
+    return {
+      reference,
+      relativePath,
+      previewUrl: this.mediaPreviewUrl(themeId, relativePath),
+      originalName: basename(sourcePath),
+      width: metadata.width,
+      height: metadata.height
+    }
+  }
+
+  async getMediaPreviewUrl(themeId: unknown, asset: unknown): Promise<string> {
+    if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体预览参数无效。')
+    const profile = await this.get(themeId)
+    const reference = [profile.hero.source, profile.polaroid.source].find((media) => media?.asset === asset)
+    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset)) throw new Error('该媒体未被当前主题引用。')
+    const path = this.resolveAsset(themeId, asset)
+    const file = await stat(path)
+    if (!file.isFile()) throw new Error('媒体文件不存在。')
+    return this.mediaPreviewUrl(themeId, asset)
+  }
+
+  async resolveReferencedMedia(themeId: unknown, asset: unknown): Promise<{ path: string; mimeType: string; size: number }> {
+    if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体参数无效。')
+    const profile = await this.get(themeId)
+    const reference = [profile.hero.source, profile.polaroid.source].find((media) => media?.asset === asset)
+    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset)) throw new Error('该媒体未被主题引用。')
+    const path = this.resolveAsset(themeId, asset)
+    const file = await stat(path)
+    if (!file.isFile()) throw new Error('媒体文件不存在。')
+    return { path, mimeType: reference?.mimeType ?? mediaMimeTypeForPath(asset), size: file.size }
+  }
+
+  async getRuntimeMediaBindings(themeId: string): Promise<Array<{ role: 'hero' | 'polaroid'; path: string; mimeType: string }>> {
+    const profile = await this.get(themeId)
+    const bindings: Array<{ role: 'hero' | 'polaroid'; path: string; mimeType: string }> = []
+    for (const [role, reference] of [['hero', profile.hero.source], ['polaroid', profile.polaroid.source]] as const) {
+      if (reference?.kind !== 'video') continue
+      const resolved = await this.resolveReferencedMedia(themeId, reference.asset)
+      bindings.push({ role, path: resolved.path, mimeType: resolved.mimeType })
+    }
+    return bindings
+  }
+
   private async migrateLegacySettings(activeThemeId: string): Promise<StudioSettings> {
     const entries = await readdir(this.themesRoot, { withFileTypes: true })
     const candidates = (await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
@@ -360,8 +496,9 @@ export class ProfileStore {
       await copyFile(this.bundledDefaultAsset, destination)
       const metadata = await sharp(destination).metadata()
       if (metadata.width && metadata.height) {
-        profile.hero.sourceImage = relativePath
-        profile.polaroid.sourceImage = relativePath
+        const media = mediaReferenceForPath(relativePath)
+        profile.hero.source = media
+        profile.polaroid.source = media
         profile.polaroid.sourceSize = { width: metadata.width, height: metadata.height }
         profile.polaroid.fence = [
           { x: 0.850, y: 0.739 },
@@ -432,16 +569,307 @@ export class ProfileStore {
     }
   }
 
-  private async validateShareAsset(asset: string, data: Buffer, kind: 'image' | 'font'): Promise<void> {
+  private async writeShareArchiveAtomic(path: string, assets: Map<string, string>, manifest: Uint8Array, profile: Uint8Array, signal?: AbortSignal): Promise<void> {
+    this.throwIfAborted(signal, '主题导出已取消。')
+    await mkdir(dirname(path), { recursive: true })
+    const temporary = `${path}.${randomUUID()}.tmp`
+    const output = createWriteStream(temporary, { flags: 'wx' })
+    const ZipArchive = (archiver as unknown as { ZipArchive: new (options?: Record<string, unknown>) => {
+      pipe: (stream: NodeJS.WritableStream) => void
+      append: (input: NodeJS.ReadableStream | Buffer, options: { name: string }) => void
+      on: (event: string, listener: (...args: unknown[]) => void) => void
+      finalize: () => Promise<void>
+      abort?: () => void
+    } }).ZipArchive
+    const archive = new ZipArchive({ forceZip64: true, zlib: { level: 6 } })
+    const completion = new Promise<void>((resolvePromise, reject) => {
+      output.once('close', resolvePromise)
+      output.once('error', reject)
+      archive.on('error', reject)
+    })
+    const abortExport = (): void => {
+      archive.abort?.()
+      output.destroy(new Error('主题导出已取消。'))
+    }
+    signal?.addEventListener('abort', abortExport, { once: true })
+    archive.pipe(output)
+    archive.append(Buffer.from(manifest), { name: 'manifest.json' })
+    archive.append(Buffer.from(profile), { name: 'theme.json' })
+    for (const [asset, sourcePath] of assets) archive.append(createReadStream(sourcePath), { name: asset })
+    try {
+      await archive.finalize()
+      await completion
+      this.throwIfAborted(signal, '主题导出已取消。')
+      const file = await open(temporary, 'r+')
+      try { await file.sync() } finally { await file.close() }
+      const backup = `${path}.previous`
+      let hadOriginal = false
+      try {
+        try { await rename(path, backup); hadOriginal = true } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+        await rename(temporary, path)
+        if (hadOriginal) await rm(backup, { force: true })
+      } catch (error) {
+        await rm(temporary, { force: true })
+        if (hadOriginal) await rename(backup, path).catch(() => undefined)
+        throw error
+      }
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => undefined)
+      throw error
+    } finally {
+      signal?.removeEventListener('abort', abortExport)
+    }
+  }
+
+  private async extractShareArchive(sourcePath: string, compressedSize: number, temporaryRoot: string, signal?: AbortSignal): Promise<Map<string, { path: string; size: number }>> {
+    await this.assertDiskSpace(temporaryRoot, compressedSize)
+    this.throwIfAborted(signal, '主题导入已取消。')
+    return await new Promise((resolvePromise, reject) => {
+      yauzl.open(sourcePath, { lazyEntries: true, autoClose: true }, (error, zipFile) => {
+        if (error || !zipFile) { reject(error ?? new Error('分享包 ZIP 无效。')); return }
+        const entries = new Map<string, { path: string; size: number }>()
+        const seen = new Set<string>()
+        let settled = false
+        const fail = (reason: unknown): void => {
+          if (settled) return
+          settled = true
+          zipFile.close()
+          reject(reason instanceof Error ? reason : new Error(String(reason)))
+        }
+        const abortImport = (): void => fail(new Error('主题导入已取消。'))
+        signal?.addEventListener('abort', abortImport, { once: true })
+        zipFile.on('error', fail)
+        zipFile.on('end', () => {
+          signal?.removeEventListener('abort', abortImport)
+          if (!settled) { settled = true; resolvePromise(entries) }
+        })
+        zipFile.on('entry', (entry) => {
+          if (settled) return
+          void (async () => {
+            try {
+              this.throwIfAborted(signal, '主题导入已取消。')
+              assertSharePath(entry.fileName)
+              const canonical = entry.fileName.toLowerCase()
+              if (seen.has(canonical)) throw new Error('分享包包含重复条目。')
+              seen.add(canonical)
+              if (seen.size > MAX_SHARE_ENTRIES) throw new Error('分享包条目数量超过限制。')
+              const kind = entry.fileName.startsWith('assets/') ? assetKind(entry.fileName) : null
+              const limit = kind === 'image' ? MAX_SHARE_IMAGE_BYTES : kind === 'font' ? MAX_SHARE_FONT_BYTES : kind === 'video' ? Number.MAX_SAFE_INTEGER : MAX_SHARE_METADATA_BYTES
+              if (entry.uncompressedSize > limit) throw new Error('分享包条目超过大小限制。')
+              await this.assertDiskSpace(temporaryRoot, entry.uncompressedSize)
+              const destination = entry.fileName.startsWith('assets/')
+                ? this.resolveWithinRoot(temporaryRoot, entry.fileName)
+                : join(temporaryRoot, entry.fileName)
+              await mkdir(dirname(destination), { recursive: true })
+              await new Promise<void>((resolveStream, rejectStream) => {
+                zipFile.openReadStream(entry, (streamError, stream) => {
+                  if (streamError || !stream) { rejectStream(streamError ?? new Error('分享包条目读取失败。')); return }
+                  void pipeline(stream, createWriteStreamChecked(destination), { signal }).then(() => resolveStream(), rejectStream)
+                })
+              })
+              entries.set(entry.fileName, { path: destination, size: entry.uncompressedSize })
+              zipFile.readEntry()
+            } catch (reason) { fail(reason) }
+          })()
+        })
+        zipFile.readEntry()
+      })
+    })
+  }
+
+  private async readShareEntries(sourcePath: string, compressedSize: number): Promise<Map<string, Buffer>> {
+    await this.assertDiskSpace(this.themesRoot, compressedSize)
+    return await new Promise((resolvePromise, reject) => {
+      yauzl.open(sourcePath, { lazyEntries: true, autoClose: true }, (error, zipFile) => {
+        if (error || !zipFile) { reject(error ?? new Error('分享包 ZIP 无效。')); return }
+        const entries = new Map<string, Buffer>()
+        const seen = new Set<string>()
+        let settled = false
+        const fail = (reason: unknown): void => {
+          if (settled) return
+          settled = true
+          zipFile.close()
+          reject(reason instanceof Error ? reason : new Error(String(reason)))
+        }
+        zipFile.on('error', fail)
+        zipFile.on('end', () => { if (!settled) { settled = true; resolvePromise(entries) } })
+        zipFile.on('entry', (entry) => {
+          if (settled) return
+          try {
+            assertSharePath(entry.fileName)
+            const canonical = entry.fileName.toLowerCase()
+            if (seen.has(canonical)) throw new Error('分享包包含重复条目。')
+            seen.add(canonical)
+            if (seen.size > MAX_SHARE_ENTRIES) throw new Error('分享包条目数量超过限制。')
+            const kind = entry.fileName.startsWith('assets/') ? assetKind(entry.fileName) : null
+            const limit = kind === 'image' ? MAX_SHARE_IMAGE_BYTES : kind === 'font' ? MAX_SHARE_FONT_BYTES : kind === 'video' ? Number.MAX_SAFE_INTEGER : MAX_SHARE_METADATA_BYTES
+            if (entry.uncompressedSize > limit) throw new Error('分享包条目超过大小限制。')
+            zipFile.openReadStream(entry, (streamError, stream) => {
+              if (streamError || !stream) { fail(streamError ?? new Error('分享包条目读取失败。')); return }
+              const chunks: Buffer[] = []
+              let size = 0
+              stream.on('data', (chunk: Buffer) => { size += chunk.length; chunks.push(chunk) })
+              stream.on('error', fail)
+              stream.on('end', () => { entries.set(entry.fileName, Buffer.concat(chunks, size)); zipFile.readEntry() })
+            })
+          } catch (reason) { fail(reason) }
+        })
+        zipFile.readEntry()
+      })
+    })
+  }
+
+  private async validateShareAssetFile(asset: string, path: string, kind: 'image' | 'video' | 'font'): Promise<void> {
+    const file = await stat(path)
+    if (kind === 'image') {
+      if (file.size > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
+      await this.inspectImage(path, extname(asset).toLowerCase())
+      return
+    }
+    if (kind === 'video') {
+      await this.inspectVideo(path, extname(asset).toLowerCase(), file.size)
+      return
+    }
+    if (file.size > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
+    const header = await readFile(path).then((data) => data.subarray(0, 4))
+    this.assertFontHeader(extname(asset).toLowerCase().slice(1) as ImportedFontFormat, header)
+  }
+
+  private async validateShareAsset(asset: string, data: Buffer, kind: 'image' | 'video' | 'font'): Promise<void> {
     if (kind === 'image') {
       if (data.byteLength > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
       const metadata = await sharp(data).metadata()
       if (!metadata.width || !metadata.height) throw new Error(`图片素材无效: ${asset}`)
+      const imageExtension = extname(asset).toLowerCase()
+      const expectedFormat = imageExtension === '.jpg' || imageExtension === '.jpeg' ? 'jpeg' : imageExtension.slice(1)
+      if (metadata.format !== expectedFormat) throw new Error(`图片素材扩展名与内容不匹配: ${asset}`)
+      return
+    }
+    if (kind === 'video') {
+      const extension = extname(asset).toLowerCase()
+      if (extension === '.mp4' && (data.length < 12 || data.toString('latin1', 4, 8) !== 'ftyp')) throw new Error(`视频素材无效: ${asset}`)
+      if (extension === '.webm' && !(data[0] === 0x1a && data[1] === 0x45 && data[2] === 0xdf && data[3] === 0xa3)) throw new Error(`视频素材无效: ${asset}`)
+      const temporaryRoot = await mkdtemp(join(this.themesRoot, '.media-validate-'))
+      const temporary = join(temporaryRoot, `probe${extension}`)
+      try {
+        await writeFile(temporary, data)
+        await this.inspectVideo(temporary, extension, data.byteLength)
+      } finally { await rm(temporaryRoot, { recursive: true, force: true }).catch(() => undefined) }
       return
     }
     if (data.byteLength > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
     const extension = extname(asset).toLowerCase().slice(1) as ImportedFontFormat
     this.assertFontHeader(extension, data.subarray(0, 4))
+  }
+
+  private async inspectImage(sourcePath: string, extension: string): Promise<{ width: number; height: number }> {
+    const metadata = await sharp(sourcePath, { animated: extension === '.gif' }).metadata().catch(() => null)
+    if (!metadata?.width || !metadata.height) throw new Error('媒体图片无效或无法读取尺寸。')
+    const expectedFormat = extension === '.jpg' || extension === '.jpeg' ? 'jpeg' : extension.slice(1)
+    if (metadata.format !== expectedFormat) throw new Error('媒体图片内容与扩展名不匹配。')
+    return { width: metadata.width, height: metadata.height }
+  }
+
+  private async validateProfileMedia(profile: ThemeProfile): Promise<void> {
+    this.validateProfileAssetReferences(profile)
+    for (const reference of [profile.hero.source, profile.polaroid.source]) {
+      if (!reference) continue
+      const extension = extname(reference.asset).toLowerCase()
+      if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
+      const expected = mediaMimeTypeForPath(reference.asset)
+      if (expected !== reference.mimeType || (reference.kind === 'video') !== VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体类型与文件扩展名不匹配。')
+      const sourcePath = this.resolveAsset(profile.id, reference.asset)
+      const sourceStat = await stat(sourcePath)
+      if (!sourceStat.isFile()) throw new Error(`主题媒体不存在: ${reference.asset}`)
+      if (reference.kind === 'video') await this.inspectVideo(sourcePath, extension, sourceStat.size)
+      else {
+        if (sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
+        await this.inspectImage(sourcePath, extension)
+      }
+    }
+  }
+
+  private async validateProfileAssets(profile: ThemeProfile): Promise<void> {
+    this.validateProfileAssetReferences(profile)
+    for (const asset of this.collectAssets(profile)) {
+      const sourcePath = this.resolveAsset(profile.id, asset)
+      const sourceStat = await stat(sourcePath)
+      if (!sourceStat.isFile()) throw new Error(`主题素材不存在: ${asset}`)
+      await this.validateShareAssetFile(asset, sourcePath, assetKind(asset))
+    }
+  }
+
+  private validateProfileAssetReferences(profile: ThemeProfile): void {
+    for (const reference of [profile.hero.source, profile.polaroid.source]) {
+      if (!reference) continue
+      const extension = extname(reference.asset).toLowerCase()
+      if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
+      const expected = mediaMimeTypeForPath(reference.asset)
+      if (expected !== reference.mimeType || (reference.kind === 'video') !== VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体类型与文件扩展名不匹配。')
+    }
+    for (const icon of Object.values(profile.icons)) {
+      if (icon.kind === 'asset' && assetKind(icon.asset) !== 'image') throw new Error('定制图标只能使用图片素材。')
+    }
+    for (const font of profile.typography.importedFonts) {
+      if (assetKind(font.asset) !== 'font') throw new Error('导入字体素材类型无效。')
+    }
+  }
+
+  private async inspectVideo(sourcePath: string, extension: string, size: number): Promise<{ width: number; height: number }> {
+    const handle = await open(sourcePath, 'r')
+    try {
+      const header = Buffer.alloc(Math.min(64 * 1024, size))
+      const result = await handle.read(header, 0, header.length, 0)
+      const bytes = header.subarray(0, result.bytesRead)
+      if (extension === '.mp4' && (bytes.length < 12 || bytes.toString('latin1', 4, 8) !== 'ftyp')) throw new Error('MP4 文件头无效。')
+      if (extension === '.webm' && !(bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3)) throw new Error('WebM 文件头无效。')
+    } finally { await handle.close() }
+
+    let width = 0
+    let height = 0
+    try {
+      const info = await mediaInfoFactory({ format: 'object' })
+      try {
+        const result = await info.analyzeData(size, async (chunkSize, offset) => {
+          const file = await open(sourcePath, 'r')
+          try {
+            const chunk = Buffer.alloc(chunkSize)
+            const read = await file.read(chunk, 0, chunkSize, offset)
+            return chunk.subarray(0, read.bytesRead)
+          } finally { await file.close() }
+        })
+        const track = result.media?.track?.find((item) => isTrackType(item, 'Video'))
+        width = typeof track?.Width === 'number' ? track.Width : Number(track?.Width ?? 0)
+        height = typeof track?.Height === 'number' ? track.Height : Number(track?.Height ?? 0)
+        const codec = `${track?.CodecID ?? ''} ${track?.Format ?? ''}`.toLowerCase()
+        const supported = extension === '.mp4'
+          ? /avc|h264|hevc|h265|mpeg-4/.test(codec)
+          : /vp8|vp9|av1/.test(codec)
+        if (!supported) throw new Error('视频编码不是 Chromium 常见支持格式。')
+      } finally { info.close() }
+    } catch {
+      throw new Error('视频元数据无法读取，文件可能损坏或编码不受支持。')
+    }
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error('视频尺寸无效。')
+    if (Math.max(width, height) > MAX_VIDEO_DIMENSION) throw new Error('视频最长边不能超过 4096px。')
+    return { width: Math.round(width), height: Math.round(height) }
+  }
+
+  private async assertDiskSpace(targetRoot: string, incomingBytes: number): Promise<void> {
+    const usage = await statfs(targetRoot).catch(() => null)
+    if (!usage) return
+    const available = Number(usage.bavail) * Number(usage.bsize)
+    const total = Number(usage.blocks) * Number(usage.bsize)
+    const minimum = Math.max(MIN_FREE_BYTES, total * MIN_FREE_RATIO)
+    if (available - incomingBytes < minimum) throw new Error('磁盘空间不足，需要至少保留 10 GB 或 15% 的可用空间。')
+  }
+
+  private throwIfAborted(signal: AbortSignal | undefined, message: string): void {
+    if (signal?.aborted) throw new Error(message)
+  }
+
+  private mediaPreviewUrl(themeId: string, asset: string): string {
+    return `studio-media://${encodeURIComponent(themeId)}/${asset.split('/').map((part) => encodeURIComponent(part)).join('/')}`
   }
 
   private resolveWithinRoot(root: string, asset: string): string {
@@ -487,4 +915,17 @@ export class ProfileStore {
 
 function requireSeparator(): string {
   return process.platform === 'win32' ? '\\' : '/'
+}
+
+function createWriteStreamChecked(path: string): ReturnType<typeof createWriteStream> {
+  return createWriteStream(path, { flags: 'wx' })
+}
+
+async function hashFile(path: string, signal?: AbortSignal): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(path)) {
+    if (signal?.aborted) throw new Error('主题导出已取消。')
+    hash.update(chunk as Buffer)
+  }
+  return hash.digest('hex')
 }

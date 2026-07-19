@@ -28,6 +28,8 @@ const api: StudioApi = {
   },
   assets: {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),
+    selectMedia: (themeId, purpose) => ipcRenderer.invoke('assets:select-media', themeId, purpose),
+    getPreviewUrl: (themeId, asset) => ipcRenderer.invoke('assets:get-preview-url', themeId, asset),
     selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon'),
     selectFont: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'font')
   },
@@ -38,6 +40,14 @@ const api: StudioApi = {
   },
   files: {
     getPathForFile: (file) => webUtils.getPathForFile(file as Parameters<typeof webUtils.getPathForFile>[0])
+  },
+  operations: {
+    cancel: (id) => ipcRenderer.invoke('operations:cancel', id),
+    subscribeProgress: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof listener>[0]) => listener(progress)
+      ipcRenderer.on('operations:progress', handler)
+      return () => ipcRenderer.removeListener('operations:progress', handler)
+    }
   },
   codex: {
     detect: () => invokeCodex('codex:detect'),

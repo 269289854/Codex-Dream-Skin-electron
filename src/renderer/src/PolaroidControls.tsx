@@ -1,23 +1,25 @@
 import * as React from 'react'
-import { Image, Upload } from 'lucide-react'
+import { Image, Upload, Volume2, VolumeX } from 'lucide-react'
 import type { ThemeProfile } from '../../shared/theme'
 import { Range, SolidColorControl } from './editor-controls'
 
 interface PolaroidControlsProps {
   profile: ThemeProfile
   polaroidUrl?: string
+  mediaBusy?: boolean
   showAdvanced?: boolean
   onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void
   onInteractionEnd: () => void
   onSelectImage: () => void
 }
 
-export function PolaroidControls({ profile, polaroidUrl, showAdvanced = false, onChange, onInteractionEnd, onSelectImage }: PolaroidControlsProps): React.JSX.Element {
+export function PolaroidControls({ profile, polaroidUrl, mediaBusy = false, showAdvanced = false, onChange, onInteractionEnd, onSelectImage }: PolaroidControlsProps): React.JSX.Element {
   const polaroid = profile.polaroid
   const shadow = polaroid.style.shadow
   return <div className="polaroid-controls">
     <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={polaroid.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.polaroid.visible = visible }) }} /></label>
-    <button className="asset-picker polaroid-asset-picker" type="button" onClick={onSelectImage}>{polaroidUrl ? <img src={polaroidUrl} alt="拍立得原图" /> : <Image size={20} />}<span><Upload size={13} />{polaroidUrl ? '更换拍立得原图' : '选择拍立得原图'}</span></button>
+    <button className="asset-picker polaroid-asset-picker" type="button" disabled={mediaBusy} onClick={onSelectImage}>{polaroidUrl ? (polaroid.source?.kind === 'video' ? <video src={polaroidUrl} muted playsInline /> : <img src={polaroidUrl} alt="拍立得原图" />) : <Image size={20} />}<span><Upload size={13} />{polaroidUrl ? '更换拍立得媒体' : '选择拍立得媒体'}</span></button>
+    {polaroid.source?.kind === 'video' && <div className="media-playback-controls"><label className="toggle-row"><span>{polaroid.playback.autoplay ? '自动播放' : '点击播放'} </span><input type="checkbox" checked={polaroid.playback.autoplay} onChange={(event) => { const autoplay = event.currentTarget.checked; onChange((next) => { next.polaroid.playback.autoplay = autoplay }) }} /></label><label className="toggle-row"><span>循环播放</span><input type="checkbox" checked={polaroid.playback.loop} onChange={(event) => { const loop = event.currentTarget.checked; onChange((next) => { next.polaroid.playback.loop = loop }) }} /></label><label className="toggle-row"><span>{polaroid.playback.sound ? <Volume2 size={14} /> : <VolumeX size={14} />}声音</span><input type="checkbox" checked={polaroid.playback.sound} onChange={(event) => { const sound = event.currentTarget.checked; onChange((next) => { next.polaroid.playback.sound = sound; if (sound) next.hero.playback.sound = false }) }} /></label><Range label="音量" min={0} max={1} step={.01} value={polaroid.playback.volume} disabled={!polaroid.playback.sound} onChange={(value) => onChange((next) => { next.polaroid.playback.volume = value }, 'polaroid-volume')} onChangeEnd={onInteractionEnd} /></div>}
     <div className="segmented-control polaroid-mode-tabs" aria-label="拍立得显示模式">
       <button type="button" className={polaroid.mode === 'full' ? 'active' : ''} onClick={() => onChange((next) => { next.polaroid.mode = 'full' })}>整图</button>
       <button type="button" className={polaroid.mode === 'fence' ? 'active' : ''} onClick={() => onChange((next) => { next.polaroid.mode = 'fence' })}>四点围栏</button>

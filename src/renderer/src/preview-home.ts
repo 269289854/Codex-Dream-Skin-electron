@@ -26,13 +26,15 @@ export const PREVIEW_HERO_FALLBACK = 'linear-gradient(135deg, #d9fbfc, #fff4fb 5
 export interface PreviewHeroImageProps {
   src: string
   style: CSSProperties
+  kind: 'image' | 'video'
+  playback: ThemeProfile['hero']['playback']
 }
 
 export function buildPreviewHeroImageProps(heroUrl: string | undefined, hero: ThemeProfile['hero']): PreviewHeroImageProps | null {
   if (!heroUrl) return null
   const x = hero.position.x * 100
   const y = hero.position.y * 100
-  return {
+  const props = {
     src: heroUrl,
     style: {
       width: `${hero.scale * 100}%`,
@@ -40,5 +42,10 @@ export function buildPreviewHeroImageProps(heroUrl: string | undefined, hero: Th
       top: `${y}%`,
       transform: `translate(-${x}%, -${y}%)`
     }
-  }
+  } as PreviewHeroImageProps
+  Object.defineProperties(props, {
+    kind: { value: hero.source?.kind ?? 'image', enumerable: false },
+    playback: { value: hero.playback, enumerable: false }
+  })
+  return props
 }

@@ -3,32 +3,33 @@ import { extname } from 'node:path'
 import { Unzip, UnzipInflate } from 'fflate'
 import { z } from 'zod'
 import { parseThemeProfile, type ThemeProfile } from '../shared/theme'
+import { mediaMimeTypeForPath } from '../shared/media'
 import type { ImportedFontFormat } from '../shared/typography'
 
 export const THEME_SHARE_FORMAT = 'codex-dream-skin-theme' as const
-export const THEME_SHARE_VERSION = 1 as const
+export const THEME_SHARE_VERSION = 2 as const
 export const MAX_SHARE_COMPRESSED_BYTES = 500 * 1024 * 1024
 export const MAX_SHARE_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
 export const MAX_SHARE_ENTRIES = 128
 export const MAX_SHARE_IMAGE_BYTES = 30 * 1024 * 1024
 export const MAX_SHARE_FONT_BYTES = 12 * 1024 * 1024
 
-const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg'])
+const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif'])
 const FONT_EXTENSIONS = new Set<ImportedFontFormat>(['ttf', 'otf', 'woff', 'woff2'])
 const MAX_SHARE_METADATA_BYTES = 5 * 1024 * 1024
 
 const assetManifestSchema = z.object({
   path: z.string().min(1),
-  kind: z.enum(['image', 'font']),
+  kind: z.enum(['image', 'video', 'font']),
   size: z.number().int().nonnegative(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/i)
 }).strict()
 
 const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
-  version: z.literal(THEME_SHARE_VERSION),
+  version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(10),
+  profileVersion: z.number().int().min(0).max(11),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -36,14 +37,27 @@ export type ThemeShareAsset = z.infer<typeof assetManifestSchema>
 export type ThemeShareManifest = z.infer<typeof manifestSchema>
 
 export function collectThemeAssets(profile: ThemeProfile): string[] {
-  const assets: Array<string | null> = [profile.hero.sourceImage, profile.polaroid.sourceImage]
+  const assets: Array<string | null> = [profile.hero.source?.asset ?? profile.hero.sourceImage ?? null, profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null]
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assets.push(icon.asset)
   for (const font of profile.typography.importedFonts) assets.push(font.asset)
   return [...new Set(assets.filter((value): value is string => Boolean(value)))]
 }
 
-export function assetKind(path: string): 'image' | 'font' {
+export function validateThemeAssetReferences(profile: ThemeProfile): void {
+  for (const reference of [profile.hero.source, profile.polaroid.source]) {
+    if (!reference) continue
+    const extension = extname(reference.asset).toLowerCase()
+    const expectedKind = extension === '.mp4' || extension === '.webm' ? 'video' : extension === '.png' || extension === '.webp' || extension === '.jpg' || extension === '.jpeg' || extension === '.gif' ? 'image' : null
+    const expectedMime = mediaMimeTypeForPath(reference.asset)
+    if (!expectedKind || reference.kind !== expectedKind || reference.mimeType !== expectedMime) throw new Error('主题媒体类型与文件扩展名不匹配。')
+  }
+  for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset' && assetKind(icon.asset) !== 'image') throw new Error('定制图标只能使用图片素材。')
+  for (const font of profile.typography.importedFonts) if (assetKind(font.asset) !== 'font') throw new Error('导入字体素材类型无效。')
+}
+
+export function assetKind(path: string): 'image' | 'video' | 'font' {
   const extension = extname(path).toLowerCase()
+  if (extension === '.mp4' || extension === '.webm') return 'video'
   if (RASTER_EXTENSIONS.has(extension)) return 'image'
   if (FONT_EXTENSIONS.has(extension.slice(1) as ImportedFontFormat)) return 'font'
   throw new Error('主题包含不支持的素材格式。')
@@ -101,7 +115,7 @@ export function decodeShareZip(source: Uint8Array): Map<string, Buffer> {
       if (seenPaths.has(canonicalPath)) throw new Error('分享包包含重复条目。')
       seenPaths.add(canonicalPath)
       const entryLimit = file.name.startsWith('assets/')
-        ? assetKind(file.name) === 'image' ? MAX_SHARE_IMAGE_BYTES : MAX_SHARE_FONT_BYTES
+        ? assetKind(file.name) === 'image' ? MAX_SHARE_IMAGE_BYTES : assetKind(file.name) === 'font' ? MAX_SHARE_FONT_BYTES : MAX_SHARE_UNCOMPRESSED_BYTES
         : MAX_SHARE_METADATA_BYTES
       if (file.originalSize !== undefined && file.originalSize > entryLimit) throw new Error('分享包中的单个条目超过大小限制。')
       if (file.originalSize !== undefined && file.originalSize > MAX_SHARE_UNCOMPRESSED_BYTES) throw new Error('分享包解压大小超过限制。')
@@ -170,7 +184,11 @@ export function validateShareContents(entries: Map<string, Buffer>): { profile: 
   }
   const manifest = parseThemeShareManifest(manifestInput)
   const profile = parseThemeProfile(themeInput)
-  if (manifest.themeName !== profile.name || manifest.profileVersion !== profile.version) throw new Error('分享包清单与主题配置不一致。')
+  validateThemeAssetReferences(profile)
+  const profileVersionMatches = manifest.version === 1
+    ? (manifest.profileVersion === profile.version || (manifest.profileVersion === 10 && profile.version === 11))
+    : manifest.profileVersion === profile.version
+  if (manifest.themeName !== profile.name || !profileVersionMatches) throw new Error('分享包清单与主题配置不一致。')
   const listed = new Map(manifest.assets.map((asset) => [asset.path, asset]))
   const referenced = collectThemeAssets(profile)
   if (referenced.length !== listed.size || referenced.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')

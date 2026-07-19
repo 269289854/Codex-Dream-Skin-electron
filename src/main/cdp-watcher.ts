@@ -3,6 +3,7 @@ import type { PolaroidPlacementUpdate } from '../shared/contracts'
 
 interface CdpVersion { webSocketDebuggerUrl: string }
 interface CdpTarget { id: string; type: string; url: string; webSocketDebuggerUrl: string }
+export interface CdpMediaBinding { role: 'hero' | 'polaroid'; path: string; mimeType: string }
 
 const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); return true; })()'
 const TAKE_PLACEMENT_EXPRESSION = 'window.__CODEX_DREAM_SKIN_STATE__?.takePlacementUpdate?.() ?? null'
@@ -43,6 +44,7 @@ export interface CdpSnapshot {
 export class CdpWatcher {
   private timer: NodeJS.Timeout | null = null
   private payload = ''
+  private mediaBindings: CdpMediaBinding[] = []
   private busy = false
 
   constructor(
@@ -61,6 +63,10 @@ export class CdpWatcher {
     this.payload = payload
   }
 
+  setMediaBindings(bindings: CdpMediaBinding[]): void {
+    this.mediaBindings = bindings.map((binding) => ({ ...binding }))
+  }
+
   async start(): Promise<CdpSnapshot> {
     if (!this.payload) throw new Error('Theme payload is not ready.')
     await this.cleanupExcludedTargets()
@@ -71,7 +77,10 @@ export class CdpWatcher {
 
   async inject(): Promise<CdpSnapshot> {
     const targets = await this.targets()
-    await Promise.all(targets.map((target) => this.evaluate(target, this.payload)))
+    await Promise.all(targets.map(async (target) => {
+      await this.evaluate(target, this.payload)
+      if (this.mediaBindings.length > 0) await this.bindMedia(target)
+    }))
     const snapshot = { connected: true, targetCount: targets.length }
     this.onSnapshot(snapshot)
     return snapshot
@@ -159,20 +168,44 @@ export class CdpWatcher {
   }
 
   private async evaluate(target: CdpTarget, expression: string): Promise<unknown> {
+    return this.command(target, 'Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }).then((message) => {
+      const result = message as { error?: { message: string }; result?: { result?: { value?: unknown }; exceptionDetails?: unknown } }
+      if (result.error || result.result?.exceptionDetails) throw new Error(result.error?.message ?? 'Theme evaluation failed.')
+      return result.result?.result?.value
+    })
+  }
+
+  private async bindMedia(target: CdpTarget): Promise<void> {
+    const prepared = await this.evaluate(target, 'window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__?.() ?? {}')
+    if (!prepared || typeof prepared !== 'object') return
+    for (const binding of this.mediaBindings) {
+      const inputId = (prepared as Record<string, unknown>)[binding.role]
+      if (typeof inputId !== 'string') continue
+      const documentResult = await this.command(target, 'DOM.getDocument', { depth: 1 }) as { result?: { root?: { nodeId?: number } } }
+      const rootNodeId = documentResult.result?.root?.nodeId
+      if (!rootNodeId) throw new Error('Codex 页面 DOM 根节点不可用。')
+      const query = await this.command(target, 'DOM.querySelector', { nodeId: rootNodeId, selector: `#${inputId}` }) as { result?: { nodeId?: number } }
+      const nodeId = query.result?.nodeId
+      if (!nodeId) throw new Error('Codex 媒体输入节点不可用。')
+      await this.command(target, 'DOM.setFileInputFiles', { files: [binding.path], nodeId })
+    }
+    await this.evaluate(target, 'window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__?.()')
+  }
+
+  private async command(target: CdpTarget, method: string, params: Record<string, unknown>): Promise<unknown> {
     if (!this.validateWebSocketUrl(target.webSocketDebuggerUrl, 'page', target.id)) throw new Error('Unsafe CDP page URL was rejected.')
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(target.webSocketDebuggerUrl, { handshakeTimeout: 3000 })
       const requestId = 1
       const timeout = setTimeout(() => { socket.close(); reject(new Error('CDP evaluation timed out.')) }, 8000)
-      socket.once('open', () => socket.send(JSON.stringify({ id: requestId, method: 'Runtime.evaluate', params: { expression, awaitPromise: true, returnByValue: true } })))
+      socket.once('open', () => socket.send(JSON.stringify({ id: requestId, method, params })))
       socket.on('message', (data) => {
         try {
           const message = JSON.parse(data.toString()) as { id?: number; error?: { message: string }; result?: { result?: { value?: unknown }; exceptionDetails?: unknown } }
           if (message.id !== requestId) return
           clearTimeout(timeout)
           socket.close()
-          if (message.error || message.result?.exceptionDetails) reject(new Error(message.error?.message ?? 'Theme evaluation failed.'))
-          else resolve(message.result?.result?.value)
+          resolve(message)
         } catch (error) { clearTimeout(timeout); socket.close(); reject(error) }
       })
       socket.once('error', (error) => { clearTimeout(timeout); reject(error) })

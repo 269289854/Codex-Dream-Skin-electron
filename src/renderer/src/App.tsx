@@ -5,7 +5,7 @@ import {
   GitBranch, GitPullRequest, Grid2X2, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload, X
 } from 'lucide-react'
-import type { RuntimeStatus } from '../../shared/contracts'
+import type { OperationProgress, RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
@@ -52,6 +52,8 @@ export function App(): React.JSX.Element {
   const [duplicateBusy, setDuplicateBusy] = useState(false)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
+  const [mediaBusy, setMediaBusy] = useState(false)
+  const [operationProgress, setOperationProgress] = useState<OperationProgress | null>(null)
   const [shareDropActive, setShareDropActive] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
@@ -69,6 +71,7 @@ export function App(): React.JSX.Element {
   const inspectorRef = useRef<HTMLElement>(null)
   const duplicateInputRef = useRef<HTMLInputElement>(null)
   const shareBusyRef = useRef(false)
+  const mediaBusyRef = useRef(false)
   const historyRef = useRef<ThemeProfile[]>([])
   const historyGroupRef = useRef<string | null>(null)
   const dragCounterRef = useRef(0)
@@ -78,7 +81,14 @@ export function App(): React.JSX.Element {
       setError(null)
       const [profile, compiled] = await Promise.all([window.studio.themes.get(id), window.studio.themes.compile(id)])
       setDraft(profile)
-      setAssets(compiled.assets)
+      const nextAssets = { ...compiled.assets }
+      if (window.studio.assets.getPreviewUrl) {
+        for (const source of [profile.hero.source, profile.polaroid.source]) {
+          if (!source) continue
+          try { nextAssets[source.asset] = await window.studio.assets.getPreviewUrl(id, source.asset) } catch { /* missing media is shown as fallback */ }
+        }
+      }
+      setAssets(nextAssets)
       setPreviewSelection(null)
       setInspectorAnchor(null)
       historyRef.current = []
@@ -102,6 +112,12 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     void window.studio.runtime.getStatus().then(setRuntime)
     return window.studio.runtime.subscribeStatus(setRuntime)
+  }, [])
+
+  useEffect(() => {
+    const subscribe = window.studio.operations?.subscribeProgress
+    if (!subscribe) return
+    return subscribe((progress) => setOperationProgress(progress.phase === 'completed' || progress.phase === 'failed' || progress.phase === 'cancelled' ? null : progress))
   }, [])
 
   useEffect(() => {
@@ -401,19 +417,34 @@ export function App(): React.JSX.Element {
   }
 
   const selectImage = async (purpose: 'hero' | 'polaroid'): Promise<void> => {
-    if (!draft) return
+    if (!draft || mediaBusyRef.current) return
+    mediaBusyRef.current = true
+    setMediaBusy(true)
     try {
-      const imported = await window.studio.assets.selectImage(draft.id, purpose)
+      const imported = window.studio.assets.selectMedia
+        ? await window.studio.assets.selectMedia(draft.id, purpose)
+        : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
+          reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
+          relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
+        } : null)
       if (!imported) return
-      setAssets((current) => ({ ...current, [imported.relativePath]: imported.dataUrl }))
+      setAssets((current) => ({ ...current, [imported.relativePath]: imported.previewUrl }))
       change((profile) => {
-        if (purpose === 'hero') profile.hero.sourceImage = imported.relativePath
+        if (purpose === 'hero') {
+          profile.hero.source = imported.reference
+          if (imported.reference.kind === 'video') profile.hero.playback = { ...profile.hero.playback, sound: false }
+        }
         else {
-          profile.polaroid.sourceImage = imported.relativePath
+          profile.polaroid.source = imported.reference
           profile.polaroid.sourceSize = { width: imported.width, height: imported.height }
+          if (imported.reference.kind === 'video') profile.polaroid.playback = { ...profile.polaroid.playback, sound: false }
         }
       })
     } catch (reason) { setError(messageOf(reason)) }
+    finally {
+      mediaBusyRef.current = false
+      setMediaBusy(false)
+    }
   }
 
   const importIcon = async (slot: IconSlot): Promise<void> => {
@@ -543,8 +574,8 @@ export function App(): React.JSX.Element {
   }
 
   if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? '正在打开主题工作台'}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>重新加载</button>}</div>
-  const heroUrl = draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
-  const polaroidUrl = draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
+  const heroUrl = draft.hero.source ? assets[draft.hero.source.asset] : draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
+  const polaroidUrl = draft.polaroid.source ? assets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
   const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
   const homeCopyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
   const brandValidationError = brandCopyError(draft.copy)
@@ -598,6 +629,7 @@ export function App(): React.JSX.Element {
           </div>
           <div className="theme-actions"><button type="button" title="导出主题" disabled={shareBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title="导入主题" disabled={shareBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title="复制主题" disabled={duplicateBusy || shareBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={systemThemeSelected ? '系统主题不能删除' : '删除主题'} disabled={shareBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
           {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title="关闭提示" onClick={() => setNotice(null)}><X size={13} /></button></div>}
+          {operationProgress && <div className="operation-progress" role="status"><span>{operationProgress.message}</span>{operationProgress.totalBytes ? <small>{Math.round(operationProgress.processedBytes / operationProgress.totalBytes * 100)}%</small> : <small>处理中</small>}<button type="button" title="取消操作" onClick={() => void window.studio.operations?.cancel(operationProgress.id)}>取消</button></div>}
           <nav className="sidebar-nav">
             <button className={activeInspector === 'visual' ? 'active' : ''} onClick={() => showInspector('visual')}><Palette size={17} />视觉设计</button>
             <button className={activeInspector === 'icons' ? 'active' : ''} onClick={() => showInspector('icons')}><Box size={17} />图标样式</button>
@@ -629,7 +661,9 @@ export function App(): React.JSX.Element {
                   {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
-                        ? <img className="preview-hero-art" src={heroImage.src} style={heroImage.style} alt="" draggable={false} />
+                        ? heroImage.kind === 'video'
+                          ? <video ref={(element) => { if (element) element.volume = heroImage.playback.volume }} className="preview-hero-art" src={heroImage.src} style={heroImage.style} autoPlay={heroImage.playback.autoplay} loop={heroImage.playback.loop} muted={!heroImage.playback.sound} controls={!heroImage.playback.autoplay} playsInline />
+                          : <img className="preview-hero-art" src={heroImage.src} style={heroImage.style} alt="" draggable={false} />
                         : <div className="preview-hero-fallback" aria-hidden="true" />}
                       <div className="dream-heading-region" data-preview-target="copy-heading">
                         <h1 className="dream-heading">
@@ -654,7 +688,7 @@ export function App(): React.JSX.Element {
                       <PreviewComposer profile={draft} assets={assets} />
                     </div>
                   </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
@@ -693,13 +727,14 @@ export function App(): React.JSX.Element {
               {homeCopyValidationError && <p className="field-error">{homeCopyValidationError}</p>}
             </Property>
             <Property title="主视觉" anchor="visual-hero" highlighted={inspectorAnchor === 'visual-hero'}>
-              <button className="asset-picker" onClick={() => void selectImage('hero')}>{heroUrl ? <img src={heroUrl} alt="主视觉" /> : <Image size={20} />}<span><Upload size={13} />选择背景图片</span></button>
+              <button className="asset-picker" disabled={mediaBusy} onClick={() => void selectImage('hero')}>{heroUrl ? (draft.hero.source?.kind === 'video' ? <video src={heroUrl} muted playsInline /> : <img src={heroUrl} alt="主视觉" />) : <Image size={20} />}<span><Upload size={13} />选择主视觉媒体</span></button>
+              {draft.hero.source?.kind === 'video' && <div className="media-playback-controls"><label className="toggle-row"><span>自动播放</span><input type="checkbox" checked={draft.hero.playback.autoplay} onChange={(event) => { const autoplay = event.currentTarget.checked; change((profile) => { profile.hero.playback.autoplay = autoplay }) }} /></label><label className="toggle-row"><span>循环播放</span><input type="checkbox" checked={draft.hero.playback.loop} onChange={(event) => { const loop = event.currentTarget.checked; change((profile) => { profile.hero.playback.loop = loop }) }} /></label><label className="toggle-row"><span>声音</span><input type="checkbox" checked={draft.hero.playback.sound} onChange={(event) => { const sound = event.currentTarget.checked; change((profile) => { profile.hero.playback.sound = sound; if (sound) profile.polaroid.playback.sound = false }) }} /></label><Range label="音量" min={0} max={1} step={.01} value={draft.hero.playback.volume} disabled={!draft.hero.playback.sound} onChange={(value) => change((profile) => { profile.hero.playback.volume = value }, 'hero-volume')} /></div>}
               <Range label="缩放" min={.5} max={3} step={.01} value={draft.hero.scale} onChange={(value) => change((profile) => { profile.hero.scale = value })} />
               <Range label="水平位置" min={0} max={1} step={.01} value={draft.hero.position.x} onChange={(value) => change((profile) => { profile.hero.position.x = value })} />
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
-              <PolaroidControls profile={draft} polaroidUrl={polaroidUrl} showAdvanced onChange={change} onInteractionEnd={endHistoryGroup} onSelectImage={() => void selectImage('polaroid')} />
+              <PolaroidControls profile={draft} polaroidUrl={polaroidUrl} mediaBusy={mediaBusy} showAdvanced onChange={change} onInteractionEnd={endHistoryGroup} onSelectImage={() => void selectImage('polaroid')} />
               {polaroidUrl && draft.polaroid.mode === 'fence' && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
             </Property>
             <Property title="背景粒子" anchor="visual-sparkles" highlighted={inspectorAnchor === 'visual-sparkles'}><ParticleEffectControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} /></Property>

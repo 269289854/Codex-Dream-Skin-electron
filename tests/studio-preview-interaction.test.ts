@@ -93,6 +93,8 @@ describe('Studio preview editing interaction', () => {
       },
     assets: {
       selectImage: async () => null,
+      selectMedia: async () => null,
+      getPreviewUrl: async (_themeId, asset) => `data:image/png;base64,${asset}`,
       selectIcon,
       selectFont: async () => selectedFontAsset
     },
@@ -102,6 +104,7 @@ describe('Studio preview editing interaction', () => {
         importThemePath
       },
       files: { getPathForFile },
+      operations: { cancel: async () => undefined, subscribeProgress: () => () => undefined },
       codex: {
         detect: async () => ({ found: true, version: 'test', executable: '', packageFamilyName: '', running: false, backupAvailable: false }),
         installTheme: async () => runtimeStatus,

@@ -138,7 +138,33 @@ const polaroidStyleSchema = z.object({
   }).strict()
 }).strict()
 
-const commonProfileFields = {
+export const mediaKindSchema = z.enum(['image', 'video'])
+export type MediaKind = z.infer<typeof mediaKindSchema>
+
+export const mediaMimeTypeSchema = z.enum(['image/png', 'image/webp', 'image/jpeg', 'image/gif', 'video/mp4', 'video/webm'])
+export type MediaMimeType = z.infer<typeof mediaMimeTypeSchema>
+
+export const mediaReferenceSchema = z.object({
+  asset: z.string().min(1).max(260),
+  kind: mediaKindSchema,
+  mimeType: mediaMimeTypeSchema
+}).strict().superRefine((media, context) => {
+  const isVideo = media.mimeType.startsWith('video/')
+  if (isVideo !== (media.kind === 'video')) context.addIssue({ code: 'custom', path: ['kind'], message: 'Media kind does not match its MIME type.' })
+  if (!isVideo && media.mimeType === 'image/gif' && media.kind !== 'image') context.addIssue({ code: 'custom', path: ['kind'], message: 'GIF media must be an image.' })
+})
+
+const videoPlaybackSchema = z.object({
+  autoplay: z.boolean(),
+  loop: z.boolean(),
+  sound: z.boolean(),
+  volume: normalized
+}).strict()
+
+export type MediaReference = z.infer<typeof mediaReferenceSchema>
+export type VideoPlayback = z.infer<typeof videoPlaybackSchema>
+
+const legacyCommonProfileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   updatedAt: z.string().datetime(),
@@ -165,7 +191,7 @@ const commonProfileFields = {
 }
 
 const versionNineThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(9),
   colors: colorsSchema,
   copy: themeCopySchema,
@@ -176,10 +202,10 @@ const versionNineThemeSchema = z.object({
   typography: themeTypographySchema
 }).strict()
 
-const currentPolaroidSchema = commonProfileFields.polaroid.extend({ style: polaroidStyleSchema }).strict()
+const currentPolaroidSchema = legacyCommonProfileFields.polaroid.extend({ style: polaroidStyleSchema }).strict()
 
-export const themeProfileSchema = z.object({
-  ...commonProfileFields,
+const versionTenThemeSchema = z.object({
+  ...legacyCommonProfileFields,
   polaroid: currentPolaroidSchema,
   version: z.literal(10),
   colors: colorsSchema,
@@ -191,8 +217,53 @@ export const themeProfileSchema = z.object({
   typography: themeTypographySchema
 }).strict()
 
+const currentHeroSchema = z.object({
+  source: mediaReferenceSchema.nullable(),
+  focus: pointSchema,
+  scale: z.number().finite().min(0.5).max(3),
+  position: pointSchema,
+  playback: videoPlaybackSchema
+}).strict()
+
+const currentPolaroidMediaSchema = z.object({
+  mode: polaroidModeSchema.default('fence'),
+  visible: z.boolean().default(true),
+  source: mediaReferenceSchema.nullable(),
+  sourceSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).strict().nullable().default(null),
+  fence: z.tuple([pointSchema, pointSchema, pointSchema, pointSchema]),
+  placement: z.object({
+    x: normalized,
+    y: normalized,
+    width: normalized,
+    rotation: z.number().finite().min(-180).max(180),
+    hideBelowWidth: z.number().int().min(320).max(3840)
+  }).strict(),
+  style: polaroidStyleSchema,
+  playback: videoPlaybackSchema
+}).strict()
+
+export const themeProfileSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(80),
+  version: z.literal(11),
+  updatedAt: z.string().datetime(),
+  hero: currentHeroSchema,
+  polaroid: currentPolaroidMediaSchema,
+  colors: colorsSchema,
+  copy: themeCopySchema,
+  icons: currentParticleIconsSchema,
+  composerBadge: composerBadgeSchema,
+  decorations: decorationsSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
 const versionEightThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(8),
   colors: colorsSchema,
   copy: themeCopySchema,
@@ -204,7 +275,7 @@ const versionEightThemeSchema = z.object({
 }).strict()
 
 const versionSevenThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(7),
   colors: colorsSchema,
   copy: themeCopySchema,
@@ -216,7 +287,7 @@ const versionSevenThemeSchema = z.object({
 }).strict()
 
 const versionSixThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(6),
   colors: colorsSchema,
   copy: themeCopySchema,
@@ -227,7 +298,7 @@ const versionSixThemeSchema = z.object({
 }).strict()
 
 const versionFiveThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(5),
   colors: colorsSchema,
   copy: themeCopySchema,
@@ -237,7 +308,7 @@ const versionFiveThemeSchema = z.object({
 }).strict()
 
 const versionFourThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(4),
   colors: legacyColorsSchema,
   copy: themeCopySchema,
@@ -245,7 +316,7 @@ const versionFourThemeSchema = z.object({
 }).strict()
 
 const versionThreeThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(3),
   colors: legacyColorsSchema,
   copy: legacyHomeCopySchema,
@@ -253,7 +324,7 @@ const versionThreeThemeSchema = z.object({
 }).strict()
 
 const versionTwoThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(2),
   colors: legacyColorsSchema,
   copy: legacyHomeCopySchema,
@@ -261,7 +332,7 @@ const versionTwoThemeSchema = z.object({
 }).strict()
 
 const versionOneThemeSchema = z.object({
-  ...commonProfileFields,
+  ...legacyCommonProfileFields,
   version: z.literal(1),
   colors: legacyColorsSchema,
   icons: legacyIconsSchema
@@ -275,7 +346,13 @@ const legacyThemeSchema = z.object({
 }).passthrough()
 
 export type Point = z.infer<typeof pointSchema>
-export type ThemeProfile = z.infer<typeof themeProfileSchema>
+type CurrentThemeProfile = z.infer<typeof themeProfileSchema>
+// sourceImage is retained as a non-persisted compatibility hint for older renderer
+// integrations. parseThemeProfile normalizes it into source before validation.
+export type ThemeProfile = CurrentThemeProfile & {
+  hero: CurrentThemeProfile['hero'] & { sourceImage?: string | null }
+  polaroid: CurrentThemeProfile['polaroid'] & { sourceImage?: string | null }
+}
 export type ThemeColors = ThemeProfile['colors']
 export type IconSlotMap = ThemeProfile['icons']
 export type IconSlot = keyof IconSlotMap
@@ -292,19 +369,20 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 10,
+    version: 11,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
-      sourceImage: null,
+      source: null,
       focus: { x: 0.62, y: 0.42 },
       scale: 1,
-      position: { x: 0.5, y: 0.5 }
+      position: { x: 0.5, y: 0.5 },
+      playback: createDefaultVideoPlayback()
     },
     polaroid: {
       mode: 'full',
       visible: true,
-      sourceImage: null,
+      source: null,
       sourceSize: null,
       fence: [
         { x: 0.12, y: 0.12 },
@@ -313,7 +391,8 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
         { x: 0.12, y: 0.88 }
       ],
       placement: { x: 0.72, y: 0.2, width: 0.22, rotation: 3, hideBelowWidth: 920 },
-      style: createDefaultPolaroidStyle()
+      style: createDefaultPolaroidStyle(),
+      playback: createDefaultVideoPlayback()
     },
     colors: {
       surface: '#F7FFFF',
@@ -349,8 +428,33 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
+  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 1 && input.version <= 10) {
+    const legacy = structuredClone(input) as Record<string, unknown>
+    const hero = legacy.hero && typeof legacy.hero === 'object' ? legacy.hero as Record<string, unknown> : null
+    const polaroid = legacy.polaroid && typeof legacy.polaroid === 'object' ? legacy.polaroid as Record<string, unknown> : null
+    if (hero && !('sourceImage' in hero)) hero.sourceImage = hero.source && typeof hero.source === 'object' && typeof (hero.source as Record<string, unknown>).asset === 'string' ? (hero.source as Record<string, unknown>).asset : null
+    if (polaroid && !('sourceImage' in polaroid)) polaroid.sourceImage = polaroid.source && typeof polaroid.source === 'object' && typeof (polaroid.source as Record<string, unknown>).asset === 'string' ? (polaroid.source as Record<string, unknown>).asset : null
+    if (hero) { delete hero.source; delete hero.playback; legacy.hero = hero }
+    if (polaroid) { delete polaroid.source; delete polaroid.playback; legacy.polaroid = polaroid }
+    input = legacy
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 11) {
+    const candidate = structuredClone(input) as Record<string, unknown>
+    const hero = candidate.hero && typeof candidate.hero === 'object' ? candidate.hero as Record<string, unknown> : null
+    const polaroid = candidate.polaroid && typeof candidate.polaroid === 'object' ? polaroidRecord(candidate.polaroid) : null
+    if (hero && (!hero.source || !('source' in hero)) && typeof hero.sourceImage === 'string') hero.source = inferLegacyMediaReference(hero.sourceImage)
+    if (hero) delete hero.sourceImage
+    if (polaroid && (!polaroid.source || !('source' in polaroid)) && typeof polaroid.sourceImage === 'string') polaroid.source = inferLegacyMediaReference(polaroid.sourceImage)
+    if (polaroid) delete polaroid.sourceImage
+    if (hero) candidate.hero = hero
+    if (polaroid) candidate.polaroid = polaroid
+    const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
+    Object.defineProperty(parsed.hero, 'sourceImage', { value: parsed.hero.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
+    Object.defineProperty(parsed.polaroid, 'sourceImage', { value: parsed.polaroid.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
+    return parsed
+  }
   if (input && typeof input === 'object' && 'version' in input && input.version === 10) {
-    return themeProfileSchema.parse(input)
+    return migrateVersionTen(versionTenThemeSchema.parse(input))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 9) {
     return migrateVersionNine(versionNineThemeSchema.parse(input))
@@ -393,18 +497,18 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
 }
 
 function migrateVersionNine(legacy: z.infer<typeof versionNineThemeSchema>): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionTen(versionTenThemeSchema.parse({
     ...legacy,
     version: 10,
     polaroid: { ...legacy.polaroid, style: createDefaultPolaroidStyle() }
-  })
+  }))
 }
 
 function migrateLegacyTheme(
   legacy: z.infer<typeof versionThreeThemeSchema> | z.infer<typeof versionTwoThemeSchema> | z.infer<typeof versionOneThemeSchema>,
   copy: z.infer<typeof legacyHomeCopySchema>
 ): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionTen(versionTenThemeSchema.parse({
     ...legacy,
     version: 10,
     polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
@@ -414,11 +518,11 @@ function migrateLegacyTheme(
     decorations: createDefaultDecorations(),
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
-  })
+  }))
 }
 
 function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionTen(versionTenThemeSchema.parse({
     ...legacy,
     version: 10,
     polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
@@ -427,7 +531,7 @@ function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): The
     decorations: createDefaultDecorations(),
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
-  })
+  }))
 }
 
 function migrateVersionFive(legacy: z.infer<typeof versionFiveThemeSchema>): ThemeProfile {
@@ -442,7 +546,7 @@ function migrateVersionFive(legacy: z.infer<typeof versionFiveThemeSchema>): The
 }
 
 function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionTen(versionTenThemeSchema.parse({
     ...legacy,
     version: 10,
     polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
@@ -452,11 +556,11 @@ function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): Theme
       ...legacy.typography,
       slots: { ...legacy.typography.slots, composerMelody: { kind: 'inherit' } }
     }
-  })
+  }))
 }
 
 function migrateVersionSeven(legacy: z.infer<typeof versionSevenThemeSchema>): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionTen(versionTenThemeSchema.parse({
     ...legacy,
     version: 10,
     polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
@@ -465,15 +569,51 @@ function migrateVersionSeven(legacy: z.infer<typeof versionSevenThemeSchema>): T
       ...legacy.decorations,
       sparkles: { ...legacy.decorations.sparkles, effect: 'twinkle', speed: 1 }
     }
-  })
+  }))
 }
 
 function migrateVersionEight(legacy: z.infer<typeof versionEightThemeSchema>): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionTen(versionTenThemeSchema.parse({
     ...legacy,
     version: 10,
     polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() }
+  }))
+}
+
+function migrateVersionTen(legacy: z.infer<typeof versionTenThemeSchema>): ThemeProfile {
+  const { sourceImage: polaroidSourceImage, ...polaroid } = legacy.polaroid
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 11,
+    hero: {
+      source: legacy.hero.sourceImage ? inferLegacyMediaReference(legacy.hero.sourceImage) : null,
+      focus: legacy.hero.focus,
+      scale: legacy.hero.scale,
+      position: legacy.hero.position,
+      playback: createDefaultVideoPlayback()
+    },
+    polaroid: {
+      ...polaroid,
+      source: polaroidSourceImage ? inferLegacyMediaReference(polaroidSourceImage) : null,
+      playback: createDefaultVideoPlayback()
+    }
   })
+}
+
+function inferLegacyMediaReference(asset: string): MediaReference {
+  const lower = asset.toLowerCase()
+  const mimeType: MediaMimeType = lower.endsWith('.webp')
+    ? 'image/webp'
+    : lower.endsWith('.gif')
+      ? 'image/gif'
+      : lower.endsWith('.jpg') || lower.endsWith('.jpeg')
+        ? 'image/jpeg'
+        : 'image/png'
+  return { asset, kind: 'image', mimeType }
+}
+
+function polaroidRecord(value: object): Record<string, unknown> {
+  return value as Record<string, unknown>
 }
 
 function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
@@ -511,6 +651,10 @@ function createDefaultPolaroidStyle(): z.infer<typeof polaroidStyleSchema> {
       color: 'rgba(24, 48, 54, 0.24)'
     }
   }
+}
+
+function createDefaultVideoPlayback(): VideoPlayback {
+  return { autoplay: true, loop: true, sound: false, volume: 0.7 }
 }
 
 function createDefaultParticleIcons(): Pick<z.infer<typeof currentParticleIconsSchema>, 'backgroundSparkle' | 'backgroundFloat' | 'backgroundRain' | 'backgroundMeteor' | 'backgroundSnow'> {

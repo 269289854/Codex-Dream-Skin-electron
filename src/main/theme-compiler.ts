@@ -10,15 +10,21 @@ export async function compileTheme(
   readAsset: (asset: string) => Promise<string>
 ): Promise<CompiledTheme> {
   const assetNames = new Set<string>()
-  if (profile.hero.sourceImage) assetNames.add(profile.hero.sourceImage)
-  if (profile.polaroid.sourceImage) assetNames.add(profile.polaroid.sourceImage)
+  if (profile.hero.source?.kind === 'image') assetNames.add(profile.hero.source.asset)
+  else if (!profile.hero.source && profile.hero.sourceImage) assetNames.add(profile.hero.sourceImage)
+  if (profile.polaroid.source?.kind === 'image') assetNames.add(profile.polaroid.source.asset)
+  else if (!profile.polaroid.source && profile.polaroid.sourceImage) assetNames.add(profile.polaroid.sourceImage)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
   for (const font of profile.typography.importedFonts) assetNames.add(font.asset)
 
   const assets: Record<string, string> = {}
   for (const asset of assetNames) assets[asset] = await readAsset(asset)
-  const hero = profile.hero.sourceImage ? assets[profile.hero.sourceImage] : null
-  const polaroid = profile.polaroid.sourceImage ? assets[profile.polaroid.sourceImage] : null
+  const hero = profile.hero.source
+    ? profile.hero.source.kind === 'image' ? assets[profile.hero.source.asset] : null
+    : profile.hero.sourceImage ? assets[profile.hero.sourceImage] : null
+  const polaroid = profile.polaroid.source
+    ? profile.polaroid.source.kind === 'image' ? assets[profile.polaroid.source.asset] : null
+    : profile.polaroid.sourceImage ? assets[profile.polaroid.sourceImage] : null
   const polaroidLayout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, profile.polaroid.fence as Fence) : null
   const showPolaroid = profile.polaroid.visible && Boolean(polaroid && polaroidLayout)
   const polaroidStyle = profile.polaroid.style
@@ -31,7 +37,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 10, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 11, profile, home: { actions: HOME_ACTIONS }, assets }).replace(/</g, '\\u003c'),
     assets
   }
 }

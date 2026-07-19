@@ -16,20 +16,25 @@
     "package:win": "npm run build && electron-builder --win nsis --x64"
   },
   "dependencies": {
+    "archiver": "^8.0.0",
     "culori": "^4.0.2",
     "fflate": "^0.8.3",
     "lucide-react": "^0.468.0",
+    "mediainfo.js": "^0.3.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.35.3",
     "ws": "^8.21.1",
+    "yauzl": "^3.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
     "@types/ws": "^8.18.1",
+    "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^35.0.0",
     "electron-builder": "^26.0.12",

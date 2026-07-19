@@ -1,4 +1,4 @@
-import type { ThemeProfile, ThemeSummary } from './theme'
+import type { MediaReference, ThemeProfile, ThemeSummary } from './theme'
 import type { ImportedFontFormat } from './typography'
 
 export interface AppInfo {
@@ -10,6 +10,15 @@ export interface ImportedAsset {
   relativePath: string
   dataUrl: string
   mediaType: string
+  originalName: string
+  width: number
+  height: number
+}
+
+export interface ImportedMediaAsset {
+  reference: MediaReference
+  relativePath: string
+  previewUrl: string
   originalName: string
   width: number
   height: number
@@ -29,6 +38,15 @@ export interface CompiledTheme {
   css: string
   rendererPayload: string
   assets: Record<string, string>
+}
+
+export interface OperationProgress {
+  id: string
+  kind: 'media-import' | 'theme-copy' | 'share-export' | 'share-import'
+  phase: 'started' | 'copying' | 'validating' | 'writing' | 'completed' | 'failed' | 'cancelled'
+  processedBytes: number
+  totalBytes: number | null
+  message: string
 }
 
 export type AssetPurpose = 'hero' | 'polaroid' | 'icon' | 'font'
@@ -78,6 +96,8 @@ export interface StudioApi {
   }
   assets: {
     selectImage: (themeId: string, purpose: Exclude<AssetPurpose, 'icon' | 'font'>) => Promise<ImportedAsset | null>
+    selectMedia: (themeId: string, purpose: Exclude<AssetPurpose, 'icon' | 'font'>) => Promise<ImportedMediaAsset | null>
+    getPreviewUrl: (themeId: string, asset: string) => Promise<string>
     selectIcon: (themeId: string) => Promise<ImportedAsset | null>
     selectFont: (themeId: string) => Promise<ImportedFontAsset | null>
   }
@@ -88,6 +108,10 @@ export interface StudioApi {
   }
   files: {
     getPathForFile: (file: unknown) => string
+  }
+  operations: {
+    cancel: (id: string) => Promise<void>
+    subscribeProgress: (listener: (progress: OperationProgress) => void) => () => void
   }
   codex: {
     detect: () => Promise<CodexDetection>

@@ -284,6 +284,7 @@
   };
 
   const previous = window[STATE_KEY];
+  if (previous?.cleanup) previous.cleanup();
   if (previous?.observer) previous.observer.disconnect();
   if (previous?.timer) clearInterval(previous.timer);
   if (previous?.scheduler?.timeout) clearTimeout(previous.scheduler.timeout);
@@ -297,6 +298,105 @@
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     return URL.createObjectURL(new Blob([bytes], { type: mediaType }));
   })();
+
+  const mediaUrls = {};
+  const mediaInputs = {};
+  const mediaConfig = themeConfig?.media || {};
+  const mediaInputId = (role) => `codex-dream-skin-media-${role}`;
+  const prepareMedia = () => {
+    const result = {};
+    for (const role of ["hero", "polaroid"]) {
+      if (mediaConfig?.[role]?.kind !== "video") continue;
+      let input = document.getElementById(mediaInputId(role));
+      if (!(input instanceof HTMLInputElement)) {
+        input?.remove();
+        input = document.createElement("input");
+        input.type = "file";
+        input.id = mediaInputId(role);
+        input.accept = mediaConfig[role]?.mimeType || "video/mp4,video/webm";
+        input.hidden = true;
+        input.setAttribute("aria-hidden", "true");
+        (document.body || document.documentElement).appendChild(input);
+      }
+      mediaInputs[role] = input;
+      result[role] = input.id;
+    }
+    return result;
+  };
+  const attachMedia = () => {
+    for (const role of ["hero", "polaroid"]) {
+      const input = mediaInputs[role] || document.getElementById(mediaInputId(role));
+      const file = input instanceof HTMLInputElement ? input.files?.[0] : null;
+      if (!file) continue;
+      if (mediaUrls[role]) URL.revokeObjectURL(mediaUrls[role]);
+      mediaUrls[role] = URL.createObjectURL(file);
+    }
+    ensure();
+    return true;
+  };
+  window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__ = prepareMedia;
+  window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__ = attachMedia;
+
+  const configureVideo = (video, playback) => {
+    video.autoplay = Boolean(playback?.autoplay);
+    video.loop = Boolean(playback?.loop);
+    video.muted = !Boolean(playback?.sound);
+    video.volume = clamp(Number(playback?.volume) || 0, 0, 1);
+    video.playsInline = true;
+    video.controls = false;
+    video.onplay = () => video.parentElement?.querySelector(".dream-media-play")?.remove();
+    const showPlayButton = () => {
+      if (!video.parentElement?.querySelector(".dream-media-play")) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "dream-media-play";
+        button.textContent = "▶";
+        button.setAttribute("aria-label", "播放媒体");
+        button.addEventListener("click", () => { void video.play().catch(() => undefined); });
+        video.parentElement?.appendChild(button);
+      }
+    };
+    video.onpause = () => { if (video.ended) showPlayButton(); };
+    video.dataset.dreamAutoplay = playback?.autoplay ? "true" : "false";
+    if (!playback?.autoplay) showPlayButton();
+    return showPlayButton;
+  };
+  const ensureHeroMedia = (hero) => {
+    if (!(hero instanceof HTMLElement)) return;
+    let video = hero.querySelector(":scope > .dream-hero-video");
+    if (mediaConfig?.hero?.kind !== "video" || !mediaUrls.hero) {
+      video?.remove();
+      return;
+    }
+    if (!(video instanceof HTMLVideoElement)) {
+      video?.remove();
+      video = document.createElement("video");
+      video.className = "dream-hero-video";
+      video.setAttribute("aria-hidden", "true");
+      hero.prepend(video);
+    }
+    if (video.src !== mediaUrls.hero) video.src = mediaUrls.hero;
+    const showPlayButton = configureVideo(video, mediaConfig.hero.playback);
+    if (mediaConfig.hero.playback?.autoplay) video.play().catch(showPlayButton);
+  };
+  const ensurePolaroidMedia = (surface) => {
+    if (!(surface instanceof HTMLElement)) return;
+    let video = surface.querySelector(":scope > .dream-polaroid-video");
+    if (mediaConfig?.polaroid?.kind !== "video" || !mediaUrls.polaroid) {
+      video?.remove();
+      return;
+    }
+    if (!(video instanceof HTMLVideoElement)) {
+      video?.remove();
+      video = document.createElement("video");
+      video.className = "dream-polaroid-video";
+      video.setAttribute("aria-hidden", "true");
+      surface.appendChild(video);
+    }
+    if (video.src !== mediaUrls.polaroid) video.src = mediaUrls.polaroid;
+    const showPlayButton = configureVideo(video, mediaConfig.polaroid.playback);
+    if (mediaConfig.polaroid.playback?.autoplay) video.play().catch(showPlayButton);
+  };
 
   const isVisible = (node) => {
     if (!(node instanceof HTMLElement)) return false;
@@ -689,6 +789,7 @@
       markCurrentNode(".dream-project-bar", projectBar, "dream-project-bar");
       const nativeSuggestions = home.querySelector('[data-home-ambient-suggestions="true"], [data-home-ambient-suggestions]');
       markCurrentNode(".dream-native-suggestions", nativeSuggestions, "dream-native-suggestions");
+      ensureHeroMedia(hero);
     } else {
       clearHomeLayout();
     }
@@ -736,6 +837,7 @@
         surface.className = "dream-polaroid-surface";
         shadow.appendChild(surface);
       }
+      ensurePolaroidMedia(surface);
     }
     let pin = chrome.querySelector(".dream-polaroid-pin");
     if (!pin) {
@@ -794,14 +896,28 @@
     const state = window[STATE_KEY];
     state?.observer?.disconnect();
     if (state?.resizeHandler) window.removeEventListener("resize", state.resizeHandler);
+    if (state?.visibilityHandler) document.removeEventListener("visibilitychange", state.visibilityHandler);
     if (state?.timer) clearInterval(state.timer);
     if (state?.scheduler?.timeout) clearTimeout(state.scheduler.timeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
+    for (const url of Object.values(mediaUrls)) if (url) URL.revokeObjectURL(url);
+    document.querySelectorAll(".dream-hero-video, .dream-polaroid-video").forEach((node) => { if (node instanceof HTMLMediaElement) node.pause(); node.remove(); });
+    document.querySelectorAll("input[id^='codex-dream-skin-media-']").forEach((node) => node.remove());
+    delete window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__;
+    delete window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__;
     delete window[STATE_KEY];
     return true;
   };
 
   const scheduler = { timeout: null };
+  const visibilityHandler = () => {
+    document.querySelectorAll(".dream-hero-video, .dream-polaroid-video").forEach((node) => {
+      if (!(node instanceof HTMLVideoElement)) return;
+      if (document.hidden) node.pause();
+      else if (node.dataset.dreamAutoplay === "true") void node.play().catch(() => undefined);
+    });
+  };
+  document.addEventListener("visibilitychange", visibilityHandler);
   const scheduleEnsure = () => {
     if (scheduler.timeout) clearTimeout(scheduler.timeout);
     scheduler.timeout = setTimeout(() => {
@@ -824,6 +940,8 @@
     timer,
     scheduler,
     artUrl,
+    mediaUrls,
+    visibilityHandler,
     version: VERSION,
   };
   ensure();

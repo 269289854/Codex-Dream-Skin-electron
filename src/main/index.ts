@@ -1,4 +1,8 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, type NativeImage, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, protocol, type NativeImage, type OpenDialogOptions } from 'electron'
+import { createReadStream } from 'node:fs'
+import { stat } from 'node:fs/promises'
+import { Readable } from 'node:stream'
+import { randomUUID } from 'node:crypto'
 import { extname, join } from 'node:path'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
@@ -11,7 +15,9 @@ let tray: Tray | null = null
 let trayIcon: NativeImage | null = null
 let appIconPath = ''
 let quitting = false
+const operationControllers = new Map<string, AbortController>()
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
+protocol.registerSchemesAsPrivileged([{ scheme: 'studio-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 function showWindow(): void {
   mainWindow?.show()
@@ -60,6 +66,33 @@ function registerIpc(): void {
     if (purpose === 'font') return store.importFontAsset(themeId, result.filePaths[0])
     return store.importAsset(themeId, result.filePaths[0], purpose)
   })
+  ipcMain.handle('assets:select-media', async (_event, themeId: string, purpose: 'hero' | 'polaroid') => {
+    const options: OpenDialogOptions = {
+      title: purpose === 'hero' ? '选择主视觉媒体' : '选择拍立得媒体',
+      properties: ['openFile'],
+      filters: [{ name: 'Images and Video', extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
+    }
+    const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return null
+    const id = randomUUID()
+    const controller = new AbortController()
+    operationControllers.set(id, controller)
+    emitProgress({ id, kind: 'media-import', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导入媒体' })
+    try {
+      const imported = await store.importMediaAsset(themeId, result.filePaths[0], purpose, controller.signal)
+      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '媒体导入完成' })
+      return imported
+    } catch (error) {
+      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? error.message : '媒体导入失败' })
+      throw error
+    } finally {
+      operationControllers.delete(id)
+    }
+  })
+  ipcMain.handle('assets:get-preview-url', (_event, themeId: unknown, asset: unknown) => store.getMediaPreviewUrl(themeId, asset))
+  ipcMain.handle('operations:cancel', (_event, id: unknown) => {
+    if (typeof id === 'string') operationControllers.get(id)?.abort()
+  })
   ipcMain.handle('share:export', async (_event, profile: unknown) => {
     const name = typeof profile === 'object' && profile !== null && 'name' in profile && typeof profile.name === 'string' ? profile.name : '主题'
     const safeName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().slice(0, 80) || '主题'
@@ -68,17 +101,57 @@ function registerIpc(): void {
       : await dialog.showSaveDialog({ title: '导出主题', defaultPath: `${safeName}.cdstheme`, filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
     if (result.canceled || !result.filePath) return null
     const filePath = extname(result.filePath).toLowerCase() === '.cdstheme' ? result.filePath : `${result.filePath}.cdstheme`
-    await store.exportSharePackage(profile, filePath)
-    return { filePath }
+    const id = randomUUID()
+    emitProgress({ id, kind: 'share-export', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导出主题' })
+    const controller = new AbortController()
+    operationControllers.set(id, controller)
+    try {
+      await store.exportSharePackage(profile, filePath, controller.signal)
+      emitProgress({ id, kind: 'share-export', phase: 'completed', processedBytes: 0, totalBytes: null, message: '主题导出完成' })
+      return { filePath }
+    } catch (error) {
+      emitProgress({ id, kind: 'share-export', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? error.message : '主题导出失败' })
+      throw error
+    } finally {
+      operationControllers.delete(id)
+    }
   })
   ipcMain.handle('share:import', async () => {
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, { title: '导入主题', properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
       : await dialog.showOpenDialog({ title: '导入主题', properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
     if (result.canceled || !result.filePaths[0]) return null
-    return store.importSharePackage(result.filePaths[0])
+    const id = randomUUID()
+    emitProgress({ id, kind: 'share-import', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导入主题' })
+    const controller = new AbortController()
+    operationControllers.set(id, controller)
+    try {
+      const profile = await store.importSharePackage(result.filePaths[0], controller.signal)
+      emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '主题导入完成' })
+      return profile
+    } catch (error) {
+      emitProgress({ id, kind: 'share-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? error.message : '主题导入失败' })
+      throw error
+    } finally {
+      operationControllers.delete(id)
+    }
   })
-  ipcMain.handle('share:import-path', (_event, path: unknown) => store.importSharePackage(path))
+  ipcMain.handle('share:import-path', async (_event, path: unknown) => {
+    const id = randomUUID()
+    emitProgress({ id, kind: 'share-import', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导入主题' })
+    const controller = new AbortController()
+    operationControllers.set(id, controller)
+    try {
+      const profile = await store.importSharePackage(path, controller.signal)
+      emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '主题导入完成' })
+      return profile
+    } catch (error) {
+      emitProgress({ id, kind: 'share-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? error.message : '主题导入失败' })
+      throw error
+    } finally {
+      operationControllers.delete(id)
+    }
+  })
   ipcMain.handle('codex:detect', () => captureIpcResult(() => codexService.detect()))
   ipcMain.handle('codex:install-theme', (_event, themeId: string) =>
     captureIpcResult(() => codexService.installTheme(themeId)))
@@ -152,6 +225,7 @@ if (!hasSingleInstanceLock) {
     app.setAppUserModelId('com.codexdreamskin.studio')
     store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), join(resourcesRoot, 'dream-reference.png'))
     await store.initialize()
+    protocol.handle('studio-media', async (request) => handleStudioMediaRequest(request))
     codexService = new CodexService(store, resourcesRoot, (status) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
       try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
@@ -165,6 +239,43 @@ if (!hasSingleInstanceLock) {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
   })
+}
+
+function emitProgress(progress: { id: string; kind: 'media-import' | 'theme-copy' | 'share-export' | 'share-import'; phase: 'started' | 'copying' | 'validating' | 'writing' | 'completed' | 'failed' | 'cancelled'; processedBytes: number; totalBytes: number | null; message: string }): void {
+  for (const window of BrowserWindow.getAllWindows()) window.webContents.send('operations:progress', progress)
+}
+
+async function handleStudioMediaRequest(request: Request): Promise<Response> {
+  try {
+    if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 })
+    const url = new URL(request.url)
+    const themeId = decodeURIComponent(url.hostname)
+    const asset = url.pathname.replace(/^\//, '').split('/').map((part) => decodeURIComponent(part)).join('/')
+    const resolved = await store.resolveReferencedMedia(themeId, asset)
+    const range = request.headers.get('range') ?? url.searchParams.get('range')
+    const fileStat = await stat(resolved.path)
+    let start = 0
+    let end = fileStat.size - 1
+    let status = 200
+    const headers = new Headers({ 'Content-Type': resolved.mimeType, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' })
+    if (range) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range)
+      if (!match) return new Response('Invalid range', { status: 416 })
+      if (match[1]) start = Number(match[1])
+      if (match[2]) end = Number(match[2])
+      if (!match[1] && match[2]) { const length = Number(match[2]); start = Math.max(0, fileStat.size - length); end = fileStat.size - 1 }
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= fileStat.size) return new Response('Range not satisfiable', { status: 416 })
+      end = Math.min(end, fileStat.size - 1)
+      status = 206
+      headers.set('Content-Range', `bytes ${start}-${end}/${fileStat.size}`)
+    }
+    headers.set('Content-Length', String(end - start + 1))
+    if (request.method === 'HEAD') return new Response(null, { status, headers })
+    const stream = createReadStream(resolved.path, { start, end })
+    return new Response(Readable.toWeb(stream) as ReadableStream, { status, headers })
+  } catch {
+    return new Response('Not found', { status: 404 })
+  }
 }
 
 app.on('window-all-closed', () => { if (!codexService?.isActive()) app.quit() })

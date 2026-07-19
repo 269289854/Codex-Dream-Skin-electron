@@ -4,7 +4,9 @@ import { getPolaroidLayout, polaroidShadowFilter } from '../../shared/polaroid'
 import type { PolaroidMode, ThemeProfile } from '../../shared/theme'
 
 interface PolaroidPreviewProps {
-  imageUrl: string
+  mediaUrl: string
+  mediaKind: 'image' | 'video'
+  playback: ThemeProfile['polaroid']['playback']
   mode: PolaroidMode
   fence: Fence
   sourceSize: { width: number; height: number } | null
@@ -14,7 +16,7 @@ interface PolaroidPreviewProps {
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
 }
 
-export function PolaroidPreview({ imageUrl, mode, fence, sourceSize, placement, style, pin, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
+export function PolaroidPreview({ mediaUrl, mediaKind, playback, mode, fence, sourceSize, placement, style, pin, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
   if (!sourceSize) return null
   const layout = getPolaroidLayout(mode, sourceSize, fence)
   if (!layout) return null
@@ -37,14 +39,7 @@ export function PolaroidPreview({ imageUrl, mode, fence, sourceSize, placement, 
     >
       <div className="preview-polaroid-shadow" style={{ filter: polaroidShadowFilter(style) }}>
         <div className="preview-polaroid-surface" style={{ clipPath: layout.clipPath ?? 'none' }}>
-          <img
-            src={imageUrl}
-            alt="拍立得"
-            draggable={false}
-            style={{
-              ...layout.image
-            }}
-          />
+          {mediaKind === 'video' ? <video ref={(element) => { if (element) element.volume = playback.volume }} src={mediaUrl} muted={!playback.sound} autoPlay={playback.autoplay} loop={playback.loop} controls={!playback.autoplay} playsInline style={{ ...layout.image }} /> : <img src={mediaUrl} alt="拍立得" draggable={false} style={{ ...layout.image }} />}
         </div>
       </div>
       <span className="preview-polaroid-pin" data-preview-target="icon-polaroid-pin" onPointerDown={(event) => event.stopPropagation()}>{pin}</span>

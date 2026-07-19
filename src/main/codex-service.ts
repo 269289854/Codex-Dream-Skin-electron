@@ -20,15 +20,16 @@ export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<strin
   const rules = [`:root.codex-dream-skin { ${buildThemeVariableDeclarations(profile)} }`,
     'html.codex-dream-skin body { color: var(--dream-global-text) !important; background: var(--dream-canvas) !important; font-family: var(--dream-font-ui) !important; }',
     `.dream-layout-root { --dream-art-scale: ${Math.round(profile.hero.scale * 100)}%; --dream-art-x: ${profile.hero.position.x * 100}%; --dream-art-y: ${profile.hero.position.y * 100}%; }`]
-  const source = profile.polaroid.sourceImage
+  const source = profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null
+  const imageSource = profile.polaroid.source?.kind === 'image' || !profile.polaroid.source ? source : null
   const fence = profile.polaroid.fence as Fence
   const layout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, fence) : null
-  if (profile.polaroid.visible && source && assets[source] && layout) {
+  if (profile.polaroid.visible && source && layout) {
     const p = profile.polaroid.placement
     const style = profile.polaroid.style
     rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${layout.aspectRatio}; transform: rotate(${p.rotation}deg); transform-origin: center; opacity: ${style.opacity}; }`)
     rules.push(`#codex-dream-skin-chrome .dream-polaroid-shadow { filter: ${polaroidShadowFilter(style)} !important; }`)
-    rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface { background-image: url("${assets[source]}") !important; background-size: ${layout.backgroundSize} !important; background-position: ${layout.backgroundPosition} !important; clip-path: ${layout.clipPath ?? 'none'} !important; }`)
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface { background-image: ${imageSource && assets[source] ? `url("${assets[source]}")` : 'none'} !important; background-size: ${layout.backgroundSize} !important; background-position: ${layout.backgroundPosition} !important; clip-path: ${layout.clipPath ?? 'none'} !important; }`)
     rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
   } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
   return rules.join('\n')
@@ -163,6 +164,7 @@ export class CodexService {
       const payload = await this.buildPayload(themeId)
       await this.writeRuntimePayload(payload)
       this.watcher.setPayload(payload)
+      this.watcher.setMediaBindings(await this.store.getRuntimeMediaBindings(themeId))
       const snapshot = await this.watcher.inject()
       this.patch('active', `主题已重新注入 ${snapshot.targetCount} 个页面`)
       return this.getStatus()
@@ -230,6 +232,7 @@ export class CodexService {
       (update) => this.queuePolaroidPlacement(update)
     )
     this.watcher.setPayload(payload)
+    if (this.activeThemeId) this.watcher.setMediaBindings(await this.store.getRuntimeMediaBindings(this.activeThemeId))
     return await this.watcher.start()
   }
 
@@ -241,7 +244,10 @@ export class CodexService {
       readFile(join(this.resourcesRoot, 'dream-particle-effects.css'), 'utf8'),
       readFile(join(this.resourcesRoot, 'renderer-inject.js'), 'utf8')
     ])
-    const hero = profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
+    // Video media is bound through CDP; only image media belongs in the base64 art payload.
+    const hero = profile.hero.source
+      ? profile.hero.source.kind === 'image' ? compiled.assets[profile.hero.source.asset] : TRANSPARENT_PNG
+      : profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
     const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot)
     const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
@@ -253,6 +259,10 @@ export class CodexService {
       .replace('__DREAM_ART_JSON__', JSON.stringify(hero ?? TRANSPARENT_PNG))
       .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
         themeId: profile.id,
+        media: {
+          hero: profile.hero.source?.kind === 'video' ? { kind: 'video', mimeType: profile.hero.source.mimeType, playback: profile.hero.playback } : null,
+          polaroid: profile.polaroid.source?.kind === 'video' ? { kind: 'video', mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback } : null
+        },
         icons,
         decorations: profile.decorations,
         particleViewportTop: PARTICLE_VIEWPORT_TOP,
