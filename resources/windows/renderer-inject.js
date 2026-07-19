@@ -362,6 +362,9 @@
     if (!playback?.autoplay) showPlayButton();
     return showPlayButton;
   };
+  const keepHeroMediaOutOfLayoutAnchor = (hero, media) => {
+    if (hero.firstElementChild === media) hero.appendChild(media);
+  };
   const ensureHeroMedia = (hero) => {
     if (!(hero instanceof HTMLElement)) return;
     let video = hero.querySelector(":scope > .dream-hero-video");
@@ -378,8 +381,9 @@
         video = document.createElement("video");
         video.className = "dream-hero-video";
         video.setAttribute("aria-hidden", "true");
-        hero.prepend(video);
+        hero.appendChild(video);
       }
+      keepHeroMediaOutOfLayoutAnchor(hero, video);
       if (video.src !== mediaUrls.hero) video.src = mediaUrls.hero || "";
       video.style.transform = mediaTransform(mediaConfig.hero.transform);
       const showPlayButton = configureVideo(video, mediaConfig.hero.playback);
@@ -392,8 +396,9 @@
       image = document.createElement("div");
       image.className = "dream-hero-image";
       image.setAttribute("aria-hidden", "true");
-      hero.prepend(image);
+      hero.appendChild(image);
     }
+    keepHeroMediaOutOfLayoutAnchor(hero, image);
     image.style.backgroundImage = `url("${artUrl}")`;
     image.style.backgroundRepeat = "no-repeat";
     image.style.backgroundSize = "var(--dream-art-scale, 100%) auto";

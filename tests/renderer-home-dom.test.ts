@@ -579,9 +579,34 @@ describe('renderer home DOM adaptation', () => {
 
     const heroImage = window.document.querySelector('.dream-hero-image') as HTMLElement | null
     expect(heroImage?.style.transform).toBe('scaleX(-1) scaleY(1)')
+    expect(heroImage?.parentElement?.firstElementChild).not.toBe(heroImage)
+    expect(heroImage?.parentElement?.firstElementChild?.classList.contains('hero-host')).toBe(true)
     expect(window.document.querySelector('.dream-heading-region')).not.toBeNull()
     stateOf(window).cleanup()
     expect(window.document.querySelector('.dream-hero-image')).toBeNull()
+  })
+
+  it('keeps hero video outside the native content layout and repairs an older first-child injection', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: { kind: 'video', transform: { flipHorizontal: false, flipVertical: true } },
+      polaroid: null
+    })
+
+    const hero = window.document.querySelector('.dream-layout-root')
+    const heroVideo = hero?.querySelector(':scope > .dream-hero-video')
+    if (!(heroVideo instanceof window.HTMLVideoElement)) throw new Error('Hero video fixture is missing.')
+    expect(heroVideo?.style.transform).toBe('scaleX(1) scaleY(-1)')
+    expect(hero?.firstElementChild?.classList.contains('hero-host')).toBe(true)
+
+    hero?.prepend(heroVideo)
+    expect(hero?.firstElementChild).toBe(heroVideo)
+    stateOf(window).ensure()
+
+    expect(hero?.firstElementChild).not.toBe(heroVideo)
+    expect(hero?.firstElementChild?.classList.contains('hero-host')).toBe(true)
+    expect(hero?.querySelectorAll(':scope > .dream-hero-video')).toHaveLength(1)
   })
 
   it('reuses a native heading project button when Codex renders one', () => {

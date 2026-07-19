@@ -36,6 +36,10 @@ describe('renderer injection template', () => {
     expect(layoutCss).toContain('.dream-project-proxy')
     expect(layoutCss).toContain('.dream-native-suggestions')
     expect(layoutCss).toContain('[data-testid="home-icon"]')
+    const heroMediaRule = layoutCss.match(/\.dream-home \.dream-layout-root > :is\(\.dream-hero-image, \.dream-hero-video\)\s*\{[^}]+\}/)?.[0]
+    expect(heroMediaRule).toContain('position: absolute !important')
+    expect(heroMediaRule).toContain('width: 100% !important')
+    expect(heroMediaRule).toContain('height: 100% !important')
     expect(rendererEntry).toContain("dream-home-layout.css")
     expect(studio).toContain('HOME_ACTIONS.map')
     expect(codexService).toContain("dream-home-layout.css")

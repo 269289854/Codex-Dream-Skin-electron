@@ -4,6 +4,7 @@ import type { PolaroidPlacementUpdate } from '../shared/contracts'
 interface CdpVersion { webSocketDebuggerUrl: string }
 interface CdpTarget { id: string; type: string; url: string; webSocketDebuggerUrl: string }
 export interface CdpMediaBinding { role: 'hero' | 'polaroid'; path: string; mimeType: string }
+type CdpCommand = (method: string, params: Record<string, unknown>) => Promise<unknown>
 
 const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); return true; })()'
 const TAKE_PLACEMENT_EXPRESSION = 'window.__CODEX_DREAM_SKIN_STATE__?.takePlacementUpdate?.() ?? null'
@@ -178,37 +179,68 @@ export class CdpWatcher {
   private async bindMedia(target: CdpTarget): Promise<void> {
     const prepared = await this.evaluate(target, 'window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__?.() ?? {}')
     if (!prepared || typeof prepared !== 'object') return
-    for (const binding of this.mediaBindings) {
-      const inputId = (prepared as Record<string, unknown>)[binding.role]
-      if (typeof inputId !== 'string') continue
-      const documentResult = await this.command(target, 'DOM.getDocument', { depth: 1 }) as { result?: { root?: { nodeId?: number } } }
-      const rootNodeId = documentResult.result?.root?.nodeId
-      if (!rootNodeId) throw new Error('Codex 页面 DOM 根节点不可用。')
-      const query = await this.command(target, 'DOM.querySelector', { nodeId: rootNodeId, selector: `#${inputId}` }) as { result?: { nodeId?: number } }
-      const nodeId = query.result?.nodeId
-      if (!nodeId) throw new Error('Codex 媒体输入节点不可用。')
-      await this.command(target, 'DOM.setFileInputFiles', { files: [binding.path], nodeId })
-    }
+    await this.withSession(target, async (send) => {
+      await send('DOM.enable', {})
+      for (const binding of this.mediaBindings) {
+        const inputId = (prepared as Record<string, unknown>)[binding.role]
+        if (typeof inputId !== 'string') continue
+        let nodeId: number | undefined
+        for (let attempt = 0; attempt < 4 && !nodeId; attempt += 1) {
+          const documentResult = await send('DOM.getDocument', { depth: 1, pierce: true }) as { result?: { root?: { nodeId?: number } } }
+          const rootNodeId = documentResult.result?.root?.nodeId
+          if (!rootNodeId) throw new Error('Codex 页面 DOM 根节点不可用。')
+          const query = await send('DOM.querySelector', { nodeId: rootNodeId, selector: `#${inputId}` }) as { result?: { nodeId?: number } }
+          nodeId = query.result?.nodeId || undefined
+          if (!nodeId && attempt < 3) await new Promise((resolve) => setTimeout(resolve, 80))
+        }
+        if (!nodeId) throw new Error('Codex 媒体输入节点不可用。')
+        await send('DOM.setFileInputFiles', { files: [binding.path], nodeId })
+      }
+    })
     await this.evaluate(target, 'window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__?.()')
   }
 
   private async command(target: CdpTarget, method: string, params: Record<string, unknown>): Promise<unknown> {
+    return await this.withSession(target, (send) => send(method, params))
+  }
+
+  private async withSession<T>(target: CdpTarget, operation: (send: CdpCommand) => Promise<T>): Promise<T> {
     if (!this.validateWebSocketUrl(target.webSocketDebuggerUrl, 'page', target.id)) throw new Error('Unsafe CDP page URL was rejected.')
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(target.webSocketDebuggerUrl, { handshakeTimeout: 3000 })
-      const requestId = 1
-      const timeout = setTimeout(() => { socket.close(); reject(new Error('CDP evaluation timed out.')) }, 8000)
-      socket.once('open', () => socket.send(JSON.stringify({ id: requestId, method, params })))
+      const pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason: Error) => void }>()
+      let requestId = 0
+      let settled = false
+      const finish = (reason?: Error, value?: T): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        for (const request of pending.values()) request.reject(reason ?? new Error('CDP 会话已结束。'))
+        pending.clear()
+        socket.close()
+        if (reason) reject(reason)
+        else resolve(value as T)
+      }
+      const timeout = setTimeout(() => finish(new Error('CDP evaluation timed out.')), 12_000)
+      const send: CdpCommand = (method, params) => new Promise((resolveCommand, rejectCommand) => {
+        const id = ++requestId
+        pending.set(id, { resolve: resolveCommand, reject: rejectCommand })
+        socket.send(JSON.stringify({ id, method, params }))
+      })
+      socket.once('open', () => { void operation(send).then((value) => finish(undefined, value), (error) => finish(error instanceof Error ? error : new Error(String(error)))) })
       socket.on('message', (data) => {
         try {
-          const message = JSON.parse(data.toString()) as { id?: number; error?: { message: string }; result?: { result?: { value?: unknown }; exceptionDetails?: unknown } }
-          if (message.id !== requestId) return
-          clearTimeout(timeout)
-          socket.close()
-          resolve(message)
-        } catch (error) { clearTimeout(timeout); socket.close(); reject(error) }
+          const message = JSON.parse(data.toString()) as { id?: number; error?: { message: string } }
+          if (typeof message.id !== 'number') return
+          const request = pending.get(message.id)
+          if (!request) return
+          pending.delete(message.id)
+          if (message.error) request.reject(new Error(message.error.message))
+          else request.resolve(message)
+        } catch (error) { finish(error instanceof Error ? error : new Error(String(error))) }
       })
-      socket.once('error', (error) => { clearTimeout(timeout); reject(error) })
+      socket.once('error', (error) => finish(error))
+      socket.once('close', () => { if (!settled) finish(new Error('CDP 会话意外关闭。')) })
     })
   }
 }
