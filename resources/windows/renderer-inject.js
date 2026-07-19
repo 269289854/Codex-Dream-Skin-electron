@@ -296,6 +296,7 @@
 
   const mediaUrls = {};
   const mediaInputs = {};
+  const playbackGuardTimers = new WeakMap();
   const mediaConfig = themeConfig?.media || {};
   const mediaTransform = (transform) => `scaleX(${transform?.flipHorizontal ? -1 : 1}) scaleY(${transform?.flipVertical ? -1 : 1})`;
   const mediaInputId = (role) => `codex-dream-skin-media-${role}`;
@@ -333,6 +334,37 @@
   window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__ = prepareMedia;
   window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__ = attachMedia;
 
+  const clearPlaybackGuard = (video) => {
+    const timer = playbackGuardTimers.get(video);
+    if (timer) clearInterval(timer);
+    playbackGuardTimers.delete(video);
+  };
+  const installPlaybackGuard = (video, playback, showPlayButton) => {
+    if (!playback?.autoplay) {
+      clearPlaybackGuard(video);
+      return;
+    }
+    if (playbackGuardTimers.has(video)) return;
+    let lastTime = video.currentTime;
+    let stalledSince = performance.now();
+    const timer = setInterval(() => {
+      if (!video.isConnected || video.paused || video.ended || document.hidden || video.readyState < video.HAVE_CURRENT_DATA) {
+        if (!video.isConnected) clearPlaybackGuard(video);
+        return;
+      }
+      const now = performance.now();
+      if (Math.abs(video.currentTime - lastTime) >= 0.01) {
+        lastTime = video.currentTime;
+        stalledSince = now;
+        return;
+      }
+      if (now - stalledSince < 1200) return;
+      video.pause();
+      stalledSince = now;
+      void video.play().catch(showPlayButton);
+    }, 750);
+    playbackGuardTimers.set(video, timer);
+  };
   const configureVideo = (video, playback) => {
     video.autoplay = Boolean(playback?.autoplay);
     video.loop = Boolean(playback?.loop);
@@ -364,11 +396,13 @@
     video.oncanplay = () => { if (playback?.autoplay && !document.hidden) void video.play().catch(showPlayButton); };
     video.dataset.dreamAutoplay = playback?.autoplay ? "true" : "false";
     if (!playback?.autoplay) showPlayButton();
+    installPlaybackGuard(video, playback, showPlayButton);
     return showPlayButton;
   };
   const resumePolaroidVideo = (polaroid) => {
     const video = polaroid?.querySelector?.(".dream-polaroid-video");
     if (!(video instanceof HTMLVideoElement) || video.dataset.dreamAutoplay !== "true" || document.hidden) return;
+    video.pause();
     void video.play().catch(() => undefined);
   };
   const keepHeroMediaOutOfLayoutAnchor = (hero, media) => {
@@ -379,6 +413,7 @@
     let video = hero.querySelector(":scope > .dream-hero-video");
     let image = hero.querySelector(":scope > .dream-hero-image");
     if (!mediaConfig?.hero || !artUrl) {
+      if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
       image?.remove();
       return;
@@ -386,6 +421,7 @@
     if (mediaConfig.hero.kind === "video") {
       image?.remove();
       if (!(video instanceof HTMLVideoElement)) {
+        if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
         video?.remove();
         video = document.createElement("video");
         video.className = "dream-hero-video";
@@ -403,6 +439,7 @@
       if (mediaConfig.hero.playback?.autoplay && !document.hidden) video.play().catch(showPlayButton);
       return;
     }
+    if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
     video?.remove();
     if (!(image instanceof HTMLElement)) {
       image?.remove();
@@ -422,10 +459,12 @@
     if (!(surface instanceof HTMLElement)) return;
     let video = surface.querySelector(":scope > .dream-polaroid-video");
     if (mediaConfig?.polaroid?.kind !== "video" || !mediaUrls.polaroid) {
+      if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
       return;
     }
     if (!(video instanceof HTMLVideoElement)) {
+      if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
       video = document.createElement("video");
       video.className = "dream-polaroid-video";
@@ -1022,7 +1061,7 @@
     if (state?.scheduler?.timeout) clearTimeout(state.scheduler.timeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
     for (const url of Object.values(mediaUrls)) if (url) URL.revokeObjectURL(url);
-    document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video").forEach((node) => { if (node instanceof HTMLMediaElement) node.pause(); node.remove(); });
+    document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video").forEach((node) => { if (node instanceof HTMLVideoElement) clearPlaybackGuard(node); if (node instanceof HTMLMediaElement) node.pause(); node.remove(); });
     document.querySelectorAll("input[id^='codex-dream-skin-media-']").forEach((node) => node.remove());
     delete window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__;
     delete window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__;

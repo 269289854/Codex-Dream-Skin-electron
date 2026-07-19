@@ -65,8 +65,20 @@ export function PolaroidPreview({ mediaUrl, mediaKind, playback, mediaTransform,
     video.addEventListener('pause', recoverPausedVideo)
     document.addEventListener('visibilitychange', resumeVisibleVideo)
     window.addEventListener('focus', attemptPlay)
+    let lastTime = video.currentTime
+    let stalledSince = window.performance.now()
     const guardTimer = window.setInterval(() => {
-      if (video.paused && !video.ended && video.readyState >= video.HAVE_CURRENT_DATA) attemptPlay()
+      if (video.paused || video.ended || document.hidden || video.readyState < video.HAVE_CURRENT_DATA) return
+      const now = window.performance.now()
+      if (Math.abs(video.currentTime - lastTime) >= 0.01) {
+        lastTime = video.currentTime
+        stalledSince = now
+        return
+      }
+      if (now - stalledSince < 1200) return
+      video.pause()
+      stalledSince = now
+      schedulePlay()
     }, 750)
     setPlaybackBlocked(false)
     attemptPlay()
