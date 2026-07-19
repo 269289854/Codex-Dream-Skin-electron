@@ -101,6 +101,37 @@ describe('PolaroidPreview video playback', () => {
     expect(play).toHaveBeenCalled()
   })
 
+  it('recovers a retained video after the preview is re-rendered', async () => {
+    const play = vi.fn(() => Promise.resolve())
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    profile.polaroid.playback.autoplay = true
+    await renderVideo('studio-media://theme/assets/re-render.mp4')
+
+    const video = container.querySelector<HTMLVideoElement>('video')
+    if (!video) throw new Error('Preview video is missing.')
+    Object.defineProperty(video, 'paused', { configurable: true, value: true })
+    play.mockClear()
+    await renderVideo('studio-media://theme/assets/re-render.mp4')
+    await act(async () => { await new Promise((resolve) => browserWindow.setTimeout(resolve, 20)) })
+    expect(play).toHaveBeenCalled()
+  })
+
+  it('restarts playback after a placement pointer interaction', async () => {
+    const play = vi.fn(() => Promise.resolve())
+    const pause = vi.fn()
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+    profile.polaroid.playback.autoplay = true
+    await renderVideo('studio-media://theme/assets/drag.mp4')
+
+    const polaroid = container.querySelector<HTMLElement>('[data-preview-target="polaroid"]')
+    if (!polaroid) throw new Error('Polaroid preview is missing.')
+    play.mockClear()
+    polaroid.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    expect(pause).toHaveBeenCalled()
+    expect(play).toHaveBeenCalled()
+  })
+
   it('shows a usable play button when autoplay is rejected', async () => {
     let rejectPlayback = true
     const play = vi.fn(() => rejectPlayback ? Promise.reject(new Error('blocked')) : Promise.resolve())

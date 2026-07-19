@@ -36,6 +36,27 @@ export function PolaroidPreview({ mediaUrl, mediaKind, playback, mediaTransform,
     }
   }, [mediaKind, playback.autoplay, playback.sound, playback.volume])
 
+  const recoverAfterInteraction = React.useCallback((): void => {
+    const video = videoRef.current
+    if (mediaKind !== 'video' || !playback.autoplay || playbackBlocked || !video || video.ended || document.hidden) return
+    if (video.paused) attemptPlay()
+  }, [attemptPlay, mediaKind, playback.autoplay, playbackBlocked])
+
+  const restartAfterPointer = React.useCallback((): void => {
+    const video = videoRef.current
+    if (mediaKind !== 'video' || !playback.autoplay || playbackBlocked || !video || video.ended || document.hidden) return
+    video.pause()
+    attemptPlay()
+  }, [attemptPlay, mediaKind, playback.autoplay, playbackBlocked])
+
+  // Settings and placement edits re-render the preview while retaining the
+  // video node. Resume on the next frame if Chromium paused it during that work.
+  React.useEffect(() => {
+    if (mediaKind !== 'video' || !playback.autoplay) return
+    const frame = window.requestAnimationFrame(recoverAfterInteraction)
+    return () => window.cancelAnimationFrame(frame)
+  })
+
   React.useEffect(() => {
     const video = videoRef.current
     if (mediaKind !== 'video' || !video) return
@@ -122,6 +143,8 @@ export function PolaroidPreview({ mediaUrl, mediaKind, playback, mediaTransform,
       role="button"
       aria-label="编辑拍立得"
       onPointerDown={onPointerDown}
+      onPointerUp={restartAfterPointer}
+      onPointerCancel={restartAfterPointer}
       style={{
         left: `${placement.x * 100}%`,
         top: `${placement.y * 100}%`,
