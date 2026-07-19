@@ -404,7 +404,7 @@ export class ProfileStore {
       } else {
         await pipeline(createReadStream(sourcePath), createWriteStreamChecked(temporary), { signal })
       }
-      const temporaryFile = await open(temporary, 'r')
+      const temporaryFile = await open(temporary, 'r+')
       try { await temporaryFile.sync() } finally { await temporaryFile.close() }
       await rename(temporary, destination)
     } catch (error) {

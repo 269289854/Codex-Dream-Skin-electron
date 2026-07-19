@@ -122,6 +122,21 @@ describe('ProfileStore', () => {
     expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(imported.dataUrl)
   })
 
+  it('imports media atomically without leaving a temporary file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-media-store-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('媒体主题')
+    const source = join(root, 'hero.png')
+    await writeFile(source, TEST_PNG)
+
+    const imported = await store.importMediaAsset(profile.id, source, 'hero')
+    const assetDirectory = join(store.themesRoot, profile.id, 'assets')
+    expect(await readFile(join(store.themesRoot, profile.id, imported.relativePath))).toEqual(TEST_PNG)
+    expect((await readdir(assetDirectory)).some((entry) => entry.endsWith('.tmp'))).toBe(false)
+  })
+
   it('duplicates the current draft and every referenced asset without changing the source profile', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-draft-duplicate-'))
     roots.push(root)
