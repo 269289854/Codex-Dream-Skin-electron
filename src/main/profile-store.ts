@@ -82,18 +82,25 @@ export class ProfileStore {
     return profile
   }
 
-  async duplicate(id: string, name: string): Promise<ThemeProfile> {
-    const source = await this.get(id)
+  async duplicate(input: unknown, name: unknown): Promise<ThemeProfile> {
+    const source = parseThemeProfile(input)
+    await this.get(source.id)
     const duplicate = { ...structuredClone(source), id: randomUUID(), name: this.cleanName(name), updatedAt: new Date().toISOString() }
-    await mkdir(this.assetRoot(duplicate.id), { recursive: true })
-    for (const asset of this.collectAssets(source)) {
-      const sourcePath = this.resolveAsset(id, asset)
-      const targetPath = this.resolveAsset(duplicate.id, asset)
-      await mkdir(dirname(targetPath), { recursive: true })
-      await copyFile(sourcePath, targetPath)
+    const duplicateRoot = this.themeRoot(duplicate.id)
+    try {
+      await mkdir(this.assetRoot(duplicate.id), { recursive: true })
+      for (const asset of this.collectAssets(source)) {
+        const sourcePath = this.resolveAsset(source.id, asset)
+        const targetPath = this.resolveAsset(duplicate.id, asset)
+        await mkdir(dirname(targetPath), { recursive: true })
+        await copyFile(sourcePath, targetPath)
+      }
+      await this.writeProfile(duplicate)
+      return duplicate
+    } catch (error) {
+      await rm(duplicateRoot, { recursive: true, force: true }).catch(() => undefined)
+      throw error
     }
-    await this.writeProfile(duplicate)
-    return duplicate
   }
 
   async update(input: unknown): Promise<ThemeProfile> {
@@ -262,7 +269,7 @@ export class ProfileStore {
   private themeRoot(id: string): string { this.assertId(id); return join(this.themesRoot, id) }
   private assetRoot(id: string): string { return join(this.themeRoot(id), 'assets') }
   private assertId(id: string): void { if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)) throw new Error('Theme ID is invalid.') }
-  private cleanName(name: string): string { const result = name.trim(); if (!result || result.length > 80) throw new Error('Theme name must be 1-80 characters.'); return result }
+  private cleanName(name: unknown): string { if (typeof name !== 'string') throw new Error('Theme name must be 1-80 characters.'); const result = name.trim(); if (!result || result.length > 80) throw new Error('Theme name must be 1-80 characters.'); return result }
   private mediaType(extension: string): string {
     if (extension === '.png') return 'image/png'
     if (extension === '.webp') return 'image/webp'

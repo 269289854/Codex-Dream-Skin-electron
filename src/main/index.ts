@@ -40,7 +40,7 @@ function registerIpc(): void {
   ipcMain.handle('themes:list', () => store.list())
   ipcMain.handle('themes:get', (_event, id: string) => store.get(id))
   ipcMain.handle('themes:create', (_event, name: string) => store.create(name))
-  ipcMain.handle('themes:duplicate', (_event, id: string, name: string) => store.duplicate(id, name))
+  ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => store.duplicate(profile, name))
   ipcMain.handle('themes:update', (_event, profile: unknown) => store.update(profile))
   ipcMain.handle('themes:delete', (_event, id: string) => store.delete(id))
   ipcMain.handle('themes:activate', (_event, id: string) => store.activate(id))

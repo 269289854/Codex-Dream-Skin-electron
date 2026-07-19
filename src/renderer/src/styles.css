@@ -9,13 +9,32 @@ button { cursor: pointer; }
 .titlebar strong { font-size: 13px; }.title-status { margin-left: auto; color: #718b90; font-size: 10px; }
 .error-banner { position: fixed; z-index: 30; top: 48px; left: 50%; transform: translateX(-50%); display: flex; gap: 18px; align-items: center; max-width: 650px; padding: 10px 12px; border: 1px solid #e3a8ad; border-radius: 6px; color: #8b2633; background: #fff5f5; box-shadow: 0 8px 30px #67404722; font-size: 11px; }
 .error-banner button { border: 0; color: #8b2633; background: transparent; }
+.theme-dialog-backdrop { position: fixed; z-index: 40; inset: 42px 0 0; display: grid; place-items: center; padding: 16px; background: rgba(18, 47, 52, .28); }
+.theme-dialog { width: min(380px, calc(100vw - 32px)); overflow: hidden; border: 1px solid #bfd1d4; border-radius: 7px; background: #f9fcfc; box-shadow: 0 18px 55px rgba(27, 61, 67, .24); }
+.theme-dialog > header { height: 48px; display: grid; grid-template-columns: 27px minmax(0, 1fr) 29px; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid #dbe6e7; }
+.theme-dialog > header > span { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 5px; color: #fff; background: #168f96; }
+.theme-dialog h2 { margin: 0; font-size: 14px; }
+.theme-dialog > header > button { width: 29px; height: 29px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; color: #6a8489; background: transparent; }
+.theme-dialog > header > button:hover { background: #e9f1f2; }
+.theme-dialog form { display: grid; gap: 9px; padding: 17px; }
+.theme-dialog-field { display: grid; gap: 6px; color: #58757a; font-size: 10px; font-weight: 600; }
+.theme-dialog-field input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid #bfd0d3; border-radius: 5px; outline: 0; color: #183f47; background: #fff; font-size: 12px; }
+.theme-dialog-field input:focus { border-color: #168f96; box-shadow: 0 0 0 3px rgba(22, 143, 150, .13); }
+.theme-dialog-field input[aria-invalid="true"] { border-color: #d67d89; }
+.theme-dialog-error { min-height: 15px; margin: 0; color: #b03545; font-size: 10px; line-height: 1.5; }
+.theme-dialog footer { display: flex; justify-content: flex-end; gap: 7px; margin-top: 4px; }
+.theme-dialog footer .secondary-command { width: auto; min-width: 68px; padding: 0 12px; }
+.theme-dialog footer .primary-button { min-width: 96px; }
+.theme-dialog button:disabled { opacity: .5; cursor: default; }
 .workspace { min-height: 0; display: grid; grid-template-columns: 224px minmax(620px, 1fr) 310px; }
 .theme-sidebar, .inspector { min-height: 0; padding: 18px 14px; overflow-y: auto; background: #f8fbfb; }
 .theme-sidebar { display: flex; flex-direction: column; border-right: 1px solid #d6e1e3; }.inspector { border-left: 1px solid #d6e1e3; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }.panel-heading h2 { margin: 3px 0 0; font-size: 17px; }.eyebrow { color: #7a9499; font-size: 9px; font-weight: 700; }
 .icon-button, .tool-button { width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid #c9dadd; border-radius: 5px; background: #fff; }.tool-button.active { color: #fff; border-color: #138b92; background: #138b92; }
 .theme-list { display: grid; gap: 5px; max-height: 230px; overflow-y: auto; }.theme-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid transparent; border-radius: 6px; text-align: left; background: transparent; }.theme-item.active { border-color: #b9d8dc; background: #eaf8f8; }.theme-item > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: 2px; }.theme-item strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.theme-item small { color: #69858a; font-size: 9px; }.theme-swatch { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 5px; }
-.theme-actions { display: flex; justify-content: flex-end; gap: 5px; padding-top: 7px; }.theme-actions button { width: 29px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 4px; color: #66858a; background: #edf4f5; }
+.theme-actions { display: flex; justify-content: flex-end; gap: 5px; padding-top: 7px; }.theme-actions button { width: 29px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 4px; color: #66858a; background: #edf4f5; }.theme-actions button:disabled { opacity: .5; cursor: default; }
+.theme-success { display: grid; grid-template-columns: 16px minmax(0, 1fr) 22px; align-items: center; gap: 5px; margin-top: 8px; padding: 7px 6px 7px 8px; border: 1px solid #a9dac6; border-radius: 5px; color: #176b4d; background: #f1fff8; font-size: 9px; line-height: 1.4; }
+.theme-success button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; color: #397b63; background: transparent; }
 .sidebar-nav { margin-top: 20px; display: grid; gap: 3px; }.sidebar-nav button { display: flex; align-items: center; gap: 9px; padding: 9px; border: 0; border-radius: 5px; background: transparent; text-align: left; font-size: 12px; }.sidebar-nav button.active { color: #087f86; background: #e7f4f4; font-weight: 600; }.sidebar-footer { margin-top: auto; display: flex; align-items: center; gap: 7px; color: #728b90; font-size: 9px; }
 .preview-panel { min-width: 0; min-height: 0; padding: 16px; display: grid; grid-template-rows: 40px minmax(0, 1fr); background: #e5edef; }.preview-toolbar { display: flex; justify-content: space-between; align-items: flex-start; font-size: 11px; font-weight: 600; }.preview-toolbar > div { display: flex; align-items: center; gap: 7px; }.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #16a067; box-shadow: 0 0 0 3px #cce9dd; }.viewport-label { color: #82999d; font-size: 9px; font-weight: 400; }.preview-actions { display: flex; gap: 6px; margin-top: -6px; }
 .primary-button, .secondary-command { display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 5px; }.primary-button { min-height: 31px; padding: 0 12px; border: 0; color: #fff; background: #138f96; font-size: 11px; }.primary-button.wide { width: 100%; padding: 10px; }.primary-button:disabled { opacity: .55; cursor: default; }

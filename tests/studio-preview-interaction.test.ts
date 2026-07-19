@@ -31,36 +31,55 @@ describe('Studio preview editing interaction', () => {
   let previous: Map<string, PropertyDescriptor | undefined>
   let scrollIntoView: ReturnType<typeof vi.fn>
   let savedProfiles: ThemeProfile[]
+  let profile: ThemeProfile
   let alternateProfile: ThemeProfile
+  let themeProfiles: ThemeProfile[]
+  let activeThemeId: string
   let selectedFontAsset: ImportedFontAsset | null
   let selectIcon: ReturnType<typeof vi.fn>
+  let duplicateTheme: ReturnType<typeof vi.fn>
+  let activateTheme: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
     previous = new Map(GLOBAL_KEYS.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
-    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     alternateProfile = createDefaultTheme('00000000-0000-4000-8000-000000000001', '备用主题')
+    themeProfiles = [profile, alternateProfile]
+    activeThemeId = profile.id
     profile.polaroid.sourceImage = 'assets/polaroid.png'
     profile.polaroid.sourceSize = { width: 1000, height: 800 }
     savedProfiles = []
     selectedFontAsset = null
     selectIcon = vi.fn(async () => null)
+    duplicateTheme = vi.fn(async (current: ThemeProfile, name: string) => {
+      const duplicate = { ...structuredClone(current), id: '00000000-0000-4000-8000-000000000002', name, updatedAt: new Date().toISOString() }
+      themeProfiles.push(duplicate)
+      return duplicate
+    })
+    activateTheme = vi.fn(async (id: string) => {
+      const selected = themeProfiles.find((item) => item.id === id)
+      if (!selected) throw new Error('Theme not found.')
+      activeThemeId = id
+      return selected
+    })
     const studio: StudioApi = {
       app: { getInfo: async () => ({ version: 'test', platform: 'win32' }) },
       themes: {
-        list: async () => [
-          { id: profile.id, name: profile.name, updatedAt: profile.updatedAt, active: true },
-          { id: alternateProfile.id, name: alternateProfile.name, updatedAt: alternateProfile.updatedAt, active: false }
-        ],
-        get: async (id) => id === alternateProfile.id ? alternateProfile : profile,
+        list: async () => themeProfiles.map((item) => ({ id: item.id, name: item.name, updatedAt: item.updatedAt, active: item.id === activeThemeId })),
+        get: async (id) => {
+          const selected = themeProfiles.find((item) => item.id === id)
+          if (!selected) throw new Error('Theme not found.')
+          return selected
+        },
         create: async () => profile,
-        duplicate: async () => profile,
+        duplicate: duplicateTheme,
         update: async (next) => {
           savedProfiles.push(structuredClone(next))
           return next
         },
         delete: async () => undefined,
-        activate: async (id) => id === alternateProfile.id ? alternateProfile : profile,
+        activate: activateTheme,
         compile: async () => ({ css: '', rendererPayload: '', assets: { 'assets/polaroid.png': 'data:image/png;base64,AA==' } }),
         subscribePolaroidPlacement: () => () => undefined
       },
@@ -174,6 +193,92 @@ describe('Studio preview editing interaction', () => {
     if (!button) throw new Error(`Dialog button ${label} is missing.`)
     button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
   }
+
+  it('opens an accessible duplicate dialog, validates the name, and cancels with Escape', () => {
+    const copy = container.querySelector<HTMLButtonElement>('button[title="复制主题"]')
+    if (!copy) throw new Error('Duplicate theme command is missing.')
+    act(() => copy.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
+    const dialog = container.querySelector('[role="dialog"]')
+    const input = dialog?.querySelector<HTMLInputElement>('input')
+    expect(dialog?.querySelector('h2')?.textContent).toBe('复制主题')
+    expect(dialog?.getAttribute('aria-modal')).toBe('true')
+    expect(input?.value).toBe('初音未来 副本')
+    expect(browserWindow.document.activeElement).toBe(input)
+    expect(input?.selectionStart).toBe(0)
+    expect(input?.selectionEnd).toBe(input?.value.length)
+
+    if (!input) throw new Error('Duplicate name input is missing.')
+    act(() => setInputValue(input, '   '))
+    expect(container.querySelector('.theme-dialog-error')?.textContent).toBe('主题名称不能为空。')
+    expect(container.querySelector<HTMLButtonElement>('.theme-dialog button[type="submit"]')?.disabled).toBe(true)
+
+    act(() => input.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) as unknown as KeyboardEvent))
+    expect(container.querySelector('.theme-dialog')).toBeNull()
+    expect(duplicateTheme).not.toHaveBeenCalled()
+  })
+
+  it('duplicates the unsaved draft once, activates it, and reports success', async () => {
+    const title = container.querySelector('[data-preview-target="copy-brand-title"]')
+    const copy = container.querySelector<HTMLButtonElement>('button[title="复制主题"]')
+    if (!title || !copy) throw new Error('Duplicate theme fixtures are missing.')
+    pointerDown(title)
+    enterQuickCopy('尚未保存的副本标题')
+
+    let resolveDuplicate: ((value: ThemeProfile) => void) | undefined
+    duplicateTheme.mockImplementationOnce((_current: ThemeProfile, _name: string) => new Promise<ThemeProfile>((resolve) => { resolveDuplicate = resolve }))
+    act(() => copy.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const input = container.querySelector<HTMLInputElement>('.theme-dialog input')
+    if (!input) throw new Error('Duplicate name input is missing.')
+    act(() => setInputValue(input, '我的设计副本'))
+    const submit = container.querySelector<HTMLButtonElement>('.theme-dialog button[type="submit"]')
+    if (!submit) throw new Error('Duplicate submit command is missing.')
+    await act(async () => {
+      input.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }) as unknown as KeyboardEvent)
+      await Promise.resolve()
+    })
+
+    expect(duplicateTheme).toHaveBeenCalledTimes(1)
+    expect(submit.disabled).toBe(true)
+    expect(submit.textContent).toContain('复制中')
+    act(() => submit.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(duplicateTheme).toHaveBeenCalledTimes(1)
+    const submitted = duplicateTheme.mock.calls[0]?.[0] as ThemeProfile
+    expect(submitted.copy.brandTitle).toBe('尚未保存的副本标题')
+    expect((await Promise.resolve(duplicateTheme.mock.calls[0]?.[1]))).toBe('我的设计副本')
+    expect(profile.copy.brandTitle).not.toBe('尚未保存的副本标题')
+
+    const duplicated = { ...structuredClone(submitted), id: '00000000-0000-4000-8000-000000000002', name: '我的设计副本', updatedAt: new Date().toISOString() }
+    themeProfiles.push(duplicated)
+    await act(async () => {
+      resolveDuplicate?.(duplicated)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+
+    expect(activateTheme).toHaveBeenCalledWith(duplicated.id)
+    expect(container.querySelector('.theme-dialog')).toBeNull()
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('已创建主题“我的设计副本”')
+    const duplicatedItem = [...container.querySelectorAll('.theme-item')].find((item) => item.querySelector('strong')?.textContent === '我的设计副本')
+    expect(duplicatedItem?.classList.contains('active')).toBe(true)
+  })
+
+  it('keeps the duplicate dialog open and shows copy failures', async () => {
+    duplicateTheme.mockRejectedValueOnce(new Error('素材复制失败'))
+    const copy = container.querySelector<HTMLButtonElement>('button[title="复制主题"]')
+    if (!copy) throw new Error('Duplicate theme command is missing.')
+    act(() => copy.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const submit = container.querySelector<HTMLButtonElement>('.theme-dialog button[type="submit"]')
+    if (!submit) throw new Error('Duplicate submit command is missing.')
+    await act(async () => {
+      submit.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('.theme-dialog')).not.toBeNull()
+    expect(container.querySelector('.theme-dialog-error')?.textContent).toBe('素材复制失败')
+    expect(submit.disabled).toBe(false)
+  })
 
   it('opens the most specific nested target and closes with Escape or outside click', () => {
     for (const targetId of Object.values(ICON_PREVIEW_TARGETS)) {

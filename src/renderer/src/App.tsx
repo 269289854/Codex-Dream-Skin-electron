@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy,
   GitBranch, GitPullRequest, Grid2X2, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
-  Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload
+  Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
@@ -45,7 +45,12 @@ export function App(): React.JSX.Element {
   const [assets, setAssets] = useState<Record<string, string>>({})
   const [activeInspector, setActiveInspector] = useState<'visual' | 'icons' | 'runtime'>('visual')
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [duplicateName, setDuplicateName] = useState('')
+  const [duplicateBusy, setDuplicateBusy] = useState(false)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
   const [draggingPlacement, setDraggingPlacement] = useState(false)
@@ -60,6 +65,7 @@ export function App(): React.JSX.Element {
   const previewRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const inspectorRef = useRef<HTMLElement>(null)
+  const duplicateInputRef = useRef<HTMLInputElement>(null)
   const historyRef = useRef<ThemeProfile[]>([])
   const historyGroupRef = useRef<string | null>(null)
 
@@ -93,6 +99,18 @@ export function App(): React.JSX.Element {
     void window.studio.runtime.getStatus().then(setRuntime)
     return window.studio.runtime.subscribeStatus(setRuntime)
   }, [])
+
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 3200)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
+  useLayoutEffect(() => {
+    if (!duplicateDialogOpen) return
+    duplicateInputRef.current?.focus()
+    duplicateInputRef.current?.select()
+  }, [duplicateDialogOpen])
 
   useEffect(() => window.studio.themes.subscribePolaroidPlacement((update) => {
     setDraft((current) => current?.id === update.themeId ? {
@@ -250,16 +268,44 @@ export function App(): React.JSX.Element {
     } catch (reason) { setError(messageOf(reason)) }
   }
 
+  const openDuplicateDialog = (): void => {
+    if (!draft || duplicateBusy) return
+    const suffix = ' 副本'
+    setDuplicateName(`${draft.name.slice(0, 80 - suffix.length)}${suffix}`)
+    setDuplicateError(null)
+    setNotice(null)
+    setPreviewSelection(null)
+    setDuplicateDialogOpen(true)
+  }
+
+  const closeDuplicateDialog = (): void => {
+    if (duplicateBusy) return
+    setDuplicateDialogOpen(false)
+    setDuplicateError(null)
+  }
+
   const duplicateTheme = async (): Promise<void> => {
-    if (!draft) return
-    const name = window.prompt('副本名称', `${draft.name} 副本`)?.trim()
-    if (!name) return
+    if (!draft || duplicateBusy) return
+    const name = duplicateName.trim()
+    const nameError = themeNameError(name)
+    if (nameError) {
+      setDuplicateError(nameError)
+      return
+    }
+    setDuplicateBusy(true)
+    setDuplicateError(null)
     try {
-      const profile = await window.studio.themes.duplicate(draft.id, name)
+      const profile = await window.studio.themes.duplicate(draft, name)
       await window.studio.themes.activate(profile.id)
       await refreshThemes()
       await loadTheme(profile.id)
-    } catch (reason) { setError(messageOf(reason)) }
+      setDuplicateDialogOpen(false)
+      setNotice(`已创建主题“${profile.name}”`)
+    } catch (reason) {
+      setDuplicateError(messageOf(reason))
+    } finally {
+      setDuplicateBusy(false)
+    }
   }
 
   const deleteTheme = async (): Promise<void> => {
@@ -421,6 +467,7 @@ export function App(): React.JSX.Element {
   const homeCopyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
   const brandValidationError = brandCopyError(draft.copy)
   const copyValidationError = homeCopyValidationError ?? brandValidationError
+  const duplicateNameValidationError = themeNameError(duplicateName)
   const selectedTarget = previewSelection ? PREVIEW_TARGETS[previewSelection.id] : null
   const previewStyle = buildThemeStyleVariables(draft) as React.CSSProperties
   const previewFontCss = buildPreviewImportedFontCss(draft, assets)
@@ -430,13 +477,24 @@ export function App(): React.JSX.Element {
     <main className="studio-shell">
       <header className="titlebar"><span className="brand-mark"><Sparkles size={16} /></span><strong>Codex Dream Skin Studio</strong><span className="title-status">Windows Theme Editor</span></header>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
+      {duplicateDialogOpen && <div className="theme-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDuplicateDialog() }}>
+        <section className="theme-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-theme-title">
+          <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">复制主题</h2><button type="button" title="关闭" disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
+          <form onSubmit={(event) => { event.preventDefault(); void duplicateTheme() }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeDuplicateDialog() } else if (event.key === 'Enter') { event.preventDefault(); void duplicateTheme() } }}>
+            <label className="theme-dialog-field"><span>副本名称</span><input ref={duplicateInputRef} value={duplicateName} maxLength={80} aria-invalid={Boolean(duplicateNameValidationError)} aria-describedby={duplicateNameValidationError || duplicateError ? 'duplicate-theme-error' : undefined} onInput={(event) => { setDuplicateName(event.currentTarget.value); setDuplicateError(null) }} /></label>
+            {(duplicateNameValidationError || duplicateError) && <p className="theme-dialog-error" id="duplicate-theme-error" role="alert">{duplicateError ?? duplicateNameValidationError}</p>}
+            <footer><button className="secondary-command" type="button" disabled={duplicateBusy} onClick={closeDuplicateDialog}>取消</button><button className="primary-button" type="submit" disabled={Boolean(duplicateNameValidationError) || duplicateBusy}><Copy size={14} />{duplicateBusy ? '复制中' : '创建副本'}</button></footer>
+          </form>
+        </section>
+      </div>}
       <section className="workspace">
         <aside className="theme-sidebar">
           <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>我的主题</h2></div><button className="icon-button" title="新建主题" onClick={() => void createTheme()}><Plus size={17} /></button></div>
           <div className="theme-list">
             {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} onClick={() => { void window.studio.themes.activate(theme.id).then(() => refreshThemes()); void loadTheme(theme.id) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.active ? '当前主题' : '本地主题'}</small></span></button>)}
           </div>
-          <div className="theme-actions"><button title="复制主题" onClick={() => void duplicateTheme()}><Copy size={15} /></button><button title="删除主题" onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
+          <div className="theme-actions"><button type="button" title="复制主题" disabled={duplicateBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title="删除主题" onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
+          {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title="关闭提示" onClick={() => setNotice(null)}><X size={13} /></button></div>}
           <nav className="sidebar-nav">
             <button className={activeInspector === 'visual' ? 'active' : ''} onClick={() => showInspector('visual')}><Palette size={17} />视觉设计</button>
             <button className={activeInspector === 'icons' ? 'active' : ''} onClick={() => showInspector('icons')}><Box size={17} />图标样式</button>
@@ -697,4 +755,11 @@ function assignFontSlot(profile: ThemeProfile, slot: TypographySlot, selection: 
 
 function messageOf(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
+}
+
+function themeNameError(name: string): string | null {
+  const trimmed = name.trim()
+  if (!trimmed) return '主题名称不能为空。'
+  if (trimmed.length > 80) return '主题名称不能超过 80 个字符。'
+  return null
 }
