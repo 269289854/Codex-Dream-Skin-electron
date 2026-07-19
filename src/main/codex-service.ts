@@ -1,9 +1,10 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CodexDetection, PolaroidPlacementUpdate, RuntimePhase, RuntimeStatus } from '../shared/contracts'
-import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from '../shared/geometry'
+import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
+import { getPolaroidLayout } from '../shared/polaroid'
 import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
@@ -21,13 +22,10 @@ export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<strin
     `.dream-layout-root { --dream-art-scale: ${Math.round(profile.hero.scale * 100)}%; --dream-art-x: ${profile.hero.position.x * 100}%; --dream-art-y: ${profile.hero.position.y * 100}%; }`]
   const source = profile.polaroid.sourceImage
   const fence = profile.polaroid.fence as Fence
-  if (profile.polaroid.visible && source && profile.polaroid.sourceSize && assets[source] && isFenceValid(fence)) {
-    const bounds = fenceBounds(fence)
-    const ratio = (bounds.width * profile.polaroid.sourceSize.width) / (bounds.height * profile.polaroid.sourceSize.height)
-    const positionX = bounds.width === 1 ? 0 : bounds.minX / (1 - bounds.width) * 100
-    const positionY = bounds.height === 1 ? 0 : bounds.minY / (1 - bounds.height) * 100
+  const layout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, fence) : null
+  if (profile.polaroid.visible && source && assets[source] && layout) {
     const p = profile.polaroid.placement
-    rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${ratio}; transform: rotate(${p.rotation}deg); transform-origin: center; background-image: url("${assets[source]}") !important; background-size: ${100 / bounds.width}% ${100 / bounds.height}% !important; background-position: ${positionX}% ${positionY}% !important; clip-path: ${fenceClipPath(fence)} !important; }`)
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${layout.aspectRatio}; transform: rotate(${p.rotation}deg); transform-origin: center; background-image: url("${assets[source]}") !important; background-size: ${layout.backgroundSize} !important; background-position: ${layout.backgroundPosition} !important; clip-path: ${layout.clipPath ?? 'none'} !important; }`)
     rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
   } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
   return rules.join('\n')

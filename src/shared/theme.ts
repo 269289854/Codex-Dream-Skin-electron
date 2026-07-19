@@ -6,6 +6,9 @@ import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySc
 
 const normalized = z.number().finite().min(0).max(1)
 
+export const polaroidModeSchema = z.enum(['full', 'fence'])
+export type PolaroidMode = z.infer<typeof polaroidModeSchema>
+
 export const pointSchema = z.object({ x: normalized, y: normalized }).strict()
 
 const iconSourceSchema = z.discriminatedUnion('kind', [
@@ -135,6 +138,7 @@ const commonProfileFields = {
     position: pointSchema
   }).strict(),
   polaroid: z.object({
+    mode: polaroidModeSchema.default('fence'),
     visible: z.boolean().default(true),
     sourceImage: z.string().max(260).nullable(),
     sourceSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).strict().nullable().default(null),
@@ -150,6 +154,18 @@ const commonProfileFields = {
 }
 
 export const themeProfileSchema = z.object({
+  ...commonProfileFields,
+  version: z.literal(9),
+  colors: colorsSchema,
+  copy: themeCopySchema,
+  icons: currentParticleIconsSchema,
+  composerBadge: composerBadgeSchema,
+  decorations: decorationsSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict()
+
+const versionEightThemeSchema = z.object({
   ...commonProfileFields,
   version: z.literal(8),
   colors: colorsSchema,
@@ -249,7 +265,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 8,
+    version: 9,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
@@ -259,6 +275,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       position: { x: 0.5, y: 0.5 }
     },
     polaroid: {
+      mode: 'full',
       visible: true,
       sourceImage: null,
       sourceSize: null,
@@ -304,8 +321,11 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 8) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 9) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 8) {
+    return migrateVersionEight(versionEightThemeSchema.parse(input))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 7) {
     return migrateVersionSeven(versionSevenThemeSchema.parse(input))
@@ -334,6 +354,7 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
   if (input && typeof input === 'object' && 'version' in input && input.version === 0) {
     const legacy = legacyThemeSchema.parse(input)
     const migrated = createDefaultTheme(legacy.id, legacy.name)
+    migrated.polaroid.mode = 'fence'
     migrated.colors = { ...migrated.colors, ...legacy.colors }
     return themeProfileSchema.parse(migrated)
   }
@@ -346,7 +367,8 @@ function migrateLegacyTheme(
 ): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 8,
+    version: 9,
+    polaroid: { ...legacy.polaroid, mode: 'fence' },
     copy: { ...copy, ...DEFAULT_BRAND_COPY },
     icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' }, composerBadge: { kind: 'builtin', name: 'music' }, ...createDefaultParticleIcons() },
     composerBadge: { visible: true },
@@ -359,7 +381,8 @@ function migrateLegacyTheme(
 function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 8,
+    version: 9,
+    polaroid: { ...legacy.polaroid, mode: 'fence' },
     icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' }, ...createDefaultParticleIcons() },
     composerBadge: { visible: true },
     decorations: createDefaultDecorations(),
@@ -382,7 +405,8 @@ function migrateVersionFive(legacy: z.infer<typeof versionFiveThemeSchema>): The
 function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 8,
+    version: 9,
+    polaroid: { ...legacy.polaroid, mode: 'fence' },
     icons: { ...legacy.icons, ...createDefaultParticleIcons() },
     decorations: createDefaultDecorations(),
     typography: {
@@ -395,12 +419,21 @@ function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): Theme
 function migrateVersionSeven(legacy: z.infer<typeof versionSevenThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 8,
+    version: 9,
+    polaroid: { ...legacy.polaroid, mode: 'fence' },
     icons: { ...legacy.icons, ...createAdditionalParticleIcons() },
     decorations: {
       ...legacy.decorations,
       sparkles: { ...legacy.decorations.sparkles, effect: 'twinkle', speed: 1 }
     }
+  })
+}
+
+function migrateVersionEight(legacy: z.infer<typeof versionEightThemeSchema>): ThemeProfile {
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 9,
+    polaroid: { ...legacy.polaroid, mode: 'fence' }
   })
 }
 

@@ -489,7 +489,7 @@ export function App(): React.JSX.Element {
                       <PreviewComposer profile={draft} assets={assets} />
                     </div>
                   </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
@@ -536,7 +536,11 @@ export function App(): React.JSX.Element {
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
               <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={draft.polaroid.visible} onChange={(event) => { const visible = event.currentTarget.checked; change((profile) => { profile.polaroid.visible = visible }) }} /></label>
               <button className="secondary-command" onClick={() => void selectImage('polaroid')}><Image size={15} />{polaroidUrl ? '更换拍立得原图' : '选择拍立得原图'}</button>
-              {polaroidUrl && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
+              <div className="segmented-control polaroid-mode-tabs" aria-label="拍立得显示模式">
+                <button type="button" className={draft.polaroid.mode === 'full' ? 'active' : ''} onClick={() => change((profile) => { profile.polaroid.mode = 'full' })}>整图</button>
+                <button type="button" className={draft.polaroid.mode === 'fence' ? 'active' : ''} onClick={() => change((profile) => { profile.polaroid.mode = 'fence' })}>四点围栏</button>
+              </div>
+              {polaroidUrl && draft.polaroid.mode === 'fence' && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
               <Range label="宽度" min={.08} max={.6} step={.01} value={draft.polaroid.placement.width} onChange={(value) => change((profile) => { profile.polaroid.placement.width = value })} />
               <Range label="旋转" min={-45} max={45} step={1} value={draft.polaroid.placement.rotation} onChange={(value) => change((profile) => { profile.polaroid.placement.rotation = value })} suffix="°" />
               <Range label="隐藏阈值" min={320} max={1600} step={10} value={draft.polaroid.placement.hideBelowWidth} onChange={(value) => change((profile) => { profile.polaroid.placement.hideBelowWidth = value })} suffix="px" />

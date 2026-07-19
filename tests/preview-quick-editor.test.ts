@@ -172,6 +172,22 @@ describe('preview quick editor', () => {
     expect(profile.copy.brandSignature).toBe('QUEUED VALUE')
   })
 
+  it('switches polaroid modes without clearing the fence points', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    profile.polaroid.fence = [{ x: 0.08, y: 0.14 }, { x: 0.86, y: 0.2 }, { x: 0.8, y: 0.82 }, { x: 0.16, y: 0.76 }]
+    const originalFence = profile.polaroid.fence.map((point) => ({ ...point }))
+    renderEditor(PREVIEW_TARGETS.polaroid, profile)
+
+    const full = [...container.querySelectorAll('.polaroid-mode-tabs button')].find((button) => button.textContent === '整图')
+    const fenceButton = [...container.querySelectorAll('.polaroid-mode-tabs button')].find((button) => button.textContent === '四点围栏')
+    if (!full || !fenceButton) throw new Error('Polaroid mode controls are missing.')
+    act(() => full.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(profile.polaroid.mode).toBe('full')
+    act(() => fenceButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(profile.polaroid.mode).toBe('fence')
+    expect(profile.polaroid.fence).toEqual(originalFence)
+  })
+
   it('edits particle effects, independent materials, speed, and visibility from one target', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     renderEditor(PREVIEW_TARGETS.sparkles, profile)
