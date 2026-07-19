@@ -5,6 +5,7 @@
   const CHROME_ID = "codex-dream-skin-chrome";
   const CARD_GRID_ID = "codex-dream-skin-actions";
   const PROJECT_PROXY_ID = "codex-dream-skin-project-proxy";
+  const projectAnchorRestorers = new WeakMap();
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
@@ -711,6 +712,66 @@
 
   const projectLabel = (button) => button?.textContent?.replace(/\s+/g, " ").trim() || "";
 
+  const activateProjectButton = (sourceButton, proxy) => {
+    if (!(sourceButton instanceof HTMLElement)) return;
+    sourceButton.focus?.({ preventScroll: true });
+    projectAnchorRestorers.get(sourceButton)?.();
+    const proxyRect = proxy?.getBoundingClientRect?.();
+    const canAlignAnchor = proxyRect && proxyRect.width > 0 && proxyRect.height > 0;
+    const hadOwnRect = Object.prototype.hasOwnProperty.call(sourceButton, "getBoundingClientRect");
+    const originalRect = sourceButton.getBoundingClientRect;
+    let checkAnchorState = null;
+    if (canAlignAnchor) {
+      let stateObserver = null;
+      const isOpen = () => sourceButton.getAttribute("aria-expanded") === "true" ||
+        sourceButton.getAttribute("data-state") === "open";
+      let sawOpenState = isOpen();
+      const directPointerDown = (event) => {
+        if (event.isTrusted) restoreAnchor();
+      };
+      const restoreAnchor = () => {
+        if (projectAnchorRestorers.get(sourceButton) !== restoreAnchor) return;
+        stateObserver?.disconnect();
+        sourceButton.removeEventListener("pointerdown", directPointerDown, true);
+        if (hadOwnRect) sourceButton.getBoundingClientRect = originalRect;
+        else delete sourceButton.getBoundingClientRect;
+        projectAnchorRestorers.delete(sourceButton);
+      };
+      checkAnchorState = () => {
+        if (isOpen()) sawOpenState = true;
+        else if (sawOpenState) restoreAnchor();
+      };
+      sourceButton.getBoundingClientRect = () => proxyRect;
+      projectAnchorRestorers.set(sourceButton, restoreAnchor);
+      stateObserver = new MutationObserver(checkAnchorState);
+      stateObserver.observe(sourceButton, { attributes: true, attributeFilter: ["aria-expanded", "data-state"] });
+      sourceButton.addEventListener("pointerdown", directPointerDown, true);
+    }
+    const pointerEvent = window.PointerEvent || window.MouseEvent;
+    const expandedBefore = sourceButton.getAttribute("aria-expanded");
+    const pointerDown = new pointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      button: 0,
+      buttons: 1,
+      pointerType: "mouse",
+    });
+    sourceButton.dispatchEvent(pointerDown);
+    sourceButton.dispatchEvent(new pointerEvent("pointerup", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      button: 0,
+      buttons: 0,
+      pointerType: "mouse",
+    }));
+    if (!pointerDown.defaultPrevented && expandedBefore === sourceButton.getAttribute("aria-expanded")) {
+      sourceButton.click();
+    }
+    checkAnchorState?.();
+  };
+
   const ensureProjectProxy = (heading, sourceButton) => {
     const label = projectLabel(sourceButton);
     if (!label) return null;
@@ -725,10 +786,21 @@
       proxy.type = "button";
       proxy.dataset.dreamProjectProxy = "true";
       proxy.className = "dream-copy-node dream-project-selector dream-project-proxy";
-      proxy.addEventListener("click", () => {
-        findVisible(document, '[data-composer-navigation-target="workspace-project"]')?.click();
-      });
     }
+    const resolveSourceButton = () => {
+      const home = heading.closest('[role="main"]');
+      return findVisible(home || document, '[data-composer-navigation-target="workspace-project"]') || sourceButton;
+    };
+    proxy.onpointerdown = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      activateProjectButton(resolveSourceButton(), proxy);
+    };
+    proxy.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.detail === 0) activateProjectButton(resolveSourceButton(), proxy);
+    };
     if (proxy.textContent !== label) proxy.textContent = label;
     return proxy;
   };

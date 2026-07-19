@@ -259,13 +259,22 @@ describe('renderer home DOM adaptation', () => {
     expect(polaroid.classList.contains('dream-polaroid-dragging')).toBe(false)
   })
 
-  it('creates a synchronized clickable project proxy for long project names', () => {
+  it('creates a synchronized clickable project proxy for long project names', async () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Codex-Dream-Skin-electron')
     const sourceButton = window.document.querySelector('[data-composer-navigation-target="workspace-project"]')
     if (!sourceButton) throw new Error('Project selector fixture is missing.')
+    Object.defineProperty(sourceButton, 'getBoundingClientRect', {
+      configurable: true,
+      writable: true,
+      value: () => ({ x: 500, y: 900, top: 900, left: 500, right: 700, bottom: 940, width: 200, height: 40, toJSON: () => ({}) })
+    })
     const click = vi.fn()
+    const pointerDown = vi.fn()
+    const observedAnchorRect = vi.fn()
+    const bubbledClick = vi.fn()
     sourceButton.addEventListener('click', click)
+    window.document.body.addEventListener('click', bubbledClick)
 
     inject(window)
 
@@ -281,8 +290,35 @@ describe('renderer home DOM adaptation', () => {
 
     proxy.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     expect(click).toHaveBeenCalledTimes(1)
+    expect(bubbledClick).toHaveBeenCalledTimes(1)
 
-    sourceButton.textContent = 'Renamed-Project'
+    click.mockClear()
+    bubbledClick.mockClear()
+    sourceButton.addEventListener('pointerdown', (event) => {
+      observedAnchorRect(sourceButton.getBoundingClientRect())
+      pointerDown(event)
+      sourceButton.setAttribute('aria-expanded', 'true')
+      event.preventDefault()
+    })
+    proxy.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    proxy.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true, button: 0 }))
+    proxy.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1 }))
+    expect(pointerDown).toHaveBeenCalledTimes(1)
+    expect(observedAnchorRect.mock.calls[0]?.[0]).toMatchObject({ left: 0, top: 0 })
+    expect(click).not.toHaveBeenCalled()
+    expect(bubbledClick).not.toHaveBeenCalled()
+    sourceButton.setAttribute('aria-expanded', 'false')
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0))
+    expect(sourceButton.getBoundingClientRect()).toMatchObject({ left: 500, top: 900 })
+
+    const replacement = sourceButton.cloneNode(true)
+    const replacementClick = vi.fn()
+    replacement.addEventListener('click', replacementClick)
+    sourceButton.replaceWith(replacement)
+    proxy.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    expect(replacementClick).toHaveBeenCalledTimes(1)
+
+    replacement.textContent = 'Renamed-Project'
     stateOf(window).ensure()
     stateOf(window).ensure()
     expect(proxy.textContent).toBe('Renamed-Project')
