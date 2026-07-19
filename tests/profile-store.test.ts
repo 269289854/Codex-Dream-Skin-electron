@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 
 const roots: string[] = []
+const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -16,9 +17,11 @@ describe('ProfileStore', () => {
     roots.push(root)
     const store = new ProfileStore(root)
     await store.initialize()
-    expect(await store.list()).toHaveLength(1)
+    const [systemTheme] = await store.list()
+    expect(systemTheme).toMatchObject({ active: true, system: true })
 
     const created = await store.create('中文主题')
+    expect((await store.list()).find((item) => item.id === created.id)?.system).toBe(false)
     const activated = await store.activate(created.id)
     expect(activated.name).toBe('中文主题')
     expect((await store.list()).find((item) => item.id === created.id)?.active).toBe(true)
@@ -32,6 +35,63 @@ describe('ProfileStore', () => {
     const profileFile = await readFile(join(root, 'themes', created.id, 'theme.json'), 'utf8')
     expect(profileFile).toContain('中文主题')
     expect(profileFile.endsWith('\n')).toBe(true)
+    if (!systemTheme) throw new Error('System theme was not initialized.')
+    await expect(store.delete(systemTheme.id)).rejects.toThrow('系统默认主题不能删除')
+    await store.delete(created.id)
+    expect(await store.list()).toEqual([expect.objectContaining({ id: systemTheme.id, active: true, system: true })])
+  })
+
+  it('migrates legacy settings and keeps the original bundled theme editable but undeletable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-system-theme-'))
+    roots.push(root)
+    const bundledAsset = join(root, 'bundled.png')
+    await writeFile(bundledAsset, TEST_PNG)
+    const store = new ProfileStore(root, bundledAsset)
+    await store.initialize()
+    const systemTheme = (await store.list()).find((theme) => theme.system)
+    if (!systemTheme) throw new Error('System theme was not initialized.')
+    const customTheme = await store.create('自定义主题')
+    await store.activate(customTheme.id)
+    await writeFile(join(root, 'settings.json'), `${JSON.stringify({ version: 1, activeThemeId: customTheme.id }, null, 2)}\n`, 'utf8')
+
+    const reopened = new ProfileStore(root, bundledAsset)
+    await reopened.initialize()
+    const migrated = await reopened.list()
+    expect(migrated.find((theme) => theme.id === systemTheme.id)).toMatchObject({ system: true, active: false })
+    expect(migrated.find((theme) => theme.id === customTheme.id)).toMatchObject({ system: false, active: true })
+    expect(JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'))).toEqual({ version: 2, activeThemeId: customTheme.id, systemThemeId: systemTheme.id })
+
+    const editableSystem = await reopened.get(systemTheme.id)
+    editableSystem.name = '修改后的系统主题'
+    await reopened.update(editableSystem)
+    expect((await reopened.list()).find((theme) => theme.id === systemTheme.id)).toMatchObject({ name: '修改后的系统主题', system: true })
+    await expect(reopened.delete(systemTheme.id)).rejects.toThrow('系统默认主题不能删除')
+    await reopened.delete(customTheme.id)
+    expect((await reopened.list()).map((theme) => theme.id)).toEqual([systemTheme.id])
+  })
+
+  it.each([1, 2] as const)('recreates a missing system theme from v%s settings without replacing the active custom theme', async (settingsVersion) => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-missing-system-'))
+    roots.push(root)
+    const bundledAsset = join(root, 'bundled.png')
+    await writeFile(bundledAsset, TEST_PNG)
+    const store = new ProfileStore(root, bundledAsset)
+    await store.initialize()
+    const originalSystem = (await store.list()).find((theme) => theme.system)
+    if (!originalSystem) throw new Error('System theme was not initialized.')
+    const customTheme = await store.create('保留的自定义主题')
+    await rm(join(store.themesRoot, originalSystem.id), { recursive: true, force: true })
+    const settings = settingsVersion === 1
+      ? { version: 1, activeThemeId: customTheme.id }
+      : { version: 2, activeThemeId: customTheme.id, systemThemeId: originalSystem.id }
+    await writeFile(join(root, 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
+
+    const reopened = new ProfileStore(root, bundledAsset)
+    await reopened.initialize()
+    const themes = await reopened.list()
+    expect(themes).toHaveLength(2)
+    expect(themes.find((theme) => theme.system)?.id).not.toBe(customTheme.id)
+    expect(themes.find((theme) => theme.id === customTheme.id)).toMatchObject({ active: true, system: false })
   })
 
   it('imports, persists, compiles, and duplicates validated font assets', async () => {
@@ -70,7 +130,7 @@ describe('ProfileStore', () => {
     const profile = await store.create('原主题')
     const imageSource = join(root, 'art.png')
     const fontSource = join(root, 'title.woff2')
-    await writeFile(imageSource, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64'))
+    await writeFile(imageSource, TEST_PNG)
     await writeFile(fontSource, Buffer.from('wOF2'))
     const image = await store.importAsset(profile.id, imageSource, 'hero')
     const font = await store.importFontAsset(profile.id, fontSource)

@@ -386,7 +386,12 @@ export function App(): React.JSX.Element {
   }
 
   const deleteTheme = async (): Promise<void> => {
-    if (!draft || !window.confirm(`删除主题“${draft.name}”？`)) return
+    if (!draft) return
+    if (themes.find((theme) => theme.id === draft.id)?.system) {
+      setError('系统默认主题不能删除。')
+      return
+    }
+    if (!window.confirm(`删除主题“${draft.name}”？`)) return
     try {
       await window.studio.themes.delete(draft.id)
       const remaining = await refreshThemes()
@@ -549,6 +554,7 @@ export function App(): React.JSX.Element {
   const previewStyle = buildThemeStyleVariables(draft) as React.CSSProperties
   const previewFontCss = buildPreviewImportedFontCss(draft, assets)
   const heroImage = buildPreviewHeroImageProps(heroUrl, draft.hero)
+  const systemThemeSelected = themes.find((theme) => theme.id === draft.id)?.system === true
 
   return (
     <main
@@ -588,9 +594,9 @@ export function App(): React.JSX.Element {
         <aside className="theme-sidebar">
           <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>我的主题</h2></div><button className="icon-button" title="新建主题" onClick={() => void createTheme()}><Plus size={17} /></button></div>
           <div className="theme-list">
-            {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} onClick={() => { void window.studio.themes.activate(theme.id).then(() => refreshThemes()); void loadTheme(theme.id) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.active ? '当前主题' : '本地主题'}</small></span></button>)}
+            {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} onClick={() => { void window.studio.themes.activate(theme.id).then(() => refreshThemes()); void loadTheme(theme.id) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题'}</small></span></button>)}
           </div>
-          <div className="theme-actions"><button type="button" title="导出主题" disabled={shareBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title="导入主题" disabled={shareBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title="复制主题" disabled={duplicateBusy || shareBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title="删除主题" disabled={shareBusy} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
+          <div className="theme-actions"><button type="button" title="导出主题" disabled={shareBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title="导入主题" disabled={shareBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title="复制主题" disabled={duplicateBusy || shareBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={systemThemeSelected ? '系统主题不能删除' : '删除主题'} disabled={shareBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
           {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title="关闭提示" onClick={() => setNotice(null)}><X size={13} /></button></div>}
           <nav className="sidebar-nav">
             <button className={activeInspector === 'visual' ? 'active' : ''} onClick={() => showInspector('visual')}><Palette size={17} />视觉设计</button>

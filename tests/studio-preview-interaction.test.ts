@@ -74,7 +74,7 @@ describe('Studio preview editing interaction', () => {
     const studio: StudioApi = {
       app: { getInfo: async () => ({ version: 'test', platform: 'win32' }) },
       themes: {
-        list: async () => themeProfiles.map((item) => ({ id: item.id, name: item.name, updatedAt: item.updatedAt, active: item.id === activeThemeId })),
+        list: async () => themeProfiles.map((item) => ({ id: item.id, name: item.name, updatedAt: item.updatedAt, active: item.id === activeThemeId, system: item.id === profile.id })),
         get: async (id) => {
           const selected = themeProfiles.find((item) => item.id === id)
           if (!selected) throw new Error('Theme not found.')
@@ -207,6 +207,22 @@ describe('Studio preview editing interaction', () => {
     if (!button) throw new Error(`Dialog button ${label} is missing.`)
     button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
   }
+
+  it('distinguishes system and custom themes and only enables deleting custom themes', async () => {
+    expect(container.querySelector('.theme-item.active small')?.textContent).toBe('系统主题 · 当前')
+    const deleteSystem = container.querySelector<HTMLButtonElement>('button[title="系统主题不能删除"]')
+    expect(deleteSystem?.disabled).toBe(true)
+
+    const customTheme = [...container.querySelectorAll<HTMLButtonElement>('.theme-item')].find((item) => item.querySelector('strong')?.textContent === '备用主题')
+    if (!customTheme) throw new Error('Custom theme fixture is missing.')
+    await act(async () => {
+      customTheme.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('.theme-item.active small')?.textContent).toBe('自定义主题 · 当前')
+    expect(container.querySelector<HTMLButtonElement>('button[title="删除主题"]')?.disabled).toBe(false)
+  })
 
   it('opens an accessible duplicate dialog, validates the name, and cancels with Escape', () => {
     const copy = container.querySelector<HTMLButtonElement>('button[title="复制主题"]')

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import sharp from 'sharp'
 import { zipSync } from 'fflate'
@@ -23,6 +23,12 @@ import {
 } from './theme-share'
 
 interface StudioSettings {
+  version: 2
+  activeThemeId: string
+  systemThemeId: string
+}
+
+interface LegacyStudioSettings {
   version: 1
   activeThemeId: string
 }
@@ -43,44 +49,39 @@ export class ProfileStore {
 
   async initialize(): Promise<void> {
     await mkdir(this.themesRoot, { recursive: true })
+    let settings: StudioSettings
     try {
-      await this.readSettings()
+      settings = await this.readSettings()
     } catch {
-      const profile = createDefaultTheme(randomUUID())
-      if (this.bundledDefaultAsset) {
-        const relativePath = 'assets/dream-reference.png'
-        const destination = this.resolveAsset(profile.id, relativePath)
-        await mkdir(dirname(destination), { recursive: true })
-        await copyFile(this.bundledDefaultAsset, destination)
-        const metadata = await sharp(destination).metadata()
-        if (metadata.width && metadata.height) {
-          profile.hero.sourceImage = relativePath
-          profile.polaroid.sourceImage = relativePath
-          profile.polaroid.sourceSize = { width: metadata.width, height: metadata.height }
-          profile.polaroid.fence = [
-            { x: 0.850, y: 0.739 },
-            { x: 0.981, y: 0.690 },
-            { x: 0.999, y: 0.930 },
-            { x: 0.871, y: 0.977 }
-          ]
-          profile.polaroid.placement = { x: 0.76, y: 0.56, width: 0.19, rotation: -2, hideBelowWidth: 920 }
-        }
-      }
-      await this.writeProfile(profile)
-      await this.writeJsonAtomic(this.settingsPath, { version: 1, activeThemeId: profile.id })
+      const profile = await this.createSystemTheme()
+      await this.writeSettings({ version: 2, activeThemeId: profile.id, systemThemeId: profile.id })
+      return
     }
+
+    const systemExists = await this.get(settings.systemThemeId).then(() => true).catch(() => false)
+    const activeExists = settings.activeThemeId === settings.systemThemeId
+      ? systemExists
+      : await this.get(settings.activeThemeId).then(() => true).catch(() => false)
+    if (systemExists && activeExists) return
+
+    const systemThemeId = systemExists ? settings.systemThemeId : (await this.createSystemTheme()).id
+    await this.writeSettings({
+      version: 2,
+      activeThemeId: activeExists ? settings.activeThemeId : systemThemeId,
+      systemThemeId
+    })
   }
 
   async list(): Promise<ThemeSummary[]> {
     const settings = await this.readSettings()
-    const entries = await import('node:fs/promises').then(({ readdir }) => readdir(this.themesRoot, { withFileTypes: true }))
+    const entries = await readdir(this.themesRoot, { withFileTypes: true })
     const profiles = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
       try { return await this.get(entry.name) } catch { return null }
     }))
     return profiles
       .filter((profile): profile is ThemeProfile => profile !== null)
-      .map((profile) => ({ id: profile.id, name: profile.name, updatedAt: profile.updatedAt, active: profile.id === settings.activeThemeId }))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map((profile) => ({ id: profile.id, name: profile.name, updatedAt: profile.updatedAt, active: profile.id === settings.activeThemeId, system: profile.id === settings.systemThemeId }))
+      .sort((a, b) => Number(b.system) - Number(a.system) || b.updatedAt.localeCompare(a.updatedAt))
   }
 
   async get(id: string): Promise<ThemeProfile> {
@@ -197,20 +198,23 @@ export class ProfileStore {
   }
 
   async delete(id: string): Promise<void> {
+    const settings = await this.readSettings()
+    this.assertId(id)
+    if (settings.systemThemeId === id) throw new Error('系统默认主题不能删除。')
     const themes = await this.list()
     if (themes.length <= 1) throw new Error('At least one theme must remain.')
-    const settings = await this.readSettings()
     await rm(this.themeRoot(id), { recursive: true, force: false })
     if (settings.activeThemeId === id) {
       const fallback = themes.find((theme) => theme.id !== id)
       if (!fallback) throw new Error('No fallback theme is available.')
-      await this.writeJsonAtomic(this.settingsPath, { version: 1, activeThemeId: fallback.id })
+      await this.writeSettings({ ...settings, activeThemeId: fallback.id })
     }
   }
 
   async activate(id: string): Promise<ThemeProfile> {
     const profile = await this.get(id)
-    await this.writeJsonAtomic(this.settingsPath, { version: 1, activeThemeId: id })
+    const settings = await this.readSettings()
+    await this.writeSettings({ ...settings, activeThemeId: id })
     return profile
   }
 
@@ -308,10 +312,74 @@ export class ProfileStore {
   }
 
   private async readSettings(): Promise<StudioSettings> {
-    const parsed = JSON.parse(await readFile(this.settingsPath, 'utf8')) as Partial<StudioSettings>
-    if (parsed.version !== 1 || !parsed.activeThemeId) throw new Error('Studio settings are invalid.')
-    this.assertId(parsed.activeThemeId)
-    return parsed as StudioSettings
+    const parsed = JSON.parse(await readFile(this.settingsPath, 'utf8')) as Partial<StudioSettings> | Partial<LegacyStudioSettings>
+    if (parsed.version === 2 && parsed.activeThemeId && parsed.systemThemeId) {
+      this.assertId(parsed.activeThemeId)
+      this.assertId(parsed.systemThemeId)
+      return parsed as StudioSettings
+    }
+    if (parsed.version === 1 && parsed.activeThemeId) {
+      this.assertId(parsed.activeThemeId)
+      return await this.migrateLegacySettings(parsed.activeThemeId)
+    }
+    throw new Error('Studio settings are invalid.')
+  }
+
+  private async migrateLegacySettings(activeThemeId: string): Promise<StudioSettings> {
+    const entries = await readdir(this.themesRoot, { withFileTypes: true })
+    const candidates = (await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
+      try {
+        const profile = await this.get(entry.name)
+        const themeStat = await stat(join(this.themeRoot(profile.id), 'theme.json'))
+        const hasBundledAsset = await stat(join(this.assetRoot(profile.id), 'dream-reference.png')).then((value) => value.isFile()).catch(() => false)
+        return { id: profile.id, hasBundledAsset, createdAt: themeStat.birthtimeMs || themeStat.ctimeMs }
+      } catch {
+        return null
+      }
+    }))).filter((candidate): candidate is { id: string; hasBundledAsset: boolean; createdAt: number } => candidate !== null)
+    candidates.sort((a, b) => Number(b.hasBundledAsset) - Number(a.hasBundledAsset) || a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+    let systemThemeId = candidates.find((candidate) => candidate.hasBundledAsset)?.id
+    if (!systemThemeId && this.bundledDefaultAsset) systemThemeId = (await this.createSystemTheme()).id
+    systemThemeId ??= candidates[0]?.id
+    if (!systemThemeId) throw new Error('Studio settings cannot identify the system theme.')
+    const settings: StudioSettings = {
+      version: 2,
+      activeThemeId: candidates.some((candidate) => candidate.id === activeThemeId) ? activeThemeId : systemThemeId,
+      systemThemeId
+    }
+    await this.writeSettings(settings)
+    return settings
+  }
+
+  private async createSystemTheme(): Promise<ThemeProfile> {
+    const profile = createDefaultTheme(randomUUID())
+    if (this.bundledDefaultAsset) {
+      const relativePath = 'assets/dream-reference.png'
+      const destination = this.resolveAsset(profile.id, relativePath)
+      await mkdir(dirname(destination), { recursive: true })
+      await copyFile(this.bundledDefaultAsset, destination)
+      const metadata = await sharp(destination).metadata()
+      if (metadata.width && metadata.height) {
+        profile.hero.sourceImage = relativePath
+        profile.polaroid.sourceImage = relativePath
+        profile.polaroid.sourceSize = { width: metadata.width, height: metadata.height }
+        profile.polaroid.fence = [
+          { x: 0.850, y: 0.739 },
+          { x: 0.981, y: 0.690 },
+          { x: 0.999, y: 0.930 },
+          { x: 0.871, y: 0.977 }
+        ]
+        profile.polaroid.placement = { x: 0.76, y: 0.56, width: 0.19, rotation: -2, hideBelowWidth: 920 }
+      }
+    }
+    await this.writeProfile(profile)
+    return profile
+  }
+
+  private async writeSettings(settings: StudioSettings): Promise<void> {
+    this.assertId(settings.activeThemeId)
+    this.assertId(settings.systemThemeId)
+    await this.writeJsonAtomic(this.settingsPath, settings)
   }
 
   private async writeJsonAtomic(path: string, value: unknown): Promise<void> {

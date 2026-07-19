@@ -285,6 +285,7 @@ export interface ThemeSummary {
   name: string
   updatedAt: string
   active: boolean
+  system: boolean
 }
 
 export function createDefaultTheme(id: string, name = '初音未来'): ThemeProfile {
