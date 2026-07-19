@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { StudioApi } from '../shared/contracts'
 import { unwrapIpcResult, type IpcResult } from '../shared/ipc-result'
 
@@ -30,6 +30,14 @@ const api: StudioApi = {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),
     selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon'),
     selectFont: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'font')
+  },
+  share: {
+    exportTheme: (profile) => ipcRenderer.invoke('share:export', profile),
+    importTheme: () => ipcRenderer.invoke('share:import'),
+    importThemePath: (path) => ipcRenderer.invoke('share:import-path', path)
+  },
+  files: {
+    getPathForFile: (file) => webUtils.getPathForFile(file as Parameters<typeof webUtils.getPathForFile>[0])
   },
   codex: {
     detect: () => invokeCodex('codex:detect'),

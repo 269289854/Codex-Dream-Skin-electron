@@ -1,11 +1,26 @@
 import { randomUUID } from 'node:crypto'
-import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import sharp from 'sharp'
+import { zipSync } from 'fflate'
 import { createDefaultTheme, parseThemeProfile, type ThemeProfile, type ThemeSummary } from '../shared/theme'
 import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset } from '../shared/contracts'
 import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
+import {
+  MAX_SHARE_COMPRESSED_BYTES,
+  MAX_SHARE_ENTRIES,
+  MAX_SHARE_FONT_BYTES,
+  MAX_SHARE_IMAGE_BYTES,
+  MAX_SHARE_UNCOMPRESSED_BYTES,
+  assetKind,
+  collectThemeAssets,
+  decodeShareZip,
+  encodeJson,
+  parseThemeShareManifest,
+  sha256,
+  validateShareContents
+} from './theme-share'
 
 interface StudioSettings {
   version: 1
@@ -99,6 +114,69 @@ export class ProfileStore {
       return duplicate
     } catch (error) {
       await rm(duplicateRoot, { recursive: true, force: true }).catch(() => undefined)
+      throw error
+    }
+  }
+
+  async exportSharePackage(input: unknown, destinationPath: unknown): Promise<void> {
+    const profile = parseThemeProfile(input)
+    await this.get(profile.id)
+    if (typeof destinationPath !== 'string' || !isAbsolute(destinationPath)) throw new Error('分享包保存路径必须是绝对路径。')
+    const assets: Record<string, Uint8Array> = {}
+    const manifestAssets = []
+    let totalAssetBytes = 0
+    for (const asset of collectThemeAssets(profile)) {
+      const sourcePath = this.resolveAsset(profile.id, asset)
+      const data = await readFile(sourcePath)
+      const kind = assetKind(asset)
+      await this.validateShareAsset(asset, data, kind)
+      assets[asset] = data
+      totalAssetBytes += data.byteLength
+      manifestAssets.push({ path: asset, kind, size: data.byteLength, sha256: sha256(data) })
+    }
+    const manifest = {
+      format: 'codex-dream-skin-theme',
+      version: 1,
+      themeName: profile.name,
+      profileVersion: profile.version,
+      assets: manifestAssets
+    }
+    parseThemeShareManifest(manifest)
+    if (manifestAssets.length + 2 > MAX_SHARE_ENTRIES) throw new Error('分享包条目数量超过限制。')
+    const manifestData = encodeJson(manifest)
+    const profileData = encodeJson(profile)
+    if (totalAssetBytes + manifestData.byteLength + profileData.byteLength > MAX_SHARE_UNCOMPRESSED_BYTES) throw new Error('分享包解压总量超过 1 GB 限制。')
+    assets['manifest.json'] = manifestData
+    assets['theme.json'] = profileData
+    const packageData = zipSync(assets, { level: 6 })
+    if (packageData.byteLength > MAX_SHARE_COMPRESSED_BYTES) throw new Error('分享包超过 500 MB 压缩大小限制。')
+    await this.writeBinaryAtomic(destinationPath, Buffer.from(packageData))
+  }
+
+  async importSharePackage(sourcePath: unknown): Promise<ThemeProfile> {
+    if (typeof sourcePath !== 'string' || !isAbsolute(sourcePath)) throw new Error('分享包路径必须是绝对路径。')
+    if (extname(sourcePath).toLowerCase() !== '.cdstheme') throw new Error('请选择 .cdstheme 分享文件。')
+    const sourceStat = await stat(sourcePath)
+    if (!sourceStat.isFile()) throw new Error('分享包必须是文件。')
+    if (sourceStat.size > MAX_SHARE_COMPRESSED_BYTES) throw new Error('分享包超过 500 MB 压缩大小限制。')
+    const entries = decodeShareZip(await readFile(sourcePath))
+    const { profile: source, assets } = validateShareContents(entries)
+    for (const [asset, data] of assets) await this.validateShareAsset(asset, data, assetKind(asset))
+
+    const imported = { ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString() }
+    const temporaryRoot = await mkdtemp(join(this.themesRoot, '.cdstheme-import-'))
+    const importedRoot = this.themeRoot(imported.id)
+    try {
+      for (const [asset, data] of assets) {
+        const destination = this.resolveWithinRoot(temporaryRoot, asset)
+        await mkdir(dirname(destination), { recursive: true })
+        await writeFile(destination, data)
+      }
+      await this.writeJsonAtomic(join(temporaryRoot, 'theme.json'), imported)
+      await rename(temporaryRoot, importedRoot)
+      return imported
+    } catch (error) {
+      await rm(temporaryRoot, { recursive: true, force: true }).catch(() => undefined)
       throw error
     }
   }
@@ -222,12 +300,7 @@ export class ProfileStore {
     return `data:${this.mediaType(extname(path).toLowerCase())};base64,${data.toString('base64')}`
   }
 
-  private collectAssets(profile: ThemeProfile): string[] {
-    const assets = [profile.hero.sourceImage, profile.polaroid.sourceImage]
-    for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assets.push(icon.asset)
-    for (const font of profile.typography.importedFonts) assets.push(font.asset)
-    return [...new Set(assets.filter((value): value is string => Boolean(value)))]
-  }
+  private collectAssets(profile: ThemeProfile): string[] { return collectThemeAssets(profile) }
 
   private async writeProfile(profile: ThemeProfile): Promise<void> {
     await mkdir(this.assetRoot(profile.id), { recursive: true })
@@ -264,6 +337,52 @@ export class ProfileStore {
       if (hadOriginal) await rename(backup, path).catch(() => undefined)
       throw error
     }
+  }
+
+  private async writeBinaryAtomic(path: string, data: Buffer): Promise<void> {
+    await mkdir(dirname(path), { recursive: true })
+    const temporary = `${path}.${randomUUID()}.tmp`
+    const backup = `${path}.previous`
+    const file = await open(temporary, 'wx')
+    try {
+      await file.write(data)
+      await file.sync()
+    } finally {
+      await file.close()
+    }
+    let hadOriginal = false
+    try {
+      try { await rename(path, backup); hadOriginal = true } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+      await rename(temporary, path)
+      if (hadOriginal) await rm(backup, { force: true })
+    } catch (error) {
+      await rm(temporary, { force: true })
+      if (hadOriginal) await rename(backup, path).catch(() => undefined)
+      throw error
+    }
+  }
+
+  private async validateShareAsset(asset: string, data: Buffer, kind: 'image' | 'font'): Promise<void> {
+    if (kind === 'image') {
+      if (data.byteLength > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
+      const metadata = await sharp(data).metadata()
+      if (!metadata.width || !metadata.height) throw new Error(`图片素材无效: ${asset}`)
+      return
+    }
+    if (data.byteLength > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
+    const extension = extname(asset).toLowerCase().slice(1) as ImportedFontFormat
+    this.assertFontHeader(extension, data.subarray(0, 4))
+  }
+
+  private resolveWithinRoot(root: string, asset: string): string {
+    if (!asset || asset.includes('\\') || isAbsolute(asset)) throw new Error('Asset path is invalid.')
+    const base = resolve(root)
+    const candidate = resolve(base, asset)
+    const rel = relative(base, candidate)
+    if (!rel || rel.startsWith('..') || isAbsolute(rel) || !rel.startsWith(`assets${requireSeparator()}`)) throw new Error('Asset path escapes the theme directory.')
+    return candidate
   }
 
   private themeRoot(id: string): string { this.assertId(id); return join(this.themesRoot, id) }

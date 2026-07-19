@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy,
+  AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy, Download,
   GitBranch, GitPullRequest, Grid2X2, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload, X
 } from 'lucide-react'
@@ -51,6 +51,8 @@ export function App(): React.JSX.Element {
   const [duplicateName, setDuplicateName] = useState('')
   const [duplicateBusy, setDuplicateBusy] = useState(false)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [shareDropActive, setShareDropActive] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
   const [draggingPlacement, setDraggingPlacement] = useState(false)
@@ -66,8 +68,10 @@ export function App(): React.JSX.Element {
   const popoverRef = useRef<HTMLDivElement>(null)
   const inspectorRef = useRef<HTMLElement>(null)
   const duplicateInputRef = useRef<HTMLInputElement>(null)
+  const shareBusyRef = useRef(false)
   const historyRef = useRef<ThemeProfile[]>([])
   const historyGroupRef = useRef<string | null>(null)
+  const dragCounterRef = useRef(0)
 
   const loadTheme = useCallback(async (id: string) => {
     try {
@@ -285,7 +289,7 @@ export function App(): React.JSX.Element {
   }
 
   const duplicateTheme = async (): Promise<void> => {
-    if (!draft || duplicateBusy) return
+    if (!draft || duplicateBusy || shareBusy) return
     const name = duplicateName.trim()
     const nameError = themeNameError(name)
     if (nameError) {
@@ -305,6 +309,79 @@ export function App(): React.JSX.Element {
       setDuplicateError(messageOf(reason))
     } finally {
       setDuplicateBusy(false)
+    }
+  }
+
+  const activateImportedTheme = async (profile: ThemeProfile): Promise<void> => {
+    await window.studio.themes.activate(profile.id)
+    await refreshThemes()
+    await loadTheme(profile.id)
+    setNotice(`已导入主题“${profile.name}”`)
+  }
+
+  const exportTheme = async (): Promise<void> => {
+    if (!draft || shareBusyRef.current) return
+    if (!window.studio.share) {
+      setError('当前版本不支持主题分享。')
+      return
+    }
+    shareBusyRef.current = true
+    setShareBusy(true)
+    setError(null)
+    try {
+      const result = await window.studio.share.exportTheme(draft)
+      if (result) setNotice(`主题已导出为“${result.filePath.split(/[\\/]/).pop() ?? '分享文件'}”`)
+    } catch (reason) {
+      setError(messageOf(reason))
+    } finally {
+      shareBusyRef.current = false
+      setShareBusy(false)
+    }
+  }
+
+  const importTheme = async (): Promise<void> => {
+    if (shareBusyRef.current) return
+    if (!window.studio.share) {
+      setError('当前版本不支持主题分享。')
+      return
+    }
+    shareBusyRef.current = true
+    setShareBusy(true)
+    setError(null)
+    try {
+      const profile = await window.studio.share.importTheme()
+      if (profile) await activateImportedTheme(profile)
+    } catch (reason) {
+      setError(messageOf(reason))
+    } finally {
+      shareBusyRef.current = false
+      setShareBusy(false)
+    }
+  }
+
+  const dropTheme = async (event: React.DragEvent<HTMLElement>): Promise<void> => {
+    event.preventDefault()
+    dragCounterRef.current = 0
+    setShareDropActive(false)
+    if (shareBusyRef.current) return
+    const file = event.dataTransfer.files[0]
+    if (!file) return
+    if (!window.studio.share || !window.studio.files) {
+      setError('当前版本不支持主题分享。')
+      return
+    }
+    shareBusyRef.current = true
+    setShareBusy(true)
+    setError(null)
+    try {
+      const path = window.studio.files.getPathForFile(file)
+      const profile = await window.studio.share.importThemePath(path)
+      await activateImportedTheme(profile)
+    } catch (reason) {
+      setError(messageOf(reason))
+    } finally {
+      shareBusyRef.current = false
+      setShareBusy(false)
     }
   }
 
@@ -474,9 +551,29 @@ export function App(): React.JSX.Element {
   const heroImage = buildPreviewHeroImageProps(heroUrl, draft.hero)
 
   return (
-    <main className="studio-shell">
+    <main
+      className="studio-shell"
+      onDragEnter={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        event.preventDefault()
+        dragCounterRef.current += 1
+        setShareDropActive(true)
+      }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+      }}
+      onDragLeave={(event) => {
+        event.preventDefault()
+        dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
+        if (dragCounterRef.current === 0) setShareDropActive(false)
+      }}
+      onDrop={(event) => { void dropTheme(event) }}
+    >
       <header className="titlebar"><span className="brand-mark"><Sparkles size={16} /></span><strong>Codex Dream Skin Studio</strong><span className="title-status">Windows Theme Editor</span></header>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
+      {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>释放 .cdstheme 文件以导入主题</strong><span>将创建新的本地主题，不会覆盖现有主题</span></div>}
       {duplicateDialogOpen && <div className="theme-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDuplicateDialog() }}>
         <section className="theme-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-theme-title">
           <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">复制主题</h2><button type="button" title="关闭" disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
@@ -493,7 +590,7 @@ export function App(): React.JSX.Element {
           <div className="theme-list">
             {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} onClick={() => { void window.studio.themes.activate(theme.id).then(() => refreshThemes()); void loadTheme(theme.id) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.active ? '当前主题' : '本地主题'}</small></span></button>)}
           </div>
-          <div className="theme-actions"><button type="button" title="复制主题" disabled={duplicateBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title="删除主题" onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
+          <div className="theme-actions"><button type="button" title="导出主题" disabled={shareBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title="导入主题" disabled={shareBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title="复制主题" disabled={duplicateBusy || shareBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title="删除主题" disabled={shareBusy} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
           {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title="关闭提示" onClick={() => setNotice(null)}><X size={13} /></button></div>}
           <nav className="sidebar-nav">
             <button className={activeInspector === 'visual' ? 'active' : ''} onClick={() => showInspector('visual')}><Palette size={17} />视觉设计</button>

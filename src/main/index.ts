@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, type NativeImage, type OpenDialogOptions } from 'electron'
-import { join } from 'node:path'
+import { extname, join } from 'node:path'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
 import { captureIpcResult } from '../shared/ipc-result'
@@ -60,6 +60,25 @@ function registerIpc(): void {
     if (purpose === 'font') return store.importFontAsset(themeId, result.filePaths[0])
     return store.importAsset(themeId, result.filePaths[0], purpose)
   })
+  ipcMain.handle('share:export', async (_event, profile: unknown) => {
+    const name = typeof profile === 'object' && profile !== null && 'name' in profile && typeof profile.name === 'string' ? profile.name : '主题'
+    const safeName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().slice(0, 80) || '主题'
+    const result = mainWindow
+      ? await dialog.showSaveDialog(mainWindow, { title: '导出主题', defaultPath: `${safeName}.cdstheme`, filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
+      : await dialog.showSaveDialog({ title: '导出主题', defaultPath: `${safeName}.cdstheme`, filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
+    if (result.canceled || !result.filePath) return null
+    const filePath = extname(result.filePath).toLowerCase() === '.cdstheme' ? result.filePath : `${result.filePath}.cdstheme`
+    await store.exportSharePackage(profile, filePath)
+    return { filePath }
+  })
+  ipcMain.handle('share:import', async () => {
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, { title: '导入主题', properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
+      : await dialog.showOpenDialog({ title: '导入主题', properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
+    if (result.canceled || !result.filePaths[0]) return null
+    return store.importSharePackage(result.filePaths[0])
+  })
+  ipcMain.handle('share:import-path', (_event, path: unknown) => store.importSharePackage(path))
   ipcMain.handle('codex:detect', () => captureIpcResult(() => codexService.detect()))
   ipcMain.handle('codex:install-theme', (_event, themeId: string) =>
     captureIpcResult(() => codexService.installTheme(themeId)))

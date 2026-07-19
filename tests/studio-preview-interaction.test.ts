@@ -39,6 +39,10 @@ describe('Studio preview editing interaction', () => {
   let selectIcon: ReturnType<typeof vi.fn>
   let duplicateTheme: ReturnType<typeof vi.fn>
   let activateTheme: ReturnType<typeof vi.fn>
+  let exportTheme: ReturnType<typeof vi.fn>
+  let importTheme: ReturnType<typeof vi.fn>
+  let importThemePath: ReturnType<typeof vi.fn>
+  let getPathForFile: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
@@ -63,6 +67,10 @@ describe('Studio preview editing interaction', () => {
       activeThemeId = id
       return selected
     })
+    exportTheme = vi.fn(async () => ({ filePath: 'C:\\Shares\\design.cdstheme' }))
+    importTheme = vi.fn(async () => null)
+    importThemePath = vi.fn(async () => { throw new Error('未设置拖放导入结果') })
+    getPathForFile = vi.fn(() => 'C:\\Shares\\design.cdstheme')
     const studio: StudioApi = {
       app: { getInfo: async () => ({ version: 'test', platform: 'win32' }) },
       themes: {
@@ -88,6 +96,12 @@ describe('Studio preview editing interaction', () => {
       selectIcon,
       selectFont: async () => selectedFontAsset
     },
+      share: {
+        exportTheme,
+        importTheme,
+        importThemePath
+      },
+      files: { getPathForFile },
       codex: {
         detect: async () => ({ found: true, version: 'test', executable: '', packageFamilyName: '', running: false, backupAvailable: false }),
         installTheme: async () => runtimeStatus,
@@ -278,6 +292,84 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('.theme-dialog')).not.toBeNull()
     expect(container.querySelector('.theme-dialog-error')?.textContent).toBe('素材复制失败')
     expect(submit.disabled).toBe(false)
+  })
+
+  it('exports the unsaved draft once and reports the selected share file', async () => {
+    const title = container.querySelector('[data-preview-target="copy-brand-title"]')
+    const exportButton = container.querySelector<HTMLButtonElement>('button[title="导出主题"]')
+    if (!title || !exportButton) throw new Error('Share export fixtures are missing.')
+    pointerDown(title)
+    enterQuickCopy('尚未保存的分享标题')
+    let finishExport: ((value: { filePath: string }) => void) | undefined
+    exportTheme.mockImplementationOnce(() => new Promise((resolve) => { finishExport = resolve }))
+    await act(async () => {
+      exportButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      exportButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(exportTheme).toHaveBeenCalledTimes(1)
+    expect((exportTheme.mock.calls[0]?.[0] as ThemeProfile).copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(exportButton.disabled).toBe(true)
+    await act(async () => {
+      finishExport?.({ filePath: 'C:\\Shares\\design.cdstheme' })
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('design.cdstheme')
+  })
+
+  it('imports, activates, and opens a new theme while cancellation and failures preserve the current theme', async () => {
+    const importButton = container.querySelector<HTMLButtonElement>('button[title="导入主题"]')
+    if (!importButton) throw new Error('Share import command is missing.')
+    await act(async () => {
+      importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(activateTheme).not.toHaveBeenCalled()
+
+    const imported = createDefaultTheme('00000000-0000-4000-8000-000000000003', '分享主题')
+    themeProfiles.push(imported)
+    importTheme.mockResolvedValueOnce(imported)
+    await act(async () => {
+      importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(activateTheme).toHaveBeenCalledWith(imported.id)
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('已导入主题“分享主题”')
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe('分享主题')
+
+    importTheme.mockRejectedValueOnce(new Error('分享包校验失败'))
+    await act(async () => {
+      importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.error-banner')?.textContent).toContain('分享包校验失败')
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe('分享主题')
+  })
+
+  it('converts dropped files through preload and imports through the validated path API', async () => {
+    const shell = container.querySelector('main')
+    if (!shell) throw new Error('Studio shell is missing.')
+    const imported = createDefaultTheme('00000000-0000-4000-8000-000000000004', '拖放主题')
+    themeProfiles.push(imported)
+    importThemePath.mockResolvedValueOnce(imported)
+    const file = new browserWindow.File(['theme'], 'design.cdstheme')
+    const dragEnter = new browserWindow.Event('dragenter', { bubbles: true, cancelable: true })
+    Object.defineProperty(dragEnter, 'dataTransfer', { value: { types: ['Files'], files: [file], dropEffect: 'none' } })
+    act(() => shell.dispatchEvent(dragEnter as unknown as Event))
+    expect(container.querySelector('.share-drop-zone')?.textContent).toContain('.cdstheme')
+    const drop = new browserWindow.Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(drop, 'dataTransfer', { value: { types: ['Files'], files: [file], dropEffect: 'copy' } })
+    await act(async () => {
+      shell.dispatchEvent(drop as unknown as Event)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(getPathForFile).toHaveBeenCalledWith(file)
+    expect(importThemePath).toHaveBeenCalledWith('C:\\Shares\\design.cdstheme')
+    expect(activateTheme).toHaveBeenCalledWith(imported.id)
+    expect(container.querySelector('.share-drop-zone')).toBeNull()
   })
 
   it('opens the most specific nested target and closes with Escape or outside click', () => {

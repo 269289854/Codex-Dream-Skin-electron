@@ -81,6 +81,14 @@ export interface StudioApi {
     selectIcon: (themeId: string) => Promise<ImportedAsset | null>
     selectFont: (themeId: string) => Promise<ImportedFontAsset | null>
   }
+  share: {
+    exportTheme: (profile: ThemeProfile) => Promise<{ filePath: string } | null>
+    importTheme: () => Promise<ThemeProfile | null>
+    importThemePath: (path: string) => Promise<ThemeProfile>
+  }
+  files: {
+    getPathForFile: (file: unknown) => string
+  }
   codex: {
     detect: () => Promise<CodexDetection>
     installTheme: (themeId: string) => Promise<RuntimeStatus>
