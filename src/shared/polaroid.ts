@@ -1,5 +1,5 @@
 import { fenceBounds, fenceClipPath, isFenceValid, type Fence } from './geometry'
-import type { PolaroidMode } from './theme'
+import type { PolaroidMode, ThemeProfile } from './theme'
 
 export interface PolaroidSourceSize {
   width: number
@@ -17,6 +17,11 @@ export interface PolaroidLayout {
   backgroundSize: string
   backgroundPosition: string
   clipPath: string | null
+}
+
+export interface PolaroidPlacementMetrics {
+  width: number
+  height: number
 }
 
 export function getPolaroidLayout(mode: PolaroidMode, sourceSize: PolaroidSourceSize, fence: Fence): PolaroidLayout | null {
@@ -46,10 +51,31 @@ export function getPolaroidLayout(mode: PolaroidMode, sourceSize: PolaroidSource
   }
 }
 
+export function getPolaroidPlacementMetrics(width: number, layout: PolaroidLayout): PolaroidPlacementMetrics {
+  return { width, height: layout.aspectRatio > 0 ? width / layout.aspectRatio : width }
+}
+
+export function clampPolaroidPosition(x: number, y: number, metrics: PolaroidPlacementMetrics): { x: number; y: number } {
+  return {
+    x: clamp(x, 0, Math.max(0, 1 - metrics.width)),
+    y: clamp(y, 0, Math.max(0, 1 - metrics.height))
+  }
+}
+
+export function polaroidShadowFilter(style: ThemeProfile['polaroid']['style']): string {
+  if (!style.shadow.visible) return 'none'
+  const shadow = style.shadow
+  return `drop-shadow(${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blur}px ${shadow.color})`
+}
+
 function ratio(value: number): number {
   return Number(value.toFixed(6))
 }
 
 function percentage(value: number): string {
   return `${Number((value * 100).toFixed(3))}%`
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value))
 }

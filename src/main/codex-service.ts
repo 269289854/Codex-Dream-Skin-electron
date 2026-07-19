@@ -4,7 +4,7 @@ import type { CodexDetection, PolaroidPlacementUpdate, RuntimePhase, RuntimeStat
 import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
-import { getPolaroidLayout } from '../shared/polaroid'
+import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
@@ -25,7 +25,10 @@ export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<strin
   const layout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, fence) : null
   if (profile.polaroid.visible && source && assets[source] && layout) {
     const p = profile.polaroid.placement
-    rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${layout.aspectRatio}; transform: rotate(${p.rotation}deg); transform-origin: center; background-image: url("${assets[source]}") !important; background-size: ${layout.backgroundSize} !important; background-position: ${layout.backgroundPosition} !important; clip-path: ${layout.clipPath ?? 'none'} !important; }`)
+    const style = profile.polaroid.style
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${layout.aspectRatio}; transform: rotate(${p.rotation}deg); transform-origin: center; opacity: ${style.opacity}; }`)
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid-shadow { filter: ${polaroidShadowFilter(style)} !important; }`)
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface { background-image: url("${assets[source]}") !important; background-size: ${layout.backgroundSize} !important; background-position: ${layout.backgroundPosition} !important; clip-path: ${layout.clipPath ?? 'none'} !important; }`)
     rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
   } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
   return rules.join('\n')

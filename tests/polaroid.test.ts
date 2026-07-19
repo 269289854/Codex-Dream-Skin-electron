@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Fence } from '../src/shared/geometry'
-import { getPolaroidLayout } from '../src/shared/polaroid'
+import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics, polaroidShadowFilter } from '../src/shared/polaroid'
+import { createDefaultTheme } from '../src/shared/theme'
 
 const fence: Fence = [{ x: 0.1, y: 0.2 }, { x: 0.9, y: 0.2 }, { x: 0.9, y: 0.8 }, { x: 0.1, y: 0.8 }]
 
@@ -27,5 +28,20 @@ describe('polaroid layout', () => {
     const invalid: Fence = [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.9 }, { x: 0.9, y: 0.1 }, { x: 0.1, y: 0.9 }]
     expect(getPolaroidLayout('fence', { width: 100, height: 100 }, invalid)).toBeNull()
     expect(getPolaroidLayout('full', { width: 100, height: 100 }, invalid)).not.toBeNull()
+  })
+
+  it('uses the rendered aspect ratio for placement bounds and shadow styling', () => {
+    const layout = getPolaroidLayout('full', { width: 800, height: 1200 }, fence)
+    if (!layout) throw new Error('Expected a full-image layout.')
+    const metrics = getPolaroidPlacementMetrics(.25, layout)
+    expect(metrics.width).toBe(.25)
+    expect(metrics.height).toBeCloseTo(.375)
+    expect(clampPolaroidPosition(.9, .9, metrics).x).toBe(.75)
+    expect(clampPolaroidPosition(.9, .9, metrics).y).toBeCloseTo(.625)
+
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    expect(polaroidShadowFilter(profile.polaroid.style)).toBe('drop-shadow(0px 8px 10px rgba(24, 48, 54, 0.24))')
+    profile.polaroid.style.shadow.visible = false
+    expect(polaroidShadowFilter(profile.polaroid.style)).toBe('none')
   })
 })

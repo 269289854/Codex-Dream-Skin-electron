@@ -56,12 +56,14 @@ describe('renderer injection template', () => {
     expect(codexService).not.toContain('主题已注入 ${result.targetCount} 个 Codex 页面')
   })
 
-  it('keeps the custom polaroid container transparent', async () => {
+  it('keeps the custom polaroid surface transparent and leaves shadow styling configurable', async () => {
     const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
     const rule = css.match(/\.dream-polaroid\s*\{[^}]+\}/)?.[0]
+    const surfaceRule = css.match(/\.dream-polaroid-surface\s*\{[^}]+\}/)?.[0]
+    const shadowRule = css.match(/\.dream-polaroid-shadow\s*\{[^}]+\}/)?.[0]
 
-    expect(rule).toContain('background-color: transparent !important')
-    expect(rule).toContain('box-shadow: none !important')
-    expect(rule).toContain('filter: none !important')
+    expect(rule).toContain('overflow: visible')
+    expect(surfaceRule).toContain('background-color: transparent !important')
+    expect(shadowRule).toContain('filter: var(--dream-polaroid-shadow-filter, none)')
   })
 })

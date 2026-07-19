@@ -212,6 +212,9 @@ describe('renderer home DOM adaptation', () => {
     const chrome = window.document.getElementById('codex-dream-skin-chrome')
     const polaroid = chrome?.querySelector('.dream-polaroid') as unknown as HTMLElement | null
     if (!chrome || !polaroid) throw new Error('Injected polaroid fixture is missing.')
+    expect(polaroid.querySelectorAll(':scope > .dream-polaroid-shadow')).toHaveLength(1)
+    expect(polaroid.querySelectorAll(':scope > .dream-polaroid-shadow > .dream-polaroid-surface')).toHaveLength(1)
+    expect(polaroid.querySelector('.dream-polaroid-pin')?.parentElement).toBe(polaroid)
 
     Object.defineProperties(polaroid, {
       offsetLeft: { configurable: true, value: 700 },

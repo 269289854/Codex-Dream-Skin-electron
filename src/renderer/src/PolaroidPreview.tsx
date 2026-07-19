@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { Fence } from '../../shared/geometry'
-import { getPolaroidLayout } from '../../shared/polaroid'
-import type { PolaroidMode } from '../../shared/theme'
+import { getPolaroidLayout, polaroidShadowFilter } from '../../shared/polaroid'
+import type { PolaroidMode, ThemeProfile } from '../../shared/theme'
 
 interface PolaroidPreviewProps {
   imageUrl: string
@@ -9,11 +9,12 @@ interface PolaroidPreviewProps {
   fence: Fence
   sourceSize: { width: number; height: number } | null
   placement: { x: number; y: number; width: number; rotation: number }
+  style: ThemeProfile['polaroid']['style']
   pin: React.ReactNode
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
 }
 
-export function PolaroidPreview({ imageUrl, mode, fence, sourceSize, placement, pin, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
+export function PolaroidPreview({ imageUrl, mode, fence, sourceSize, placement, style, pin, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
   if (!sourceSize) return null
   const layout = getPolaroidLayout(mode, sourceSize, fence)
   if (!layout) return null
@@ -31,17 +32,21 @@ export function PolaroidPreview({ imageUrl, mode, fence, sourceSize, placement, 
         width: `${placement.width * 100}%`,
         aspectRatio: `${layout.aspectRatio}`,
         transform: `rotate(${placement.rotation}deg)`,
-        clipPath: layout.clipPath ?? 'none'
+        opacity: style.opacity
       }}
     >
-      <img
-        src={imageUrl}
-        alt="拍立得"
-        draggable={false}
-        style={{
-          ...layout.image
-        }}
-      />
+      <div className="preview-polaroid-shadow" style={{ filter: polaroidShadowFilter(style) }}>
+        <div className="preview-polaroid-surface" style={{ clipPath: layout.clipPath ?? 'none' }}>
+          <img
+            src={imageUrl}
+            alt="拍立得"
+            draggable={false}
+            style={{
+              ...layout.image
+            }}
+          />
+        </div>
+      </div>
       <span className="preview-polaroid-pin" data-preview-target="icon-polaroid-pin" onPointerDown={(event) => event.stopPropagation()}>{pin}</span>
     </div>
   )

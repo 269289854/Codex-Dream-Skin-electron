@@ -127,6 +127,17 @@ const colorsSchema = z.object({
   danger: cssColorSchema
 }).strict()
 
+const polaroidStyleSchema = z.object({
+  opacity: normalized,
+  shadow: z.object({
+    visible: z.boolean(),
+    offsetX: z.number().finite().min(-40).max(40),
+    offsetY: z.number().finite().min(-40).max(40),
+    blur: z.number().finite().min(0).max(48),
+    color: cssColorSchema
+  }).strict()
+}).strict()
+
 const commonProfileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
@@ -153,9 +164,24 @@ const commonProfileFields = {
   }).strict()
 }
 
-export const themeProfileSchema = z.object({
+const versionNineThemeSchema = z.object({
   ...commonProfileFields,
   version: z.literal(9),
+  colors: colorsSchema,
+  copy: themeCopySchema,
+  icons: currentParticleIconsSchema,
+  composerBadge: composerBadgeSchema,
+  decorations: decorationsSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict()
+
+const currentPolaroidSchema = commonProfileFields.polaroid.extend({ style: polaroidStyleSchema }).strict()
+
+export const themeProfileSchema = z.object({
+  ...commonProfileFields,
+  polaroid: currentPolaroidSchema,
+  version: z.literal(10),
   colors: colorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
@@ -265,7 +291,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 9,
+    version: 10,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
     hero: {
@@ -285,7 +311,8 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
         { x: 0.88, y: 0.88 },
         { x: 0.12, y: 0.88 }
       ],
-      placement: { x: 0.72, y: 0.2, width: 0.22, rotation: 3, hideBelowWidth: 920 }
+      placement: { x: 0.72, y: 0.2, width: 0.22, rotation: 3, hideBelowWidth: 920 },
+      style: createDefaultPolaroidStyle()
     },
     colors: {
       surface: '#F7FFFF',
@@ -321,8 +348,11 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && input.version === 9) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 10) {
     return themeProfileSchema.parse(input)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 9) {
+    return migrateVersionNine(versionNineThemeSchema.parse(input))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 8) {
     return migrateVersionEight(versionEightThemeSchema.parse(input))
@@ -361,14 +391,22 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
   throw new Error('Unsupported theme profile version.')
 }
 
+function migrateVersionNine(legacy: z.infer<typeof versionNineThemeSchema>): ThemeProfile {
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 10,
+    polaroid: { ...legacy.polaroid, style: createDefaultPolaroidStyle() }
+  })
+}
+
 function migrateLegacyTheme(
   legacy: z.infer<typeof versionThreeThemeSchema> | z.infer<typeof versionTwoThemeSchema> | z.infer<typeof versionOneThemeSchema>,
   copy: z.infer<typeof legacyHomeCopySchema>
 ): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 9,
-    polaroid: { ...legacy.polaroid, mode: 'fence' },
+    version: 10,
+    polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
     copy: { ...copy, ...DEFAULT_BRAND_COPY },
     icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' }, composerBadge: { kind: 'builtin', name: 'music' }, ...createDefaultParticleIcons() },
     composerBadge: { visible: true },
@@ -381,8 +419,8 @@ function migrateLegacyTheme(
 function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 9,
-    polaroid: { ...legacy.polaroid, mode: 'fence' },
+    version: 10,
+    polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
     icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' }, ...createDefaultParticleIcons() },
     composerBadge: { visible: true },
     decorations: createDefaultDecorations(),
@@ -405,8 +443,8 @@ function migrateVersionFive(legacy: z.infer<typeof versionFiveThemeSchema>): The
 function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 9,
-    polaroid: { ...legacy.polaroid, mode: 'fence' },
+    version: 10,
+    polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
     icons: { ...legacy.icons, ...createDefaultParticleIcons() },
     decorations: createDefaultDecorations(),
     typography: {
@@ -419,8 +457,8 @@ function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): Theme
 function migrateVersionSeven(legacy: z.infer<typeof versionSevenThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 9,
-    polaroid: { ...legacy.polaroid, mode: 'fence' },
+    version: 10,
+    polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
     icons: { ...legacy.icons, ...createAdditionalParticleIcons() },
     decorations: {
       ...legacy.decorations,
@@ -432,8 +470,8 @@ function migrateVersionSeven(legacy: z.infer<typeof versionSevenThemeSchema>): T
 function migrateVersionEight(legacy: z.infer<typeof versionEightThemeSchema>): ThemeProfile {
   return themeProfileSchema.parse({
     ...legacy,
-    version: 9,
-    polaroid: { ...legacy.polaroid, mode: 'fence' }
+    version: 10,
+    polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() }
   })
 }
 
@@ -457,6 +495,19 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
       fontSize: 16,
       position: { x: 0.5, y: 0.35 },
       hideWhenTyping: true
+    }
+  }
+}
+
+function createDefaultPolaroidStyle(): z.infer<typeof polaroidStyleSchema> {
+  return {
+    opacity: 1,
+    shadow: {
+      visible: true,
+      offsetX: 0,
+      offsetY: 8,
+      blur: 10,
+      color: 'rgba(24, 48, 54, 0.24)'
     }
   }
 }

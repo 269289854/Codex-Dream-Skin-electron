@@ -704,7 +704,7 @@
         <div class="dream-brand"><span class="dream-note">♫</span><span><b></b><small></small></span></div>
         <div class="dream-signature"></div>
         <div class="dream-sparkles" aria-hidden="true"></div>
-        <div class="dream-polaroid"></div>`;
+        <div class="dream-polaroid"><div class="dream-polaroid-shadow"><div class="dream-polaroid-surface"></div></div></div>`;
       document.body.appendChild(chrome);
     }
     renderSlot(chrome.querySelector(".dream-note"), "branding", "♫");
@@ -716,11 +716,26 @@
     if (brandSubtitle) brandSubtitle.textContent = typeof copy.brandSubtitle === "string" ? copy.brandSubtitle : "你的专属 AI 编程与创作伙伴";
     if (brandSignature) brandSignature.textContent = typeof copy.brandSignature === "string" ? copy.brandSignature : "MIKU ✦ 01";
     chrome.querySelectorAll(".dream-wave").forEach((node) => node.remove());
+    const polaroid = chrome.querySelector(".dream-polaroid");
+    if (polaroid) {
+      let shadow = polaroid.querySelector(":scope > .dream-polaroid-shadow");
+      if (!(shadow instanceof HTMLElement)) {
+        shadow = document.createElement("div");
+        shadow.className = "dream-polaroid-shadow";
+        polaroid.prepend(shadow);
+      }
+      let surface = shadow.querySelector(":scope > .dream-polaroid-surface");
+      if (!(surface instanceof HTMLElement)) {
+        surface = document.createElement("div");
+        surface.className = "dream-polaroid-surface";
+        shadow.appendChild(surface);
+      }
+    }
     let pin = chrome.querySelector(".dream-polaroid-pin");
     if (!pin) {
       pin = document.createElement("span");
       pin.className = "dream-polaroid-pin";
-      chrome.querySelector(".dream-polaroid")?.appendChild(pin);
+      polaroid?.appendChild(pin);
     }
     renderSlot(pin, "polaroidPin", "●");
     installPolaroidDragging(chrome, chrome.querySelector(".dream-polaroid"));

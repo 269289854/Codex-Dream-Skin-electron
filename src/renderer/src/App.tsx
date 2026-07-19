@@ -9,13 +9,15 @@ import type { RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
-import { clampNormalized, type Fence } from '../../shared/geometry'
+import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
+import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls } from './DecorationControls'
 import { FenceEditor } from './FenceEditor'
+import { PolaroidControls } from './PolaroidControls'
 import { PolaroidPreview } from './PolaroidPreview'
 import { ParticleEffectControls } from './ParticleEffectControls'
 import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
@@ -399,15 +401,17 @@ export function App(): React.JSX.Element {
 
   const movePlacement = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (!draggingPlacement || !previewRef.current) return
+    const current = draft?.polaroid
+    const layout = current?.sourceSize ? getPolaroidLayout(current.mode, current.sourceSize, current.fence as Fence) : null
+    if (!current || !layout) return
     const bounds = previewRef.current.getBoundingClientRect()
-    setDraft((current) => current ? {
-      ...current,
-      polaroid: { ...current.polaroid, placement: {
-        ...current.polaroid.placement,
-        x: clampNormalized((event.clientX - bounds.left) / bounds.width - current.polaroid.placement.width / 2),
-        y: clampNormalized((event.clientY - bounds.top) / bounds.height - current.polaroid.placement.width / 2)
-      } }
-    } : current)
+    const metrics = getPolaroidPlacementMetrics(current.placement.width, layout)
+    const position = clampPolaroidPosition(
+      (event.clientX - bounds.left) / bounds.width - current.placement.width / 2,
+      (event.clientY - bounds.top) / bounds.height - metrics.height / 2,
+      metrics
+    )
+    setDraft((profile) => profile ? { ...profile, polaroid: { ...profile.polaroid, placement: { ...profile.polaroid.placement, ...position } } } : profile)
   }
 
   if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? '正在打开主题工作台'}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>重新加载</button>}</div>
@@ -489,7 +493,7 @@ export function App(): React.JSX.Element {
                       <PreviewComposer profile={draft} assets={assets} />
                     </div>
                   </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview imageUrl={polaroidUrl} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
@@ -534,16 +538,8 @@ export function App(): React.JSX.Element {
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
-              <label className="toggle-row"><span>显示拍立得</span><input type="checkbox" checked={draft.polaroid.visible} onChange={(event) => { const visible = event.currentTarget.checked; change((profile) => { profile.polaroid.visible = visible }) }} /></label>
-              <button className="secondary-command" onClick={() => void selectImage('polaroid')}><Image size={15} />{polaroidUrl ? '更换拍立得原图' : '选择拍立得原图'}</button>
-              <div className="segmented-control polaroid-mode-tabs" aria-label="拍立得显示模式">
-                <button type="button" className={draft.polaroid.mode === 'full' ? 'active' : ''} onClick={() => change((profile) => { profile.polaroid.mode = 'full' })}>整图</button>
-                <button type="button" className={draft.polaroid.mode === 'fence' ? 'active' : ''} onClick={() => change((profile) => { profile.polaroid.mode = 'fence' })}>四点围栏</button>
-              </div>
+              <PolaroidControls profile={draft} polaroidUrl={polaroidUrl} showAdvanced onChange={change} onInteractionEnd={endHistoryGroup} onSelectImage={() => void selectImage('polaroid')} />
               {polaroidUrl && draft.polaroid.mode === 'fence' && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
-              <Range label="宽度" min={.08} max={.6} step={.01} value={draft.polaroid.placement.width} onChange={(value) => change((profile) => { profile.polaroid.placement.width = value })} />
-              <Range label="旋转" min={-45} max={45} step={1} value={draft.polaroid.placement.rotation} onChange={(value) => change((profile) => { profile.polaroid.placement.rotation = value })} suffix="°" />
-              <Range label="隐藏阈值" min={320} max={1600} step={10} value={draft.polaroid.placement.hideBelowWidth} onChange={(value) => change((profile) => { profile.polaroid.placement.hideBelowWidth = value })} suffix="px" />
             </Property>
             <Property title="背景粒子" anchor="visual-sparkles" highlighted={inspectorAnchor === 'visual-sparkles'}><ParticleEffectControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} /></Property>
             <Property title="输入框旋律" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>

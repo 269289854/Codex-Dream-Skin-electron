@@ -344,14 +344,8 @@ html.codex-dream-skin [aria-disabled="true"] {
   width: 170px;
   height: 210px;
   display: none;
-  background-image: var(--dream-art);
-  background-repeat: no-repeat;
-  background-size: 672% auto;
-  background-position: right bottom;
-  background-color: transparent !important;
-  box-shadow: none !important;
-  clip-path: polygon(6% 0, 100% 8%, 92% 100%, 0 89%);
-  filter: none !important;
+  overflow: visible;
+  opacity: var(--dream-polaroid-opacity, 1);
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
@@ -390,6 +384,22 @@ html.codex-dream-skin [aria-disabled="true"] {
 
 @media (max-width: 600px) {
   .dream-brand small { display: none !important; }
+}
+
+.dream-polaroid-shadow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  filter: var(--dream-polaroid-shadow-filter, none);
+}
+
+.dream-polaroid-surface {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: transparent !important;
+  background-repeat: no-repeat;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

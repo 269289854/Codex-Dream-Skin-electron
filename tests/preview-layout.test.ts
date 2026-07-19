@@ -142,9 +142,11 @@ describe('Studio home preview', () => {
 
   it('only renders the Studio polaroid when the visibility option is enabled', async () => {
     const source = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'App.tsx'), 'utf8')
+    const controls = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'PolaroidControls.tsx'), 'utf8')
     expect(source).toContain('draft.polaroid.visible && polaroidUrl')
-    expect(source).toContain('checked={draft.polaroid.visible}')
-    expect(source).toContain('const visible = event.currentTarget.checked')
-    expect(source).toContain('profile.polaroid.visible = visible')
+    expect(controls).toContain('checked={polaroid.visible}')
+    expect(controls).toContain('const visible = event.currentTarget.checked')
+    expect(controls).toContain('next.polaroid.visible = visible')
+    expect(controls).toContain('next.polaroid.style.shadow')
   })
 })

@@ -37,22 +37,24 @@ interface RangeProps {
   max: number
   step: number
   suffix?: string
+  disabled?: boolean
   onChangeEnd?: () => void
 }
 
-export function Range({ label, value, onChange, min, max, step, suffix = '', onChangeEnd }: RangeProps): React.JSX.Element {
-  return <label className="range-row"><span>{label}</span><input type="range" min={min} max={max} step={step} value={value} onInput={(event) => onChange(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} /><output>{Number.isInteger(step) ? value : value.toFixed(2)}{suffix}</output></label>
+export function Range({ label, value, onChange, min, max, step, suffix = '', disabled = false, onChangeEnd }: RangeProps): React.JSX.Element {
+  return <label className={disabled ? 'range-row is-disabled' : 'range-row'}><span>{label}</span><input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onInput={(event) => onChange(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} /><output>{Number.isInteger(step) ? value : value.toFixed(2)}{suffix}</output></label>
 }
 
-interface SolidColorControlProps {
+export interface SolidColorControlProps {
   label: string
   value: string
   onChange: (value: string) => void
   onChangeEnd?: () => void
   token?: string
+  disabled?: boolean
 }
 
-export function SolidColorControl({ label, value, onChange, onChangeEnd, token }: SolidColorControlProps): React.JSX.Element {
+export function SolidColorControl({ label, value, onChange, onChangeEnd, token, disabled = false }: SolidColorControlProps): React.JSX.Element {
   const [input, setInput] = React.useState(value)
   React.useEffect(() => setInput(value), [value])
   const parsed = parse(value)
@@ -79,13 +81,13 @@ export function SolidColorControl({ label, value, onChange, onChangeEnd, token }
   }
 
   return (
-    <div className="solid-color-control" data-color-token={token}>
+    <div className={disabled ? 'solid-color-control is-disabled' : 'solid-color-control'} data-color-token={token}>
       <div className="solid-color-heading"><span>{label}</span><code>{Math.round(alpha * 100)}%</code></div>
       <div className="solid-color-row">
-        <span className="color-swatch" style={{ background: value }}><input aria-label={`${label}色板`} type="color" value={pickerValue} onInput={(event) => updatePicker(event.currentTarget.value)} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onBlur={onChangeEnd} /></span>
-        <input className="color-text-input" aria-label={`${label}颜色值`} value={input} aria-invalid={parseCssColor(input) === null} onInput={(event) => updateText(event.currentTarget.value)} onBlur={onChangeEnd} onKeyDown={(event) => { if (event.key === 'Enter') onChangeEnd?.() }} />
+        <span className="color-swatch" style={{ background: value }}><input aria-label={`${label}色板`} type="color" value={pickerValue} disabled={disabled} onInput={(event) => updatePicker(event.currentTarget.value)} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onBlur={onChangeEnd} /></span>
+        <input className="color-text-input" aria-label={`${label}颜色值`} value={input} disabled={disabled} aria-invalid={parseCssColor(input) === null} onInput={(event) => updateText(event.currentTarget.value)} onBlur={onChangeEnd} onKeyDown={(event) => { if (event.key === 'Enter') onChangeEnd?.() }} />
       </div>
-      <input className="alpha-slider" aria-label={`${label}透明度`} type="range" min={0} max={1} step={.01} value={alpha} onInput={(event) => updateAlpha(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} />
+      <input className="alpha-slider" aria-label={`${label}透明度`} type="range" min={0} max={1} step={.01} value={alpha} disabled={disabled} onInput={(event) => updateAlpha(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} />
     </div>
   )
 }
