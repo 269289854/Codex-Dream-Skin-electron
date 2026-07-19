@@ -296,9 +296,12 @@
 
   const mediaUrls = {};
   const mediaInputs = {};
-  const playbackGuardTimers = new WeakMap();
+  const retainedMediaNodes = {};
+  const playbackStates = new WeakMap();
   const mediaConfig = themeConfig?.media || {};
   const mediaTransform = (transform) => `scaleX(${transform?.flipHorizontal ? -1 : 1}) scaleY(${transform?.flipVertical ? -1 : 1})`;
+  const mediaVideoId = (role) => `codex-dream-skin-${role}-video`;
+  const mediaKey = (role) => String(mediaConfig?.[role]?.asset || `${themeConfig?.themeId || "theme"}:${role}`);
   const mediaInputId = (role) => `codex-dream-skin-media-${role}`;
   const prepareMedia = () => {
     const result = {};
@@ -335,44 +338,128 @@
   window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__ = attachMedia;
 
   const clearPlaybackGuard = (video) => {
-    const timer = playbackGuardTimers.get(video);
-    if (timer) clearInterval(timer);
-    playbackGuardTimers.delete(video);
+    const state = playbackStates.get(video);
+    if (!state) return;
+    if (state.timer) clearInterval(state.timer);
+    if (state.frameRequest !== null && typeof video.cancelVideoFrameCallback === "function") video.cancelVideoFrameCallback(state.frameRequest);
+    for (const [type, handler] of state.handlers || []) video.removeEventListener(type, handler);
+    playbackStates.delete(video);
   };
   const installPlaybackGuard = (video, playback, showPlayButton) => {
+    const configKey = JSON.stringify({ autoplay: Boolean(playback?.autoplay), loop: Boolean(playback?.loop), sound: Boolean(playback?.sound), volume: Number(playback?.volume) || 0 });
+    const existing = playbackStates.get(video);
     if (!playback?.autoplay) {
-      clearPlaybackGuard(video);
-      return;
+      if (existing) clearPlaybackGuard(video);
+      return { changed: Boolean(existing), showPlayButton };
     }
-    if (playbackGuardTimers.has(video)) return;
-    let lastTime = video.currentTime;
-    let stalledSince = performance.now();
-    const timer = setInterval(() => {
-      if (!video.isConnected || video.paused || video.ended || document.hidden || video.readyState < video.HAVE_CURRENT_DATA) {
-        if (!video.isConnected) clearPlaybackGuard(video);
+    if (existing?.configKey === configKey) {
+      existing.showPlayButton = showPlayButton;
+      if (existing.frameRequest === null) existing.requestFrame?.();
+      return { changed: false, showPlayButton };
+    }
+    if (existing) clearPlaybackGuard(video);
+    const now = performance.now();
+    const state = {
+      configKey,
+      lastTime: video.currentTime,
+      lastSignalAt: now,
+      stalledSince: null,
+      recovering: false,
+      nextRecoveryAt: 0,
+      detachedSince: null,
+      sourceChanging: false,
+      timer: null,
+      frameRequest: null,
+      handlers: [],
+      requestFrame: null,
+      showPlayButton
+    };
+    const noteProgress = () => {
+      const current = video.currentTime;
+      if (Number.isFinite(current) && Math.abs(current - state.lastTime) >= 0.01) {
+        state.lastTime = current;
+        state.lastSignalAt = performance.now();
+        state.stalledSince = null;
+        state.recovering = false;
+      }
+    };
+    const requestFrame = () => {
+      if (typeof video.requestVideoFrameCallback !== "function" || !video.isConnected) return;
+      state.frameRequest = video.requestVideoFrameCallback((_now, metadata) => {
+        if (!playbackStates.has(video)) return;
+        const mediaTime = Number(metadata?.mediaTime);
+        const nextTime = Number.isFinite(mediaTime) ? mediaTime : video.currentTime;
+        if (Math.abs(nextTime - state.lastTime) >= 0.01) {
+          state.lastTime = nextTime;
+          state.lastSignalAt = performance.now();
+          state.stalledSince = null;
+          state.recovering = false;
+        }
+        requestFrame();
+      });
+    };
+    const recover = () => {
+      const recoveryNow = performance.now();
+      if (state.recovering || recoveryNow < state.nextRecoveryAt || !video.isConnected || video.paused || video.ended || document.hidden) return;
+      const resumeTime = video.currentTime;
+      state.recovering = true;
+      state.nextRecoveryAt = recoveryNow + 1800;
+      try {
+        video.pause();
+        if (Number.isFinite(resumeTime) && video.readyState >= (Number(video.HAVE_METADATA) || 1)) video.currentTime = resumeTime;
+      } catch {
+        // Chromium can reject currentTime while the media element is replacing its source.
+      }
+      Promise.resolve(video.play()).then(() => {
+        state.recovering = false;
+        state.lastTime = video.currentTime;
+        state.lastSignalAt = performance.now();
+        state.stalledSince = null;
+        requestFrame();
+      }).catch(() => {
+        state.recovering = false;
+        state.stalledSince = performance.now();
+        showPlayButton();
+      });
+    };
+    state.timer = setInterval(() => {
+      const timerNow = performance.now();
+      if (!video.isConnected) {
+        state.detachedSince ??= timerNow;
+        if (state.frameRequest !== null && typeof video.cancelVideoFrameCallback === "function") video.cancelVideoFrameCallback(state.frameRequest);
+        state.frameRequest = null;
         return;
       }
-      const now = performance.now();
-      if (Math.abs(video.currentTime - lastTime) >= 0.01) {
-        lastTime = video.currentTime;
-        stalledSince = now;
+      state.detachedSince = null;
+      if (state.frameRequest === null) requestFrame();
+      if (video.paused || video.ended || document.hidden || video.readyState < (Number(video.HAVE_CURRENT_DATA) || 2)) {
+        state.stalledSince = null;
         return;
       }
-      if (now - stalledSince < 1200) return;
-      video.pause();
-      stalledSince = now;
-      void video.play().catch(showPlayButton);
+      noteProgress();
+      if (timerNow - state.lastSignalAt < 1200) return;
+      state.stalledSince ??= timerNow;
+      if (timerNow - state.stalledSince >= 0) recover();
     }, 750);
-    playbackGuardTimers.set(video, timer);
+    state.requestFrame = requestFrame;
+    playbackStates.set(video, state);
+    const onWaiting = () => { state.stalledSince ??= performance.now() - 1200; };
+    const onStalled = () => { state.stalledSince ??= performance.now() - 1200; };
+    state.handlers = [["timeupdate", noteProgress], ["playing", noteProgress], ["progress", noteProgress], ["waiting", onWaiting], ["stalled", onStalled]];
+    for (const [type, handler] of state.handlers) video.addEventListener(type, handler);
+    requestFrame();
+    return { changed: true, showPlayButton };
   };
   const configureVideo = (video, playback) => {
+    const configKey = JSON.stringify({ autoplay: Boolean(playback?.autoplay), loop: Boolean(playback?.loop), sound: Boolean(playback?.sound), volume: Number(playback?.volume) || 0 });
+    const existing = playbackStates.get(video);
+    if (existing?.configKey === configKey) return { changed: false, showPlayButton: existing.showPlayButton };
     video.autoplay = Boolean(playback?.autoplay);
     video.loop = Boolean(playback?.loop);
     video.muted = !Boolean(playback?.sound);
     video.volume = clamp(Number(playback?.volume) || 0, 0, 1);
     video.playsInline = true;
     video.controls = false;
-    video.onplay = () => video.parentElement?.querySelector(".dream-media-play")?.remove();
     const showPlayButton = () => {
       if (!video.parentElement?.querySelector(".dream-media-play")) {
         const button = document.createElement("button");
@@ -388,33 +475,65 @@
       if (!video.isConnected || document.hidden || video.dataset.dreamAutoplay !== "true") return;
       void video.play().catch(showPlayButton);
     };
+    video.onplay = () => video.parentElement?.querySelector(".dream-media-play")?.remove();
     video.onpause = () => {
+      const state = playbackStates.get(video);
       if (video.ended && !video.loop) showPlayButton();
-      else if (playback?.autoplay && !document.hidden) setTimeout(resumeAutoplay, 0);
+      else if (!state?.recovering && !state?.sourceChanging && playback?.autoplay && !document.hidden) setTimeout(resumeAutoplay, 0);
     };
     video.onloadeddata = () => { if (playback?.autoplay && !document.hidden) void video.play().catch(showPlayButton); };
     video.oncanplay = () => { if (playback?.autoplay && !document.hidden) void video.play().catch(showPlayButton); };
     video.dataset.dreamAutoplay = playback?.autoplay ? "true" : "false";
+    const guard = installPlaybackGuard(video, playback, showPlayButton);
     if (!playback?.autoplay) showPlayButton();
-    installPlaybackGuard(video, playback, showPlayButton);
-    return showPlayButton;
+    return { changed: guard.changed, showPlayButton };
   };
   const resumePolaroidVideo = (polaroid) => {
     const video = polaroid?.querySelector?.(".dream-polaroid-video");
-    if (!(video instanceof HTMLVideoElement) || video.dataset.dreamAutoplay !== "true" || document.hidden) return;
-    video.pause();
+    if (!(video instanceof HTMLVideoElement) || video.dataset.dreamAutoplay !== "true" || document.hidden || !video.paused) return;
     void video.play().catch(() => undefined);
   };
   const keepHeroMediaOutOfLayoutAnchor = (hero, media) => {
     if (hero.firstElementChild === media) hero.appendChild(media);
   };
+  const findExistingMediaVideo = (surface, role) => {
+    const id = mediaVideoId(role);
+    let video = surface.querySelector(`:scope > #${id}`) || surface.querySelector(`:scope > .dream-${role}-video`);
+    if (!(video instanceof HTMLVideoElement)) {
+      const detached = document.getElementById(id) || retainedMediaNodes[role];
+      if (detached instanceof HTMLVideoElement) {
+        video = detached;
+        surface.appendChild(video);
+      }
+    }
+    if (video instanceof HTMLVideoElement) {
+      video.id = id;
+      retainedMediaNodes[role] = video;
+    }
+    return video instanceof HTMLVideoElement ? video : null;
+  };
+  const setVideoSource = (video, role) => {
+    const key = mediaKey(role);
+    const source = mediaUrls[role] || "";
+    const changed = video.dataset.dreamMediaKey !== key || video.src !== source;
+    if (!changed) return false;
+    const state = playbackStates.get(video);
+    if (state) state.sourceChanging = true;
+    video.pause();
+    video.dataset.dreamMediaKey = key;
+    video.src = source;
+    video.load();
+    if (state) state.sourceChanging = false;
+    return true;
+  };
   const ensureHeroMedia = (hero) => {
     if (!(hero instanceof HTMLElement)) return;
-    let video = hero.querySelector(":scope > .dream-hero-video");
+    let video = findExistingMediaVideo(hero, "hero");
     let image = hero.querySelector(":scope > .dream-hero-image");
     if (!mediaConfig?.hero || !artUrl) {
       if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
+      retainedMediaNodes.hero = null;
       image?.remove();
       return;
     }
@@ -424,23 +543,22 @@
         if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
         video?.remove();
         video = document.createElement("video");
+        video.id = mediaVideoId("hero");
         video.className = "dream-hero-video";
         video.setAttribute("aria-hidden", "true");
         hero.appendChild(video);
+        retainedMediaNodes.hero = video;
       }
       keepHeroMediaOutOfLayoutAnchor(hero, video);
-      const sourceChanged = video.src !== (mediaUrls.hero || "");
-      if (sourceChanged) {
-        video.src = mediaUrls.hero || "";
-        video.load();
-      }
+      const sourceChanged = setVideoSource(video, "hero");
       video.style.transform = mediaTransform(mediaConfig.hero.transform);
-      const showPlayButton = configureVideo(video, mediaConfig.hero.playback);
-      if (mediaConfig.hero.playback?.autoplay && !document.hidden) video.play().catch(showPlayButton);
+      const configured = configureVideo(video, mediaConfig.hero.playback);
+      if ((configured.changed || sourceChanged || video.paused) && mediaConfig.hero.playback?.autoplay && !document.hidden) video.play().catch(configured.showPlayButton);
       return;
     }
     if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
     video?.remove();
+    retainedMediaNodes.hero = null;
     if (!(image instanceof HTMLElement)) {
       image?.remove();
       image = document.createElement("div");
@@ -457,28 +575,27 @@
   };
   const ensurePolaroidMedia = (surface) => {
     if (!(surface instanceof HTMLElement)) return;
-    let video = surface.querySelector(":scope > .dream-polaroid-video");
+    let video = findExistingMediaVideo(surface, "polaroid");
     if (mediaConfig?.polaroid?.kind !== "video" || !mediaUrls.polaroid) {
       if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
+      retainedMediaNodes.polaroid = null;
       return;
     }
     if (!(video instanceof HTMLVideoElement)) {
       if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
       video = document.createElement("video");
+      video.id = mediaVideoId("polaroid");
       video.className = "dream-polaroid-video";
       video.setAttribute("aria-hidden", "true");
       surface.appendChild(video);
+      retainedMediaNodes.polaroid = video;
     }
-    const sourceChanged = video.src !== mediaUrls.polaroid;
-    if (sourceChanged) {
-      video.src = mediaUrls.polaroid;
-      video.load();
-    }
+    const sourceChanged = setVideoSource(video, "polaroid");
     video.style.transform = mediaTransform(mediaConfig.polaroid.transform);
-    const showPlayButton = configureVideo(video, mediaConfig.polaroid.playback);
-    if (mediaConfig.polaroid.playback?.autoplay && !document.hidden) video.play().catch(showPlayButton);
+    const configured = configureVideo(video, mediaConfig.polaroid.playback);
+    if ((configured.changed || sourceChanged || video.paused) && mediaConfig.polaroid.playback?.autoplay && !document.hidden) video.play().catch(configured.showPlayButton);
   };
 
   const isVisible = (node) => {
@@ -541,6 +658,7 @@
   };
 
   let livePolaroidPlacement = null;
+  let chromeRoot = null;
   const setPolaroidPlacement = (polaroid, x, y) => {
     polaroid.style.setProperty("right", "auto", "important");
     polaroid.style.setProperty("left", `${x * 100}%`, "important");
@@ -892,7 +1010,14 @@
   };
 
   const clearHomeLayout = () => {
-    document.querySelectorAll(".dream-hero-video, .dream-hero-image").forEach((node) => { if (node instanceof HTMLMediaElement) node.pause(); node.remove(); });
+    document.querySelectorAll(".dream-hero-video, .dream-hero-image").forEach((node) => {
+      if (node instanceof HTMLVideoElement) {
+        retainedMediaNodes.hero = node;
+        node.remove();
+      } else {
+        node.remove();
+      }
+    });
     document.querySelectorAll(".dream-heading").forEach(clearHeading);
     markCurrentNode("[role=main].dream-home", null, "dream-home");
     markCurrentNode(".dream-hero", null, "dream-hero");
@@ -957,19 +1082,23 @@
     ensureComposerSendIcon(composerSurface);
 
     if (!shellMain || !document.body) return;
-    let chrome = document.getElementById(CHROME_ID);
+    let chrome = document.getElementById(CHROME_ID) || chromeRoot;
     if (!chrome || chrome.parentElement !== document.body) {
-      chrome?.remove();
-      chrome = document.createElement("div");
-      chrome.id = CHROME_ID;
-      chrome.setAttribute("aria-hidden", "true");
-      chrome.innerHTML = `
-        <div class="dream-brand"><span class="dream-note">♫</span><span><b></b><small></small></span></div>
-        <div class="dream-signature"></div>
-        <div class="dream-sparkles" aria-hidden="true"></div>
-        <div class="dream-polaroid"><div class="dream-polaroid-shadow"><div class="dream-polaroid-surface"></div></div></div>`;
-      document.body.appendChild(chrome);
+      if (chrome instanceof HTMLElement) {
+        document.body.appendChild(chrome);
+      } else {
+        chrome = document.createElement("div");
+        chrome.id = CHROME_ID;
+        chrome.setAttribute("aria-hidden", "true");
+        chrome.innerHTML = `
+          <div class="dream-brand"><span class="dream-note">♫</span><span><b></b><small></small></span></div>
+          <div class="dream-signature"></div>
+          <div class="dream-sparkles" aria-hidden="true"></div>
+          <div class="dream-polaroid"><div class="dream-polaroid-shadow"><div class="dream-polaroid-surface"></div></div></div>`;
+        document.body.appendChild(chrome);
+      }
     }
+    chromeRoot = chrome;
     renderSlot(chrome.querySelector(".dream-note"), "branding", "♫");
     const copy = themeConfig?.copy || {};
     const brandTitle = chrome.querySelector(".dream-brand b");
@@ -1053,6 +1182,7 @@
     document.getElementById(CARD_GRID_ID)?.remove();
     document.getElementById(STYLE_ID)?.remove();
     document.getElementById(CHROME_ID)?.remove();
+    chromeRoot = null;
     const state = window[STATE_KEY];
     state?.observer?.disconnect();
     if (state?.resizeHandler) window.removeEventListener("resize", state.resizeHandler);
@@ -1061,7 +1191,10 @@
     if (state?.scheduler?.timeout) clearTimeout(state.scheduler.timeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
     for (const url of Object.values(mediaUrls)) if (url) URL.revokeObjectURL(url);
-    document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video").forEach((node) => { if (node instanceof HTMLVideoElement) clearPlaybackGuard(node); if (node instanceof HTMLMediaElement) node.pause(); node.remove(); });
+    const mediaNodes = new Set([...document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video"), ...Object.values(retainedMediaNodes)]);
+    mediaNodes.forEach((node) => { if (node instanceof HTMLVideoElement) clearPlaybackGuard(node); if (node instanceof HTMLMediaElement) node.pause(); if (node instanceof Element) node.remove(); });
+    retainedMediaNodes.hero = null;
+    retainedMediaNodes.polaroid = null;
     document.querySelectorAll("input[id^='codex-dream-skin-media-']").forEach((node) => node.remove());
     delete window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__;
     delete window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__;
@@ -1071,7 +1204,8 @@
 
   const scheduler = { timeout: null };
   const visibilityHandler = () => {
-    document.querySelectorAll(".dream-hero-video, .dream-polaroid-video").forEach((node) => {
+    const videos = new Set([...document.querySelectorAll(".dream-hero-video, .dream-polaroid-video"), ...Object.values(retainedMediaNodes)]);
+    videos.forEach((node) => {
       if (!(node instanceof HTMLVideoElement)) return;
       if (document.hidden) node.pause();
       else if (node.dataset.dreamAutoplay === "true") void node.play().catch(() => undefined);
@@ -1079,14 +1213,20 @@
   };
   document.addEventListener("visibilitychange", visibilityHandler);
   const scheduleEnsure = () => {
-    if (scheduler.timeout) clearTimeout(scheduler.timeout);
+    if (scheduler.timeout) return;
     scheduler.timeout = setTimeout(() => {
       scheduler.timeout = null;
       ensure();
     }, 180);
   };
-  const observer = new MutationObserver(scheduleEnsure);
-  observer.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
+  const observer = new MutationObserver((records) => {
+    const relevant = records.some((record) => {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      return !target?.closest(`#${CHROME_ID}`);
+    });
+    if (relevant) scheduleEnsure();
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   const resizeHandler = scheduleEnsure;
   window.addEventListener("resize", resizeHandler);
   const timer = setInterval(ensure, 5000);

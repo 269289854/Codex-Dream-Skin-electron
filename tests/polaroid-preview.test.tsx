@@ -55,6 +55,7 @@ describe('PolaroidPreview video playback', () => {
     await act(async () => {
       root.render(<PolaroidPreview
         mediaUrl={mediaUrl}
+        mediaKey={mediaUrl}
         mediaKind="video"
         playback={profile.polaroid.playback}
         mediaTransform={profile.polaroid.mediaTransform}
@@ -117,6 +118,124 @@ describe('PolaroidPreview video playback', () => {
     expect(play).toHaveBeenCalled()
   })
 
+  it('keeps a stable media id and recovers a stalled timeline at the same time', async () => {
+    const play = vi.fn(() => Promise.resolve())
+    const pause = vi.fn()
+    const guardCallbacks: Array<() => void> = []
+    const nativeSetInterval = browserWindow.setInterval.bind(browserWindow)
+    browserWindow.setInterval = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 750 && typeof handler === 'function') {
+        guardCallbacks.push(handler as () => void)
+        return 750
+      }
+      return nativeSetInterval(handler, timeout, ...args)
+    }) as typeof browserWindow.setInterval
+    let now = 0
+    Object.defineProperty(browserWindow.performance, 'now', { configurable: true, value: () => now })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+    profile.polaroid.playback.autoplay = true
+    await renderVideo('studio-media://theme/assets/stable.mp4')
+
+    const video = container.querySelector<HTMLVideoElement>('video')
+    if (!video) throw new Error('Preview video is missing.')
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      ended: { configurable: true, value: false },
+      readyState: { configurable: true, value: 2 },
+      currentTime: { configurable: true, writable: true, value: 14 }
+    })
+    expect(video.id).toBe('studio-preview-polaroid-video')
+    expect(video.dataset.previewMediaKey).toBe('studio-media://theme/assets/stable.mp4')
+    play.mockClear()
+    pause.mockClear()
+    now = 100
+    guardCallbacks[0]?.()
+    now = 1700
+    guardCallbacks[0]?.()
+    await Promise.resolve()
+
+    expect(pause).toHaveBeenCalledOnce()
+    expect(play).toHaveBeenCalledOnce()
+    expect(video.currentTime).toBe(14)
+  })
+
+  it('uses video frame callbacks without treating a repeated frame as progress', async () => {
+    const play = vi.fn(() => Promise.resolve())
+    const pause = vi.fn()
+    const guardCallbacks: Array<() => void> = []
+    const frameCallbacks: VideoFrameRequestCallback[] = []
+    const nativeSetInterval = browserWindow.setInterval.bind(browserWindow)
+    browserWindow.setInterval = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 750 && typeof handler === 'function') {
+        guardCallbacks.push(handler as () => void)
+        return 750
+      }
+      return nativeSetInterval(handler, timeout, ...args)
+    }) as typeof browserWindow.setInterval
+    let now = 0
+    Object.defineProperty(browserWindow.performance, 'now', { configurable: true, value: () => now })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+    Object.defineProperty(browserWindow.HTMLVideoElement.prototype, 'requestVideoFrameCallback', {
+      configurable: true,
+      value: (callback: VideoFrameRequestCallback) => { frameCallbacks.push(callback); return frameCallbacks.length }
+    })
+    Object.defineProperty(browserWindow.HTMLVideoElement.prototype, 'cancelVideoFrameCallback', { configurable: true, value: vi.fn() })
+    profile.polaroid.playback.autoplay = true
+    await renderVideo('studio-media://theme/assets/frame-guard.mp4')
+
+    const video = container.querySelector<HTMLVideoElement>('video')
+    if (!video) throw new Error('Preview video is missing.')
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      ended: { configurable: true, value: false },
+      readyState: { configurable: true, value: 2 },
+      currentTime: { configurable: true, writable: true, value: 5 }
+    })
+    play.mockClear()
+    pause.mockClear()
+    now = 100
+    frameCallbacks[0]?.(now, { mediaTime: 5 } as VideoFrameCallbackMetadata)
+    now = 1600
+    frameCallbacks[1]?.(now, { mediaTime: 5 } as VideoFrameCallbackMetadata)
+    now = 1700
+    guardCallbacks[0]?.()
+    await Promise.resolve()
+
+    expect(pause).toHaveBeenCalledOnce()
+    expect(play).toHaveBeenCalledOnce()
+  })
+
+  it('restores the playback position when a preview page unmounts and returns', async () => {
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: vi.fn(() => Promise.resolve()) })
+    profile.polaroid.playback.autoplay = true
+    const mediaUrl = 'studio-media://theme/assets/page-switch.mp4'
+    await renderVideo(mediaUrl)
+    const firstVideo = container.querySelector<HTMLVideoElement>('video')
+    if (!firstVideo) throw new Error('Preview video is missing.')
+    Object.defineProperties(firstVideo, {
+      currentTime: { configurable: true, writable: true, value: 11 },
+      ended: { configurable: true, value: false }
+    })
+    await act(async () => {
+      root.render(<div />)
+      await Promise.resolve()
+    })
+
+    await renderVideo(mediaUrl)
+    const restoredVideo = container.querySelector<HTMLVideoElement>('video')
+    if (!restoredVideo) throw new Error('Restored preview video is missing.')
+    Object.defineProperties(restoredVideo, {
+      currentTime: { configurable: true, writable: true, value: 0 },
+      readyState: { configurable: true, value: 1 }
+    })
+    restoredVideo.dispatchEvent(new browserWindow.Event('loadedmetadata'))
+
+    expect(restoredVideo).not.toBe(firstVideo)
+    expect(restoredVideo.currentTime).toBe(11)
+  })
+
   it('restarts playback after a placement pointer interaction', async () => {
     const play = vi.fn(() => Promise.resolve())
     const pause = vi.fn()
@@ -127,9 +246,12 @@ describe('PolaroidPreview video playback', () => {
 
     const polaroid = container.querySelector<HTMLElement>('[data-preview-target="polaroid"]')
     if (!polaroid) throw new Error('Polaroid preview is missing.')
+    const video = container.querySelector<HTMLVideoElement>('video')
+    if (!video) throw new Error('Preview video is missing.')
+    Object.defineProperty(video, 'paused', { configurable: true, value: true })
     play.mockClear()
     polaroid.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
-    expect(pause).toHaveBeenCalled()
+    expect(pause).not.toHaveBeenCalled()
     expect(play).toHaveBeenCalled()
   })
 
@@ -141,11 +263,14 @@ describe('PolaroidPreview video playback', () => {
     profile.polaroid.playback.autoplay = true
     await renderVideo('studio-media://theme/assets/settings.mp4')
 
+    const video = container.querySelector<HTMLVideoElement>('video')
+    if (!video) throw new Error('Preview video is missing.')
+    Object.defineProperty(video, 'paused', { configurable: true, value: true })
     play.mockClear()
     pause.mockClear()
     await renderVideo('studio-media://theme/assets/settings.mp4', true)
     await act(async () => { await new Promise((resolve) => browserWindow.setTimeout(resolve, 40)) })
-    expect(pause).toHaveBeenCalled()
+    expect(pause).not.toHaveBeenCalled()
     expect(play).toHaveBeenCalled()
   })
 

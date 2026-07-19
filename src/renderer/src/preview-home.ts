@@ -26,6 +26,7 @@ export const PREVIEW_HERO_FALLBACK = 'linear-gradient(135deg, #d9fbfc, #fff4fb 5
 
 export interface PreviewHeroImageProps {
   src: string
+  mediaKey: string
   style: CSSProperties
   mediaStyle: CSSProperties
   kind: 'image' | 'video'
@@ -47,6 +48,7 @@ export function buildPreviewHeroImageProps(heroUrl: string | undefined, hero: Th
     mediaStyle: { transform: mediaFlipCssTransform(hero.mediaTransform) }
   } as PreviewHeroImageProps
   Object.defineProperties(props, {
+    mediaKey: { value: hero.source?.asset ?? '', enumerable: false },
     kind: { value: hero.source?.kind ?? 'image', enumerable: false },
     playback: { value: hero.playback, enumerable: false }
   })

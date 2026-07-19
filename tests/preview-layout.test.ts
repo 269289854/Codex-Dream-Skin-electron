@@ -40,6 +40,7 @@ describe('Studio home preview', () => {
     const sendIconRule = css.match(/\.preview-send-command \.custom-icon, \.preview-send-command svg\s*\{[^}]+\}/)?.[0]
     expect(source).toContain('className="dream-layout-root dream-hero preview-hero-explicit"')
     expect(source).toContain('className="preview-hero-art"')
+    expect(source).toContain('<PreviewVideo role="hero"')
     expect(source).toContain('className="preview-hero-fallback"')
     expect(source).toContain('className="preview-lower-region"')
     expect(source).toContain('data-preview-context="project"')

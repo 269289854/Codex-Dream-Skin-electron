@@ -92,6 +92,7 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
 }
 
 type RuntimeMediaConfig = {
+  asset?: string
   kind: 'image' | 'video'
   transform: ThemeProfile['hero']['mediaTransform']
   playback?: ThemeProfile['hero']['playback']
@@ -657,6 +658,35 @@ describe('renderer home DOM adaptation', () => {
     expect(hero?.querySelectorAll(':scope > .dream-hero-video')).toHaveLength(1)
   })
 
+  it('retains the hero video node and playback position across page navigation', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: vi.fn(() => Promise.resolve()) })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: {
+        asset: 'asset-hero-video',
+        kind: 'video',
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        transform: { flipHorizontal: false, flipVertical: false }
+      },
+      polaroid: null
+    })
+    const video = window.document.querySelector('#codex-dream-skin-hero-video') as HTMLVideoElement | null
+    if (!video) throw new Error('Hero video fixture is missing.')
+    Object.defineProperty(video, 'currentTime', { configurable: true, writable: true, value: 9 })
+
+    window.document.body.innerHTML = '<main class="main-surface"><div role="main"><article>Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></main>'
+    stateOf(window).ensure()
+    expect(video.isConnected).toBe(false)
+
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    stateOf(window).ensure()
+    expect(window.document.querySelector('#codex-dream-skin-hero-video')).toBe(video)
+    expect(video.currentTime).toBe(9)
+    expect(window.document.querySelectorAll('#codex-dream-skin-hero-video')).toHaveLength(1)
+  })
+
   it('starts bound polaroid video and retries autoplay when the media becomes playable', async () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')
@@ -687,6 +717,8 @@ describe('renderer home DOM adaptation', () => {
     expect(video.muted).toBe(true)
     expect(video.loop).toBe(true)
     expect(video.volume).toBe(0.7)
+    expect(video.id).toBe('codex-dream-skin-polaroid-video')
+    expect(video.dataset.dreamMediaKey).toBe(`${themeId}:polaroid`)
 
     const firstVideo = video
     const callsBeforeCanPlay = play.mock.calls.length
@@ -722,6 +754,72 @@ describe('renderer home DOM adaptation', () => {
     polaroid.onpointerup?.(pointer(740, 160))
     expect(play).toHaveBeenCalled()
     await Promise.resolve()
+  })
+
+  it('reuses the same media node and playback position when the document body is replaced', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const play = vi.fn(() => Promise.resolve())
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: null,
+      polaroid: {
+        kind: 'video',
+        mimeType: 'video/mp4',
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        transform: { flipHorizontal: false, flipVertical: false }
+      }
+    })
+    const inputIds = (window as unknown as { __CODEX_DREAM_SKIN_PREPARE_MEDIA__: () => Record<string, string> }).__CODEX_DREAM_SKIN_PREPARE_MEDIA__()
+    const input = window.document.getElementById(inputIds.polaroid ?? '')
+    if (!(input instanceof window.HTMLInputElement)) throw new Error('Polaroid media input fixture is missing.')
+    Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['video'], 'polaroid.mp4', { type: 'video/mp4' })] })
+    ;(window as unknown as { __CODEX_DREAM_SKIN_ATTACH_MEDIA__: () => boolean }).__CODEX_DREAM_SKIN_ATTACH_MEDIA__()
+    const video = window.document.querySelector('#codex-dream-skin-polaroid-video') as HTMLVideoElement | null
+    if (!video) throw new Error('Polaroid video fixture is missing.')
+    Object.defineProperty(video, 'currentTime', { configurable: true, writable: true, value: 14 })
+
+    const replacement = window.document.createElement('body')
+    replacement.innerHTML = homeFixture('Sample-Project')
+    window.document.documentElement.replaceChild(replacement, window.document.body)
+    stateOf(window).ensure()
+
+    expect(window.document.querySelector('#codex-dream-skin-polaroid-video')).toBe(video)
+    expect(video.currentTime).toBe(14)
+    expect(window.document.querySelectorAll('#codex-dream-skin-polaroid-video')).toHaveLength(1)
+  })
+
+  it('does not reconfigure media for streaming text mutations', async () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const play = vi.fn(() => Promise.resolve())
+    const load = vi.fn()
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'load', { configurable: true, value: load })
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: null,
+      polaroid: {
+        kind: 'video',
+        mimeType: 'video/mp4',
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        transform: { flipHorizontal: false, flipVertical: false }
+      }
+    })
+    const inputIds = (window as unknown as { __CODEX_DREAM_SKIN_PREPARE_MEDIA__: () => Record<string, string> }).__CODEX_DREAM_SKIN_PREPARE_MEDIA__()
+    const input = window.document.getElementById(inputIds.polaroid ?? '')
+    if (!(input instanceof window.HTMLInputElement)) throw new Error('Polaroid media input fixture is missing.')
+    Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['video'], 'polaroid.mp4', { type: 'video/mp4' })] })
+    ;(window as unknown as { __CODEX_DREAM_SKIN_ATTACH_MEDIA__: () => boolean }).__CODEX_DREAM_SKIN_ATTACH_MEDIA__()
+    play.mockClear()
+    load.mockClear()
+    const headingText = window.document.querySelector('[data-feature="game-source"]')?.firstChild
+    if (!headingText) throw new Error('Heading fixture is missing.')
+    headingText.textContent = '正在调用工具'
+    await Promise.resolve()
+
+    expect(play).not.toHaveBeenCalled()
+    expect(load).not.toHaveBeenCalled()
   })
 
   it('restarts a polaroid video whose playing timeline stalls during DOM streaming', () => {

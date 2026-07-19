@@ -22,6 +22,7 @@ import { MediaFlipControls } from './MediaFlipControls'
 import { PolaroidControls } from './PolaroidControls'
 import { PolaroidPreview } from './PolaroidPreview'
 import { ParticleEffectControls } from './ParticleEffectControls'
+import { PreviewVideo } from './PreviewVideo'
 import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import {
@@ -654,7 +655,7 @@ export function App(): React.JSX.Element {
                       {heroImage
                         ? <div className="preview-hero-art-frame" style={heroImage.style}>
                           {heroImage.kind === 'video'
-                            ? <video ref={(element) => { if (element) element.volume = heroImage.playback.volume }} className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} autoPlay={heroImage.playback.autoplay} loop={heroImage.playback.loop} muted={!heroImage.playback.sound} controls={!heroImage.playback.autoplay} playsInline />
+                            ? <PreviewVideo role="hero" mediaKey={heroImage.mediaKey} className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} playback={heroImage.playback} controls={!heroImage.playback.autoplay} />
                             : <img className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} alt="" draggable={false} />}
                         </div>
                         : <div className="preview-hero-fallback" aria-hidden="true" />}
@@ -681,7 +682,7 @@ export function App(): React.JSX.Element {
                       <PreviewComposer profile={draft} assets={assets} />
                     </div>
                   </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKey={draft.polaroid.source?.asset ?? polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>

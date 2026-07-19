@@ -48,6 +48,7 @@ describe('CodexService operation queue', () => {
     const root = join(tmpdir(), `codex-dream-skin-payload-${process.pid}-${Date.now()}`)
     const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
     profile.updatedAt = '2026-07-20T00:00:00.000Z'
+    profile.polaroid.source = { asset: 'asset-polaroid', kind: 'video', mimeType: 'video/mp4' }
     const store = {
       root,
       themesRoot: join(root, 'themes'),
@@ -65,6 +66,7 @@ describe('CodexService operation queue', () => {
 
     expect(firstVersion).toMatch(/^studio-2026-07-20T00:00:00\.000Z-[0-9a-f-]{36}$/)
     expect(secondVersion).not.toBe(firstVersion)
+    expect(first).toContain('"asset":"asset-polaroid"')
   })
 
 })
