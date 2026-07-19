@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { createDefaultTheme } from '../src/shared/theme'
 
 const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
@@ -41,6 +42,29 @@ describe('CodexService operation queue', () => {
     release(detection)
     await Promise.all([resume, detect])
     expect(runPowerShellMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('changes the renderer version for every rebuilt payload', async () => {
+    const root = join(tmpdir(), `codex-dream-skin-payload-${process.pid}-${Date.now()}`)
+    const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
+    profile.updatedAt = '2026-07-20T00:00:00.000Z'
+    const store = {
+      root,
+      themesRoot: join(root, 'themes'),
+      get: vi.fn().mockResolvedValue(profile),
+      compile: vi.fn().mockResolvedValue({ assets: {} })
+    }
+    const service = new CodexService(store as never, join(process.cwd(), 'resources', 'windows'), () => undefined)
+    const builder = service as unknown as { buildPayload(themeId: string): Promise<string> }
+
+    const first = await builder.buildPayload(profile.id)
+    const second = await builder.buildPayload(profile.id)
+    const versionPattern = /const VERSION = "([^"]+)"/
+    const firstVersion = first.match(versionPattern)?.[1]
+    const secondVersion = second.match(versionPattern)?.[1]
+
+    expect(firstVersion).toMatch(/^studio-2026-07-20T00:00:00\.000Z-[0-9a-f-]{36}$/)
+    expect(secondVersion).not.toBe(firstVersion)
   })
 
 })

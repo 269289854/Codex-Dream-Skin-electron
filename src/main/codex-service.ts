@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
@@ -253,8 +254,9 @@ export class CodexService {
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
       source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
     ]))
+    const runtimeVersion = `studio-${profile.updatedAt}-${randomUUID()}`
     return renderer
-      .replace('__DREAM_VERSION_JSON__', JSON.stringify(`studio-${profile.updatedAt}`))
+      .replace('__DREAM_VERSION_JSON__', JSON.stringify(runtimeVersion))
       .replace('__DREAM_CSS_JSON__', JSON.stringify(css))
       .replace('__DREAM_ART_JSON__', JSON.stringify(hero ?? TRANSPARENT_PNG))
       .replace('__DREAM_CONFIG_JSON__', JSON.stringify({

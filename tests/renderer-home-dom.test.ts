@@ -724,6 +724,60 @@ describe('renderer home DOM adaptation', () => {
     await Promise.resolve()
   })
 
+  it('restarts a polaroid video whose playing timeline stalls during DOM streaming', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const guardCallbacks: Array<() => void> = []
+    const nativeSetInterval = window.setInterval.bind(window)
+    window.setInterval = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
+      if (timeout === 750 && typeof handler === 'function') {
+        guardCallbacks.push(handler as () => void)
+        return 750
+      }
+      return nativeSetInterval(handler, timeout, ...args)
+    }) as typeof window.setInterval
+    let now = 0
+    Object.defineProperty(window.performance, 'now', { configurable: true, value: () => now })
+    const play = vi.fn(() => Promise.resolve())
+    const pause = vi.fn()
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: null,
+      polaroid: {
+        kind: 'video',
+        mimeType: 'video/mp4',
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        transform: { flipHorizontal: false, flipVertical: false }
+      }
+    })
+
+    const inputIds = (window as unknown as { __CODEX_DREAM_SKIN_PREPARE_MEDIA__: () => Record<string, string> }).__CODEX_DREAM_SKIN_PREPARE_MEDIA__()
+    const input = window.document.getElementById(inputIds.polaroid ?? '')
+    if (!(input instanceof window.HTMLInputElement)) throw new Error('Polaroid media input fixture is missing.')
+    Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['video'], 'polaroid.mp4', { type: 'video/mp4' })] })
+    ;(window as unknown as { __CODEX_DREAM_SKIN_ATTACH_MEDIA__: () => boolean }).__CODEX_DREAM_SKIN_ATTACH_MEDIA__()
+
+    const video = window.document.querySelector('.dream-polaroid-video')
+    if (!(video instanceof window.HTMLVideoElement)) throw new Error('Polaroid video fixture is missing.')
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      ended: { configurable: true, value: false },
+      readyState: { configurable: true, value: 2 },
+      currentTime: { configurable: true, value: 8 }
+    })
+    play.mockClear()
+    pause.mockClear()
+    now = 100
+    guardCallbacks[0]?.()
+    now = 1700
+    guardCallbacks[0]?.()
+
+    expect(pause).toHaveBeenCalledOnce()
+    expect(play).toHaveBeenCalledOnce()
+  })
+
   it('reuses a native heading project button when Codex renders one', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('ShortProject', true)
