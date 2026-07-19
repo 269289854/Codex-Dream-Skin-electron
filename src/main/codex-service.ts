@@ -294,7 +294,7 @@ export class CodexService {
       const watcher = this.watcher
       if (watcher && this.activeThemeId === saved.id) {
         watcher.setPayload(payload)
-        await watcher.inject()
+        await watcher.syncPolaroidPlacement(savedUpdate)
         this.patch('active', '拍立得位置已保存并同步')
       }
     }).catch((reason) => {

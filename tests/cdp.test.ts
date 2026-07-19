@@ -46,6 +46,7 @@ describe('CDP media binding', () => {
     const browserId = 'browser-1'
     const targetId = 'page-1'
     const boundFiles: Array<{ nodeId: number; files: string[] }> = []
+    const evaluatedExpressions: string[] = []
     const server = createServer((request, response) => {
       response.setHeader('content-type', 'application/json')
       if (request.url === '/json/version') {
@@ -66,6 +67,7 @@ describe('CDP media binding', () => {
         let result: unknown = {}
         if (command.method === 'Runtime.evaluate') {
           const expression = String(command.params.expression ?? '')
+          evaluatedExpressions.push(expression)
           const value = expression.includes('__CODEX_DREAM_SKIN_PREPARE_MEDIA__')
             ? { hero: 'codex-dream-skin-media-hero', polaroid: 'codex-dream-skin-media-polaroid' }
             : true
@@ -103,6 +105,11 @@ describe('CDP media binding', () => {
       await expect(watcher.inject()).resolves.toEqual({ connected: true, targetCount: 1 })
       expect(boundFiles.map((binding) => binding.files[0])).toEqual(['C:\\theme\\hero.mp4', 'C:\\theme\\polaroid.webm'])
       expect(boundFiles[0]!.nodeId - 1).toBe(boundFiles[1]!.nodeId - 2)
+
+      await watcher.syncPolaroidPlacement({ themeId: '11111111-1111-4111-8111-111111111111', x: 0.24, y: 0.68 })
+      const placementExpression = evaluatedExpressions.find((expression) => expression.includes('applyPolaroidPlacement'))
+      expect(placementExpression).toContain('"x":0.24')
+      expect(placementExpression).toContain('"y":0.68')
     } finally {
       for (const client of webSockets.clients) client.terminate()
       await new Promise<void>((resolve) => webSockets.close(() => resolve()))

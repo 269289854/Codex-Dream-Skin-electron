@@ -484,6 +484,12 @@
     renderSlot(icon, "composer", "↑");
   };
 
+  let livePolaroidPlacement = null;
+  const setPolaroidPlacement = (polaroid, x, y) => {
+    polaroid.style.setProperty("right", "auto", "important");
+    polaroid.style.setProperty("left", `${x * 100}%`, "important");
+    polaroid.style.setProperty("top", `${y * 100}%`, "important");
+  };
   const installPolaroidDragging = (chrome, polaroid) => {
     if (!(chrome instanceof HTMLElement) || !(polaroid instanceof HTMLElement)) return;
     const themeId = typeof themeConfig?.themeId === "string" ? themeConfig.themeId : "";
@@ -548,9 +554,8 @@
       drag.x = left / drag.shellWidth;
       drag.y = top / drag.shellHeight;
       drag.moved = drag.moved || left !== drag.startLeft || top !== drag.startTop;
-      polaroid.style.setProperty("right", "auto", "important");
-      polaroid.style.setProperty("left", `${drag.x * 100}%`, "important");
-      polaroid.style.setProperty("top", `${drag.y * 100}%`, "important");
+      livePolaroidPlacement = { x: drag.x, y: drag.y };
+      setPolaroidPlacement(polaroid, drag.x, drag.y);
       event.preventDefault();
       event.stopPropagation();
     };
@@ -558,6 +563,18 @@
     polaroid.onpointerup = finishDrag;
     polaroid.onpointercancel = finishDrag;
     polaroid.onlostpointercapture = finishDrag;
+  };
+
+  const applyPolaroidPlacement = (update) => {
+    if (!update || update.themeId !== themeConfig?.themeId) return false;
+    const x = Number(update.x);
+    const y = Number(update.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return false;
+    livePolaroidPlacement = { x, y };
+    const polaroid = document.getElementById(CHROME_ID)?.querySelector(":scope > .dream-polaroid");
+    if (!(polaroid instanceof HTMLElement)) return false;
+    setPolaroidPlacement(polaroid, x, y);
+    return true;
   };
 
   const findHomeContext = () => {
@@ -875,6 +892,10 @@
     }
     renderSlot(pin, "polaroidPin", "●");
     installPolaroidDragging(chrome, chrome.querySelector(".dream-polaroid"));
+    const currentPolaroid = chrome.querySelector(":scope > .dream-polaroid");
+    if (livePolaroidPlacement && currentPolaroid instanceof HTMLElement) {
+      setPolaroidPlacement(currentPolaroid, livePolaroidPlacement.x, livePolaroidPlacement.y);
+    }
 
     const shellBox = shellMain.getBoundingClientRect();
     chrome.style.left = `${Math.round(shellBox.left)}px`;
@@ -969,6 +990,7 @@
     scheduler,
     artUrl,
     mediaUrls,
+    applyPolaroidPlacement,
     visibilityHandler,
     version: VERSION,
   };

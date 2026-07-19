@@ -87,6 +87,13 @@ export class CdpWatcher {
     return snapshot
   }
 
+  async syncPolaroidPlacement(update: PolaroidPlacementUpdate): Promise<void> {
+    const targets = await this.targets()
+    const serialized = JSON.stringify(update)
+    const expression = `(() => { const update = ${serialized}; const state = window.__CODEX_DREAM_SKIN_STATE__; if (typeof state?.applyPolaroidPlacement === "function") return state.applyPolaroidPlacement(update); const polaroid = document.querySelector("#codex-dream-skin-chrome > .dream-polaroid"); if (!(polaroid instanceof HTMLElement)) return false; polaroid.style.setProperty("right", "auto", "important"); polaroid.style.setProperty("left", (update.x * 100) + "%", "important"); polaroid.style.setProperty("top", (update.y * 100) + "%", "important"); return true; })()`
+    await Promise.all(targets.map((target) => this.evaluate(target, expression)))
+  }
+
   async verify(): Promise<CdpSnapshot> {
     const targets = await this.targets()
     const results = await Promise.all(targets.map((target) => this.evaluate(target,

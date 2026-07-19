@@ -118,8 +118,8 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   window.eval(payload)
 }
 
-function stateOf(window: Window): { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown } {
-  const state = (window as unknown as Record<string, { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown } | undefined>).__CODEX_DREAM_SKIN_STATE__
+function stateOf(window: Window): { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown; applyPolaroidPlacement: (update: unknown) => boolean } {
+  const state = (window as unknown as Record<string, { ensure: () => void; cleanup: () => void; takePlacementUpdate: () => unknown; applyPolaroidPlacement: (update: unknown) => boolean } | undefined>).__CODEX_DREAM_SKIN_STATE__
   if (!state) throw new Error('Renderer injection state was not installed.')
   return state
 }
@@ -247,6 +247,14 @@ describe('renderer home DOM adaptation', () => {
     const update = stateOf(window).takePlacementUpdate()
     expect(update).toEqual({ themeId, x: 0.8, y: 460 / 700 })
     expect(stateOf(window).takePlacementUpdate()).toBeNull()
+    expect(stateOf(window).applyPolaroidPlacement({ themeId, x: 0.22, y: 0.31 })).toBe(true)
+    expect(polaroid.style.getPropertyValue('left')).toBe('22%')
+    expect(polaroid.style.getPropertyValue('top')).toBe('31%')
+    chrome.remove()
+    stateOf(window).ensure()
+    const restoredPolaroid = window.document.querySelector('.dream-polaroid') as unknown as HTMLElement | null
+    expect(restoredPolaroid?.style.getPropertyValue('left')).toBe('22%')
+    expect(restoredPolaroid?.style.getPropertyValue('top')).toBe('31%')
     expect(capturedPointer).toBeNull()
     expect(polaroid.classList.contains('dream-polaroid-dragging')).toBe(false)
   })
