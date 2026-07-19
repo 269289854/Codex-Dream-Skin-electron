@@ -63,6 +63,8 @@ describe('renderer injection template', () => {
     const shadowRule = css.match(/\.dream-polaroid-shadow\s*\{[^}]+\}/)?.[0]
 
     expect(rule).toContain('overflow: visible')
+    expect(rule).toContain('display: block')
+    expect(css).not.toContain('#codex-dream-skin-chrome.dream-home-shell .dream-polaroid')
     expect(surfaceRule).toContain('background-color: transparent !important')
     expect(shadowRule).toContain('filter: var(--dream-polaroid-shadow-filter, none)')
   })

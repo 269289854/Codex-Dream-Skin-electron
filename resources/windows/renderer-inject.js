@@ -758,6 +758,8 @@
       const composerBox = composerSurface.getBoundingClientRect();
       const photoTop = Math.max(110, Math.round(composerBox.top - shellBox.top - 58));
       chrome.style.setProperty("--dream-polaroid-top", `${photoTop}px`);
+    } else {
+      chrome.style.removeProperty("--dream-polaroid-top");
     }
   };
 

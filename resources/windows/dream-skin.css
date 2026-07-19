@@ -343,7 +343,7 @@ html.codex-dream-skin [aria-disabled="true"] {
   top: var(--dream-polaroid-top, 520px);
   width: 170px;
   height: 210px;
-  display: none;
+  display: block;
   overflow: visible;
   opacity: var(--dream-polaroid-opacity, 1);
   pointer-events: auto;
@@ -374,8 +374,6 @@ html.codex-dream-skin [aria-disabled="true"] {
   transform: translate(-50%, -50%);
   filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--dream-polaroid-pin) 30%, transparent));
 }
-
-#codex-dream-skin-chrome.dream-home-shell .dream-polaroid { display: block; }
 
 @media (max-width: 900px) {
   .dream-signature { display: none !important; }

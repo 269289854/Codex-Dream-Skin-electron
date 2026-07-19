@@ -546,6 +546,28 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-composer-melody')).toBeNull()
   })
 
+  it('keeps the polaroid visible and idempotent on conversation pages', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div><article data-message-author-role="assistant">Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></main>'
+    inject(window, undefined, undefined, '.dream-polaroid { display: block; }')
+
+    const chrome = window.document.getElementById('codex-dream-skin-chrome')
+    const polaroid = chrome?.querySelector('.dream-polaroid')
+    if (!chrome || !polaroid) throw new Error('Conversation polaroid fixture is missing.')
+    expect(chrome.classList.contains('dream-home-shell')).toBe(false)
+    expect(chrome.getAttribute('style') ?? '').not.toContain('--dream-polaroid-top')
+
+    stateOf(window).ensure()
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('#codex-dream-skin-chrome')).toHaveLength(1)
+    expect(window.document.querySelectorAll('.dream-polaroid')).toHaveLength(1)
+    expect(polaroid.querySelectorAll(':scope > .dream-polaroid-shadow')).toHaveLength(1)
+    expect(polaroid.querySelectorAll(':scope > .dream-polaroid-shadow > .dream-polaroid-surface')).toHaveLength(1)
+
+    stateOf(window).cleanup()
+    expect(window.document.getElementById('codex-dream-skin-chrome')).toBeNull()
+  })
+
   it('reuses a native heading project button when Codex renders one', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('ShortProject', true)
