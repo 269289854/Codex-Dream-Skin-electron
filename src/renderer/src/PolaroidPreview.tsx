@@ -16,10 +16,11 @@ interface PolaroidPreviewProps {
   placement: { x: number; y: number; width: number; rotation: number }
   style: ThemeProfile['polaroid']['style']
   pin: React.ReactNode
+  quickEditorOpen: boolean
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
 }
 
-export function PolaroidPreview({ mediaUrl, mediaKind, playback, mediaTransform, mode, fence, sourceSize, placement, style, pin, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
+export function PolaroidPreview({ mediaUrl, mediaKind, playback, mediaTransform, mode, fence, sourceSize, placement, style, pin, quickEditorOpen, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const [playbackBlocked, setPlaybackBlocked] = React.useState(false)
   const layout = sourceSize ? getPolaroidLayout(mode, sourceSize, fence) : null
@@ -56,6 +57,18 @@ export function PolaroidPreview({ mediaUrl, mediaKind, playback, mediaTransform,
     const frame = window.requestAnimationFrame(recoverAfterInteraction)
     return () => window.cancelAnimationFrame(frame)
   })
+
+  React.useEffect(() => {
+    if (mediaKind !== 'video' || !playback.autoplay) return
+    let secondFrame: number | null = null
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(restartAfterPointer)
+    })
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      if (secondFrame !== null) window.cancelAnimationFrame(secondFrame)
+    }
+  }, [mediaKind, playback.autoplay, quickEditorOpen, restartAfterPointer])
 
   React.useEffect(() => {
     const video = videoRef.current

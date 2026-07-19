@@ -51,7 +51,7 @@ describe('PolaroidPreview video playback', () => {
     vi.restoreAllMocks()
   })
 
-  const renderVideo = async (mediaUrl: string): Promise<void> => {
+  const renderVideo = async (mediaUrl: string, quickEditorOpen = false): Promise<void> => {
     await act(async () => {
       root.render(<PolaroidPreview
         mediaUrl={mediaUrl}
@@ -64,6 +64,7 @@ describe('PolaroidPreview video playback', () => {
         placement={profile.polaroid.placement}
         style={profile.polaroid.style}
         pin={null}
+        quickEditorOpen={quickEditorOpen}
         onPointerDown={() => undefined}
       />)
       await Promise.resolve()
@@ -128,6 +129,22 @@ describe('PolaroidPreview video playback', () => {
     if (!polaroid) throw new Error('Polaroid preview is missing.')
     play.mockClear()
     polaroid.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    expect(pause).toHaveBeenCalled()
+    expect(play).toHaveBeenCalled()
+  })
+
+  it('restarts playback after the quick editor finishes opening', async () => {
+    const play = vi.fn(() => Promise.resolve())
+    const pause = vi.fn()
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+    profile.polaroid.playback.autoplay = true
+    await renderVideo('studio-media://theme/assets/settings.mp4')
+
+    play.mockClear()
+    pause.mockClear()
+    await renderVideo('studio-media://theme/assets/settings.mp4', true)
+    await act(async () => { await new Promise((resolve) => browserWindow.setTimeout(resolve, 40)) })
     expect(pause).toHaveBeenCalled()
     expect(play).toHaveBeenCalled()
   })

@@ -681,7 +681,7 @@ export function App(): React.JSX.Element {
                       <PreviewComposer profile={draft} assets={assets} />
                     </div>
                   </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
