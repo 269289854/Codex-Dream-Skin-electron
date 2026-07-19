@@ -469,6 +469,10 @@ describe('renderer home DOM adaptation', () => {
   it('shows composer melody as text and hides it for text or attachments', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')
+    const composer = window.document.querySelector('.composer-surface-chrome')
+    const emptyAttachments = window.document.createElement('div')
+    emptyAttachments.className = '_attachmentsDefault_1qb5a_2'
+    composer?.appendChild(emptyAttachments)
     const decorations = structuredClone(defaultDecorations)
     decorations.composerMelody = {
       visible: true,
@@ -479,7 +483,6 @@ describe('renderer home DOM adaptation', () => {
     }
     inject(window, undefined, undefined, undefined, undefined, decorations)
 
-    const composer = window.document.querySelector('.composer-surface-chrome')
     const editor = composer?.querySelector('.ProseMirror')
     const melody = composer?.querySelector('.dream-composer-melody') as HTMLElement | null
     expect(melody?.textContent).toBe('<b>♫</b>')
@@ -494,6 +497,17 @@ describe('renderer home DOM adaptation', () => {
     stateOf(window).ensure()
     expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(true)
     editor.textContent = ''
+    stateOf(window).ensure()
+    expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(false)
+
+    const attachmentItem = window.document.createElement('div')
+    emptyAttachments.appendChild(attachmentItem)
+    stateOf(window).ensure()
+    expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(true)
+    attachmentItem.remove()
+    stateOf(window).ensure()
+    expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(false)
+
     const attachment = window.document.createElement('div')
     attachment.setAttribute('data-attachment', 'image.png')
     composer?.appendChild(attachment)
@@ -516,7 +530,7 @@ describe('renderer home DOM adaptation', () => {
 
   it('keeps melody visible while typing when configured and supports conversation composers', () => {
     const window = createWindow()
-    window.document.body.innerHTML = '<main class="main-surface"><div role="main"><article>Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true">已有内容</div></div></div></main>'
+    window.document.body.innerHTML = '<main class="main-surface"><div role="main"><article>Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true">已有内容</div><div class="_attachmentsDefault_1qb5a_2"><div data-attachment="image.png"></div></div></div></div></main>'
     const decorations = structuredClone(defaultDecorations)
     decorations.composerMelody.hideWhenTyping = false
     inject(window, undefined, undefined, undefined, undefined, decorations)

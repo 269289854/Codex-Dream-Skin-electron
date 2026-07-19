@@ -33,6 +33,7 @@ describe('Studio preview editing interaction', () => {
   let savedProfiles: ThemeProfile[]
   let alternateProfile: ThemeProfile
   let selectedFontAsset: ImportedFontAsset | null
+  let selectIcon: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
@@ -43,6 +44,7 @@ describe('Studio preview editing interaction', () => {
     profile.polaroid.sourceSize = { width: 1000, height: 800 }
     savedProfiles = []
     selectedFontAsset = null
+    selectIcon = vi.fn(async () => null)
     const studio: StudioApi = {
       app: { getInfo: async () => ({ version: 'test', platform: 'win32' }) },
       themes: {
@@ -64,7 +66,7 @@ describe('Studio preview editing interaction', () => {
       },
     assets: {
       selectImage: async () => null,
-      selectIcon: async () => null,
+      selectIcon,
       selectFont: async () => selectedFontAsset
     },
       codex: {
@@ -314,6 +316,35 @@ describe('Studio preview editing interaction', () => {
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
     expect(container.querySelector('[data-inspector-anchor="typography"]')?.classList.contains('inspector-highlight')).toBe(true)
+  })
+
+  it('opens custom icon import from both quick editing and the full icon inspector', async () => {
+    const composerIcon = container.querySelector('[data-preview-target="icon-composer"]')
+    if (!composerIcon) throw new Error('Composer icon target is missing.')
+
+    pointerDown(composerIcon)
+    const quickSelect = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-icon-slot="composer"] select')
+    if (!quickSelect) throw new Error('Quick icon selector is missing.')
+    act(() => {
+      quickSelect.value = '__asset'
+      quickSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(selectIcon).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000000')
+
+    const iconSettings = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('图标设置'))
+    if (!iconSettings) throw new Error('Icon settings command is missing.')
+    await act(async () => {
+      iconSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    const inspectorSelect = container.querySelector<HTMLSelectElement>('[data-inspector-anchor="icon-composer"] select')
+    if (!inspectorSelect) throw new Error('Inspector icon selector is missing.')
+    act(() => {
+      inspectorSelect.value = '__asset'
+      inspectorSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(selectIcon).toHaveBeenCalledTimes(2)
   })
 
   it('keeps particles and composer melody synchronized across home and conversation previews', async () => {

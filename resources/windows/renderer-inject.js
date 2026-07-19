@@ -174,7 +174,13 @@
     const editor = composer?.querySelector(".ProseMirror");
     if (!editor) return false;
     if (editor.textContent?.trim()) return true;
-    return Boolean(editor.querySelector("img, video, audio") || composer.querySelector("[data-attachment], [data-testid*='attachment' i], [class*='attachment' i], [data-testid*='file' i]"));
+    if (editor.querySelector("img, video, audio") || composer.querySelector("[data-attachment]")) return true;
+    const attachmentCandidates = [...composer.querySelectorAll("[data-testid*='attachment' i], [class*='attachment' i], [data-testid*='file' i]")];
+    return attachmentCandidates.some((node) => Boolean(
+      node.textContent?.trim() ||
+      node.querySelector("img, video, audio") ||
+      (node.matches("[class*='attachments' i]") && node.children.length > 0)
+    ));
   };
 
   const ensureComposerMelody = (composer) => {

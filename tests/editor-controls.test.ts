@@ -3,7 +3,7 @@ import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AppearanceColorControl, FontControl, PaintControl, RenderIcon } from '../src/renderer/src/editor-controls'
+import { AppearanceColorControl, FontControl, PaintControl, RenderIcon, ThemeIconControl } from '../src/renderer/src/editor-controls'
 import type { ThemePaint } from '../src/shared/appearance'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { createDefaultTheme } from '../src/shared/theme'
@@ -162,6 +162,45 @@ describe('editor appearance controls', () => {
     if (!importButton) throw new Error('Font import command is missing.')
     act(() => importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onImport).toHaveBeenCalledOnce()
+  })
+
+  it('opens custom image import from the icon selector and keeps builtin changes separate', () => {
+    const profile = createDefaultTheme('00000000-0000-0000-0000-000000000000')
+    const onChange = vi.fn()
+    const onImport = vi.fn()
+    act(() => root.render(React.createElement(ThemeIconControl, { slot: 'composer', profile, assets: {}, onChange, onImport })))
+
+    const select = container.querySelector<HTMLSelectElement>('[data-icon-slot="composer"] select')
+    if (!select) throw new Error('Icon selector is missing.')
+    act(() => {
+      select.value = '__asset'
+      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(onImport).toHaveBeenCalledOnce()
+    expect(onChange).not.toHaveBeenCalled()
+
+    act(() => {
+      select.value = 'heart'
+      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(onChange).toHaveBeenLastCalledWith('heart')
+    expect(onImport).toHaveBeenCalledOnce()
+  })
+
+  it('keeps custom assets selectable and exposes a replace action', () => {
+    const profile = createDefaultTheme('00000000-0000-0000-0000-000000000000')
+    profile.icons.composer = { kind: 'asset', asset: 'assets/custom.png' }
+    const onImport = vi.fn()
+    act(() => root.render(React.createElement(ThemeIconControl, { slot: 'composer', profile, assets: { 'assets/custom.png': 'data:image/png;base64,AA==' }, onChange: vi.fn(), onImport })))
+
+    const select = container.querySelector<HTMLSelectElement>('[data-icon-slot="composer"] select')
+    const button = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] button')
+    if (!select || !button) throw new Error('Custom icon controls are missing.')
+    expect(select.value).toBe('__asset')
+    expect(button.title).toBe('更换输入框发送按钮图标')
+    act(() => button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(onImport).toHaveBeenCalledOnce()
+    expect(container.querySelector('img.custom-icon')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
   })
 
   it('renders the runtime glyphs for injected sidebar and brand preview slots', () => {
