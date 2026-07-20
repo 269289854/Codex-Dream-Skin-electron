@@ -1,7 +1,7 @@
 import WebSocket from 'ws'
 interface CdpVersion { webSocketDebuggerUrl: string }
 interface CdpTarget { id: string; type: string; url: string; webSocketDebuggerUrl: string }
-export interface CdpMediaBinding { role: 'hero' | 'polaroid'; path: string; mimeType: string }
+export interface CdpMediaBinding { role: 'hero' | 'polaroid' | 'conversationBackground'; path: string; mimeType: string }
 type CdpCommand = (method: string, params: Record<string, unknown>) => Promise<unknown>
 
 const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); return true; })()'

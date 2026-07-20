@@ -37,6 +37,7 @@ describe('Studio preview editing interaction', () => {
   let activeThemeId: string
   let selectedFontAsset: ImportedFontAsset | null
   let selectIcon: ReturnType<typeof vi.fn>
+  let selectMedia: ReturnType<typeof vi.fn>
   let getDefaultTheme: ReturnType<typeof vi.fn>
   let duplicateTheme: ReturnType<typeof vi.fn>
   let activateTheme: ReturnType<typeof vi.fn>
@@ -57,6 +58,7 @@ describe('Studio preview editing interaction', () => {
     savedProfiles = []
     selectedFontAsset = null
     selectIcon = vi.fn(async () => null)
+    selectMedia = vi.fn(async () => null)
     getDefaultTheme = vi.fn(async (id: string) => {
       const selected = themeProfiles.find((item) => item.id === id)
       if (!selected) throw new Error('Theme not found.')
@@ -108,7 +110,7 @@ describe('Studio preview editing interaction', () => {
       },
     assets: {
       selectImage: async () => null,
-      selectMedia: async () => null,
+      selectMedia,
       getPreviewUrl: async (_themeId, asset) => `data:image/png;base64,${asset}`,
       selectIcon,
       selectFont: async () => selectedFontAsset
@@ -547,6 +549,82 @@ describe('Studio preview editing interaction', () => {
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
     expect(container.querySelector('[data-inspector-anchor="typography"]')?.classList.contains('inspector-highlight')).toBe(true)
+  })
+
+  it('opens conversation background editing from the preview and persists the color mode', async () => {
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const surface = container.querySelector<HTMLElement>('[data-preview-target="conversation-background"]')
+    if (!surface) throw new Error('Conversation background target is missing.')
+    pointerDown(surface)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('对话区域背景快捷配置')
+    const visible = [...container.querySelectorAll('[role="dialog"] .toggle-row')].find((row) => row.querySelector('span')?.textContent === '显示对话区域背景')?.querySelector<HTMLInputElement>('input')
+    if (!visible) throw new Error('Conversation background visibility control is missing.')
+    act(() => {
+      visible.checked = false
+      visible.click()
+    })
+    await act(async () => { await Promise.resolve() })
+    const opacity = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '背景透明度')?.querySelector<HTMLInputElement>('input')
+    if (!opacity) throw new Error('Conversation background opacity control is missing.')
+    act(() => {
+      setInputValue(opacity, '.72')
+      opacity.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    })
+    await act(async () => { await Promise.resolve() })
+    expect(container.querySelector<HTMLElement>('.preview-conversation-background-color')?.style.opacity).toBe('0.72')
+    expect(container.querySelector<HTMLElement>('.preview-conversation-background-overlay')?.style.opacity).toBe('0.24')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.conversationBackground).toMatchObject({ visible: true, mode: 'color', opacity: .72 })
+  })
+
+  it('keeps cancelled media selection unchanged and previews image, GIF, and video modes', async () => {
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const surface = container.querySelector<HTMLElement>('[data-preview-target="conversation-background"]')
+    if (!surface) throw new Error('Conversation background target is missing.')
+    pointerDown(surface)
+
+    const modeButton = (label: string): HTMLButtonElement => {
+      const button = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-background-modes button')].find((candidate) => candidate.textContent === label)
+      if (!button) throw new Error(`${label} mode is missing.`)
+      return button
+    }
+    const choose = async (label: string): Promise<void> => {
+      await act(async () => {
+        modeButton(label).dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+        await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+      })
+    }
+
+    await choose('图片')
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationBackground', 'image')
+    expect(modeButton('颜色').classList.contains('active')).toBe(true)
+
+    selectMedia.mockResolvedValueOnce({ reference: { asset: 'assets/conversation.png', kind: 'image', mimeType: 'image/png' }, relativePath: 'assets/conversation.png', previewUrl: 'data:image/png;base64,AA==', originalName: 'conversation.png', width: 1200, height: 800 })
+    await choose('图片')
+    expect(container.querySelector<HTMLImageElement>('.preview-conversation-background-media')?.src).toContain('data:image/png;base64,AA==')
+
+    selectMedia.mockResolvedValueOnce({ reference: { asset: 'assets/conversation.gif', kind: 'image', mimeType: 'image/gif' }, relativePath: 'assets/conversation.gif', previewUrl: 'data:image/gif;base64,AA==', originalName: 'conversation.gif', width: 1200, height: 800 })
+    await choose('GIF')
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationBackground', 'gif')
+    expect(container.querySelector<HTMLImageElement>('.preview-conversation-background-media')?.src).toContain('data:image/gif;base64,AA==')
+
+    selectMedia.mockResolvedValueOnce({ reference: { asset: 'assets/conversation.mp4', kind: 'video', mimeType: 'video/mp4' }, relativePath: 'assets/conversation.mp4', previewUrl: 'studio-media://preview/conversation.mp4', originalName: 'conversation.mp4', width: 1200, height: 800 })
+    await choose('视频')
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationBackground', 'video')
+    const video = container.querySelector<HTMLVideoElement>('.preview-conversation-background-media')
+    expect(video?.muted).toBe(true)
+    expect(video?.loop).toBe(true)
+    expect(video?.autoplay).toBe(true)
   })
 
   it('opens custom icon import from both quick editing and the full icon inspector', async () => {

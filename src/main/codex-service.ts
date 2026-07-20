@@ -263,7 +263,10 @@ export class CodexService {
         themeId: profile.id,
         media: {
           hero: profile.hero.source ? { asset: profile.hero.source.asset, kind: profile.hero.source.kind, mimeType: profile.hero.source.mimeType, playback: profile.hero.playback, transform: profile.hero.mediaTransform } : null,
-          polaroid: profile.polaroid.source ? { asset: profile.polaroid.source.asset, kind: profile.polaroid.source.kind, mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback, transform: profile.polaroid.mediaTransform } : null
+          polaroid: profile.polaroid.source ? { asset: profile.polaroid.source.asset, kind: profile.polaroid.source.kind, mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback, transform: profile.polaroid.mediaTransform } : null,
+          conversationBackground: profile.conversationBackground.source
+            ? { ...profile.conversationBackground, kind: profile.conversationBackground.source.kind, mimeType: profile.conversationBackground.source.mimeType, asset: profile.conversationBackground.source.asset, dataUrl: profile.conversationBackground.source.kind === 'image' ? compiled.assets[profile.conversationBackground.source.asset] : null }
+            : { ...profile.conversationBackground, dataUrl: null }
         },
         icons,
         decorations: profile.decorations,

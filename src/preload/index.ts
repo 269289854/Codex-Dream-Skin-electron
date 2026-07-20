@@ -24,7 +24,7 @@ const api: StudioApi = {
   },
   assets: {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),
-    selectMedia: (themeId, purpose) => ipcRenderer.invoke('assets:select-media', themeId, purpose),
+    selectMedia: (themeId, purpose, kind) => ipcRenderer.invoke('assets:select-media', themeId, purpose, kind),
     getPreviewUrl: (themeId, asset) => ipcRenderer.invoke('assets:get-preview-url', themeId, asset),
     selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon'),
     selectFont: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'font')

@@ -28,6 +28,13 @@ describe('theme schema and compiler', () => {
     expect(() => parseThemeProfile({ ...current, decorations: { ...current.decorations, homeHeading: { ...current.decorations.homeHeading, text: 'x'.repeat(65) } } })).toThrow()
     expect(() => parseThemeProfile({ ...current, decorations: { ...current.decorations, homeHeading: { ...current.decorations.homeHeading, fontSize: 33 } } })).toThrow()
 
+    expect(current.conversationBackground).toEqual({ visible: false, mode: 'color', color: '#F7FFFF', source: null, opacity: 1, overlayColor: '#FFFFFF', overlayOpacity: .24, focus: { x: .5, y: .5 }, scale: 1 })
+    const { conversationBackground: _conversationBackground, ...withoutConversationBackground } = current
+    expect(parseThemeProfile(withoutConversationBackground).conversationBackground).toEqual(current.conversationBackground)
+    expect(() => parseThemeProfile({ ...current, conversationBackground: { ...current.conversationBackground, mode: 'gif', source: { asset: 'assets/photo.png', kind: 'image', mimeType: 'image/png' } } })).toThrow()
+    expect(() => parseThemeProfile({ ...current, conversationBackground: { ...current.conversationBackground, opacity: 1.1 } })).toThrow()
+    expect(() => parseThemeProfile({ ...current, conversationBackground: { ...current.conversationBackground, scale: 3.1 } })).toThrow()
+
     const { mode: _versionEightMode, style: _versionEightStyle, ...versionEightPolaroid } = current.polaroid
     const migratedEight = parseThemeProfile({ ...current, version: 8, polaroid: versionEightPolaroid })
     expect(migratedEight.version).toBe(12)

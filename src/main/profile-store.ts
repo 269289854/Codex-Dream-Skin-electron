@@ -10,7 +10,7 @@ const nodeRequire = createRequire(import.meta.url)
 const archiver = nodeRequire('archiver') as typeof import('archiver')
 const yauzl = nodeRequire('yauzl') as typeof import('yauzl')
 import { createDefaultTheme, parseThemeProfile, type ThemeProfile, type ThemeSummary } from '../shared/theme'
-import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset } from '../shared/contracts'
+import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset, MediaSelectionKind } from '../shared/contracts'
 import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
 import { mediaMimeTypeForPath, mediaReferenceForPath } from '../shared/media'
@@ -374,13 +374,16 @@ export class ProfileStore {
     throw new Error('Studio settings are invalid.')
   }
 
-  async importMediaAsset(themeId: string, sourcePath: string, purpose: 'hero' | 'polaroid', signal?: AbortSignal): Promise<ImportedMediaAsset> {
+  async importMediaAsset(themeId: string, sourcePath: string, purpose: 'hero' | 'polaroid' | 'conversationBackground', expectedKind?: MediaSelectionKind, signal?: AbortSignal): Promise<ImportedMediaAsset> {
     await this.get(themeId)
     if (!isAbsolute(sourcePath)) throw new Error('所选媒体路径必须是绝对路径。')
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('所选媒体必须是文件。')
     const extension = extname(sourcePath).toLowerCase()
     if (extension !== '.svg' && !MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('仅支持 PNG、WebP、JPEG、GIF、SVG、MP4 和 WebM。')
+    if (expectedKind === 'image' && (extension === '.gif' || VIDEO_EXTENSIONS.has(extension))) throw new Error('图片背景只支持 PNG、WebP、JPEG 或 SVG。')
+    if (expectedKind === 'gif' && extension !== '.gif') throw new Error('GIF 背景必须选择 GIF 文件。')
+    if (expectedKind === 'video' && !VIDEO_EXTENSIONS.has(extension)) throw new Error('视频背景只支持 MP4 或 WebM。')
     if ((extension === '.svg' || MEDIA_IMAGE_EXTENSIONS.has(extension)) && sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
     if (signal?.aborted) throw new Error('媒体导入已取消。')
 
@@ -437,7 +440,7 @@ export class ProfileStore {
   async getMediaPreviewUrl(themeId: unknown, asset: unknown): Promise<string> {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体预览参数无效。')
     const profile = await this.get(themeId)
-    const reference = [profile.hero.source, profile.polaroid.source].find((media) => media?.asset === asset)
+    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source].find((media) => media?.asset === asset)
     if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被当前主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
@@ -448,7 +451,7 @@ export class ProfileStore {
   async resolveReferencedMedia(themeId: unknown, asset: unknown): Promise<{ path: string; mimeType: string; size: number }> {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体参数无效。')
     const profile = await this.get(themeId)
-    const reference = [profile.hero.source, profile.polaroid.source].find((media) => media?.asset === asset)
+    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source].find((media) => media?.asset === asset)
     if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
@@ -462,10 +465,10 @@ export class ProfileStore {
     return settings.systemThemeId === themeId
   }
 
-  async getRuntimeMediaBindings(themeId: string): Promise<Array<{ role: 'hero' | 'polaroid'; path: string; mimeType: string }>> {
+  async getRuntimeMediaBindings(themeId: string): Promise<Array<{ role: 'hero' | 'polaroid' | 'conversationBackground'; path: string; mimeType: string }>> {
     const profile = await this.get(themeId)
-    const bindings: Array<{ role: 'hero' | 'polaroid'; path: string; mimeType: string }> = []
-    for (const [role, reference] of [['hero', profile.hero.source], ['polaroid', profile.polaroid.source]] as const) {
+    const bindings: Array<{ role: 'hero' | 'polaroid' | 'conversationBackground'; path: string; mimeType: string }> = []
+    for (const [role, reference] of [['hero', profile.hero.source], ['polaroid', profile.polaroid.source], ['conversationBackground', profile.conversationBackground.source]] as const) {
       if (reference?.kind !== 'video') continue
       const resolved = await this.resolveReferencedMedia(themeId, reference.asset)
       bindings.push({ role, path: resolved.path, mimeType: resolved.mimeType })
@@ -816,7 +819,7 @@ export class ProfileStore {
 
   private async validateProfileMedia(profile: ThemeProfile): Promise<void> {
     this.validateProfileAssetReferences(profile)
-    for (const reference of [profile.hero.source, profile.polaroid.source]) {
+    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source]) {
       if (!reference) continue
       const extension = extname(reference.asset).toLowerCase()
       if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
@@ -844,7 +847,7 @@ export class ProfileStore {
   }
 
   private validateProfileAssetReferences(profile: ThemeProfile): void {
-    for (const reference of [profile.hero.source, profile.polaroid.source]) {
+    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source]) {
       if (!reference) continue
       const extension = extname(reference.asset).toLowerCase()
       if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')

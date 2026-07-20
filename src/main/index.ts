@@ -7,6 +7,7 @@ import { extname, join } from 'node:path'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
 import { captureIpcResult } from '../shared/ipc-result'
+import type { AssetPurpose, MediaSelectionKind } from '../shared/contracts'
 
 let mainWindow: BrowserWindow | null = null
 let store: ProfileStore
@@ -52,11 +53,14 @@ function registerIpc(): void {
   ipcMain.handle('themes:delete', (_event, id: string) => store.delete(id))
   ipcMain.handle('themes:activate', (_event, id: string) => store.activate(id))
   ipcMain.handle('themes:compile', (_event, id: string) => store.compile(id))
-  ipcMain.handle('assets:select', async (_event, themeId: string, purpose: 'hero' | 'polaroid' | 'icon' | 'font') => {
+  ipcMain.handle('assets:select', async (_event, themeId: unknown, purpose: unknown) => {
+    if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
+    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'icon' && purpose !== 'font') throw new Error('素材用途无效。')
+    const safePurpose = purpose as AssetPurpose
     const options: OpenDialogOptions = {
-      title: purpose === 'font' ? '选择字体' : purpose === 'icon' ? '选择图标' : '选择主题图片',
+      title: safePurpose === 'font' ? '选择字体' : safePurpose === 'icon' ? '选择图标' : '选择主题图片',
       properties: ['openFile'],
-      filters: purpose === 'font'
+      filters: safePurpose === 'font'
         ? [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff', 'woff2'] }]
         : [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
     }
@@ -64,14 +68,25 @@ function registerIpc(): void {
       ? await dialog.showOpenDialog(mainWindow, options)
       : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return null
-    if (purpose === 'font') return store.importFontAsset(themeId, result.filePaths[0])
-    return store.importAsset(themeId, result.filePaths[0], purpose)
+    if (safePurpose === 'font') return store.importFontAsset(themeId, result.filePaths[0])
+    return store.importAsset(themeId, result.filePaths[0], safePurpose)
   })
-  ipcMain.handle('assets:select-media', async (_event, themeId: string, purpose: 'hero' | 'polaroid') => {
+  ipcMain.handle('assets:select-media', async (_event, themeId: unknown, purpose: unknown, requestedKind: unknown) => {
+    if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
+    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground') throw new Error('媒体用途无效。')
+    if (requestedKind !== undefined && requestedKind !== 'image' && requestedKind !== 'gif' && requestedKind !== 'video') throw new Error('媒体类型无效。')
+    const kind = requestedKind as MediaSelectionKind | undefined
+    const filters = kind === 'image'
+      ? [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
+      : kind === 'gif'
+        ? [{ name: 'GIF', extensions: ['gif'] }]
+        : kind === 'video'
+          ? [{ name: 'Video', extensions: ['mp4', 'webm'] }]
+          : [{ name: 'Images and Video', extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
     const options: OpenDialogOptions = {
-      title: purpose === 'hero' ? '选择主视觉媒体' : '选择拍立得媒体',
+      title: purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : '选择对话区域背景',
       properties: ['openFile'],
-      filters: [{ name: 'Images and Video', extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
+      filters
     }
     const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return null
@@ -80,7 +95,7 @@ function registerIpc(): void {
     operationControllers.set(id, controller)
     emitProgress({ id, kind: 'media-import', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导入媒体' })
     try {
-      const imported = await store.importMediaAsset(themeId, result.filePaths[0], purpose, controller.signal)
+      const imported = await store.importMediaAsset(themeId, result.filePaths[0], purpose, kind, controller.signal)
       emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '媒体导入完成' })
       return imported
     } catch (error) {

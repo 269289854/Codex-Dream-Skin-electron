@@ -99,12 +99,25 @@ type RuntimeMediaConfig = {
   mimeType?: string
 }
 
+type RuntimeConversationBackgroundConfig = {
+  visible: boolean
+  mode: 'color' | 'image' | 'gif' | 'video'
+  color: string
+  source?: { asset: string; kind: 'image' | 'video'; mimeType: string } | null
+  dataUrl?: string | null
+  opacity: number
+  overlayColor: string
+  overlayOpacity: number
+  focus: { x: number; y: number }
+  scale: number
+}
+
 function inject(window: Window, icons: Record<string, { name?: string; dataUrl?: string }> = {
   cardPrimary: { name: 'wand-sparkles' },
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null } = { hero: null, polaroid: null }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null } = { hero: null, polaroid: null }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -616,6 +629,72 @@ describe('renderer home DOM adaptation', () => {
 
     stateOf(window).cleanup()
     expect(window.document.getElementById('codex-dream-skin-chrome')).toBeNull()
+  })
+
+  it('renders a conversation background below content, keeps GIFs as images, and cleans it up', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div class="thread-scroll-container" data-app-action-timeline-scroll><div class="thread-content"><article data-message-author-role="assistant">Reply</article><div class="sticky"><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></div></div></main>'
+    const background: RuntimeConversationBackgroundConfig = {
+      visible: true,
+      mode: 'gif',
+      color: '#F7FFFF',
+      source: { asset: 'assets/background.gif', kind: 'image', mimeType: 'image/gif' },
+      dataUrl: 'data:image/gif;base64,AA==',
+      opacity: .8,
+      overlayColor: '#FFFFFF',
+      overlayOpacity: .2,
+      focus: { x: .2, y: .7 },
+      scale: 1.4
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+
+    const surface = window.document.querySelector('.dream-conversation-surface')
+    const backgroundLayer = surface?.querySelector(':scope > .dream-conversation-background')
+    const image = backgroundLayer?.querySelector(':scope > .dream-conversation-background-media') as HTMLImageElement | null
+    expect(surface).not.toBeNull()
+    expect(backgroundLayer?.firstElementChild?.classList.contains('dream-conversation-background-media')).toBe(true)
+    expect(image?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
+    expect(image?.style.objectPosition).toBe('20% 70%')
+    expect(backgroundLayer?.querySelector(':scope > .dream-conversation-background-overlay')?.classList.contains('dream-conversation-background-overlay')).toBe(true)
+    expect(backgroundLayer?.nextElementSibling?.classList.contains('thread-content')).toBe(true)
+    stateOf(window).ensure()
+    expect(surface?.querySelectorAll(':scope > .dream-conversation-background')).toHaveLength(1)
+    expect(backgroundLayer?.querySelectorAll(':scope > .dream-conversation-background-media')).toHaveLength(1)
+
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-conversation-surface')).toBeNull()
+    expect(window.document.querySelector('.dream-conversation-background')).toBeNull()
+  })
+
+  it('starts a muted looping conversation video and removes it when the page changes', () => {
+    const window = createWindow()
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: vi.fn(() => Promise.resolve()) })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    window.document.body.innerHTML = '<main class="main-surface"><div class="thread-scroll-container" data-app-action-timeline-scroll><div class="thread-content"><article data-message-author-role="assistant">Reply</article><div class="sticky"><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></div></div></main>'
+    const background: RuntimeConversationBackgroundConfig = {
+      visible: true,
+      mode: 'video',
+      color: '#F7FFFF',
+      source: { asset: 'assets/background.mp4', kind: 'video', mimeType: 'video/mp4' },
+      dataUrl: 'blob:conversation-background',
+      opacity: 1,
+      overlayColor: '#000000',
+      overlayOpacity: .3,
+      focus: { x: .5, y: .5 },
+      scale: 1
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+    const video = window.document.querySelector('.dream-conversation-background-video') as HTMLVideoElement | null
+    expect(video).not.toBeNull()
+    const prepared = (window as unknown as { __CODEX_DREAM_SKIN_PREPARE_MEDIA__?: () => Record<string, string> }).__CODEX_DREAM_SKIN_PREPARE_MEDIA__?.()
+    expect(prepared?.conversationBackground).toBe('codex-dream-skin-media-conversationBackground')
+    expect(video?.muted).toBe(true)
+    expect(video?.loop).toBe(true)
+    expect(video?.controls).toBe(false)
+    expect(video?.playsInline).toBe(true)
+    window.document.body.innerHTML = '<main class="main-surface"><div role="main"><article>Home</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></main>'
+    stateOf(window).ensure()
+    expect(video?.isConnected).toBe(false)
   })
 
   it('applies hero media flips to an isolated layer and cleans it up', () => {

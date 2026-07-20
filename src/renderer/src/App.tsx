@@ -5,7 +5,7 @@ import {
   GitBranch, GitPullRequest, Grid2X2, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload, X
 } from 'lucide-react'
-import type { OperationProgress, RuntimeStatus } from '../../shared/contracts'
+import type { MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
@@ -17,6 +17,7 @@ import { mediaFlipCssTransform } from '../../shared/media'
 import type { IconSlot, ThemeProfile, ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
+import { ConversationBackgroundControls } from './ConversationBackgroundControls'
 import { FenceEditor } from './FenceEditor'
 import { MediaFlipControls } from './MediaFlipControls'
 import { PolaroidControls } from './PolaroidControls'
@@ -89,7 +90,7 @@ export function App(): React.JSX.Element {
       setDraft(profile)
       const nextAssets = { ...compiled.assets }
       if (window.studio.assets.getPreviewUrl) {
-        for (const source of [profile.hero.source, profile.polaroid.source]) {
+        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source]) {
           if (!source) continue
           try { nextAssets[source.asset] = await window.studio.assets.getPreviewUrl(id, source.asset) } catch { /* missing media is shown as fallback */ }
         }
@@ -319,7 +320,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.themes.getDefault(themeId)
       const restoredAssets: Record<string, string> = {}
-      for (const source of [profile.hero.source, profile.polaroid.source]) {
+      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source]) {
         if (!source) continue
         restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
       }
@@ -460,13 +461,13 @@ export function App(): React.JSX.Element {
     } catch (reason) { setError(messageOf(reason)) }
   }
 
-  const selectImage = async (purpose: 'hero' | 'polaroid'): Promise<void> => {
+  const selectImage = async (purpose: 'hero' | 'polaroid' | 'conversationBackground', requestedKind?: MediaSelectionKind): Promise<void> => {
     if (!draft || mediaBusyRef.current) return
     mediaBusyRef.current = true
     setMediaBusy(true)
     try {
       const imported = window.studio.assets.selectMedia
-        ? await window.studio.assets.selectMedia(draft.id, purpose)
+        ? await window.studio.assets.selectMedia(draft.id, purpose, requestedKind)
         : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
@@ -478,10 +479,15 @@ export function App(): React.JSX.Element {
           profile.hero.source = imported.reference
           if (imported.reference.kind === 'video') profile.hero.playback = { ...profile.hero.playback, sound: false }
         }
-        else {
+        else if (purpose === 'polaroid') {
           profile.polaroid.source = imported.reference
           profile.polaroid.sourceSize = { width: imported.width, height: imported.height }
           if (imported.reference.kind === 'video') profile.polaroid.playback = { ...profile.polaroid.playback, sound: false }
+        } else {
+          const mode = imported.reference.mimeType === 'image/gif' ? 'gif' : imported.reference.kind === 'video' ? 'video' : 'image'
+          profile.conversationBackground.visible = true
+          profile.conversationBackground.mode = mode
+          profile.conversationBackground.source = imported.reference
         }
       })
     } catch (reason) { setError(messageOf(reason)) }
@@ -620,6 +626,7 @@ export function App(): React.JSX.Element {
   if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? '正在打开主题工作台'}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>重新加载</button>}</div>
   const heroUrl = draft.hero.source ? assets[draft.hero.source.asset] : draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
   const polaroidUrl = draft.polaroid.source ? assets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
+  const conversationBackgroundUrl = draft.conversationBackground.source ? assets[draft.conversationBackground.source.asset] : undefined
   const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
   const homeHeadingVisible = draft.decorations.homeHeading.visible && draft.decorations.homeHeading.text.length > 0
   const homeCopyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
@@ -746,11 +753,13 @@ export function App(): React.JSX.Element {
               assets={assets}
               heroUrl={heroUrl}
               polaroidUrl={polaroidUrl}
+              conversationBackgroundUrl={conversationBackgroundUrl}
+              mediaBusy={mediaBusy}
               position={popoverPosition}
               popoverRef={popoverRef}
               onChange={change}
               onInteractionEnd={endHistoryGroup}
-              onSelectImage={(purpose) => { void selectImage(purpose) }}
+              onSelectImage={(purpose, kind) => { void selectImage(purpose, kind) }}
               onImportIcon={(slot) => { void importIcon(slot) }}
               onImportFont={(slot) => { void importFont(slot) }}
               onStateChange={setPreviewComponentState}
@@ -783,6 +792,7 @@ export function App(): React.JSX.Element {
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="首页标题装饰" anchor="visual-home-heading-decoration" highlighted={inspectorAnchor === 'visual-home-heading-decoration'}><HomeHeadingDecorationControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
+            <Property title="对话区域背景" anchor="visual-conversation-background" highlighted={inspectorAnchor === 'visual-conversation-background'}><ConversationBackgroundControls profile={draft} backgroundUrl={conversationBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('conversationBackground', kind) }} /></Property>
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
               <PolaroidControls profile={draft} polaroidUrl={polaroidUrl} mediaBusy={mediaBusy} showAdvanced onChange={change} onInteractionEnd={endHistoryGroup} onSelectImage={() => void selectImage('polaroid')} />
               {polaroidUrl && draft.polaroid.mode === 'fence' && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
@@ -888,7 +898,22 @@ function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: R
 }
 
 function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
-  return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>完善主题编辑器</strong><span>{PREVIEW_PROJECT_NAME} · Miku</span></div></header><div className="preview-message-list"><article className="preview-message user" data-preview-target="conversation-message" tabIndex={0}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article><article className="preview-message assistant" data-preview-target="conversation-message" tabIndex={0}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p><button className="preview-primary-command" data-preview-target="primary-button" type="button">查看改动</button></article></div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div></div>
+  const background = profile.conversationBackground
+  const sourceUrl = background.source ? assets[background.source.asset] : undefined
+  const mediaStyle: React.CSSProperties = {
+    objectPosition: `${background.focus.x * 100}% ${background.focus.y * 100}%`,
+    opacity: background.visible ? background.opacity : 0,
+    transform: `scale(${background.scale})`
+  }
+  return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>完善主题编辑器</strong><span>{PREVIEW_PROJECT_NAME} · Miku</span></div></header><div className="preview-conversation-surface" data-preview-target="conversation-background" tabIndex={0} role="button" aria-label="编辑对话区域背景">
+    <div className="preview-conversation-background" aria-hidden="true">
+      {background.visible && background.mode === 'color' && <div className="preview-conversation-background-color" style={{ background: background.color, opacity: background.opacity }} />}
+      {background.visible && sourceUrl && background.mode === 'video' && <video className="preview-conversation-background-media" src={sourceUrl} muted autoPlay loop playsInline style={mediaStyle} />}
+      {background.visible && sourceUrl && background.mode !== 'color' && background.mode !== 'video' && <img className="preview-conversation-background-media" src={sourceUrl} alt="" draggable={false} style={mediaStyle} />}
+      {background.visible && <div className="preview-conversation-background-overlay" style={{ background: background.overlayColor, opacity: background.overlayOpacity }} />}
+    </div>
+    <div className="preview-message-list"><article className="preview-message user" data-preview-target="conversation-message" tabIndex={0}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article><article className="preview-message assistant" data-preview-target="conversation-message" tabIndex={0}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p><button className="preview-primary-command" data-preview-target="primary-button" type="button">查看改动</button></article></div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div>
+  </div></div>
 }
 
 function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {

@@ -22,6 +22,7 @@ export type PreviewEditor =
   | PreviewStyleEditor
   | { kind: 'hero' }
   | { kind: 'polaroid' }
+  | { kind: 'conversationBackground' }
 
 export interface PreviewTargetDefinition {
   label: string
@@ -53,6 +54,7 @@ export const PREVIEW_TARGETS = {
   'surface-main': styleTarget('主区域', 'global', { colors: ['globalText', 'globalBorder'], paints: ['mainSurface'], fontSlot: 'ui' }),
   'conversation-message': styleTarget('会话消息', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationMessage', 'conversationMessageHover'], fontSlot: 'ui' }),
   'primary-button': styleTarget('主要按钮', 'conversation', { colors: ['primaryButtonText'], paints: ['primaryButton', 'primaryButtonHover', 'primaryButtonSelected'], fontSlot: 'ui' }),
+  'conversation-background': { label: '对话区域背景', inspector: 'visual', inspectorAnchor: 'visual-conversation-background', editor: { kind: 'conversationBackground' } },
 
   'palette-sidebar': styleTarget('侧边栏', 'sidebar', { colors: ['sidebarBorder', 'sidebarText', 'sidebarMutedText'], paints: ['sidebarSurface'], fontSlot: 'ui' }),
   'sidebar-header': styleTarget('侧边栏头部', 'sidebar', { colors: ['sidebarHeaderText'], paints: ['sidebarHeader'], fontSlot: 'ui' }),

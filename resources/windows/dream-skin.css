@@ -221,6 +221,45 @@ html.codex-dream-skin [role="main"] {
   scrollbar-color: var(--dream-global-scrollbar) transparent;
 }
 
+html.codex-dream-skin .dream-conversation-surface {
+  position: relative !important;
+  isolation: isolate !important;
+  background: transparent !important;
+}
+
+html.codex-dream-skin .dream-conversation-surface > :not(.dream-conversation-background) {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+html.codex-dream-skin .dream-conversation-background {
+  position: absolute !important;
+  z-index: 0 !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+html.codex-dream-skin .dream-conversation-background-color,
+html.codex-dream-skin .dream-conversation-background-overlay,
+html.codex-dream-skin .dream-conversation-background-media {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+html.codex-dream-skin .dream-conversation-background-media {
+  display: block !important;
+  object-fit: cover !important;
+  transform-origin: center !important;
+  pointer-events: none !important;
+}
+
+html.codex-dream-skin .dream-conversation-background-overlay {
+  pointer-events: none !important;
+}
+
 html.codex-dream-skin :is(article, [data-message-author-role]) {
   border-radius: 18px;
   background: var(--dream-conversation-message);

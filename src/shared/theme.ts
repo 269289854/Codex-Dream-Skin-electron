@@ -180,6 +180,37 @@ const mediaTransformSchema = z.object({
 export type MediaReference = z.infer<typeof mediaReferenceSchema>
 export type VideoPlayback = z.infer<typeof videoPlaybackSchema>
 
+export const conversationBackgroundModeSchema = z.enum(['color', 'image', 'gif', 'video'])
+export type ConversationBackgroundMode = z.infer<typeof conversationBackgroundModeSchema>
+
+const conversationBackgroundSchema = z.object({
+  visible: z.boolean(),
+  mode: conversationBackgroundModeSchema,
+  color: cssColorSchema,
+  source: mediaReferenceSchema.nullable(),
+  opacity: normalized,
+  overlayColor: cssColorSchema,
+  overlayOpacity: normalized,
+  focus: pointSchema,
+  scale: z.number().finite().min(1).max(3)
+}).strict().superRefine((background, context) => {
+  if (background.mode === 'color') {
+    if (background.source !== null) context.addIssue({ code: 'custom', path: ['source'], message: '颜色背景不能引用媒体。' })
+    return
+  }
+  if (!background.source) {
+    context.addIssue({ code: 'custom', path: ['source'], message: '媒体背景必须引用素材。' })
+    return
+  }
+  if (background.mode === 'video' && background.source.kind !== 'video') context.addIssue({ code: 'custom', path: ['source', 'kind'], message: '视频背景必须使用视频素材。' })
+  if (background.mode === 'video' && !background.source.mimeType.startsWith('video/')) context.addIssue({ code: 'custom', path: ['source', 'mimeType'], message: '视频背景的 MIME 类型无效。' })
+  if (background.mode === 'gif' && background.source.mimeType !== 'image/gif') context.addIssue({ code: 'custom', path: ['source', 'mimeType'], message: 'GIF 背景必须使用 GIF 素材。' })
+  if (background.mode === 'gif' && background.source.kind !== 'image') context.addIssue({ code: 'custom', path: ['source', 'kind'], message: 'GIF 背景必须使用图片素材。' })
+  if (background.mode === 'image' && (background.source.kind !== 'image' || background.source.mimeType === 'image/gif')) context.addIssue({ code: 'custom', path: ['source'], message: '图片背景只支持 PNG、WebP 或 JPEG。' })
+})
+
+export type ConversationBackground = z.infer<typeof conversationBackgroundSchema>
+
 const legacyCommonProfileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
@@ -288,6 +319,7 @@ export const themeProfileSchema = z.object({
   updatedAt: z.string().datetime(),
   hero: currentHeroSchema,
   polaroid: currentPolaroidMediaSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   colors: colorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
@@ -435,6 +467,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       playback: createDefaultVideoPlayback(),
       mediaTransform: createDefaultMediaTransform()
     },
+    conversationBackground: createDefaultConversationBackground(),
     colors: {
       surface: '#F7FFFF',
       ink: '#164B59',
@@ -477,6 +510,7 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     if (polaroid && !('sourceImage' in polaroid)) polaroid.sourceImage = polaroid.source && typeof polaroid.source === 'object' && typeof (polaroid.source as Record<string, unknown>).asset === 'string' ? (polaroid.source as Record<string, unknown>).asset : null
     if (hero) { delete hero.source; delete hero.playback; delete hero.mediaTransform; legacy.hero = hero }
     if (polaroid) { delete polaroid.source; delete polaroid.playback; delete polaroid.mediaTransform; legacy.polaroid = polaroid }
+    delete legacy.conversationBackground
     input = legacy
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 12) {
@@ -487,7 +521,9 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     return parsed
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 11) {
-    return migrateVersionEleven(versionElevenThemeSchema.parse(normalizeCurrentMediaReferences(input)))
+    const legacy = normalizeCurrentMediaReferences(input)
+    delete legacy.conversationBackground
+    return migrateVersionEleven(versionElevenThemeSchema.parse(legacy))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 10) {
     return migrateVersionTen(versionTenThemeSchema.parse(input))
@@ -676,6 +712,20 @@ function normalizeCurrentMediaReferences(input: object): Record<string, unknown>
 
 function createDefaultMediaTransform(): z.infer<typeof mediaTransformSchema> {
   return { flipHorizontal: false, flipVertical: false }
+}
+
+function createDefaultConversationBackground(): ConversationBackground {
+  return {
+    visible: false,
+    mode: 'color',
+    color: '#F7FFFF',
+    source: null,
+    opacity: 1,
+    overlayColor: '#FFFFFF',
+    overlayOpacity: 0.24,
+    focus: { x: 0.5, y: 0.5 },
+    scale: 1
+  }
 }
 
 function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
