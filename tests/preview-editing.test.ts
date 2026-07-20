@@ -79,6 +79,10 @@ describe('preview editing registry', () => {
       inspectorAnchor: 'visual-composer-melody',
       editor: { kind: 'style', colors: ['wave'], fontSlot: 'composerMelody', decoration: 'composerMelody' }
     })
+    expect(PREVIEW_TARGETS['home-heading-decoration']).toMatchObject({
+      inspectorAnchor: 'visual-home-heading-decoration',
+      editor: { kind: 'style', colors: ['homeHeadingDecoration'], fontSlot: 'homeHeadingDecoration', decoration: 'homeHeading' }
+    })
     expect(isPreviewTargetId('background-dust')).toBe(false)
     expect(isPreviewTargetId('wave')).toBe(false)
   })

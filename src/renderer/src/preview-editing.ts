@@ -5,7 +5,7 @@ export type InspectorTab = 'visual' | 'icons'
 export type PreviewCopyField = keyof ThemeProfile['copy']
 export type TypographySlot = keyof ThemeProfile['typography']['slots']
 export type PreviewVisibilityField = 'composerBadge'
-export type PreviewDecorationEditor = 'sparkles' | 'composerMelody'
+export type PreviewDecorationEditor = 'sparkles' | 'homeHeading' | 'composerMelody'
 
 export interface PreviewStyleEditor {
   kind: 'style'
@@ -73,6 +73,7 @@ export const PREVIEW_TARGETS = {
   'icon-branding': styleTarget('品牌图标', 'brand', { colors: ['brandIcon'], iconSlot: 'branding' }),
 
   'copy-heading': styleTarget('首页标题', 'home', { colors: ['homeHeading'], paints: ['homeHeadingBackdrop'], copyField: 'headingTemplate', fontSlot: 'ui' }),
+  'home-heading-decoration': styleTarget('首页标题装饰', 'home', { colors: ['homeHeadingDecoration'], fontSlot: 'homeHeadingDecoration', decoration: 'homeHeading', inspectorAnchor: 'visual-home-heading-decoration' }),
   'copy-subtitle': styleTarget('副标题', 'home', { colors: ['homeSubtitle'], copyField: 'subtitle', fontSlot: 'ui' }),
   'project-selector': styleTarget('项目选择器', 'home', { colors: ['projectSelectorText', 'projectSelectorBorder'], paints: ['projectSelector', 'projectSelectorHover', 'projectSelectorSelected'], fontSlot: 'ui' }),
   hero: { label: '主视觉', inspector: 'visual', inspectorAnchor: 'visual-hero', editor: { kind: 'hero' } },

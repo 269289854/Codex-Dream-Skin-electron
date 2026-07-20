@@ -29,6 +29,7 @@ export function buildThemeStyleVariables(profile: ThemeProfile): ThemeStyleVaria
     '--dream-font-brand-title': resolveFontFamily(profile, profile.typography.slots.brandTitle),
     '--dream-font-brand-subtitle': resolveFontFamily(profile, profile.typography.slots.brandSubtitle),
     '--dream-font-brand-signature': resolveFontFamily(profile, profile.typography.slots.brandSignature),
+    '--dream-font-home-heading-decoration': resolveFontFamily(profile, profile.typography.slots.homeHeadingDecoration),
     '--dream-font-composer-melody': resolveFontFamily(profile, profile.typography.slots.composerMelody)
   }
 

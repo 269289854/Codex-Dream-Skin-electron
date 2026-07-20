@@ -10,7 +10,7 @@ import {
 import { headingTemplateError } from '../../shared/home-layout'
 import { mediaFlipCssTransform } from '../../shared/media'
 import type { ThemeProfile } from '../../shared/theme'
-import { ComposerMelodyControls } from './DecorationControls'
+import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { AppearanceColorControl, FontControl, PaintControl, Range, ThemeIconControl } from './editor-controls'
 import { MediaFlipControls } from './MediaFlipControls'
 import { ParticleEffectControls } from './ParticleEffectControls'
@@ -76,6 +76,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {editor.kind === 'style' && !decoration && editor.fontSlot && <FontControl slot={editor.fontSlot} profile={profile} onChange={(selection) => onChange((next) => { assignFontSlot(next, editor.fontSlot!, selection) })} onImport={() => onImportFont(editor.fontSlot!)} />}
       {editor.kind === 'style' && !decoration && editor.iconSlot && <div className="icon-editor quick-icon-editor"><ThemeIconControl slot={editor.iconSlot} profile={profile} assets={assets} onChange={(name) => onChange((next) => { next.icons[editor.iconSlot!] = { kind: 'builtin', name } })} onImport={() => onImportIcon(editor.iconSlot!)} /></div>}
       {decoration === 'sparkles' && <ParticleEffectControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} />}
+      {decoration === 'homeHeading' && <HomeHeadingDecorationControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
       {decoration === 'composerMelody' && <ComposerMelodyControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
     </div>
     <footer className="preview-edit-popover-footer">

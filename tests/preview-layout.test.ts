@@ -57,8 +57,9 @@ describe('Studio home preview', () => {
     expect(sendButtonRule).toContain('height: 28px')
     expect(sendIconRule).toContain('width: 20px')
     expect(sendIconRule).toContain('height: 20px')
-    expect(projectSelectorRule).toContain('white-space: nowrap')
-    expect(projectSelectorRule).toContain('text-overflow: ellipsis')
+    expect(projectSelectorRule).toContain('max-width: 100%')
+    expect(source).toContain('className="dream-heading-decoration"')
+    expect(source).toContain('fitPreviewHeadingDensity')
     expect(PREVIEW_PROJECT_NAME).toBe('Miku Studio')
     expect(PREVIEW_HOME_CONTEXT).toEqual({
       projectName: 'Miku Studio',

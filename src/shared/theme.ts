@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema } from './appearance'
-import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, splitHeadingTemplate } from './home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
 import { PARTICLE_EFFECT_IDS } from './particle-effects'
 import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
 
@@ -94,8 +94,19 @@ const composerMelodySchema = z.object({
   hideWhenTyping: z.boolean()
 }).strict()
 
+const homeHeadingDecorationSchema = z.object({
+  visible: z.boolean(),
+  text: z.string().max(64),
+  fontSize: z.number().int().min(10).max(32)
+}).strict()
+
 const decorationsSchema = z.object({
   sparkles: sparklesSchema,
+  homeHeading: homeHeadingDecorationSchema.default({
+    visible: true,
+    text: DEFAULT_HOME_HEADING_DECORATION,
+    fontSize: 17
+  }),
   composerMelody: composerMelodySchema
 }).strict()
 
@@ -687,6 +698,11 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
       fontSize: 16,
       position: { x: 0.5, y: 0.35 },
       hideWhenTyping: true
+    },
+    homeHeading: {
+      visible: true,
+      text: DEFAULT_HOME_HEADING_DECORATION,
+      fontSize: 17
     }
   }
 }

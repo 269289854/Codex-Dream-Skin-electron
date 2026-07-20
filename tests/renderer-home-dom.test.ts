@@ -888,6 +888,61 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelectorAll('.dream-action-card')).toHaveLength(HOME_ACTIONS.length)
   })
 
+  it('renders the editable heading decoration as safe text and keeps it idempotent', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const decorations = structuredClone(defaultDecorations)
+    decorations.homeHeading = { visible: true, text: '<b>标题装饰</b>', fontSize: 23 }
+
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+
+    const decoration = window.document.querySelector('.dream-heading-decoration') as HTMLElement | null
+    const region = window.document.querySelector('.dream-heading-region') as HTMLElement | null
+    expect(decoration?.textContent).toBe('<b>标题装饰</b>')
+    expect(decoration?.querySelector('b')).toBeNull()
+    expect(decoration?.style.fontSize).toBe('23px')
+    expect(region?.classList.contains('dream-heading-region-decorated')).toBe(true)
+    expect(decoration?.nextElementSibling?.classList.contains('dream-heading')).toBe(true)
+    expect(window.document.querySelectorAll('.dream-heading-decoration')).toHaveLength(1)
+
+    stateOf(window).ensure()
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('.dream-heading-decoration')).toHaveLength(1)
+  })
+
+  it('removes the heading decoration when disabled and compacts overflowing headings', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const decorations = structuredClone(defaultDecorations)
+    decorations.homeHeading.visible = false
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+    expect(window.document.querySelector('.dream-heading-decoration')).toBeNull()
+    expect(window.document.querySelector('.dream-heading-region')?.classList.contains('dream-heading-region-decorated')).toBe(false)
+
+    const overflowing = createWindow()
+    overflowing.document.body.innerHTML = homeFixture('Sample-Project')
+    const visibleDecorations = structuredClone(defaultDecorations)
+    inject(overflowing, undefined, undefined, undefined, undefined, visibleDecorations)
+    const region = overflowing.document.querySelector('.dream-heading-region') as HTMLElement | null
+    const heading = overflowing.document.querySelector('.dream-heading') as HTMLElement | null
+    const decoration = overflowing.document.querySelector('.dream-heading-decoration') as HTMLElement | null
+    const actionGrid = overflowing.document.querySelector('.dream-action-grid') as HTMLElement | null
+    if (!region || !heading || !decoration || !actionGrid) throw new Error('Heading layout fixture is incomplete.')
+    Object.defineProperties(region, {
+      clientHeight: { configurable: true, value: 180 },
+      getBoundingClientRect: { configurable: true, value: () => ({ top: 0, bottom: 180, left: 0, right: 700, width: 700, height: 180 }) }
+    })
+    Object.defineProperties(heading, {
+      scrollHeight: { configurable: true, value: 300 },
+      getBoundingClientRect: { configurable: true, value: () => ({ top: 0, bottom: 260, left: 0, right: 500, width: 500, height: 260 }) }
+    })
+    Object.defineProperty(decoration, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 0, bottom: 20, left: 0, right: 100, width: 100, height: 20 }) })
+    Object.defineProperty(actionGrid, 'getBoundingClientRect', { configurable: true, value: () => ({ top: 200, bottom: 340, left: 0, right: 700, width: 700, height: 140 }) })
+    region.removeAttribute('data-dream-heading-measure-key')
+    stateOf(overflowing).ensure()
+    expect(region.dataset.dreamHeadingDensity).toBe('condensed')
+  })
+
   it('keeps a custom card image above the default action glyph', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')

@@ -16,14 +16,14 @@ import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../sha
 import { mediaFlipCssTransform } from '../../shared/media'
 import type { IconSlot, ThemeProfile, ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
-import { ComposerMelodyControls } from './DecorationControls'
+import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { FenceEditor } from './FenceEditor'
 import { MediaFlipControls } from './MediaFlipControls'
 import { PolaroidControls } from './PolaroidControls'
 import { PolaroidPreview } from './PolaroidPreview'
 import { ParticleEffectControls } from './ParticleEffectControls'
 import { PreviewVideo } from './PreviewVideo'
-import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
+import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import {
   ICON_PREVIEW_TARGETS,
@@ -230,6 +230,23 @@ export function App(): React.JSX.Element {
       window.clearTimeout(timer)
     }
   }, [activeInspector, inspectorAnchor])
+
+  useLayoutEffect(() => {
+    if (!draft || previewMode !== 'home') return
+    const root = previewCanvasRef.current
+    if (!root) return
+    const fit = (): void => { fitPreviewHeadingDensity(root) }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(root)
+    const region = root.querySelector<HTMLElement>('.dream-heading-region')
+    if (region) observer.observe(region)
+    const fontReady = document.fonts?.ready.then(fit).catch(() => undefined)
+    return () => {
+      observer.disconnect()
+      void fontReady
+    }
+  }, [draft?.copy.headingTemplate, draft?.copy.subtitle, draft?.decorations.homeHeading.visible, draft?.decorations.homeHeading.text, draft?.decorations.homeHeading.fontSize, draft?.typography.slots.homeHeadingDecoration, previewMode, previewScale])
 
   const change = (mutator: (profile: ThemeProfile) => void, historyGroup?: string): void => {
     setDraft((current) => {
@@ -604,6 +621,7 @@ export function App(): React.JSX.Element {
   const heroUrl = draft.hero.source ? assets[draft.hero.source.asset] : draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
   const polaroidUrl = draft.polaroid.source ? assets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
   const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
+  const homeHeadingVisible = draft.decorations.homeHeading.visible && draft.decorations.homeHeading.text.length > 0
   const homeCopyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
   const brandValidationError = brandCopyError(draft.copy)
   const copyValidationError = homeCopyValidationError ?? brandValidationError
@@ -694,7 +712,8 @@ export function App(): React.JSX.Element {
                             : <img className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} alt="" draggable={false} />}
                         </div>
                         : <div className="preview-hero-fallback" aria-hidden="true" />}
-                      <div className="dream-heading-region" data-preview-target="copy-heading">
+                      <div className={homeHeadingVisible ? 'dream-heading-region dream-heading-region-decorated' : 'dream-heading-region'} data-preview-target="copy-heading">
+                        {homeHeadingVisible && <span className="dream-heading-decoration" data-preview-target="home-heading-decoration" tabIndex={0} role="button" aria-label="编辑首页标题装饰" style={{ fontSize: `${draft.decorations.homeHeading.fontSize}px` }}>{draft.decorations.homeHeading.text}</span>}
                         <h1 className="dream-heading">
                           <span className="dream-copy-node dream-copy-before">{headingParts.before}</span>
                           <button className="dream-project-selector dream-project-proxy" data-preview-target="project-selector" type="button">{PREVIEW_HOME_CONTEXT.projectName}</button>
@@ -763,6 +782,7 @@ export function App(): React.JSX.Element {
               <Range label="水平位置" min={0} max={1} step={.01} value={draft.hero.position.x} onChange={(value) => change((profile) => { profile.hero.position.x = value })} />
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
+            <Property title="首页标题装饰" anchor="visual-home-heading-decoration" highlighted={inspectorAnchor === 'visual-home-heading-decoration'}><HomeHeadingDecorationControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
               <PolaroidControls profile={draft} polaroidUrl={polaroidUrl} mediaBusy={mediaBusy} showAdvanced onChange={change} onInteractionEnd={endHistoryGroup} onSelectImage={() => void selectImage('polaroid')} />
               {polaroidUrl && draft.polaroid.mode === 'fence' && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}

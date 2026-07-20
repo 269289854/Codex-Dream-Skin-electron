@@ -26,6 +26,35 @@ export const PREVIEW_SIDEBAR_TEAM = { avatar: 'DT', label: 'Demo Team' } as cons
 
 export const PREVIEW_HERO_FALLBACK = 'linear-gradient(135deg, #d9fbfc, #fff4fb 52%, #e7ddff)'
 
+export type HeadingDensity = 'normal' | 'compact' | 'condensed'
+
+export function fitPreviewHeadingDensity(root: Element): HeadingDensity | null {
+  const region = root.querySelector<HTMLElement>('.dream-heading-region')
+  const heading = region?.querySelector<HTMLElement>('.dream-heading')
+  const decoration = region?.querySelector<HTMLElement>('.dream-heading-decoration')
+  if (!region || !heading || !decoration) {
+    region?.removeAttribute('data-dream-heading-density')
+    return null
+  }
+  const actionGrid = region.closest('.dream-layout-root')?.querySelector<HTMLElement>('.dream-action-grid')
+  const regionBox = region.getBoundingClientRect()
+  const gridBox = actionGrid?.getBoundingClientRect()
+  const limit = gridBox && gridBox.top > regionBox.top ? gridBox.top - 10 : regionBox.bottom
+  const densities: readonly HeadingDensity[] = ['normal', 'compact', 'condensed']
+  let selected: HeadingDensity = 'condensed'
+  for (const density of densities) {
+    region.dataset.dreamHeadingDensity = density
+    const headingBox = heading.getBoundingClientRect()
+    const decorationBox = decoration.getBoundingClientRect()
+    if (Math.max(headingBox.bottom, decorationBox.bottom) <= limit && heading.scrollHeight <= region.clientHeight) {
+      selected = density
+      break
+    }
+  }
+  region.dataset.dreamHeadingDensity = selected
+  return selected
+}
+
 export interface PreviewHeroImageProps {
   src: string
   mediaKey: string

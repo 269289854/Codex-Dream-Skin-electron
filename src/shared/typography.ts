@@ -31,6 +31,7 @@ export interface ThemeTypography {
     brandTitle: FontSelection
     brandSubtitle: FontSelection
     brandSignature: FontSelection
+    homeHeadingDecoration: FontSelection
     composerMelody: FontSelection
   }
   importedFonts: ImportedFontRecord[]
@@ -65,6 +66,9 @@ const typographySlotsV6Schema = z.object({
 }).strict()
 
 const typographySlotsV7Schema = typographySlotsV6Schema.extend({ composerMelody: fontSelectionSchema }).strict()
+const currentTypographySlotsSchema = typographySlotsV7Schema.extend({
+  homeHeadingDecoration: fontSelectionSchema.default({ kind: 'inherit' })
+}).strict()
 
 function validateTypography<T extends { slots: Record<string, FontSelection>; importedFonts: ImportedFontRecord[] }>(schema: z.ZodType<T>): z.ZodType<T> {
   return schema.superRefine((typography, context) => {
@@ -88,7 +92,7 @@ export const legacyThemeTypographySchema = validateTypography(z.object({
 }).strict())
 
 export const themeTypographySchema: z.ZodType<ThemeTypography> = validateTypography(z.object({
-  slots: typographySlotsV7Schema,
+  slots: currentTypographySlotsSchema,
   importedFonts: importedFontsSchema
 }).strict())
 
@@ -99,6 +103,7 @@ export function createDefaultTypography(): ThemeTypography {
       brandTitle: { kind: 'inherit' },
       brandSubtitle: { kind: 'inherit' },
       brandSignature: { kind: 'builtin', id: 'segoe-script' },
+      homeHeadingDecoration: { kind: 'inherit' },
       composerMelody: { kind: 'inherit' }
     },
     importedFonts: []

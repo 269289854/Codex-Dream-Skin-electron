@@ -5,6 +5,7 @@
   const CHROME_ID = "codex-dream-skin-chrome";
   const CARD_GRID_ID = "codex-dream-skin-actions";
   const PROJECT_PROXY_ID = "codex-dream-skin-project-proxy";
+  const HEADING_DECORATION_ID = "codex-dream-skin-heading-decoration";
   const projectAnchorRestorers = new WeakMap();
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
@@ -864,7 +865,11 @@
     heading?.classList.remove("dream-heading");
     heading?.removeAttribute("data-dream-copy-version");
     heading?.querySelectorAll(".dream-project-selector").forEach((node) => node.classList.remove("dream-project-selector"));
-    heading?.parentElement?.classList.remove("dream-heading-region");
+    const region = heading?.parentElement;
+    region?.classList.remove("dream-heading-region", "dream-heading-region-decorated");
+    region?.removeAttribute("data-dream-heading-density");
+    region?.removeAttribute("data-dream-heading-measure-key");
+    region?.querySelector(`#${HEADING_DECORATION_ID}`)?.remove();
   };
 
   const projectLabel = (button) => button?.textContent?.replace(/\s+/g, " ").trim() || "";
@@ -962,6 +967,66 @@
     return proxy;
   };
 
+  const ensureHeadingDecoration = (heading) => {
+    const region = heading?.parentElement;
+    const config = themeConfig?.decorations?.homeHeading;
+    const text = typeof config?.text === "string" ? config.text : "♫ · ✦ · ♡";
+    if (!region || config?.visible === false || !text) {
+      document.getElementById(HEADING_DECORATION_ID)?.remove();
+      region?.classList.remove("dream-heading-region-decorated");
+      region?.removeAttribute("data-dream-heading-density");
+      region?.removeAttribute("data-dream-heading-measure-key");
+      return null;
+    }
+    document.querySelectorAll(".dream-heading-decoration").forEach((node) => {
+      if (node.id !== HEADING_DECORATION_ID || node.parentElement !== region) node.remove();
+    });
+    let decoration = document.getElementById(HEADING_DECORATION_ID);
+    if (!decoration || decoration.parentElement !== region) {
+      decoration?.remove();
+      decoration = document.createElement("span");
+      decoration.id = HEADING_DECORATION_ID;
+      decoration.className = "dream-heading-decoration";
+      decoration.setAttribute("aria-hidden", "true");
+      region.insertBefore(decoration, heading);
+    }
+    decoration.textContent = text;
+    decoration.style.fontSize = `${clamp(Number(config?.fontSize) || 17, 10, 32)}px`;
+    region.classList.add("dream-heading-region-decorated");
+    return decoration;
+  };
+
+  const fitHeadingDensity = (heading, hero, actionGrid) => {
+    const region = heading?.parentElement;
+    if (!region || !hero) return;
+    const decoration = region.querySelector(`#${HEADING_DECORATION_ID}`);
+    if (!decoration) {
+      region.removeAttribute("data-dream-heading-density");
+      region.removeAttribute("data-dream-heading-measure-key");
+      return;
+    }
+    const project = projectLabel(heading.querySelector(".dream-project-selector"));
+    const heroBox = hero.getBoundingClientRect();
+    const key = `${VERSION}|${Math.round(heroBox.width)}|${project}|${decoration.textContent}|${decoration.style.fontSize}`;
+    if (region.dataset.dreamHeadingMeasureKey === key) return;
+    const regionBox = region.getBoundingClientRect();
+    const gridBox = actionGrid?.getBoundingClientRect?.();
+    const limit = gridBox && gridBox.top > regionBox.top ? gridBox.top - 10 : regionBox.bottom;
+    const densities = ["normal", "compact", "condensed"];
+    let selected = densities[densities.length - 1];
+    for (const density of densities) {
+      region.dataset.dreamHeadingDensity = density;
+      const headingBox = heading.getBoundingClientRect();
+      const decorationBox = decoration.getBoundingClientRect();
+      if (Math.max(headingBox.bottom, decorationBox.bottom) <= limit && heading.scrollHeight <= region.clientHeight) {
+        selected = density;
+        break;
+      }
+    }
+    region.dataset.dreamHeadingDensity = selected;
+    region.dataset.dreamHeadingMeasureKey = key;
+  };
+
   const ensureHeading = (context) => {
     const { heading, projectButton: composerProjectButton } = context;
     const nativeProjectButton = heading.querySelector('button:not([data-dream-project-proxy="true"])');
@@ -1006,6 +1071,7 @@
     }
     const before = heading.querySelector(":scope > .dream-copy-before");
     if (proxy && proxy.previousElementSibling !== before) before?.after(proxy);
+    ensureHeadingDecoration(heading);
     return heading;
   };
 
@@ -1061,7 +1127,8 @@
     if (home && context && hero) {
       markCurrentNode(".dream-hero", hero, "dream-hero");
       markCurrentNode(".dream-layout-root", hero, "dream-layout-root");
-      ensureActionGrid(hero);
+      const actionGrid = ensureActionGrid(hero);
+      fitHeadingDensity(heading, hero, actionGrid);
       const quickBanner = findQuickModeBanner(home);
       markCurrentNode(".dream-quick-mode-banner", quickBanner, "dream-quick-mode-banner");
 
@@ -1163,7 +1230,12 @@
     document.querySelectorAll(".dream-hero").forEach((node) => node.classList.remove("dream-hero"));
     document.querySelectorAll(".dream-layout-root").forEach((node) => node.classList.remove("dream-layout-root"));
     document.querySelectorAll(".dream-heading").forEach(clearHeading);
-    document.querySelectorAll(".dream-heading-region").forEach((node) => node.classList.remove("dream-heading-region"));
+    document.querySelectorAll(".dream-heading-region").forEach((node) => {
+      node.classList.remove("dream-heading-region", "dream-heading-region-decorated");
+      node.removeAttribute("data-dream-heading-density");
+      node.removeAttribute("data-dream-heading-measure-key");
+    });
+    document.querySelectorAll(".dream-heading-decoration").forEach((node) => node.remove());
     document.querySelectorAll(".dream-project-selector").forEach((node) => node.classList.remove("dream-project-selector"));
     document.querySelectorAll(".dream-project-bar").forEach((node) => node.classList.remove("dream-project-bar"));
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
@@ -1229,6 +1301,12 @@
   observer.observe(document.documentElement, { childList: true, subtree: true });
   const resizeHandler = scheduleEnsure;
   window.addEventListener("resize", resizeHandler);
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(() => {
+      document.querySelectorAll(".dream-heading-region").forEach((node) => node.removeAttribute("data-dream-heading-measure-key"));
+      scheduleEnsure();
+    }).catch(() => undefined);
+  }
   const timer = setInterval(ensure, 5000);
   window[STATE_KEY] = {
     ensure,

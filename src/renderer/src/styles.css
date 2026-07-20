@@ -84,9 +84,8 @@ button { cursor: pointer; }
 .operation-progress button { border: 0; background: transparent; color: #176a73; cursor: pointer; font-size: 11px; }
 .preview-hero-fallback { inset: 0; background: linear-gradient(135deg, #d9fbfc, #fff4fb 52%, #e7ddff); }
 .codex-preview .dream-layout-root.preview-hero-explicit::before { z-index: 1; }
-.codex-preview .dream-layout-root.preview-hero-explicit::after { z-index: 2; }
 .codex-preview .dream-layout-root.preview-hero-explicit .dream-heading-region { z-index: 3; }
-.codex-preview .dream-project-selector { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codex-preview .dream-project-selector { max-width: 100%; }
 .preview-lower-region { min-height: 0; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 54px 14px; }
 .preview-project-bar { width: 100%; min-height: 66px; flex: 0 0 auto; box-sizing: border-box; border-radius: 28px 28px 0 0; }
 .preview-project-chips { display: flex; align-items: center; gap: 7px; padding: 0 10px 8px; }

@@ -20,6 +20,13 @@ describe('theme schema and compiler', () => {
     expect(current.polaroid.mode).toBe('full')
     expect(current.polaroid.style).toMatchObject({ opacity: 1, shadow: { visible: true, offsetX: 0, offsetY: 8, blur: 10, color: 'rgba(24, 48, 54, 0.24)' } })
     expect(buildThemeStyleVariables(parseThemeProfile({ ...current, appearance: { colors: {}, paints: {} } }))['--dream-sidebar-task-row-selected']).toContain('linear-gradient(90deg')
+    const { homeHeading: _homeHeadingCurrent, ...decorationsWithoutHomeHeading } = current.decorations
+    const { homeHeadingDecoration: _homeHeadingFontCurrent, ...typographySlotsWithoutHomeHeading } = current.typography.slots
+    const parsedWithoutNewFields = parseThemeProfile({ ...current, decorations: decorationsWithoutHomeHeading, typography: { ...current.typography, slots: typographySlotsWithoutHomeHeading } })
+    expect(parsedWithoutNewFields.decorations.homeHeading).toEqual(current.decorations.homeHeading)
+    expect(parsedWithoutNewFields.typography.slots.homeHeadingDecoration).toEqual({ kind: 'inherit' })
+    expect(() => parseThemeProfile({ ...current, decorations: { ...current.decorations, homeHeading: { ...current.decorations.homeHeading, text: 'x'.repeat(65) } } })).toThrow()
+    expect(() => parseThemeProfile({ ...current, decorations: { ...current.decorations, homeHeading: { ...current.decorations.homeHeading, fontSize: 33 } } })).toThrow()
 
     const { mode: _versionEightMode, style: _versionEightStyle, ...versionEightPolaroid } = current.polaroid
     const migratedEight = parseThemeProfile({ ...current, version: 8, polaroid: versionEightPolaroid })
@@ -27,12 +34,13 @@ describe('theme schema and compiler', () => {
     expect(migratedEight.polaroid.mode).toBe('fence')
 
     const { backgroundFloat: _backgroundFloat, backgroundRain: _backgroundRain, backgroundMeteor: _backgroundMeteor, backgroundSnow: _backgroundSnow, ...versionSevenIcons } = current.icons
+    const { homeHeading: _homeHeadingSeven, ...versionSevenDecorations } = current.decorations
     const versionSeven = {
       ...current,
       version: 7,
       polaroid: versionEightPolaroid,
       icons: versionSevenIcons,
-      decorations: { ...current.decorations, sparkles: Object.fromEntries(Object.entries(current.decorations.sparkles).filter(([key]) => key !== 'effect' && key !== 'speed')) }
+      decorations: { ...versionSevenDecorations, sparkles: Object.fromEntries(Object.entries(current.decorations.sparkles).filter(([key]) => key !== 'effect' && key !== 'speed')) }
     }
     const migratedSeven = parseThemeProfile(versionSeven)
     expect(migratedSeven.version).toBe(12)
@@ -40,10 +48,11 @@ describe('theme schema and compiler', () => {
     expect(migratedSeven.decorations.sparkles).toMatchObject({ effect: 'twinkle', speed: 1 })
     expect(migratedSeven.icons.backgroundSparkle).toEqual(current.icons.backgroundSparkle)
     expect(migratedSeven.icons.backgroundRain).toEqual({ kind: 'builtin', name: 'droplet' })
+    expect(migratedSeven.decorations.homeHeading).toEqual(current.decorations.homeHeading)
 
     const { decorations: _decorations, ...currentWithoutDecorations } = current
     const { backgroundSparkle: _backgroundSparkle, backgroundFloat: _backgroundFloatSix, backgroundRain: _backgroundRainSix, backgroundMeteor: _backgroundMeteorSix, backgroundSnow: _backgroundSnowSix, ...currentWithoutBackgroundSparkle } = currentWithoutDecorations.icons
-    const { composerMelody: _composerMelody, ...versionSixTypographySlots } = current.typography.slots
+    const { composerMelody: _composerMelody, homeHeadingDecoration: _homeHeadingDecoration, ...versionSixTypographySlots } = current.typography.slots
     const versionSixTypography = { ...current.typography, slots: versionSixTypographySlots }
     const { style: _styleSix, ...versionSixPolaroid } = current.polaroid
     const versionSix = { ...currentWithoutDecorations, version: 6, polaroid: versionSixPolaroid, icons: currentWithoutBackgroundSparkle, composerBadge: current.composerBadge, typography: versionSixTypography }
@@ -51,6 +60,7 @@ describe('theme schema and compiler', () => {
     expect(migratedSix.version).toBe(12)
     expect(migratedSix.decorations.sparkles.count).toBe(6)
     expect(migratedSix.decorations.composerMelody.text).toBe('♫ · · · ♡ · · · ♪')
+    expect(migratedSix.decorations.homeHeading).toEqual(current.decorations.homeHeading)
 
     const { composerBadge: _composerBadgeWithoutDecorations, ...currentWithoutBadge } = currentWithoutDecorations
     const { appearance: _appearance, typography: _typography, ...versionFiveFields } = currentWithoutBadge

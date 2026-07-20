@@ -87,6 +87,7 @@ export const APPEARANCE_COLOR_TOKENS = {
   brandSubtitle: colorToken('品牌副标题', 'brand', '--dream-brand-subtitle', 'border', ['copy-brand-subtitle']),
   brandSignature: colorToken('品牌签名', 'brand', '--dream-brand-signature', 'pink', ['copy-brand-signature']),
   homeHeading: colorToken('首页标题', 'home', '--dream-home-heading', 'ink', ['copy-heading']),
+  homeHeadingDecoration: colorToken('首页标题装饰', 'home', '--dream-home-heading-decoration', 'pink', ['home-heading-decoration']),
   homeSubtitle: colorToken('首页副标题', 'home', '--dream-home-subtitle', 'ink', ['copy-subtitle']),
   projectSelectorText: colorToken('项目选择器文字', 'home', '--dream-project-selector-text', 'ink', ['project-selector']),
   projectSelectorBorder: colorToken('项目选择器边框', 'home', '--dream-project-selector-border', 'border', ['project-selector']),

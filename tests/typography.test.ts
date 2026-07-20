@@ -12,6 +12,7 @@ describe('typography model', () => {
         brandTitle: { kind: 'inherit' },
         brandSubtitle: { kind: 'inherit' },
         brandSignature: { kind: 'builtin', id: 'segoe-script' },
+        homeHeadingDecoration: { kind: 'inherit' },
         composerMelody: { kind: 'inherit' }
       },
       importedFonts: []
