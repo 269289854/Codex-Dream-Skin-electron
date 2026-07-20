@@ -32,6 +32,8 @@ describe('renderer injection template', () => {
     expect(layoutCss).toContain('.dream-layout-root')
     expect(layoutCss).toContain('.dream-heading')
     expect(layoutCss).toContain('.dream-heading-decoration')
+    expect(layoutCss).toContain('font-family: var(--dream-font-home-heading)')
+    expect(layoutCss).toContain('font-family: var(--dream-font-home-subtitle)')
     expect(layoutCss).not.toContain('.dream-layout-root::after')
     expect(layoutCss).toContain('.dream-action-grid')
     expect(layoutCss).toContain('.dream-composer')

@@ -26,6 +26,8 @@ export function buildThemeStyleVariables(profile: ThemeProfile): ThemeStyleVaria
     '--dream-success': colors.success,
     '--dream-danger': colors.danger,
     '--dream-font-ui': resolveFontFamily(profile, profile.typography.slots.ui),
+    '--dream-font-home-heading': resolveFontFamily(profile, profile.typography.slots.homeHeading),
+    '--dream-font-home-subtitle': resolveFontFamily(profile, profile.typography.slots.homeSubtitle),
     '--dream-font-brand-title': resolveFontFamily(profile, profile.typography.slots.brandTitle),
     '--dream-font-brand-subtitle': resolveFontFamily(profile, profile.typography.slots.brandSubtitle),
     '--dream-font-brand-signature': resolveFontFamily(profile, profile.typography.slots.brandSignature),

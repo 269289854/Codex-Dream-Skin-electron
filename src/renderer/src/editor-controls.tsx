@@ -26,7 +26,7 @@ export const iconLabels: Record<IconSlot, string> = {
 }
 
 export const typographyLabels: Record<TypographySlot, string> = {
-  ui: '全局界面', brandTitle: '品牌主标题', brandSubtitle: '品牌副标题', brandSignature: '品牌签名', homeHeadingDecoration: '首页标题装饰', composerMelody: '输入框旋律'
+  ui: '全局界面', homeHeading: '首页标题', homeSubtitle: '首页副标题', brandTitle: '品牌主标题', brandSubtitle: '品牌副标题', brandSignature: '品牌签名', homeHeadingDecoration: '首页标题装饰', composerMelody: '输入框旋律'
 }
 
 interface RangeProps {

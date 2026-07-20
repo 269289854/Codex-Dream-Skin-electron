@@ -30,6 +30,8 @@ describe('runtime appearance compilation', () => {
     expect(variables['--dream-sidebar-task-selected-text']).toBe('#0b3040')
     expect(variables['--dream-sidebar-task-row-selected']).toBe('linear-gradient(90deg, #102030 0%, #f0d0e0 100%)')
     expect(variables['--dream-canvas']).toBe('linear-gradient(120deg, #fff 0%, rgb(10 20 30 / .5) 100%)')
+    expect(variables['--dream-font-home-heading']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-home-subtitle']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-brand-title']).toBe('var(--dream-font-ui)')
     for (const definition of Object.values(APPEARANCE_COLOR_TOKENS)) expect(variables[definition.cssVariable]).toBeTruthy()
     for (const definition of Object.values(APPEARANCE_PAINT_TOKENS)) expect(variables[definition.cssVariable]).toBeTruthy()
@@ -44,6 +46,23 @@ describe('runtime appearance compilation', () => {
     ]).then((parts) => parts.join('\n'))
     for (const definition of Object.values(APPEARANCE_COLOR_TOKENS)) expect(css, definition.cssVariable).toContain(`var(${definition.cssVariable})`)
     for (const definition of Object.values(APPEARANCE_PAINT_TOKENS)) expect(css, definition.cssVariable).toContain(`var(${definition.cssVariable})`)
+    expect(css).toContain('font-family: var(--dream-font-home-heading)')
+    expect(css).toContain('font-family: var(--dream-font-home-subtitle)')
+    expect(css).toMatch(/\.dream-project-proxy\s*\{[^}]*font-family:\s*inherit;/)
+  })
+
+  it('resolves independent home copy fonts while preserving global inheritance', () => {
+    const profile = createDefaultTheme(id)
+    profile.typography.importedFonts.push({ id: 'font-home', family: 'Home Font', asset: 'assets/home.woff2', originalName: 'home.woff2', format: 'woff2' })
+    profile.typography.slots.homeHeading = { kind: 'builtin', id: 'jetbrains-mono' }
+    profile.typography.slots.homeSubtitle = { kind: 'imported', id: 'font-home' }
+
+    const variables = buildThemeStyleVariables(profile)
+    expect(variables['--dream-font-home-heading']).toBe('"Dream JetBrains Mono", monospace')
+    expect(variables['--dream-font-home-subtitle']).toBe('"Dream Imported font-home", sans-serif')
+
+    profile.typography.slots.homeSubtitle = { kind: 'inherit' }
+    expect(buildThemeStyleVariables(profile)['--dream-font-home-subtitle']).toBe('var(--dream-font-ui)')
   })
 
   it('draws the brand surface once on the native header without covering injected copy', async () => {
@@ -104,7 +123,7 @@ describe('runtime appearance compilation', () => {
       { id: 'font-used', family: 'Used', asset: 'assets/used.woff2', originalName: 'used.woff2', format: 'woff2' },
       { id: 'font-unused', family: 'Unused', asset: 'assets/unused.woff2', originalName: 'unused.woff2', format: 'woff2' }
     ]
-    profile.typography.slots.brandTitle = { kind: 'imported', id: 'font-used' }
+    profile.typography.slots.homeHeading = { kind: 'imported', id: 'font-used' }
     const css = await buildRuntimeFontCss(profile, {
       'assets/used.woff2': 'data:font/woff2;base64,d09GMg==',
       'assets/unused.woff2': 'data:font/woff2;base64,VU5VU0VE'

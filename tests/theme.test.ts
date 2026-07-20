@@ -21,9 +21,11 @@ describe('theme schema and compiler', () => {
     expect(current.polaroid.style).toMatchObject({ opacity: 1, shadow: { visible: true, offsetX: 0, offsetY: 8, blur: 10, color: 'rgba(24, 48, 54, 0.24)' } })
     expect(buildThemeStyleVariables(parseThemeProfile({ ...current, appearance: { colors: {}, paints: {} } }))['--dream-sidebar-task-row-selected']).toContain('linear-gradient(90deg')
     const { homeHeading: _homeHeadingCurrent, ...decorationsWithoutHomeHeading } = current.decorations
-    const { homeHeadingDecoration: _homeHeadingFontCurrent, ...typographySlotsWithoutHomeHeading } = current.typography.slots
+    const { homeHeading: _homeHeadingFontCurrent, homeSubtitle: _homeSubtitleFontCurrent, homeHeadingDecoration: _homeHeadingDecorationFontCurrent, ...typographySlotsWithoutHomeHeading } = current.typography.slots
     const parsedWithoutNewFields = parseThemeProfile({ ...current, decorations: decorationsWithoutHomeHeading, typography: { ...current.typography, slots: typographySlotsWithoutHomeHeading } })
     expect(parsedWithoutNewFields.decorations.homeHeading).toEqual(current.decorations.homeHeading)
+    expect(parsedWithoutNewFields.typography.slots.homeHeading).toEqual({ kind: 'inherit' })
+    expect(parsedWithoutNewFields.typography.slots.homeSubtitle).toEqual({ kind: 'inherit' })
     expect(parsedWithoutNewFields.typography.slots.homeHeadingDecoration).toEqual({ kind: 'inherit' })
     expect(() => parseThemeProfile({ ...current, decorations: { ...current.decorations, homeHeading: { ...current.decorations.homeHeading, text: 'x'.repeat(65) } } })).toThrow()
     expect(() => parseThemeProfile({ ...current, decorations: { ...current.decorations, homeHeading: { ...current.decorations.homeHeading, fontSize: 33 } } })).toThrow()
@@ -59,7 +61,7 @@ describe('theme schema and compiler', () => {
 
     const { decorations: _decorations, ...currentWithoutDecorations } = current
     const { backgroundSparkle: _backgroundSparkle, backgroundFloat: _backgroundFloatSix, backgroundRain: _backgroundRainSix, backgroundMeteor: _backgroundMeteorSix, backgroundSnow: _backgroundSnowSix, ...currentWithoutBackgroundSparkle } = currentWithoutDecorations.icons
-    const { composerMelody: _composerMelody, homeHeadingDecoration: _homeHeadingDecoration, ...versionSixTypographySlots } = current.typography.slots
+    const { composerMelody: _composerMelody, homeHeading: _homeHeadingFontSix, homeSubtitle: _homeSubtitleFontSix, homeHeadingDecoration: _homeHeadingDecoration, ...versionSixTypographySlots } = current.typography.slots
     const versionSixTypography = { ...current.typography, slots: versionSixTypographySlots }
     const { style: _styleSix, ...versionSixPolaroid } = current.polaroid
     const versionSix = { ...currentWithoutDecorations, version: 6, polaroid: versionSixPolaroid, icons: currentWithoutBackgroundSparkle, composerBadge: current.composerBadge, typography: versionSixTypography }

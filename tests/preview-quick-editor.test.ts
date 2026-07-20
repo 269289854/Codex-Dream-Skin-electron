@@ -153,6 +153,31 @@ describe('preview quick editor', () => {
     }
   })
 
+  it('sets independent home copy fonts and restores global inheritance', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    const cases = [
+      ['copy-heading', 'homeHeading'],
+      ['copy-subtitle', 'homeSubtitle']
+    ] as const
+
+    for (const [targetId, slot] of cases) {
+      renderEditor(PREVIEW_TARGETS[targetId], profile)
+      const select = container.querySelector<HTMLSelectElement>(`[data-font-slot="${slot}"] select`)
+      if (!select) throw new Error(`${slot} font selector is missing.`)
+      expect(select.querySelector('option[value="inherit"]')?.textContent).toBe('继承全局界面字体')
+      act(() => {
+        select.value = 'builtin:jetbrains-mono'
+        select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      })
+      expect(profile.typography.slots[slot]).toEqual({ kind: 'builtin', id: 'jetbrains-mono' })
+      act(() => {
+        select.value = 'inherit'
+        select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      })
+      expect(profile.typography.slots[slot]).toEqual({ kind: 'inherit' })
+    }
+  })
+
   it('captures copy input before a queued state update runs', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     let queuedChange: ((next: ThemeProfile) => void) | undefined

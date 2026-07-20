@@ -55,7 +55,15 @@ describe('preview editing registry', () => {
     expect(isPreviewTargetId('unknown-target')).toBe(false)
   })
 
-  it('maps each brand copy target to the shared brand inspector group', () => {
+  it('maps each editable copy target to its independent font slot', () => {
+    expect(PREVIEW_TARGETS['copy-heading']).toMatchObject({
+      inspectorAnchor: 'appearance-home',
+      editor: { kind: 'style', copyField: 'headingTemplate', fontSlot: 'homeHeading' }
+    })
+    expect(PREVIEW_TARGETS['copy-subtitle']).toMatchObject({
+      inspectorAnchor: 'appearance-home',
+      editor: { kind: 'style', copyField: 'subtitle', fontSlot: 'homeSubtitle' }
+    })
     expect(PREVIEW_TARGETS['copy-brand-title']).toMatchObject({
       inspectorAnchor: 'appearance-brand',
       editor: { kind: 'style', copyField: 'brandTitle', fontSlot: 'brandTitle' }

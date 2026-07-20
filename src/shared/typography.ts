@@ -28,6 +28,8 @@ export type FontSelection =
 export interface ThemeTypography {
   slots: {
     ui: Exclude<FontSelection, { kind: 'inherit' }>
+    homeHeading: FontSelection
+    homeSubtitle: FontSelection
     brandTitle: FontSelection
     brandSubtitle: FontSelection
     brandSignature: FontSelection
@@ -67,6 +69,8 @@ const typographySlotsV6Schema = z.object({
 
 const typographySlotsV7Schema = typographySlotsV6Schema.extend({ composerMelody: fontSelectionSchema }).strict()
 const currentTypographySlotsSchema = typographySlotsV7Schema.extend({
+  homeHeading: fontSelectionSchema.default({ kind: 'inherit' }),
+  homeSubtitle: fontSelectionSchema.default({ kind: 'inherit' }),
   homeHeadingDecoration: fontSelectionSchema.default({ kind: 'inherit' })
 }).strict()
 
@@ -100,6 +104,8 @@ export function createDefaultTypography(): ThemeTypography {
   return {
     slots: {
       ui: { kind: 'builtin', id: 'system-ui' },
+      homeHeading: { kind: 'inherit' },
+      homeSubtitle: { kind: 'inherit' },
       brandTitle: { kind: 'inherit' },
       brandSubtitle: { kind: 'inherit' },
       brandSignature: { kind: 'builtin', id: 'segoe-script' },

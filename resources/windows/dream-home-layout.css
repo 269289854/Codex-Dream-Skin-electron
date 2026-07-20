@@ -115,7 +115,7 @@
   justify-content: flex-start !important;
   gap: 0 !important;
   color: var(--dream-home-heading) !important;
-  font-family: var(--dream-font-ui) !important;
+  font-family: var(--dream-font-home-heading) !important;
   font-size: 0 !important;
   line-height: 1.28 !important;
   font-weight: 750 !important;
@@ -188,6 +188,7 @@
   display: block;
   margin-top: 12px;
   color: var(--dream-home-subtitle);
+  font-family: var(--dream-font-home-subtitle);
   font-size: 15px;
   line-height: 1.5;
   font-weight: 500;

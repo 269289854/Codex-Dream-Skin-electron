@@ -893,6 +893,34 @@ describe('Studio preview editing interaction', () => {
     })
     expect(canvas.style.getPropertyValue('--dream-font-brand-subtitle')).toContain('Dream Imported font-test')
 
+    const homeHeading = container.querySelector('[data-preview-target="copy-heading"]')
+    if (!homeHeading) throw new Error('Home heading preview is missing.')
+    pointerDown(homeHeading)
+    const homeHeadingFont = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="homeHeading"] select')
+    if (!homeHeadingFont) throw new Error('Home heading font selector is missing.')
+    expect(homeHeadingFont.querySelector('option[value="imported:font-test"]')?.textContent).toBe('Test Font')
+    act(() => {
+      homeHeadingFont.value = 'imported:font-test'
+      homeHeadingFont.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(canvas.style.getPropertyValue('--dream-font-home-heading')).toContain('Dream Imported font-test')
+
+    const homeSubtitle = container.querySelector('[data-preview-target="copy-subtitle"]')
+    if (!homeSubtitle) throw new Error('Home subtitle preview is missing.')
+    pointerDown(homeSubtitle)
+    const homeSubtitleFont = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="homeSubtitle"] select')
+    if (!homeSubtitleFont) throw new Error('Home subtitle font selector is missing.')
+    act(() => {
+      homeSubtitleFont.value = 'imported:font-test'
+      homeSubtitleFont.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(canvas.style.getPropertyValue('--dream-font-home-subtitle')).toContain('Dream Imported font-test')
+    act(() => {
+      homeSubtitleFont.value = 'inherit'
+      homeSubtitleFont.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    expect(canvas.style.getPropertyValue('--dream-font-home-subtitle')).toBe('var(--dream-font-ui)')
+
     const melody = container.querySelector('[data-preview-target="composer-melody"]')
     if (!melody) throw new Error('Composer melody preview is missing.')
     pointerDown(melody)
@@ -912,7 +940,7 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.typography).toMatchObject({
-      slots: { brandTitle: { kind: 'imported', id: 'font-test' }, brandSubtitle: { kind: 'imported', id: 'font-test' }, composerMelody: { kind: 'imported', id: 'font-test' } },
+      slots: { homeHeading: { kind: 'imported', id: 'font-test' }, homeSubtitle: { kind: 'inherit' }, brandTitle: { kind: 'imported', id: 'font-test' }, brandSubtitle: { kind: 'imported', id: 'font-test' }, composerMelody: { kind: 'imported', id: 'font-test' } },
       importedFonts: [{ id: 'font-test', family: 'Test Font' }]
     })
 
@@ -922,6 +950,8 @@ describe('Studio preview editing interaction', () => {
       reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await Promise.resolve()
     })
+    expect(canvas.style.getPropertyValue('--dream-font-home-heading')).toBe('var(--dream-font-ui)')
+    expect(canvas.style.getPropertyValue('--dream-font-home-subtitle')).toBe('var(--dream-font-ui)')
     expect(canvas.style.getPropertyValue('--dream-font-brand-title')).toBe('var(--dream-font-ui)')
     expect(container.querySelector('.codex-preview style')).toBeNull()
   })

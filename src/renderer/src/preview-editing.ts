@@ -74,9 +74,9 @@ export const PREVIEW_TARGETS = {
   'copy-brand-signature': styleTarget('品牌签名', 'brand', { colors: ['brandSignature'], copyField: 'brandSignature', fontSlot: 'brandSignature' }),
   'icon-branding': styleTarget('品牌图标', 'brand', { colors: ['brandIcon'], iconSlot: 'branding' }),
 
-  'copy-heading': styleTarget('首页标题', 'home', { colors: ['homeHeading'], paints: ['homeHeadingBackdrop'], copyField: 'headingTemplate', fontSlot: 'ui' }),
+  'copy-heading': styleTarget('首页标题', 'home', { colors: ['homeHeading'], paints: ['homeHeadingBackdrop'], copyField: 'headingTemplate', fontSlot: 'homeHeading' }),
   'home-heading-decoration': styleTarget('首页标题装饰', 'home', { colors: ['homeHeadingDecoration'], fontSlot: 'homeHeadingDecoration', decoration: 'homeHeading', inspectorAnchor: 'visual-home-heading-decoration' }),
-  'copy-subtitle': styleTarget('副标题', 'home', { colors: ['homeSubtitle'], copyField: 'subtitle', fontSlot: 'ui' }),
+  'copy-subtitle': styleTarget('副标题', 'home', { colors: ['homeSubtitle'], copyField: 'subtitle', fontSlot: 'homeSubtitle' }),
   'project-selector': styleTarget('项目选择器', 'home', { colors: ['projectSelectorText', 'projectSelectorBorder'], paints: ['projectSelector', 'projectSelectorHover', 'projectSelectorSelected'], fontSlot: 'ui' }),
   hero: { label: '主视觉', inspector: 'visual', inspectorAnchor: 'visual-hero', editor: { kind: 'hero' } },
 

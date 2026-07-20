@@ -247,7 +247,7 @@ export function App(): React.JSX.Element {
       observer.disconnect()
       void fontReady
     }
-  }, [draft?.copy.headingTemplate, draft?.copy.subtitle, draft?.decorations.homeHeading.visible, draft?.decorations.homeHeading.text, draft?.decorations.homeHeading.fontSize, draft?.typography.slots.homeHeadingDecoration, previewMode, previewScale])
+  }, [draft?.copy.headingTemplate, draft?.copy.subtitle, draft?.decorations.homeHeading.visible, draft?.decorations.homeHeading.text, draft?.decorations.homeHeading.fontSize, draft?.typography.slots.homeHeading, draft?.typography.slots.homeSubtitle, draft?.typography.slots.homeHeadingDecoration, previewMode, previewScale])
 
   const change = (mutator: (profile: ThemeProfile) => void, historyGroup?: string): void => {
     setDraft((current) => {
