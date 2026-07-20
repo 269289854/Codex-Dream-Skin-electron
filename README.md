@@ -1,42 +1,157 @@
 # Codex Dream Skin Studio
 
-仅支持 Windows 的 Codex 桌面主题编辑器，使用 Electron、React、Vite 和 TypeScript 构建。
+Codex Dream Skin Studio 是一款仅支持 Windows x64 的 Codex 桌面主题编辑器。它面向 Microsoft Store 安装的官方 Codex 桌面应用，提供本地主题制作、实时预览、主题分享，以及通过受验证的本机连接将主题应用到 Codex 的完整工作流。
 
-主要功能：
+本项目使用 Electron、React、Vite 和 TypeScript 构建，是从 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 迁移并继续开发的独立开源项目，不是 OpenAI 官方产品，也不修改 Codex 安装包本身。
 
-- 管理多个本地主题并切换当前主题。
-- 选择主视觉图片，调整缩放与位置。
-- 在原图上使用四点围栏标记拍立得，并在 Codex 预览中拖动、缩放和旋转。
-- 配置主题颜色、内置 Lucide 图标或导入 PNG、WebP、SVG 图标。
-- 从 GUI 检测、启动、验证、重新注入、停止和恢复 Codex 主题。
-- 严格 UTF-8、原子写入和可恢复备份，不修改 WindowsApps、`app.asar` 或官方签名。
+## 功能
 
-本项目迁移自 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin)，不是 OpenAI 官方产品。
+### 主题管理
 
-项目中的预览数据、测试夹具、文档和截图必须遵守 [隐私与示例数据约束](docs/PRIVACY.md)，不得包含开发者本机的真实项目、任务、账号或团队信息。
+- 创建、复制、切换、删除多个本地主题。
+- 内置系统主题可编辑、复制和导出，但不会被删除；自定义主题可以正常管理。
+- 主题保存后可直接重新注入运行中的 Codex，也可以导出为分享文件。
+- 恢复系统默认主题时，会重新载入完整的主视觉、拍立得和装饰预设。
 
-## 使用
+### 主视觉和媒体
 
-1. 安装 Microsoft Store 版本 Codex。
-2. 安装并打开 `Codex Dream Skin Studio Setup.exe`。
-3. 在“视觉设计”中选择图片并调整主题。
-4. 在“运行设置”中点击“检测 Codex”，然后点击“启动并应用”。
-5. 不再使用主题时，点击“恢复并重启 Codex”。
+- 为 Codex 首页选择图片、GIF 或视频作为主视觉。
+- 支持 PNG、WebP、JPEG、SVG、原生 GIF、MP4 和 WebM；SVG 会先进行安全检查并转换为 PNG。
+- 调整主视觉的缩放、水平位置、垂直位置和水平/垂直翻转。
+- 为 GIF 和视频设置自动播放、循环、静音、音量等播放行为；浏览器阻止自动播放时会保留画面并提供播放入口。
+- 媒体会复制到应用数据目录，删除原始文件不会影响已经保存的主题。
 
-完整说明见 [Windows 使用指南](docs/USER_GUIDE.md)，本版本的真实环境验收记录见 [Windows 验收结果](docs/QA_RESULTS.md)，侧边栏预览改造记录见 [侧边栏预览对齐说明](docs/SIDEBAR_PREVIEW_ALIGNMENT.md)，拍立得交互见 [拍立得拖拽与保存](docs/POLAROID_DRAGGING.md)。
+### 拍立得组件
+
+- 在原图上依次选择四个角点，定义拍立得的透视裁切区域。
+- 在预览中拖动角点修正围栏，并阻止围栏自交或超出图片范围。
+- 调整拍立得宽度、旋转角度、位置、隐藏阈值、阴影、图钉和图片翻转。
+- 在 Studio 预览和实际 Codex 页面中拖动拍立得；运行时拖动位置只对当前页面生命周期生效，不会覆盖主题中的初始位置。
+- 拍立得可以使用图片、GIF 或视频，并拥有独立的播放设置。
+
+### 首页文案和布局
+
+- 自定义首页标题和副标题。
+- 标题支持唯一的 `{project}` 占位符，注入后会显示为 Codex 原生项目选择器。
+- 预览中的项目栏、标题、装饰、四张快捷操作卡片、输入框和拍立得使用与运行时一致的布局规则。
+- 支持首页和会话页面两种预览视图，点击预览元素即可打开对应的快速编辑入口。
+
+### 外观、图标和字体
+
+- 调整背景、正文、强调、粉色、淡紫、边框、成功、危险和其他界面令牌的颜色与渐变。
+- 配置品牌标识、首页装饰、输入框、项目栏、快捷卡片、拍立得图钉和其他图标槽位。
+- 图标可以使用内置 Lucide 图标，也可以导入 PNG、WebP、JPG 或 SVG；SVG 会先检查外部引用和脚本。
+- 使用系统界面字体、内置中文字体和等宽字体，或导入自己的字体文件并为不同文本槽位分别选择。
+- 配置雨落、闪烁和其他粒子装饰的显示、样式、数量、颜色、不透明度和动画参数。
+- 为会话页面配置纯色、图片或视频背景，并与首页主题保持一致。
+
+### Codex 运行控制
+
+“运行设置”提供完整的应用与恢复流程：
+
+- **检测 Codex**：检查 Microsoft Store 安装身份、版本和当前运行状态。
+- **安装配置**：先备份 Codex 配置，再设置启用本地主题所需的浅色基础配置。
+- **启动并应用**：必要时重启 Codex，开启仅监听回环地址的 CDP 端点，并注入当前主题。
+- **重新注入**：将保存后的主题重新编译并刷新到已连接的 Codex 页面。
+- **验证主题**：检查所有目标页面是否仍存在主题标记和样式。
+- **停止注入**：移除当前页面的主题注入，但保留已安装的基础配置。
+- **恢复并重启 Codex**：停止注入、恢复安装前的原始配置、归档备份，并以普通模式重启 Codex。
+- 主题运行期间关闭 Studio 会隐藏到系统托盘；重新打开 Studio 或从托盘执行恢复操作即可继续管理会话。
+- Studio 意外退出后，重新启动会尝试从会话记录恢复活动主题连接。
+
+### 主题分享
+
+- 将当前预览中的主题（包括尚未保存的修改）导出为单个 `.cdstheme` 文件。
+- 导出包是自包含的 ZIP64 文件，包含主题配置、实际引用的图片、GIF、视频、图标和字体，接收方不需要原始素材。
+- 可以通过文件选择器导入，也可以将 `.cdstheme` 文件拖入 Studio 窗口；导入会创建新的主题，不会覆盖已有主题。
+- 导入前会校验文件清单、路径、主题结构、素材大小、媒体头部和 SHA-256，并拒绝脚本或可执行文件。
+- 导入或复制失败时会清理临时数据并保持当前主题不变。
+
+## 快速开始
+
+### 使用已发布安装包
+
+环境要求：
+
+- Windows 10 或 Windows 11 x64。
+- Microsoft Store 安装的官方 Codex 桌面应用。
+- 安装包不要求单独安装 Node.js。
+
+使用步骤：
+
+1. 安装并打开 Microsoft Store 版本 Codex。
+2. 安装并启动 `Codex Dream Skin Studio Setup.exe`。
+3. 在“我的主题”中创建或选择主题，在“视觉设计”中导入主视觉和拍立得素材。
+4. 调整颜色、字体、图标、首页文案和粒子装饰，并在中间预览中检查首页和会话页面。
+5. 打开“运行设置”，点击“检测 Codex”，再点击“启动并应用”。
+6. 保存主题后，使用“重新注入”将最新修改应用到运行中的 Codex。
+7. 不再使用主题时，点击“恢复并重启 Codex”还原原始配置。
+
+详细的媒体限制、拍立得围栏、分享文件、故障排查和数据目录说明见 [Windows 使用指南](docs/USER_GUIDE.md)。
+
+## 数据与安全
+
+应用数据默认保存在 `%LOCALAPPDATA%\\CodexDreamSkinStudio`：
+
+- `themes/<id>/theme.json`：主题配置。
+- `themes/<id>/assets/`：主题引用的图片、视频、图标和字体。
+- `backups/`：Codex 配置备份及恢复归档。
+- `runtime/`：当前注入载荷和会话状态。
+
+项目坚持以下边界：
+
+- 修改 Codex 配置前创建备份；配置写入使用严格 UTF-8、临时文件、同步落盘和原子替换，失败时保留可恢复内容。
+- 只连接经过身份、进程归属、浏览器 ID 和页面 ID 校验的 Microsoft Store Codex 实例，CDP 只允许回环地址（`127.0.0.1`、`localhost` 或 `::1`）。
+- 不修改 `WindowsApps` 中的安装文件、`app.asar`、官方签名或其他 Codex 程序文件。
+- 渲染进程不能直接访问 Node.js、PowerShell、文件系统或任意 CDP 地址；导入素材会检查路径穿越、文件类型、文件头和大小限制。
+- Studio 和渲染进程不会获取视频的真实磁盘路径，运行时媒体通过已验证的主题文件绑定生成 `blob:` 地址，也不会关闭 Codex CSP。
+- 项目中的预览、测试、文档和截图只使用虚构示例数据，不同步开发者本机的项目、任务、账号或团队信息。详见 [隐私与示例数据约束](docs/PRIVACY.md)。
+
+## 支持范围与限制
+
+- 目前仅支持 Windows 10/11 x64 和 Microsoft Store 版 Codex。
+- 不支持 macOS、Linux、其他 Codex 安装来源或在线主题商店。
+- 不包含自动更新功能。
+- 拍立得区域需要用户手动选择四个角点，不提供自动图像识别。
+- 视频导入要求最长边不超过 4096px；GIF 和图片有单文件大小限制，视频导入、复制和分享时还需要足够的本地磁盘空间。
+- 当前安装包未配置发行者代码签名证书，Windows SmartScreen 可能显示未知发布者提示。
+
+## 文档
+
+- [Windows 使用指南](docs/USER_GUIDE.md)
+- [Windows 验收结果](docs/QA_RESULTS.md)
+- [隐私与示例数据约束](docs/PRIVACY.md)
+- [侧边栏预览对齐说明](docs/SIDEBAR_PREVIEW_ALIGNMENT.md)
+- [拍立得拖拽与保存](docs/POLAROID_DRAGGING.md)
+- [开源与第三方声明](NOTICE.md)
 
 ## 开发
+
+开发构建需要 Node.js 22 或更新版本，并使用 `npm` 安装依赖：
 
 ```powershell
 npm install
 npm run dev
 ```
 
-## 构建
+常用检查和构建命令：
 
 ```powershell
+npm run typecheck
+npm test
+npm run test:config
 npm run build
-npm run package:dir
 ```
 
-生成结果位于 `release/`。当前只支持 Windows x64。
+生成 Windows x64 目录包或 NSIS 安装包：
+
+```powershell
+npm run package:dir
+npm run package:win
+```
+
+打包结果位于 `release/`。该目录是生成产物，不应手工修改或提交。
+
+## 许可证
+
+本项目源代码采用 [MIT License](LICENSE)。许可证、项目来源、内置字体和第三方组件说明见 [开源与第三方声明](NOTICE.md)。
