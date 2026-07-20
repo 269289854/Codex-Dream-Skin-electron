@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { BUILTIN_ICON_GLYPHS, resolveBuiltinIconGlyph } from '../src/shared/icon-glyphs'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { createDefaultTheme } from '../src/shared/theme'
-import { buildPreviewHeroImageProps, PREVIEW_HERO_FALLBACK, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from '../src/renderer/src/preview-home'
+import { buildPreviewHeroImageProps, PREVIEW_HERO_FALLBACK, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from '../src/renderer/src/preview-home'
 
 describe('Studio home preview', () => {
   it('binds the complete hero data URL directly to the hero style', () => {
@@ -38,6 +38,7 @@ describe('Studio home preview', () => {
     ])
     const sendButtonRule = css.match(/\.preview-send-command\s*\{[^}]+\}/)?.[0]
     const sendIconRule = css.match(/\.preview-send-command \.custom-icon, \.preview-send-command svg\s*\{[^}]+\}/)?.[0]
+    const projectSelectorRule = css.match(/\.codex-preview \.dream-project-selector\s*\{[^}]+\}/)?.[0]
     expect(source).toContain('className="dream-layout-root dream-hero preview-hero-explicit"')
     expect(source).toContain('className="preview-hero-art"')
     expect(source).toContain('<PreviewVideo role="hero"')
@@ -51,12 +52,16 @@ describe('Studio home preview', () => {
     expect(source).toContain('className="preview-send-command bg-token-foreground"')
     expect(source).toContain('title="语音输入"')
     expect(source).toContain('title="发送"')
+    expect(source).toContain('<span>{PREVIEW_PROJECT_NAME} · Miku</span>')
     expect(sendButtonRule).toContain('width: 28px')
     expect(sendButtonRule).toContain('height: 28px')
     expect(sendIconRule).toContain('width: 20px')
     expect(sendIconRule).toContain('height: 20px')
+    expect(projectSelectorRule).toContain('white-space: nowrap')
+    expect(projectSelectorRule).toContain('text-overflow: ellipsis')
+    expect(PREVIEW_PROJECT_NAME).toBe('Miku Studio')
     expect(PREVIEW_HOME_CONTEXT).toEqual({
-      projectName: 'Codex-Dream-Skin-electron',
+      projectName: 'Miku Studio',
       environment: '本地',
       branch: 'Miku',
       model: '5.6 Luna 极高'
@@ -100,7 +105,7 @@ describe('Studio home preview', () => {
 
   it('uses a representative project and task snapshot', () => {
     expect(PREVIEW_SIDEBAR_PROJECTS[0]).toEqual({
-      name: 'Codex-Dream-Skin-electron',
+      name: 'Miku Studio',
       active: true,
       tasks: ['调整预览侧边栏']
     })

@@ -2,8 +2,10 @@ import type { CSSProperties } from 'react'
 import { mediaFlipCssTransform } from '../../shared/media'
 import type { ThemeProfile } from '../../shared/theme'
 
+export const PREVIEW_PROJECT_NAME = 'Miku Studio'
+
 export const PREVIEW_HOME_CONTEXT = {
-  projectName: 'Codex-Dream-Skin-electron',
+  projectName: PREVIEW_PROJECT_NAME,
   environment: '本地',
   branch: 'Miku',
   model: '5.6 Luna 极高'
@@ -17,7 +19,7 @@ export interface PreviewSidebarProject {
 }
 
 export const PREVIEW_SIDEBAR_PROJECTS: readonly PreviewSidebarProject[] = [
-  { name: 'Codex-Dream-Skin-electron', active: true, tasks: ['调整预览侧边栏'] }
+  { name: PREVIEW_PROJECT_NAME, active: true, tasks: ['调整预览侧边栏'] }
 ]
 
 export const PREVIEW_SIDEBAR_TEAM = { avatar: 'DT', label: 'Demo Team' } as const

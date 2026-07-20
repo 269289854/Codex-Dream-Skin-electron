@@ -14,7 +14,7 @@ import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPO
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { mediaFlipCssTransform } from '../../shared/media'
-import { createDefaultTheme, type IconSlot, type ThemeProfile, type ThemeSummary } from '../../shared/theme'
+import type { IconSlot, ThemeProfile, ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls } from './DecorationControls'
 import { FenceEditor } from './FenceEditor'
@@ -23,7 +23,7 @@ import { PolaroidControls } from './PolaroidControls'
 import { PolaroidPreview } from './PolaroidPreview'
 import { ParticleEffectControls } from './ParticleEffectControls'
 import { PreviewVideo } from './PreviewVideo'
-import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
+import { buildPreviewHeroImageProps, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import {
   ICON_PREVIEW_TARGETS,
@@ -50,6 +50,7 @@ export function App(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [duplicateName, setDuplicateName] = useState('')
   const [duplicateBusy, setDuplicateBusy] = useState(false)
@@ -78,8 +79,10 @@ export function App(): React.JSX.Element {
   const historyRef = useRef<ThemeProfile[]>([])
   const historyGroupRef = useRef<string | null>(null)
   const dragCounterRef = useRef(0)
+  const loadedThemeIdRef = useRef<string | null>(null)
 
   const loadTheme = useCallback(async (id: string) => {
+    loadedThemeIdRef.current = id
     try {
       setError(null)
       const [profile, compiled] = await Promise.all([window.studio.themes.get(id), window.studio.themes.compile(id)])
@@ -288,6 +291,38 @@ export function App(): React.JSX.Element {
     setNotice(null)
     setPreviewSelection(null)
     setDuplicateDialogOpen(true)
+  }
+
+  const restoreDefault = async (): Promise<void> => {
+    if (!draft || resetting) return
+    const themeId = draft.id
+    setResetting(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const profile = await window.studio.themes.getDefault(themeId)
+      const restoredAssets: Record<string, string> = {}
+      for (const source of [profile.hero.source, profile.polaroid.source]) {
+        if (!source) continue
+        restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
+      }
+      if (loadedThemeIdRef.current !== themeId) return
+      setDraft((current) => {
+        if (!current || current.id !== themeId) return current
+        historyRef.current.push(structuredClone(current))
+        if (historyRef.current.length > 60) historyRef.current.shift()
+        historyGroupRef.current = null
+        return profile
+      })
+      setAssets((current) => ({ ...current, ...restoredAssets }))
+      setPreviewSelection(null)
+      setInspectorAnchor(null)
+      setNotice('已恢复默认预设，保存主题后生效。')
+    } catch (reason) {
+      setError(messageOf(reason))
+    } finally {
+      setResetting(false)
+    }
   }
 
   const closeDuplicateDialog = (): void => {
@@ -631,7 +666,7 @@ export function App(): React.JSX.Element {
         </aside>
 
         <section className="preview-panel">
-          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><div className="preview-view-switch segmented-control" aria-label="预览页面"><button type="button" className={previewMode === 'home' ? 'active' : ''} title="首页预览" onClick={() => { setPreviewMode('home'); setPreviewSelection(null) }}><Home size={14} /></button><button type="button" className={previewMode === 'conversation' ? 'active' : ''} title="会话预览" onClick={() => { setPreviewMode('conversation'); setPreviewSelection(null) }}><MessageSquare size={14} /></button></div><button className="tool-button" title="撤销" onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" onClick={() => change((profile) => Object.assign(profile, createDefaultTheme(profile.id, profile.name)))}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
+          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><div className="preview-view-switch segmented-control" aria-label="预览页面"><button type="button" className={previewMode === 'home' ? 'active' : ''} title="首页预览" onClick={() => { setPreviewMode('home'); setPreviewSelection(null) }}><Home size={14} /></button><button type="button" className={previewMode === 'conversation' ? 'active' : ''} title="会话预览" onClick={() => { setPreviewMode('conversation'); setPreviewSelection(null) }}><MessageSquare size={14} /></button></div><button className="tool-button" title="撤销" onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" disabled={resetting} onClick={() => void restoreDefault()}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving || resetting} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
           <div className="preview-stage" ref={previewStageRef}>
             <div className="preview-frame" style={{ width: HOME_PREVIEW_VIEWPORT.width * previewScale, height: HOME_PREVIEW_VIEWPORT.height * previewScale }}>
               <div
@@ -833,7 +868,7 @@ function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: R
 }
 
 function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
-  return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>完善主题编辑器</strong><span>Codex-Dream-Skin-electron · Miku</span></div></header><div className="preview-message-list"><article className="preview-message user" data-preview-target="conversation-message" tabIndex={0}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article><article className="preview-message assistant" data-preview-target="conversation-message" tabIndex={0}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p><button className="preview-primary-command" data-preview-target="primary-button" type="button">查看改动</button></article></div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div></div>
+  return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>完善主题编辑器</strong><span>{PREVIEW_PROJECT_NAME} · Miku</span></div></header><div className="preview-message-list"><article className="preview-message user" data-preview-target="conversation-message" tabIndex={0}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article><article className="preview-message assistant" data-preview-target="conversation-message" tabIndex={0}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p><button className="preview-primary-command" data-preview-target="primary-button" type="button">查看改动</button></article></div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div></div>
 }
 
 function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {

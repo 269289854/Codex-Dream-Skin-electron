@@ -81,6 +81,7 @@ export interface StudioApi {
     list: () => Promise<ThemeSummary[]>
     get: (id: string) => Promise<ThemeProfile>
     create: (name: string) => Promise<ThemeProfile>
+    getDefault: (id: string) => Promise<ThemeProfile>
     duplicate: (profile: ThemeProfile, name: string) => Promise<ThemeProfile>
     update: (profile: ThemeProfile) => Promise<ThemeProfile>
     delete: (id: string) => Promise<void>

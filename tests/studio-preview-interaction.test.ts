@@ -37,6 +37,7 @@ describe('Studio preview editing interaction', () => {
   let activeThemeId: string
   let selectedFontAsset: ImportedFontAsset | null
   let selectIcon: ReturnType<typeof vi.fn>
+  let getDefaultTheme: ReturnType<typeof vi.fn>
   let duplicateTheme: ReturnType<typeof vi.fn>
   let activateTheme: ReturnType<typeof vi.fn>
   let exportTheme: ReturnType<typeof vi.fn>
@@ -56,6 +57,20 @@ describe('Studio preview editing interaction', () => {
     savedProfiles = []
     selectedFontAsset = null
     selectIcon = vi.fn(async () => null)
+    getDefaultTheme = vi.fn(async (id: string) => {
+      const selected = themeProfiles.find((item) => item.id === id)
+      if (!selected) throw new Error('Theme not found.')
+      const defaults = createDefaultTheme(id, selected.name)
+      if (id === profile.id) {
+        defaults.hero.source = { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' }
+        defaults.polaroid.source = { asset: 'assets/dream-polaroid.png', kind: 'image', mimeType: 'image/png' }
+        defaults.polaroid.sourceSize = { width: 1122, height: 1402 }
+        defaults.polaroid.placement = { x: 0.8278561014524648, y: 0.7127831468304384, width: 0.15, rotation: -15, hideBelowWidth: 920 }
+        defaults.icons.backgroundRain = { kind: 'builtin', name: 'wand-sparkles' }
+        defaults.decorations.sparkles = { visible: true, effect: 'rain', speed: 1, count: 20, minSize: 20, maxSize: 32, opacity: 0.72, glow: 10, seed: 0, extraColors: [] }
+      }
+      return defaults
+    })
     duplicateTheme = vi.fn(async (current: ThemeProfile, name: string) => {
       const duplicate = { ...structuredClone(current), id: '00000000-0000-4000-8000-000000000002', name, updatedAt: new Date().toISOString() }
       themeProfiles.push(duplicate)
@@ -81,6 +96,7 @@ describe('Studio preview editing interaction', () => {
           return selected
         },
         create: async () => profile,
+        getDefault: getDefaultTheme,
         duplicate: duplicateTheme,
         update: async (next) => {
           savedProfiles.push(structuredClone(next))
@@ -663,9 +679,15 @@ describe('Studio preview editing interaction', () => {
 
     const reset = container.querySelector<HTMLButtonElement>('button[title="恢复默认"]')
     if (!reset) throw new Error('Restore defaults command is missing.')
-    act(() => reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
-    expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(6)
-    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-effect')).toBe('twinkle')
+    await act(async () => {
+      reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(getDefaultTheme).toHaveBeenCalledWith(profile.id)
+    expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(20)
+    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-effect')).toBe('rain')
+    expect(container.querySelector('.preview-hero-art')).not.toBeNull()
+    expect(container.querySelector('.preview-polaroid img')).not.toBeNull()
     expect(container.querySelector('[data-preview-target="composer-melody"]')?.textContent).toBe('♫ · · · ♡ · · · ♪')
 
     const iconInspector = [...container.querySelectorAll('.sidebar-nav button')].find((button) => button.textContent?.includes('图标样式'))
@@ -818,7 +840,10 @@ describe('Studio preview editing interaction', () => {
 
     const reset = container.querySelector<HTMLButtonElement>('button[title="恢复默认"]')
     if (!reset) throw new Error('Restore defaults command is missing.')
-    act(() => reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    await act(async () => {
+      reset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
     expect(canvas.style.getPropertyValue('--dream-font-brand-title')).toBe('var(--dream-font-ui)')
     expect(container.querySelector('.codex-preview style')).toBeNull()
   })

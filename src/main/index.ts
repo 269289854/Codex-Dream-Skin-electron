@@ -46,6 +46,7 @@ function registerIpc(): void {
   ipcMain.handle('themes:list', () => store.list())
   ipcMain.handle('themes:get', (_event, id: string) => store.get(id))
   ipcMain.handle('themes:create', (_event, name: string) => store.create(name))
+  ipcMain.handle('themes:get-default', (_event, id: string) => store.getDefault(id))
   ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => store.duplicate(profile, name))
   ipcMain.handle('themes:update', (_event, profile: unknown) => store.update(profile))
   ipcMain.handle('themes:delete', (_event, id: string) => store.delete(id))
@@ -223,7 +224,10 @@ if (!hasSingleInstanceLock) {
       ? await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
       : customIcon.resize({ width: 16, height: 16 })
     app.setAppUserModelId('com.codexdreamskin.studio')
-    store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), join(resourcesRoot, 'dream-reference.png'))
+    store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), {
+      hero: join(resourcesRoot, 'dream-reference.png'),
+      polaroid: join(resourcesRoot, 'dream-polaroid.png')
+    })
     await store.initialize()
     protocol.handle('studio-media', async (request) => handleStudioMediaRequest(request))
     codexService = new CodexService(store, resourcesRoot, (status) => {

@@ -37,8 +37,14 @@ interface LegacyStudioSettings {
   activeThemeId: string
 }
 
+interface BundledSystemThemeAssets {
+  hero: string
+  polaroid: string
+}
+
 const MAX_ASSET_BYTES = 30 * 1024 * 1024
 const MAX_FONT_BYTES = 12 * 1024 * 1024
+const BUNDLED_SYSTEM_ASSETS = new Set(['assets/dream-reference.png', 'assets/dream-polaroid.png'])
 const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg'])
 const MEDIA_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif'])
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm'])
@@ -53,7 +59,7 @@ export class ProfileStore {
   private readonly settingsPath: string
   private readonly pendingMediaAssets = new Map<string, Set<string>>()
 
-  constructor(readonly root: string, private readonly bundledDefaultAsset?: string) {
+  constructor(readonly root: string, private readonly bundledSystemAssets?: BundledSystemThemeAssets) {
     this.themesRoot = join(root, 'themes')
     this.settingsPath = join(root, 'settings.json')
   }
@@ -106,6 +112,14 @@ export class ProfileStore {
   async create(name: string): Promise<ThemeProfile> {
     const profile = createDefaultTheme(randomUUID(), this.cleanName(name))
     await this.writeProfile(profile)
+    return profile
+  }
+
+  async getDefault(id: string): Promise<ThemeProfile> {
+    const current = await this.get(id)
+    const settings = await this.readSettings()
+    const profile = createDefaultTheme(current.id, current.name)
+    if (id === settings.systemThemeId) await this.applyBundledSystemPreset(profile)
     return profile
   }
 
@@ -424,7 +438,7 @@ export class ProfileStore {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体预览参数无效。')
     const profile = await this.get(themeId)
     const reference = [profile.hero.source, profile.polaroid.source].find((media) => media?.asset === asset)
-    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset)) throw new Error('该媒体未被当前主题引用。')
+    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被当前主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
     if (!file.isFile()) throw new Error('媒体文件不存在。')
@@ -435,11 +449,17 @@ export class ProfileStore {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体参数无效。')
     const profile = await this.get(themeId)
     const reference = [profile.hero.source, profile.polaroid.source].find((media) => media?.asset === asset)
-    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset)) throw new Error('该媒体未被主题引用。')
+    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
     if (!file.isFile()) throw new Error('媒体文件不存在。')
     return { path, mimeType: reference?.mimeType ?? mediaMimeTypeForPath(asset), size: file.size }
+  }
+
+  private async isBundledSystemAsset(themeId: string, asset: string): Promise<boolean> {
+    if (!this.bundledSystemAssets || !BUNDLED_SYSTEM_ASSETS.has(asset)) return false
+    const settings = await this.readSettings()
+    return settings.systemThemeId === themeId
   }
 
   async getRuntimeMediaBindings(themeId: string): Promise<Array<{ role: 'hero' | 'polaroid'; path: string; mimeType: string }>> {
@@ -467,7 +487,7 @@ export class ProfileStore {
     }))).filter((candidate): candidate is { id: string; hasBundledAsset: boolean; createdAt: number } => candidate !== null)
     candidates.sort((a, b) => Number(b.hasBundledAsset) - Number(a.hasBundledAsset) || a.createdAt - b.createdAt || a.id.localeCompare(b.id))
     let systemThemeId = candidates.find((candidate) => candidate.hasBundledAsset)?.id
-    if (!systemThemeId && this.bundledDefaultAsset) systemThemeId = (await this.createSystemTheme()).id
+    if (!systemThemeId && this.bundledSystemAssets) systemThemeId = (await this.createSystemTheme()).id
     systemThemeId ??= candidates[0]?.id
     if (!systemThemeId) throw new Error('Studio settings cannot identify the system theme.')
     const settings: StudioSettings = {
@@ -481,28 +501,60 @@ export class ProfileStore {
 
   private async createSystemTheme(): Promise<ThemeProfile> {
     const profile = createDefaultTheme(randomUUID())
-    if (this.bundledDefaultAsset) {
-      const relativePath = 'assets/dream-reference.png'
-      const destination = this.resolveAsset(profile.id, relativePath)
-      await mkdir(dirname(destination), { recursive: true })
-      await copyFile(this.bundledDefaultAsset, destination)
-      const metadata = await sharp(destination).metadata()
-      if (metadata.width && metadata.height) {
-        const media = mediaReferenceForPath(relativePath)
-        profile.hero.source = media
-        profile.polaroid.source = media
-        profile.polaroid.sourceSize = { width: metadata.width, height: metadata.height }
-        profile.polaroid.fence = [
-          { x: 0.850, y: 0.739 },
-          { x: 0.981, y: 0.690 },
-          { x: 0.999, y: 0.930 },
-          { x: 0.871, y: 0.977 }
-        ]
-        profile.polaroid.placement = { x: 0.76, y: 0.56, width: 0.19, rotation: -2, hideBelowWidth: 920 }
-      }
+    const root = this.themeRoot(profile.id)
+    try {
+      await this.applyBundledSystemPreset(profile)
+      await this.writeProfile(profile)
+      return profile
+    } catch (error) {
+      await rm(root, { recursive: true, force: true }).catch(() => undefined)
+      throw error
     }
-    await this.writeProfile(profile)
-    return profile
+  }
+
+  private async applyBundledSystemPreset(profile: ThemeProfile): Promise<void> {
+    if (!this.bundledSystemAssets) return
+    const heroAsset = 'assets/dream-reference.png'
+    const polaroidAsset = 'assets/dream-polaroid.png'
+    const heroDestination = this.resolveAsset(profile.id, heroAsset)
+    const polaroidDestination = this.resolveAsset(profile.id, polaroidAsset)
+    const heroTemporary = `${heroDestination}.${randomUUID()}.tmp`
+    const polaroidTemporary = `${polaroidDestination}.${randomUUID()}.tmp`
+    await mkdir(dirname(heroDestination), { recursive: true })
+    try {
+      await copyFile(this.bundledSystemAssets.hero, heroTemporary)
+      await copyFile(this.bundledSystemAssets.polaroid, polaroidTemporary)
+      await this.inspectImage(heroTemporary, '.png')
+      const polaroidSize = await this.inspectImage(polaroidTemporary, '.png')
+      for (const temporary of [heroTemporary, polaroidTemporary]) {
+        const file = await open(temporary, 'r+')
+        try { await file.sync() } finally { await file.close() }
+      }
+      await rename(heroTemporary, heroDestination)
+      await rename(polaroidTemporary, polaroidDestination)
+
+      profile.hero.source = mediaReferenceForPath(heroAsset)
+      profile.polaroid.source = mediaReferenceForPath(polaroidAsset)
+      profile.polaroid.sourceSize = polaroidSize
+      profile.polaroid.placement = { x: 0.8278561014524648, y: 0.7127831468304384, width: 0.15, rotation: -15, hideBelowWidth: 920 }
+      profile.icons.backgroundRain = { kind: 'builtin', name: 'wand-sparkles' }
+      profile.decorations.sparkles = {
+        visible: true,
+        effect: 'rain',
+        speed: 1,
+        count: 20,
+        minSize: 20,
+        maxSize: 32,
+        opacity: 0.72,
+        glow: 10,
+        seed: 0,
+        extraColors: []
+      }
+      await this.validateProfileMedia(profile)
+    } catch (error) {
+      await Promise.all([heroTemporary, polaroidTemporary].map((path) => rm(path, { force: true }).catch(() => undefined)))
+      throw error
+    }
   }
 
   private async writeSettings(settings: StudioSettings): Promise<void> {

@@ -7,6 +7,12 @@ import { ProfileStore } from '../src/main/profile-store'
 const roots: string[] = []
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
 
+async function writeBundledSystemAssets(root: string): Promise<{ hero: string; polaroid: string }> {
+  const assets = { hero: join(root, 'bundled-hero.png'), polaroid: join(root, 'bundled-polaroid.png') }
+  await Promise.all([writeFile(assets.hero, TEST_PNG), writeFile(assets.polaroid, TEST_PNG)])
+  return assets
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
@@ -45,17 +51,40 @@ describe('ProfileStore', () => {
   it('migrates legacy settings and keeps the original bundled theme editable but undeletable', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-system-theme-'))
     roots.push(root)
-    const bundledAsset = join(root, 'bundled.png')
-    await writeFile(bundledAsset, TEST_PNG)
-    const store = new ProfileStore(root, bundledAsset)
+    const bundledAssets = await writeBundledSystemAssets(root)
+    const store = new ProfileStore(root, bundledAssets)
     await store.initialize()
     const systemTheme = (await store.list()).find((theme) => theme.system)
     if (!systemTheme) throw new Error('System theme was not initialized.')
+    const systemProfile = await store.get(systemTheme.id)
+    expect(systemProfile).toMatchObject({
+      version: 12,
+      hero: {
+        source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        mediaTransform: { flipHorizontal: false, flipVertical: false }
+      },
+      polaroid: {
+        source: { asset: 'assets/dream-polaroid.png', kind: 'image', mimeType: 'image/png' },
+        sourceSize: { width: 1, height: 1 },
+        placement: { x: 0.8278561014524648, y: 0.7127831468304384, width: 0.15, rotation: -15, hideBelowWidth: 920 },
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        mediaTransform: { flipHorizontal: false, flipVertical: false }
+      },
+      icons: { backgroundRain: { kind: 'builtin', name: 'wand-sparkles' } },
+      decorations: {
+        sparkles: { visible: true, effect: 'rain', speed: 1, count: 20, minSize: 20, maxSize: 32, opacity: 0.72, glow: 10, seed: 0, extraColors: [] }
+      }
+    })
+    await expect(readFile(join(root, 'themes', systemTheme.id, 'assets', 'dream-reference.png'))).resolves.toEqual(TEST_PNG)
+    await expect(readFile(join(root, 'themes', systemTheme.id, 'assets', 'dream-polaroid.png'))).resolves.toEqual(TEST_PNG)
     const customTheme = await store.create('自定义主题')
+    expect(customTheme.hero.source).toBeNull()
+    expect(customTheme.polaroid.source).toBeNull()
     await store.activate(customTheme.id)
     await writeFile(join(root, 'settings.json'), `${JSON.stringify({ version: 1, activeThemeId: customTheme.id }, null, 2)}\n`, 'utf8')
 
-    const reopened = new ProfileStore(root, bundledAsset)
+    const reopened = new ProfileStore(root, bundledAssets)
     await reopened.initialize()
     const migrated = await reopened.list()
     expect(migrated.find((theme) => theme.id === systemTheme.id)).toMatchObject({ system: true, active: false })
@@ -65,7 +94,9 @@ describe('ProfileStore', () => {
     const editableSystem = await reopened.get(systemTheme.id)
     editableSystem.name = '修改后的系统主题'
     await reopened.update(editableSystem)
-    expect((await reopened.list()).find((theme) => theme.id === systemTheme.id)).toMatchObject({ name: '修改后的系统主题', system: true })
+    const preserved = new ProfileStore(root, bundledAssets)
+    await preserved.initialize()
+    expect((await preserved.list()).find((theme) => theme.id === systemTheme.id)).toMatchObject({ name: '修改后的系统主题', system: true })
     await expect(reopened.delete(systemTheme.id)).rejects.toThrow('系统默认主题不能删除')
     await reopened.delete(customTheme.id)
     expect((await reopened.list()).map((theme) => theme.id)).toEqual([systemTheme.id])
@@ -74,9 +105,8 @@ describe('ProfileStore', () => {
   it.each([1, 2] as const)('recreates a missing system theme from v%s settings without replacing the active custom theme', async (settingsVersion) => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-missing-system-'))
     roots.push(root)
-    const bundledAsset = join(root, 'bundled.png')
-    await writeFile(bundledAsset, TEST_PNG)
-    const store = new ProfileStore(root, bundledAsset)
+    const bundledAssets = await writeBundledSystemAssets(root)
+    const store = new ProfileStore(root, bundledAssets)
     await store.initialize()
     const originalSystem = (await store.list()).find((theme) => theme.system)
     if (!originalSystem) throw new Error('System theme was not initialized.')
@@ -87,12 +117,87 @@ describe('ProfileStore', () => {
       : { version: 2, activeThemeId: customTheme.id, systemThemeId: originalSystem.id }
     await writeFile(join(root, 'settings.json'), `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
 
-    const reopened = new ProfileStore(root, bundledAsset)
+    const reopened = new ProfileStore(root, bundledAssets)
     await reopened.initialize()
     const themes = await reopened.list()
     expect(themes).toHaveLength(2)
     expect(themes.find((theme) => theme.system)?.id).not.toBe(customTheme.id)
     expect(themes.find((theme) => theme.id === customTheme.id)).toMatchObject({ active: true, system: false })
+  })
+
+  it.each(['missing', 'corrupt'] as const)('cleans up an incomplete system theme when a bundled asset is %s', async (failure) => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-invalid-system-'))
+    roots.push(root)
+    const hero = join(root, 'bundled-hero.png')
+    const polaroid = join(root, 'bundled-polaroid.png')
+    await writeFile(hero, TEST_PNG)
+    if (failure === 'corrupt') await writeFile(polaroid, 'not-an-image')
+
+    await expect(new ProfileStore(root, { hero, polaroid }).initialize()).rejects.toThrow()
+    expect(await readdir(join(root, 'themes'))).toEqual([])
+  })
+
+  it('creates the production system preset from the bundled hero and polaroid images', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-production-system-'))
+    roots.push(root)
+    const resources = join(process.cwd(), 'resources', 'windows')
+    const store = new ProfileStore(root, {
+      hero: join(resources, 'dream-reference.png'),
+      polaroid: join(resources, 'dream-polaroid.png')
+    })
+
+    await store.initialize()
+    const systemTheme = (await store.list()).find((theme) => theme.system)
+    if (!systemTheme) throw new Error('System theme was not initialized.')
+    const profile = await store.get(systemTheme.id)
+    expect(profile.hero.source?.asset).toBe('assets/dream-reference.png')
+    expect(profile.polaroid.source?.asset).toBe('assets/dream-polaroid.png')
+    expect(profile.polaroid.sourceSize).toEqual({ width: 1122, height: 1402 })
+  })
+
+  it('restores the complete bundled preset for the system theme without saving the draft', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-reset-system-'))
+    roots.push(root)
+    const bundledAssets = await writeBundledSystemAssets(root)
+    const store = new ProfileStore(root, bundledAssets)
+    await store.initialize()
+    const systemTheme = (await store.list()).find((theme) => theme.system)
+    if (!systemTheme) throw new Error('System theme was not initialized.')
+
+    const edited = await store.get(systemTheme.id)
+    edited.hero.source = null
+    edited.polaroid.source = null
+    edited.decorations.sparkles.effect = 'twinkle'
+    edited.decorations.sparkles.count = 6
+    await store.update(edited)
+    const heroPath = join(root, 'themes', systemTheme.id, 'assets', 'dream-reference.png')
+    const polaroidPath = join(root, 'themes', systemTheme.id, 'assets', 'dream-polaroid.png')
+    await Promise.all([writeFile(heroPath, 'stale'), writeFile(polaroidPath, 'stale')])
+
+    const reset = await store.getDefault(systemTheme.id)
+    expect(reset).toMatchObject({
+      id: systemTheme.id,
+      hero: { source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' } },
+      polaroid: {
+        source: { asset: 'assets/dream-polaroid.png', kind: 'image', mimeType: 'image/png' },
+        sourceSize: { width: 1, height: 1 },
+        placement: { x: 0.8278561014524648, y: 0.7127831468304384, width: 0.15, rotation: -15, hideBelowWidth: 920 }
+      },
+      icons: { backgroundRain: { kind: 'builtin', name: 'wand-sparkles' } },
+      decorations: { sparkles: { effect: 'rain', count: 20, minSize: 20, maxSize: 32 } }
+    })
+    expect((await store.get(systemTheme.id)).hero.source).toBeNull()
+    await expect(readFile(heroPath)).resolves.toEqual(TEST_PNG)
+    await expect(readFile(polaroidPath)).resolves.toEqual(TEST_PNG)
+    await expect(store.getMediaPreviewUrl(systemTheme.id, 'assets/dream-reference.png')).resolves.toContain('studio-media://')
+    await expect(store.resolveReferencedMedia(systemTheme.id, 'assets/dream-polaroid.png')).resolves.toMatchObject({ mimeType: 'image/png', size: TEST_PNG.length })
+
+    const custom = await store.create('自定义主题')
+    const customReset = await store.getDefault(custom.id)
+    expect(customReset.hero.source).toBeNull()
+    expect(customReset.polaroid.source).toBeNull()
+    expect(customReset.decorations.sparkles).toMatchObject({ effect: 'twinkle', count: 6 })
+    await expect(store.getMediaPreviewUrl(custom.id, 'assets/dream-reference.png')).rejects.toThrow('未被当前主题引用')
   })
 
   it('imports, persists, compiles, and duplicates validated font assets', async () => {

@@ -15,6 +15,7 @@ const api: StudioApi = {
     list: () => ipcRenderer.invoke('themes:list'),
     get: (id) => ipcRenderer.invoke('themes:get', id),
     create: (name) => ipcRenderer.invoke('themes:create', name),
+    getDefault: (id) => ipcRenderer.invoke('themes:get-default', id),
     duplicate: (profile, name) => ipcRenderer.invoke('themes:duplicate', profile, name),
     update: (profile) => ipcRenderer.invoke('themes:update', profile),
     delete: (id) => ipcRenderer.invoke('themes:delete', id),
