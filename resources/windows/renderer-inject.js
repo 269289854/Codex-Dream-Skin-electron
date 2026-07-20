@@ -623,12 +623,26 @@
     const candidates = [...document.querySelectorAll('.thread-scroll-container[data-app-action-timeline-scroll]')];
     return candidates.find((candidate) => isVisible(candidate) && findComposer(candidate) && !candidate.closest('.dream-home')) || null;
   };
+  const conversationViewport = (surface) => {
+    const viewport = surface?.parentElement;
+    if (!(viewport instanceof HTMLElement)) return null;
+    return viewport.querySelector(':scope > .thread-scroll-container[data-app-action-timeline-scroll]') === surface ? viewport : null;
+  };
+  const clearConversationBackgroundNode = (background) => {
+    if (!(background instanceof HTMLElement)) return;
+    clearConversationBackgroundMedia(background);
+    background.remove();
+  };
   const clearConversationSurface = (surface) => {
     if (!(surface instanceof HTMLElement)) return;
     surface.classList.remove('dream-conversation-surface');
-    const background = surface.querySelector(':scope > .dream-conversation-background');
-    if (background instanceof HTMLElement) clearConversationBackgroundMedia(background);
-    background?.remove();
+    const viewport = conversationViewport(surface) || surface.parentElement;
+    viewport?.classList.remove('dream-conversation-viewport');
+    const backgrounds = new Set([
+      ...((viewport instanceof HTMLElement) ? viewport.querySelectorAll(':scope > .dream-conversation-background') : []),
+      ...surface.querySelectorAll(':scope > .dream-conversation-background')
+    ]);
+    backgrounds.forEach(clearConversationBackgroundNode);
   };
   const clearConversationBackgroundMedia = (background) => {
     const video = background?.querySelector(':scope > .dream-conversation-background-video');
@@ -647,18 +661,31 @@
     const source = mediaConfig?.conversationBackground?.dataUrl || mediaUrls.conversationBackground || '';
     const canRender = visible && (mode === 'color' || Boolean(source));
     const surface = findConversationSurface();
+    const viewport = conversationViewport(surface);
     document.querySelectorAll('.dream-conversation-surface').forEach((current) => {
       if (!canRender || current !== surface) clearConversationSurface(current);
     });
-    if (!(surface instanceof HTMLElement) || !canRender) return;
+    document.querySelectorAll('.dream-conversation-viewport').forEach((current) => {
+      if (!canRender || current !== viewport) {
+        current.classList.remove('dream-conversation-viewport');
+        current.querySelectorAll(':scope > .dream-conversation-background').forEach(clearConversationBackgroundNode);
+      }
+    });
+    if (!(surface instanceof HTMLElement) || !(viewport instanceof HTMLElement) || !canRender) return;
     surface.classList.add('dream-conversation-surface');
-    let background = surface.querySelector(':scope > .dream-conversation-background');
+    viewport.classList.add('dream-conversation-viewport');
+    const backgroundCandidates = [
+      ...viewport.querySelectorAll(':scope > .dream-conversation-background'),
+      ...surface.querySelectorAll(':scope > .dream-conversation-background')
+    ];
+    let background = backgroundCandidates[0];
+    backgroundCandidates.slice(1).forEach(clearConversationBackgroundNode);
     if (!(background instanceof HTMLElement)) {
       background = document.createElement('div');
       background.className = 'dream-conversation-background';
       background.setAttribute('aria-hidden', 'true');
-      surface.prepend(background);
     }
+    if (background.parentElement !== viewport) viewport.prepend(background);
     if (background.dataset.dreamBackgroundMode !== configuredMode) background.dataset.dreamBackgroundMode = configuredMode;
     const opacity = clamp(Number(config?.opacity) || 0, 0, 1);
     const focusXValue = Number(config?.focus?.x);
@@ -1378,6 +1405,10 @@
     document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
     document.querySelectorAll(".dream-composer-send-button").forEach(clearComposerSendIcon);
     document.querySelectorAll(".dream-conversation-surface").forEach(clearConversationSurface);
+    document.querySelectorAll(".dream-conversation-viewport").forEach((node) => {
+      node.classList.remove("dream-conversation-viewport");
+      node.querySelectorAll(":scope > .dream-conversation-background").forEach(clearConversationBackgroundNode);
+    });
     document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
     document.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));

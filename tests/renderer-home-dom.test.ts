@@ -649,21 +649,68 @@ describe('renderer home DOM adaptation', () => {
     inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
 
     const surface = window.document.querySelector('.dream-conversation-surface')
-    const backgroundLayer = surface?.querySelector(':scope > .dream-conversation-background')
+    const viewport = surface?.parentElement
+    const backgroundLayer = viewport?.querySelector(':scope > .dream-conversation-background')
     const image = backgroundLayer?.querySelector(':scope > .dream-conversation-background-media') as HTMLImageElement | null
     expect(surface).not.toBeNull()
+    expect(viewport?.classList.contains('dream-conversation-viewport')).toBe(true)
+    expect(backgroundLayer?.parentElement).toBe(viewport)
+    expect(backgroundLayer).not.toBe(surface?.firstElementChild)
     expect(backgroundLayer?.firstElementChild?.classList.contains('dream-conversation-background-media')).toBe(true)
     expect(image?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
     expect(image?.style.objectPosition).toBe('20% 70%')
     expect(backgroundLayer?.querySelector(':scope > .dream-conversation-background-overlay')?.classList.contains('dream-conversation-background-overlay')).toBe(true)
-    expect(backgroundLayer?.nextElementSibling?.classList.contains('thread-content')).toBe(true)
+    expect(backgroundLayer?.nextElementSibling).toBe(surface)
+    expect(surface?.firstElementChild?.classList.contains('thread-content')).toBe(true)
     stateOf(window).ensure()
-    expect(surface?.querySelectorAll(':scope > .dream-conversation-background')).toHaveLength(1)
+    expect(viewport?.querySelectorAll(':scope > .dream-conversation-background')).toHaveLength(1)
     expect(backgroundLayer?.querySelectorAll(':scope > .dream-conversation-background-media')).toHaveLength(1)
 
     stateOf(window).cleanup()
     expect(window.document.querySelector('.dream-conversation-surface')).toBeNull()
+    expect(window.document.querySelector('.dream-conversation-viewport')).toBeNull()
     expect(window.document.querySelector('.dream-conversation-background')).toBeNull()
+  })
+
+  it('keeps the conversation background outside the scrolling content during streaming updates', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div class="conversation-viewport"><div class="thread-scroll-container" data-app-action-timeline-scroll><div class="thread-content"><article data-message-author-role="assistant">Reply</article><div class="sticky"><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></div></div></div></main>'
+    const background: RuntimeConversationBackgroundConfig = {
+      visible: true,
+      mode: 'color',
+      color: '#F7FFFF',
+      source: null,
+      opacity: 1,
+      overlayColor: '#FFFFFF',
+      overlayOpacity: .2,
+      focus: { x: .5, y: .5 },
+      scale: 1
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+
+    const surface = window.document.querySelector('.dream-conversation-surface') as HTMLElement | null
+    const viewport = surface?.parentElement
+    const backgroundLayer = viewport?.querySelector(':scope > .dream-conversation-background')
+    if (!surface || !viewport || !backgroundLayer) throw new Error('Conversation background fixture is missing.')
+
+    const staleBackground = window.document.createElement('div')
+    staleBackground.className = 'dream-conversation-background'
+    surface.prepend(staleBackground as unknown as Node)
+    stateOf(window).ensure()
+    expect(staleBackground.isConnected).toBe(false)
+    expect(viewport.querySelectorAll(':scope > .dream-conversation-background')).toHaveLength(1)
+
+    surface.scrollTop = 420
+    const streamingMessage = window.document.createElement('article')
+    streamingMessage.textContent = '继续输出中的新内容'
+    surface.querySelector('.thread-content')?.appendChild(streamingMessage as unknown as Node)
+    stateOf(window).ensure()
+
+    expect(backgroundLayer.isConnected).toBe(true)
+    expect(backgroundLayer.parentElement).toBe(viewport)
+    expect(surface.querySelector(':scope > .dream-conversation-background')).toBeNull()
+    expect(viewport.querySelectorAll(':scope > .dream-conversation-background')).toHaveLength(1)
+    expect(surface.scrollTop).toBe(420)
   })
 
   it('starts a muted looping conversation video and removes it when the page changes', () => {

@@ -221,18 +221,19 @@ html.codex-dream-skin [role="main"] {
   scrollbar-color: var(--dream-global-scrollbar) transparent;
 }
 
-html.codex-dream-skin .dream-conversation-surface {
+html.codex-dream-skin .dream-conversation-viewport {
   position: relative !important;
   isolation: isolate !important;
   background: transparent !important;
 }
 
-html.codex-dream-skin .dream-conversation-surface > :not(.dream-conversation-background) {
+html.codex-dream-skin .dream-conversation-surface {
   position: relative !important;
   z-index: 1 !important;
+  background: transparent !important;
 }
 
-html.codex-dream-skin .dream-conversation-background {
+html.codex-dream-skin .dream-conversation-viewport > .dream-conversation-background {
   position: absolute !important;
   z-index: 0 !important;
   inset: 0 !important;
