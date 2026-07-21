@@ -32,7 +32,12 @@ export function buildThemeStyleVariables(profile: ThemeProfile): ThemeStyleVaria
     '--dream-font-brand-subtitle': resolveFontFamily(profile, profile.typography.slots.brandSubtitle),
     '--dream-font-brand-signature': resolveFontFamily(profile, profile.typography.slots.brandSignature),
     '--dream-font-home-heading-decoration': resolveFontFamily(profile, profile.typography.slots.homeHeadingDecoration),
-    '--dream-font-composer-melody': resolveFontFamily(profile, profile.typography.slots.composerMelody)
+    '--dream-font-composer-melody': resolveFontFamily(profile, profile.typography.slots.composerMelody),
+    '--dream-font-sidebar-nav-new-task': resolveFontFamily(profile, profile.typography.slots.sidebarNavNewTask),
+    '--dream-font-sidebar-nav-pull-requests': resolveFontFamily(profile, profile.typography.slots.sidebarNavPullRequests),
+    '--dream-font-sidebar-nav-sites': resolveFontFamily(profile, profile.typography.slots.sidebarNavSites),
+    '--dream-font-sidebar-nav-scheduled': resolveFontFamily(profile, profile.typography.slots.sidebarNavScheduled),
+    '--dream-font-sidebar-nav-plugins': resolveFontFamily(profile, profile.typography.slots.sidebarNavPlugins)
   }
 
   for (const [token, definition] of Object.entries(APPEARANCE_COLOR_TOKENS)) {

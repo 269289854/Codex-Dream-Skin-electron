@@ -208,6 +208,60 @@ describe('renderer home DOM adaptation', () => {
     expect(icon?.textContent).toBe('♫')
   })
 
+  it('customizes five sidebar navigation items independently and restores their native DOM', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <aside class="app-shell-left-panel">
+        <button aria-label="切换模式，当前模式：Codex"><span>Codex</span><svg><path d="mode" /></svg></button>
+        <button data-app-action-sidebar-section-toggle><span>项目</span><svg><path d="projects" /></svg></button>
+        <button data-app-action-sidebar-section-toggle><span>任务</span><svg><path d="tasks" /></svg></button>
+        <nav>${[
+          ['新建任务', 'newTask'],
+          ['拉取请求', 'pullRequests'],
+          ['站点', 'sites'],
+          ['已安排', 'scheduled'],
+          ['插件', 'plugins']
+        ].map(([label, id], index) => `<button ${index === 2 ? 'aria-current="page"' : ''}><div><span class="native-icon"><svg><path d="${id}" /></svg></span><span class="text-fade-truncate">${label}</span></div></button>`).join('')}</nav>
+      </aside><main class="main-surface"><div role="main"><article>Reply</article></div></main>`
+    inject(window, {
+      sidebarMode: { name: 'music' },
+      sidebarNavNewTask: { name: 'square-pen' },
+      sidebarNavPullRequests: { name: 'git-pull-request' },
+      sidebarNavSites: { name: 'grid-2x2' },
+      sidebarNavScheduled: { name: 'clock-3' },
+      sidebarNavPlugins: { name: 'at-sign' }
+    }, {
+      ...DEFAULT_HOME_COPY,
+      ...DEFAULT_BRAND_COPY,
+      sidebarModeTitle: 'Dream',
+      sidebarProjectsTitle: '作品集',
+      sidebarTasksTitle: '工作项',
+      sidebarNavNewTask: '<b>创建</b>',
+      sidebarNavPullRequests: '代码审阅',
+      sidebarNavSites: '应用站点',
+      sidebarNavScheduled: '计划任务',
+      sidebarNavPlugins: '扩展中心'
+    })
+
+    const navButtons = [...window.document.querySelectorAll('nav > button')]
+    expect(navButtons.map((button) => button.querySelector('.text-fade-truncate')?.textContent)).toEqual(['<b>创建</b>', '代码审阅', '应用站点', '计划任务', '扩展中心'])
+    expect(window.document.querySelector('nav b')).toBeNull()
+    expect(navButtons.map((button) => button.querySelector('.native-icon')?.textContent)).toEqual(['✎', '⑂', '▦', '◷', '@'])
+    expect(navButtons[1]?.querySelector('.native-icon')?.classList.contains('dream-sidebar-nav-icon')).toBe(true)
+    expect(navButtons[2]?.classList.contains('dream-sidebar-nav-sites-selected')).toBe(true)
+    expect(window.document.querySelector('button[aria-label^="切换模式"] span')?.textContent).toBe('Dream')
+    expect([...window.document.querySelectorAll('button[data-app-action-sidebar-section-toggle] span')].map((node) => node.textContent)).toEqual(['作品集', '工作项'])
+
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('[data-dream-sidebar-nav]')).toHaveLength(5)
+    stateOf(window).cleanup()
+    expect(navButtons.map((button) => button.querySelector('.text-fade-truncate')?.textContent)).toEqual(['新建任务', '拉取请求', '站点', '已安排', '插件'])
+    expect(navButtons[0]?.querySelector('.native-icon svg path')?.getAttribute('d')).toBe('newTask')
+    expect(navButtons[1]?.querySelector('.native-icon')?.getAttribute('class')).toBe('native-icon')
+    expect(window.document.querySelector('button[aria-label^="切换模式"] span')?.textContent).toBe('Codex')
+    expect([...window.document.querySelectorAll('button[data-app-action-sidebar-section-toggle] span')].map((node) => node.textContent)).toEqual(['项目', '任务'])
+  })
+
   it('marks the real project folder row without marking its action buttons', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')

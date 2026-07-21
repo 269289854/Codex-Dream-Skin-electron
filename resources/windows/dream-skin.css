@@ -106,6 +106,44 @@ html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row
   transform: none;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel nav :is(.dream-sidebar-nav-newTask, .dream-sidebar-nav-pullRequests, .dream-sidebar-nav-sites, .dream-sidebar-nav-scheduled, .dream-sidebar-nav-plugins) {
+  font-family: var(--dream-font-ui) !important;
+}
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-icon {
+  width: 18px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  flex: 0 0 18px !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-icon > :is(img, svg) {
+  width: 18px !important;
+  height: 18px !important;
+}
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-newTask { color: var(--dream-sidebar-nav-new-task-text) !important; font-family: var(--dream-font-sidebar-nav-new-task) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-newTask:hover { color: var(--dream-sidebar-nav-new-task-hover-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-newTask-selected,
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-newTask-selected:hover { color: var(--dream-sidebar-nav-new-task-selected-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-pullRequests { color: var(--dream-sidebar-nav-pull-requests-text) !important; font-family: var(--dream-font-sidebar-nav-pull-requests) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-pullRequests:hover { color: var(--dream-sidebar-nav-pull-requests-hover-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-pullRequests-selected,
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-pullRequests-selected:hover { color: var(--dream-sidebar-nav-pull-requests-selected-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-sites { color: var(--dream-sidebar-nav-sites-text) !important; font-family: var(--dream-font-sidebar-nav-sites) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-sites:hover { color: var(--dream-sidebar-nav-sites-hover-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-sites-selected,
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-sites-selected:hover { color: var(--dream-sidebar-nav-sites-selected-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-scheduled { color: var(--dream-sidebar-nav-scheduled-text) !important; font-family: var(--dream-font-sidebar-nav-scheduled) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-scheduled:hover { color: var(--dream-sidebar-nav-scheduled-hover-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-scheduled-selected,
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-scheduled-selected:hover { color: var(--dream-sidebar-nav-scheduled-selected-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-plugins { color: var(--dream-sidebar-nav-plugins-text) !important; font-family: var(--dream-font-sidebar-nav-plugins) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-plugins:hover { color: var(--dream-sidebar-nav-plugins-hover-text) !important; }
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-plugins-selected,
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-nav-plugins-selected:hover { color: var(--dream-sidebar-nav-plugins-selected-text) !important; }
+
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row {
   background: var(--dream-sidebar-project-row) !important;
   color: var(--dream-sidebar-project-text) !important;

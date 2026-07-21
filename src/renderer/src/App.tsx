@@ -1,9 +1,9 @@
 import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  AtSign, Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Clock3, Copy, Download,
-  GitBranch, GitPullRequest, Grid2X2, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
-  Plus, RotateCcw, Save, Search, Settings2, Sparkles, SquarePen, Trash2, Undo2, Upload, X
+  Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Copy, Download,
+  GitBranch, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
+  Plus, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
@@ -15,6 +15,7 @@ import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics }
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { mediaFlipCssTransform } from '../../shared/media'
 import type { CreateThemeInput, IconSlot, ThemeProfile, ThemeSummary } from '../../shared/theme'
+import { SIDEBAR_NAV_ITEMS } from '../../shared/sidebar-layout'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { ConversationBackgroundControls } from './ConversationBackgroundControls'
@@ -784,6 +785,12 @@ export function App(): React.JSX.Element {
         <aside className="inspector" ref={inspectorRef}>
           <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
+            <Property title="侧栏固定文案" anchor="visual-sidebar-copy" highlighted={inspectorAnchor === 'visual-sidebar-copy'}>
+              <label className="copy-field">模式标题<input value={draft.copy.sidebarModeTitle} maxLength={80} aria-invalid={!draft.copy.sidebarModeTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarModeTitle = value }) }} /></label>
+              <label className="copy-field">项目标题<input value={draft.copy.sidebarProjectsTitle} maxLength={80} aria-invalid={!draft.copy.sidebarProjectsTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarProjectsTitle = value }) }} /></label>
+              <label className="copy-field">任务标题<input value={draft.copy.sidebarTasksTitle} maxLength={80} aria-invalid={!draft.copy.sidebarTasksTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarTasksTitle = value }) }} /></label>
+              {SIDEBAR_NAV_ITEMS.map((item) => <label className="copy-field" key={item.id}>{item.label}<input value={draft.copy[item.copyField]} maxLength={80} aria-invalid={!draft.copy[item.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy[item.copyField] = value }) }} /></label>)}
+            </Property>
             <Property title="品牌文案" anchor="visual-brand-copy" highlighted={inspectorAnchor === 'visual-brand-copy'}>
               <label className="copy-field">品牌主标题<input value={draft.copy.brandTitle} maxLength={80} aria-invalid={!draft.copy.brandTitle.trim() || draft.copy.brandTitle.length > 80} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandTitle = value }) }} /></label>
               <label className="copy-field">品牌副标题<textarea value={draft.copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSubtitle = value }) }} /></label>
@@ -839,14 +846,6 @@ export function App(): React.JSX.Element {
     </main>
   )
 }
-
-const previewNavigation = [
-  { label: '新建任务', icon: SquarePen },
-  { label: '拉取请求', icon: GitPullRequest },
-  { label: '站点', icon: Grid2X2 },
-  { label: '已安排', icon: Clock3 },
-  { label: '插件', icon: AtSign }
-] as const
 
 const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
 const PREVIEW_SIDEBAR_WIDTH = 270
@@ -932,14 +931,15 @@ function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; asset
   return (
     <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
       <div className="codex-sidebar-header" data-preview-target="sidebar-header">
-        <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">Codex</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} injected /></span></div>
+        <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">{profile.copy.sidebarModeTitle}</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} injected /></span></div>
         <button className="codex-sidebar-icon-button" data-preview-target="sidebar-search" type="button" title="搜索"><Search size={19} /></button>
       </div>
-      <nav className="codex-primary-nav" aria-label="主要导航">
-        {previewNavigation.map(({ label, icon: Icon }) => <button type="button" data-preview-target="sidebar-nav" key={label}><Icon size={18} /><span>{label}</span></button>)}
+      <nav className="codex-primary-nav" aria-label="主要导航" data-preview-target="sidebar-nav">
+        {SIDEBAR_NAV_ITEMS.map((item) => <button type="button" data-preview-target={item.previewTarget} key={item.id}><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /><span>{profile.copy[item.copyField]}</span></button>)}
       </nav>
       <section className="codex-project-section">
-        <div className="codex-project-heading">项目</div>
+        <div className="codex-project-heading" data-preview-target="sidebar-project-title" tabIndex={0} role="button">{profile.copy.sidebarProjectsTitle}</div>
+        <div className="codex-task-heading" data-preview-target="sidebar-task-title" tabIndex={0} role="button">{profile.copy.sidebarTasksTitle}</div>
         <div className="codex-project-scroll">
           {PREVIEW_SIDEBAR_PROJECTS.map((project) => (
             <div className="codex-project-group" key={project.name}>

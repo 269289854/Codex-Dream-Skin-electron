@@ -1,4 +1,10 @@
 import WebSocket from 'ws'
+
+// Runtime CSS embeds selected font files as Base64. The sidebar now supports
+// independent font slots, so the legacy 20 MB ceiling rejected valid themes
+// before they could reach the verified Codex page.
+export const MAX_THEME_PAYLOAD_BYTES = 64 * 1024 * 1024
+
 interface CdpVersion { webSocketDebuggerUrl: string }
 interface CdpTarget { id: string; type: string; url: string; webSocketDebuggerUrl: string }
 export interface CdpMediaBinding { role: 'hero' | 'polaroid' | 'conversationBackground'; path: string; mimeType: string }
@@ -47,7 +53,7 @@ export class CdpWatcher {
   }
 
   setPayload(payload: string): void {
-    if (!payload || payload.length > 20_000_000) throw new Error('Theme payload is invalid.')
+    if (!payload || Buffer.byteLength(payload, 'utf8') > MAX_THEME_PAYLOAD_BYTES) throw new Error('Theme payload is invalid.')
     this.payload = payload
   }
 

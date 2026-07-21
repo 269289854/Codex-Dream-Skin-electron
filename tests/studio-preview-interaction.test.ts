@@ -740,6 +740,65 @@ describe('Studio preview editing interaction', () => {
     expect(selectIcon).toHaveBeenCalledTimes(2)
   })
 
+  it('edits each sidebar navigation item without changing the other items', async () => {
+    const newTask = container.querySelector('[data-preview-target="sidebar-nav-new-task"]')
+    const pullRequests = container.querySelector('[data-preview-target="sidebar-nav-pull-requests"]')
+    const canvas = container.querySelector<HTMLElement>('.codex-preview')
+    if (!newTask || !pullRequests || !canvas) throw new Error('Sidebar navigation preview is missing.')
+    const originalPullRequests = pullRequests.textContent
+
+    pointerDown(newTask)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('新建任务导航项快捷配置')
+    enterQuickCopy('快速创建')
+
+    const font = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="sidebarNavNewTask"] select')
+    if (!font) throw new Error('Sidebar navigation font control is missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLSelectElement.prototype, 'value')?.set?.call(font, 'builtin:jetbrains-mono')
+      font.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+
+    const iconTrigger = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="sidebarNavNewTask"] .icon-picker-trigger')
+    if (!iconTrigger) throw new Error('Sidebar navigation icon control is missing.')
+    act(() => iconTrigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const starOption = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-name="star"]')
+    if (!starOption) throw new Error('Built-in star icon option is missing.')
+    act(() => starOption.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
+    const normalColor = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="sidebarNavNewTaskText"] .color-text-input')
+    if (!normalColor) throw new Error('Normal navigation color control is missing.')
+    act(() => setInputValue(normalColor, '#123456'))
+    const selectedTab = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .state-tabs button')].find((button) => button.textContent === '选中')
+    if (!selectedTab) throw new Error('Selected state tab is missing.')
+    act(() => selectedTab.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const selectedColor = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="sidebarNavNewTaskSelectedText"] .color-text-input')
+    if (!selectedColor) throw new Error('Selected navigation color control is missing.')
+    act(() => setInputValue(selectedColor, '#654321'))
+
+    expect(container.querySelector('[data-preview-target="sidebar-nav-new-task"]')?.textContent).toContain('快速创建')
+    expect(container.querySelector('[data-preview-target="sidebar-nav-new-task"]')?.textContent).toContain('★')
+    expect(pullRequests.textContent).toBe(originalPullRequests)
+    expect(canvas.style.getPropertyValue('--dream-font-sidebar-nav-new-task')).toContain('Dream JetBrains Mono')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-nav-new-task-text')).toBe('#123456')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-nav-new-task-selected-text')).toBe('#654321')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-nav-pull-requests-text')).not.toBe('#123456')
+
+    act(() => browserWindow.document.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    pointerDown(pullRequests)
+    expect(container.querySelector('[role="dialog"] .quick-copy-field input')?.getAttribute('value')).toBe(profile.copy.sidebarNavPullRequests)
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.copy.sidebarNavNewTask).toBe('快速创建')
+    expect(savedProfiles.at(-1)?.icons.sidebarNavNewTask).toEqual({ kind: 'builtin', name: 'star' })
+    expect(savedProfiles.at(-1)?.typography.slots.sidebarNavNewTask).toEqual({ kind: 'builtin', id: 'jetbrains-mono' })
+    expect(savedProfiles.at(-1)?.appearance.colors).toMatchObject({ sidebarNavNewTaskText: '#123456', sidebarNavNewTaskSelectedText: '#654321' })
+  })
+
   it('saves the current draft before installing or reinjecting runtime changes', async () => {
     const iconSettings = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('图标样式'))
     if (!iconSettings) throw new Error('Icon settings navigation is missing.')

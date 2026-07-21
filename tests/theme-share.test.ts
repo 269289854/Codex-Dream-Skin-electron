@@ -79,7 +79,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(12)
+    expect(imported.version).toBe(13)
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
   })

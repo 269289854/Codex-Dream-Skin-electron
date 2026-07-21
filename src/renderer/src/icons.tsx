@@ -5,7 +5,7 @@ import {
   Heart, Home, Image, Info, KeyRound, Laptop, Lightbulb, Link, List, Lock, Mail, MapPin, Menu,
   MessageCircle, Mic, Minus, Moon, MoreHorizontal, Music, Palette, Paperclip, Pencil, Pin, Play, Plus,
   Rocket, Search, Settings, Shield, Smile, Snowflake, Sparkles, Square, Star, Sun, Terminal,
-  ThumbsUp, Trash2, User, Users, Video, WandSparkles, X, Zap,
+  AtSign, Clock3, GitPullRequest, Grid2X2, SquarePen, ThumbsUp, Trash2, User, Users, Video, WandSparkles, X, Zap,
   type LucideIcon
 } from 'lucide-react'
 
@@ -16,6 +16,11 @@ export const builtinIcons: Record<string, LucideIcon> = {
   image: Image,
   send: ArrowUp,
   'folder-code': FolderCode,
+  'square-pen': SquarePen,
+  'git-pull-request': GitPullRequest,
+  'grid-2x2': Grid2X2,
+  'clock-3': Clock3,
+  'at-sign': AtSign,
   heart: Heart,
   droplet: Droplet,
   star: Star,
@@ -90,6 +95,7 @@ export const builtinIcons: Record<string, LucideIcon> = {
 
 export const builtinIconLabels: Readonly<Record<string, string>> = Object.freeze({
   music: '音乐', sparkles: '闪烁', 'wand-sparkles': '魔法闪烁', image: '图片', send: '发送', 'folder-code': '代码文件夹',
+  'square-pen': '新建任务', 'git-pull-request': '拉取请求', 'grid-2x2': '站点', 'clock-3': '已安排', 'at-sign': '插件',
   heart: '爱心', droplet: '水滴', star: '星星', snowflake: '雪花', pin: '图钉', home: '首页', search: '搜索', settings: '设置',
   menu: '菜单', plus: '加号', minus: '减号', check: '勾选', 'check-circle': '完成', close: '关闭', 'arrow-up': '向上箭头',
   'arrow-down': '向下箭头', 'arrow-left': '向左箭头', 'arrow-right': '向右箭头', 'chevron-up': '向上折叠', 'chevron-down': '向下展开',

@@ -15,7 +15,12 @@ describe('typography model', () => {
         brandSubtitle: { kind: 'inherit' },
         brandSignature: { kind: 'builtin', id: 'segoe-script' },
         homeHeadingDecoration: { kind: 'inherit' },
-        composerMelody: { kind: 'inherit' }
+        composerMelody: { kind: 'inherit' },
+        sidebarNavNewTask: { kind: 'inherit' },
+        sidebarNavPullRequests: { kind: 'inherit' },
+        sidebarNavSites: { kind: 'inherit' },
+        sidebarNavScheduled: { kind: 'inherit' },
+        sidebarNavPlugins: { kind: 'inherit' }
       },
       importedFonts: []
     })

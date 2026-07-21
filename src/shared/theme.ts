@@ -3,6 +3,7 @@ import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema } from './
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
 import { PARTICLE_EFFECT_IDS } from './particle-effects'
 import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
+import { DEFAULT_SIDEBAR_COPY, DEFAULT_SIDEBAR_NAV_COPY, SIDEBAR_NAV_ITEMS } from './sidebar-layout'
 
 const normalized = z.number().finite().min(0).max(1)
 
@@ -56,6 +57,14 @@ const currentParticleIconsSchema = versionSevenIconsSchema.extend({
   backgroundRain: iconSourceSchema,
   backgroundMeteor: iconSourceSchema,
   backgroundSnow: iconSourceSchema
+}).strict()
+
+const currentSidebarIconsSchema = currentParticleIconsSchema.extend({
+  sidebarNavNewTask: iconSourceSchema,
+  sidebarNavPullRequests: iconSourceSchema,
+  sidebarNavSites: iconSourceSchema,
+  sidebarNavScheduled: iconSourceSchema,
+  sidebarNavPlugins: iconSourceSchema
 }).strict()
 
 const composerBadgeSchema = z.object({ visible: z.boolean() }).strict()
@@ -137,6 +146,18 @@ export const themeColorsSchema = z.object({
   success: cssColorSchema,
   danger: cssColorSchema
 }).strict()
+
+const sidebarCopyFields = {
+  sidebarModeTitle: z.string().trim().min(1).max(80),
+  sidebarProjectsTitle: z.string().trim().min(1).max(80),
+  sidebarTasksTitle: z.string().trim().min(1).max(80),
+  sidebarNavNewTask: z.string().trim().min(1).max(80),
+  sidebarNavPullRequests: z.string().trim().min(1).max(80),
+  sidebarNavSites: z.string().trim().min(1).max(80),
+  sidebarNavScheduled: z.string().trim().min(1).max(80),
+  sidebarNavPlugins: z.string().trim().min(1).max(80)
+}
+const currentThemeCopySchema = themeCopySchema.extend(sidebarCopyFields).strict()
 
 export type ThemeColors = z.infer<typeof themeColorsSchema>
 
@@ -341,7 +362,7 @@ const versionElevenThemeSchema = z.object({
 const currentHeroSchema = versionElevenHeroSchema.extend({ mediaTransform: mediaTransformSchema }).strict()
 const currentPolaroidMediaSchema = versionElevenPolaroidMediaSchema.extend({ mediaTransform: mediaTransformSchema }).strict()
 
-export const themeProfileSchema = z.object({
+const versionTwelveThemeSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   version: z.literal(12),
@@ -352,6 +373,27 @@ export const themeProfileSchema = z.object({
   colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
+  composerBadge: composerBadgeSchema,
+  decorations: decorationsSchema,
+  appearance: themeAppearanceSchema,
+  typography: themeTypographySchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(80),
+  version: z.literal(13),
+  updatedAt: z.string().datetime(),
+  hero: currentHeroSchema,
+  polaroid: currentPolaroidMediaSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  colors: themeColorsSchema,
+  copy: currentThemeCopySchema,
+  icons: currentSidebarIconsSchema,
   composerBadge: composerBadgeSchema,
   decorations: decorationsSchema,
   appearance: themeAppearanceSchema,
@@ -468,9 +510,9 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
   return {
     id,
     name,
-    version: 12,
+    version: 13,
     updatedAt: new Date().toISOString(),
-    copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY },
+    copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
       source: null,
       focus: { x: 0.62, y: 0.42 },
@@ -511,7 +553,12 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       backgroundSnow: { kind: 'builtin', name: 'snowflake' },
       project: { kind: 'builtin', name: 'folder-code' },
       decoration: { kind: 'builtin', name: 'heart' },
-      polaroidPin: { kind: 'builtin', name: 'pin' }
+      polaroidPin: { kind: 'builtin', name: 'pin' },
+      sidebarNavNewTask: { kind: 'builtin', name: 'square-pen' },
+      sidebarNavPullRequests: { kind: 'builtin', name: 'git-pull-request' },
+      sidebarNavSites: { kind: 'builtin', name: 'grid-2x2' },
+      sidebarNavScheduled: { kind: 'builtin', name: 'clock-3' },
+      sidebarNavPlugins: { kind: 'builtin', name: 'at-sign' }
     },
     composerBadge: { visible: true },
     decorations: createDefaultDecorations(),
@@ -523,6 +570,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
 export function parseThemeProfile(input: unknown): ThemeProfile {
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 1 && input.version <= 10) {
     const legacy = structuredClone(input) as Record<string, unknown>
+    stripSidebarFields(legacy)
     const hero = legacy.hero && typeof legacy.hero === 'object' ? legacy.hero as Record<string, unknown> : null
     const polaroid = legacy.polaroid && typeof legacy.polaroid === 'object' ? legacy.polaroid as Record<string, unknown> : null
     if (hero && !('sourceImage' in hero)) hero.sourceImage = hero.source && typeof hero.source === 'object' && typeof (hero.source as Record<string, unknown>).asset === 'string' ? (hero.source as Record<string, unknown>).asset : null
@@ -532,15 +580,19 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 12) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 13) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     Object.defineProperty(parsed.hero, 'sourceImage', { value: parsed.hero.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
     Object.defineProperty(parsed.polaroid, 'sourceImage', { value: parsed.polaroid.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
     return parsed
   }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 12) {
+    const candidate = normalizeCurrentMediaReferences(stripSidebarFields(structuredClone(input) as Record<string, unknown>))
+    return migrateVersionTwelve(versionTwelveThemeSchema.parse(candidate))
+  }
   if (input && typeof input === 'object' && 'version' in input && input.version === 11) {
-    const legacy = normalizeCurrentMediaReferences(input)
+    const legacy = normalizeCurrentMediaReferences(stripSidebarFields(structuredClone(input) as Record<string, unknown>))
     delete legacy.conversationBackground
     return migrateVersionEleven(versionElevenThemeSchema.parse(legacy))
   }
@@ -692,11 +744,23 @@ function migrateVersionTen(legacy: z.infer<typeof versionTenThemeSchema>): Theme
 }
 
 function migrateVersionEleven(legacy: z.infer<typeof versionElevenThemeSchema>): ThemeProfile {
-  return themeProfileSchema.parse({
+  return migrateVersionTwelve(versionTwelveThemeSchema.parse({
     ...legacy,
     version: 12,
     hero: { ...legacy.hero, mediaTransform: createDefaultMediaTransform() },
     polaroid: { ...legacy.polaroid, mediaTransform: createDefaultMediaTransform() }
+  }))
+}
+
+function migrateVersionTwelve(legacy: z.infer<typeof versionTwelveThemeSchema>): ThemeProfile {
+  const sidebarIcons = Object.fromEntries(SIDEBAR_NAV_ITEMS.map((item) => [item.iconSlot, { kind: 'builtin', name: item.iconName }]))
+  const sidebarFonts = Object.fromEntries(SIDEBAR_NAV_ITEMS.map((item) => [item.fontSlot, { kind: 'inherit' }]))
+  return themeProfileSchema.parse({
+    ...legacy,
+    version: 13,
+    copy: { ...legacy.copy, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
+    icons: { ...legacy.icons, ...sidebarIcons },
+    typography: { ...legacy.typography, slots: { ...legacy.typography.slots, ...sidebarFonts } }
   })
 }
 
@@ -726,6 +790,17 @@ function normalizeCurrentMediaReferences(input: object): Record<string, unknown>
   if (polaroid) delete polaroid.sourceImage
   if (hero) candidate.hero = hero
   if (polaroid) candidate.polaroid = polaroid
+  return candidate
+}
+
+function stripSidebarFields(candidate: Record<string, unknown>): Record<string, unknown> {
+  const copy = candidate.copy && typeof candidate.copy === 'object' ? candidate.copy as Record<string, unknown> : null
+  if (copy) for (const field of [...Object.keys(DEFAULT_SIDEBAR_COPY), ...Object.keys(DEFAULT_SIDEBAR_NAV_COPY)]) delete copy[field]
+  const icons = candidate.icons && typeof candidate.icons === 'object' ? candidate.icons as Record<string, unknown> : null
+  if (icons) for (const item of SIDEBAR_NAV_ITEMS) delete icons[item.iconSlot]
+  const typography = candidate.typography && typeof candidate.typography === 'object' ? candidate.typography as Record<string, unknown> : null
+  const slots = typography?.slots && typeof typography.slots === 'object' ? typography.slots as Record<string, unknown> : null
+  if (slots) for (const item of SIDEBAR_NAV_ITEMS) delete slots[item.fontSlot]
   return candidate
 }
 

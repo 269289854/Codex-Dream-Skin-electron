@@ -22,11 +22,11 @@ export const colorLabels: Record<keyof ThemeColors, string> = {
 }
 
 export const iconLabels: Record<IconSlot, string> = {
-  sidebarMode: '侧边栏模式', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '呼吸闪烁', backgroundFloat: '轻盈漂浮', backgroundRain: '垂直雨落', backgroundMeteor: '斜向流星', backgroundSnow: '摇曳飘雪', project: '项目', decoration: '装饰', polaroidPin: '图钉'
+  sidebarMode: '侧边栏模式', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '呼吸闪烁', backgroundFloat: '轻盈漂浮', backgroundRain: '垂直雨落', backgroundMeteor: '斜向流星', backgroundSnow: '摇曳飘雪', project: '项目', decoration: '装饰', polaroidPin: '图钉', sidebarNavNewTask: '新建任务图标', sidebarNavPullRequests: '拉取请求图标', sidebarNavSites: '站点图标', sidebarNavScheduled: '已安排图标', sidebarNavPlugins: '插件图标'
 }
 
 export const typographyLabels: Record<TypographySlot, string> = {
-  ui: '全局界面', homeHeading: '首页标题', homeSubtitle: '首页副标题', brandTitle: '品牌主标题', brandSubtitle: '品牌副标题', brandSignature: '品牌签名', homeHeadingDecoration: '首页标题装饰', composerMelody: '输入框旋律'
+  ui: '全局界面', homeHeading: '首页标题', homeSubtitle: '首页副标题', brandTitle: '品牌主标题', brandSubtitle: '品牌副标题', brandSignature: '品牌签名', homeHeadingDecoration: '首页标题装饰', composerMelody: '输入框旋律', sidebarNavNewTask: '新建任务字体', sidebarNavPullRequests: '拉取请求字体', sidebarNavSites: '站点字体', sidebarNavScheduled: '已安排字体', sidebarNavPlugins: '插件字体'
 }
 
 interface RangeProps {

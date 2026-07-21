@@ -58,10 +58,17 @@ export const PREVIEW_TARGETS = {
 
   'palette-sidebar': styleTarget('侧边栏', 'sidebar', { colors: ['sidebarBorder', 'sidebarText', 'sidebarMutedText'], paints: ['sidebarSurface'], fontSlot: 'ui' }),
   'sidebar-header': styleTarget('侧边栏头部', 'sidebar', { colors: ['sidebarHeaderText'], paints: ['sidebarHeader'], fontSlot: 'ui' }),
-  'sidebar-codex': styleTarget('Codex 标题', 'sidebar', { colors: ['sidebarCodexText'], fontSlot: 'ui' }),
+  'sidebar-codex': styleTarget('Codex 标题', 'sidebar', { colors: ['sidebarCodexText'], copyField: 'sidebarModeTitle', fontSlot: 'ui', inspectorAnchor: 'visual-sidebar-copy' }),
+  'sidebar-project-title': styleTarget('项目标题', 'sidebar', { copyField: 'sidebarProjectsTitle', colors: ['sidebarHeaderText'], fontSlot: 'ui', inspectorAnchor: 'visual-sidebar-copy' }),
+  'sidebar-task-title': styleTarget('任务标题', 'sidebar', { copyField: 'sidebarTasksTitle', colors: ['sidebarHeaderText'], fontSlot: 'ui', inspectorAnchor: 'visual-sidebar-copy' }),
   'sidebar-arrow': styleTarget('Codex 箭头', 'sidebar', { colors: ['sidebarArrow'] }),
   'sidebar-search': styleTarget('搜索按钮', 'sidebar', { colors: ['sidebarSearchIcon'], paints: ['sidebarSearchButton', 'sidebarSearchButtonHover'] }),
   'sidebar-nav': styleTarget('导航项', 'sidebar', { colors: ['sidebarNavText', 'sidebarNavHoverText', 'sidebarNavSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], fontSlot: 'ui' }),
+  'sidebar-nav-new-task': styleTarget('新建任务导航项', 'sidebar', { copyField: 'sidebarNavNewTask', iconSlot: 'sidebarNavNewTask', fontSlot: 'sidebarNavNewTask', colors: ['sidebarNavNewTaskText', 'sidebarNavNewTaskHoverText', 'sidebarNavNewTaskSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], inspectorAnchor: 'visual-sidebar-copy' }),
+  'sidebar-nav-pull-requests': styleTarget('拉取请求导航项', 'sidebar', { copyField: 'sidebarNavPullRequests', iconSlot: 'sidebarNavPullRequests', fontSlot: 'sidebarNavPullRequests', colors: ['sidebarNavPullRequestsText', 'sidebarNavPullRequestsHoverText', 'sidebarNavPullRequestsSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], inspectorAnchor: 'visual-sidebar-copy' }),
+  'sidebar-nav-sites': styleTarget('站点导航项', 'sidebar', { copyField: 'sidebarNavSites', iconSlot: 'sidebarNavSites', fontSlot: 'sidebarNavSites', colors: ['sidebarNavSitesText', 'sidebarNavSitesHoverText', 'sidebarNavSitesSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], inspectorAnchor: 'visual-sidebar-copy' }),
+  'sidebar-nav-scheduled': styleTarget('已安排导航项', 'sidebar', { copyField: 'sidebarNavScheduled', iconSlot: 'sidebarNavScheduled', fontSlot: 'sidebarNavScheduled', colors: ['sidebarNavScheduledText', 'sidebarNavScheduledHoverText', 'sidebarNavScheduledSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], inspectorAnchor: 'visual-sidebar-copy' }),
+  'sidebar-nav-plugins': styleTarget('插件导航项', 'sidebar', { copyField: 'sidebarNavPlugins', iconSlot: 'sidebarNavPlugins', fontSlot: 'sidebarNavPlugins', colors: ['sidebarNavPluginsText', 'sidebarNavPluginsHoverText', 'sidebarNavPluginsSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], inspectorAnchor: 'visual-sidebar-copy' }),
   'sidebar-project': styleTarget('项目行', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText'], paints: ['sidebarProjectRow', 'sidebarProjectRowHover'], fontSlot: 'ui' }),
   'sidebar-task': styleTarget('任务行', 'sidebar', { colors: ['sidebarTaskText', 'sidebarTaskSelectedText'], paints: ['sidebarTaskRow', 'sidebarTaskRowHover', 'sidebarTaskRowSelected'], fontSlot: 'ui' }),
   'sidebar-footer': styleTarget('侧边栏页脚', 'sidebar', { colors: ['sidebarFooterText'], paints: ['sidebarFooter'], fontSlot: 'ui' }),
@@ -122,7 +129,12 @@ export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
   backgroundSnow: 'sparkles',
   project: 'icon-project',
   decoration: 'icon-decoration',
-  polaroidPin: 'icon-polaroid-pin'
+  polaroidPin: 'icon-polaroid-pin',
+  sidebarNavNewTask: 'sidebar-nav-new-task',
+  sidebarNavPullRequests: 'sidebar-nav-pull-requests',
+  sidebarNavSites: 'sidebar-nav-sites',
+  sidebarNavScheduled: 'sidebar-nav-scheduled',
+  sidebarNavPlugins: 'sidebar-nav-plugins'
 }
 
 export function isPreviewTargetId(value: string | undefined): value is PreviewTargetId {

@@ -7,7 +7,7 @@ import { AppearanceColorControl, FontControl, PaintControl, RenderIcon, ThemeIco
 import type { ThemePaint } from '../src/shared/appearance'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { createDefaultTheme } from '../src/shared/theme'
-import { builtinIconOptions, builtinIcons } from '../src/renderer/src/icons'
+import { builtinIconLabels, builtinIconOptions, builtinIcons } from '../src/renderer/src/icons'
 
 const GLOBAL_KEYS = ['window', 'document', 'navigator', 'Element', 'HTMLElement', 'Node', 'Event', 'InputEvent', 'MouseEvent', 'PointerEvent'] as const
 
@@ -221,6 +221,14 @@ describe('editor appearance controls', () => {
     act(() => trigger.click())
     expect(container.querySelectorAll('.icon-picker-option[data-icon-name]:not([data-icon-name="__asset"])')).toHaveLength(builtinIconOptions.length)
     expect(container.querySelectorAll('.icon-picker-option:not([data-icon-name="__asset"]) svg')).toHaveLength(builtinIconOptions.length)
+  })
+
+  it('names the default sidebar icons without special original-icon labels', () => {
+    expect(builtinIconLabels['square-pen']).toBe('新建任务')
+    expect(builtinIconLabels['git-pull-request']).toBe('拉取请求')
+    expect(builtinIconLabels['grid-2x2']).toBe('站点')
+    expect(builtinIconLabels['clock-3']).toBe('已安排')
+    expect(builtinIconLabels['at-sign']).toBe('插件')
   })
 
   it('renders the runtime glyphs for injected sidebar and brand preview slots', () => {

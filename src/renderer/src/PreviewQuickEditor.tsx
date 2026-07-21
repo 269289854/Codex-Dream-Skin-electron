@@ -24,7 +24,15 @@ const copyFieldConfig: Record<PreviewCopyField, { label: string; maxLength: numb
   subtitle: { label: '副标题', maxLength: 160, rows: 3 },
   brandTitle: { label: '品牌主标题', maxLength: 80 },
   brandSubtitle: { label: '品牌副标题', maxLength: 120, rows: 2 },
-  brandSignature: { label: '品牌签名', maxLength: 32 }
+  brandSignature: { label: '品牌签名', maxLength: 32 },
+  sidebarModeTitle: { label: 'Codex 标题', maxLength: 80 },
+  sidebarProjectsTitle: { label: '项目标题', maxLength: 80 },
+  sidebarTasksTitle: { label: '任务标题', maxLength: 80 },
+  sidebarNavNewTask: { label: '导航文字：新建任务', maxLength: 80 },
+  sidebarNavPullRequests: { label: '导航文字：拉取请求', maxLength: 80 },
+  sidebarNavSites: { label: '导航文字：站点', maxLength: 80 },
+  sidebarNavScheduled: { label: '导航文字：已安排', maxLength: 80 },
+  sidebarNavPlugins: { label: '导航文字：插件', maxLength: 80 }
 }
 
 interface PreviewQuickEditorProps {

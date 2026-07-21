@@ -1,6 +1,7 @@
 import type { CompiledTheme } from '../shared/contracts'
 import type { Fence } from '../shared/geometry'
 import { HOME_ACTIONS } from '../shared/home-layout'
+import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
 import { mediaFlipCssTransform } from '../shared/media'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
@@ -44,7 +45,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 12, profile, home: { actions: HOME_ACTIONS }, assets, conversationBackground }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 13, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground }).replace(/</g, '\\u003c'),
     assets
   }
 }

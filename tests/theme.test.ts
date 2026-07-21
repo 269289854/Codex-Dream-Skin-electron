@@ -4,6 +4,8 @@ import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parse
 import { compileTheme } from '../src/main/theme-compiler'
 import { buildDynamicThemeCss } from '../src/main/codex-service'
 import { buildThemeStyleVariables } from '../src/shared/runtime-theme'
+import { DEFAULT_SIDEBAR_COPY, DEFAULT_SIDEBAR_NAV_COPY, SIDEBAR_NAV_ITEMS } from '../src/shared/sidebar-layout'
+import { APPEARANCE_COLOR_TOKENS } from '../src/shared/appearance'
 
 const id = '11111111-1111-4111-8111-111111111111'
 
@@ -23,10 +25,71 @@ describe('theme schema and compiler', () => {
     expect(first.colors).not.toBe(DEFAULT_THEME_COLORS)
   })
 
+  it('migrates version twelve sidebar defaults and validates independent navigation settings', () => {
+    const current = createDefaultTheme(id)
+    expect(current.version).toBe(13)
+    expect(current.copy).toMatchObject({ ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY })
+    for (const item of SIDEBAR_NAV_ITEMS) {
+      expect(current.icons[item.iconSlot]).toEqual({ kind: 'builtin', name: item.iconName })
+      expect(current.typography.slots[item.fontSlot]).toEqual({ kind: 'inherit' })
+    }
+
+    const {
+      sidebarModeTitle: _sidebarModeTitle,
+      sidebarProjectsTitle: _sidebarProjectsTitle,
+      sidebarTasksTitle: _sidebarTasksTitle,
+      sidebarNavNewTask: _sidebarNavNewTask,
+      sidebarNavPullRequests: _sidebarNavPullRequests,
+      sidebarNavSites: _sidebarNavSites,
+      sidebarNavScheduled: _sidebarNavScheduled,
+      sidebarNavPlugins: _sidebarNavPlugins,
+      ...versionTwelveCopy
+    } = current.copy
+    const {
+      sidebarNavNewTask: _sidebarNavNewTaskIcon,
+      sidebarNavPullRequests: _sidebarNavPullRequestsIcon,
+      sidebarNavSites: _sidebarNavSitesIcon,
+      sidebarNavScheduled: _sidebarNavScheduledIcon,
+      sidebarNavPlugins: _sidebarNavPluginsIcon,
+      ...versionTwelveIcons
+    } = current.icons
+    const {
+      sidebarNavNewTask: _sidebarNavNewTaskFont,
+      sidebarNavPullRequests: _sidebarNavPullRequestsFont,
+      sidebarNavSites: _sidebarNavSitesFont,
+      sidebarNavScheduled: _sidebarNavScheduledFont,
+      sidebarNavPlugins: _sidebarNavPluginsFont,
+      ...versionTwelveSlots
+    } = current.typography.slots
+    const migrated = parseThemeProfile({
+      ...current,
+      version: 12,
+      copy: versionTwelveCopy,
+      icons: versionTwelveIcons,
+      typography: { ...current.typography, slots: versionTwelveSlots }
+    })
+    expect(migrated.version).toBe(13)
+    expect(migrated.copy).toMatchObject({ ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY })
+
+    const navigationColorTokens = Object.keys(APPEARANCE_COLOR_TOKENS).filter((token) => /^sidebarNav(NewTask|PullRequests|Sites|Scheduled|Plugins)/.test(token))
+    expect(navigationColorTokens).toHaveLength(15)
+    expect(() => parseThemeProfile({ ...current, copy: { ...current.copy, sidebarNavSites: ' ' } })).toThrow()
+    expect(() => parseThemeProfile({ ...current, copy: { ...current.copy, sidebarNavSites: '字'.repeat(81) } })).toThrow()
+    expect(() => parseThemeProfile({ ...current, appearance: { ...current.appearance, colors: { ...current.appearance.colors, sidebarNavSitesText: 'not-a-color' } } })).toThrow()
+
+    const second = createDefaultTheme('22222222-2222-4222-8222-222222222222')
+    current.copy.sidebarNavSites = '自定义站点'
+    current.icons.sidebarNavSites = { kind: 'builtin', name: 'star' }
+    current.typography.slots.sidebarNavSites = { kind: 'builtin', id: 'jetbrains-mono' }
+    expect(second.copy.sidebarNavSites).toBe(DEFAULT_SIDEBAR_NAV_COPY.sidebarNavSites)
+    expect(second.icons.sidebarNavSites).toEqual({ kind: 'builtin', name: 'grid-2x2' })
+    expect(second.typography.slots.sidebarNavSites).toEqual({ kind: 'inherit' })
+  })
+
   it('validates current themes and migrates version zero through nine profiles', () => {
     const current = createDefaultTheme(id)
-    const expectedCopy = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }
-    expect(parseThemeProfile(current).version).toBe(12)
+    const expectedCopy = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY }
+    expect(parseThemeProfile(current).version).toBe(13)
     expect(current.hero.playback).toEqual({ autoplay: true, loop: true, sound: false, volume: 0.7 })
     expect(current.polaroid.playback).toEqual({ autoplay: true, loop: true, sound: false, volume: 0.7 })
     expect(current.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
@@ -54,7 +117,7 @@ describe('theme schema and compiler', () => {
 
     const { mode: _versionEightMode, style: _versionEightStyle, ...versionEightPolaroid } = current.polaroid
     const migratedEight = parseThemeProfile({ ...current, version: 8, polaroid: versionEightPolaroid })
-    expect(migratedEight.version).toBe(12)
+    expect(migratedEight.version).toBe(13)
     expect(migratedEight.polaroid.mode).toBe('fence')
 
     const { backgroundFloat: _backgroundFloat, backgroundRain: _backgroundRain, backgroundMeteor: _backgroundMeteor, backgroundSnow: _backgroundSnow, ...versionSevenIcons } = current.icons
@@ -67,7 +130,7 @@ describe('theme schema and compiler', () => {
       decorations: { ...versionSevenDecorations, sparkles: Object.fromEntries(Object.entries(current.decorations.sparkles).filter(([key]) => key !== 'effect' && key !== 'speed')) }
     }
     const migratedSeven = parseThemeProfile(versionSeven)
-    expect(migratedSeven.version).toBe(12)
+    expect(migratedSeven.version).toBe(13)
     expect(migratedSeven.polaroid.mode).toBe('fence')
     expect(migratedSeven.decorations.sparkles).toMatchObject({ effect: 'twinkle', speed: 1 })
     expect(migratedSeven.icons.backgroundSparkle).toEqual(current.icons.backgroundSparkle)
@@ -81,7 +144,7 @@ describe('theme schema and compiler', () => {
     const { style: _styleSix, ...versionSixPolaroid } = current.polaroid
     const versionSix = { ...currentWithoutDecorations, version: 6, polaroid: versionSixPolaroid, icons: currentWithoutBackgroundSparkle, composerBadge: current.composerBadge, typography: versionSixTypography }
     const migratedSix = parseThemeProfile(versionSix)
-    expect(migratedSix.version).toBe(12)
+    expect(migratedSix.version).toBe(13)
     expect(migratedSix.decorations.sparkles.count).toBe(6)
     expect(migratedSix.decorations.composerMelody.text).toBe('♫ · · · ♡ · · · ♪')
     expect(migratedSix.decorations.homeHeading).toEqual(current.decorations.homeHeading)
@@ -92,7 +155,7 @@ describe('theme schema and compiler', () => {
     const { composerBadge: _composerBadgeIcon, ...versionFiveIcons } = currentWithoutBackgroundSparkle
     const versionFour = { ...versionFiveFields, version: 4, polaroid: versionFourPolaroid, icons: versionFiveIcons }
     const migratedFour = parseThemeProfile(versionFour)
-    expect(migratedFour.version).toBe(12)
+    expect(migratedFour.version).toBe(13)
     expect(migratedFour.appearance).toEqual({ colors: {}, paints: {} })
     expect(migratedFour.typography.slots.brandSignature).toEqual({ kind: 'builtin', id: 'segoe-script' })
 
@@ -105,7 +168,7 @@ describe('theme schema and compiler', () => {
       typography: versionSixTypography
     }
     const migratedFive = parseThemeProfile(versionFive)
-    expect(migratedFive.version).toBe(12)
+    expect(migratedFive.version).toBe(13)
     expect(migratedFive.icons.composerBadge).toEqual({ kind: 'builtin', name: 'music' })
     expect(migratedFive.composerBadge.visible).toBe(true)
     expect(migratedFive.appearance.colors.composerBadgeIcon).toBe('#123456')
@@ -120,27 +183,27 @@ describe('theme schema and compiler', () => {
     const { sidebarMode: _sidebarMode, composerBadge: _composerBadgeLegacy, backgroundSparkle: _backgroundSparkleLegacy, backgroundFloat: _backgroundFloatLegacy, backgroundRain: _backgroundRainLegacy, backgroundMeteor: _backgroundMeteorLegacy, backgroundSnow: _backgroundSnowLegacy, ...legacyIcons } = current.icons
     const versionThree = { ...versionFour, version: 3, copy: legacyCopy, icons: legacyIcons }
     const migratedThree = parseThemeProfile(versionThree)
-    expect(migratedThree.version).toBe(12)
+    expect(migratedThree.version).toBe(13)
     expect(migratedThree.copy).toEqual(expectedCopy)
     expect(migratedThree.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
 
     const { visible: _visibleTwo, mode: _modeTwo, style: _styleTwo, ...versionTwoPolaroid } = current.polaroid
     const versionTwo = { ...versionThree, version: 2, polaroid: versionTwoPolaroid }
     const migratedTwo = parseThemeProfile(versionTwo)
-    expect(migratedTwo.version).toBe(12)
+    expect(migratedTwo.version).toBe(13)
     expect(migratedTwo.polaroid.visible).toBe(true)
     expect(migratedTwo.polaroid.mode).toBe('fence')
 
     const { copy: _copy, ...versionOneFields } = versionTwo
     const versionOne = { ...versionOneFields, version: 1, name: '已有主题' }
     const migratedOne = parseThemeProfile(versionOne)
-    expect(migratedOne.version).toBe(12)
+    expect(migratedOne.version).toBe(13)
     expect(migratedOne.name).toBe('已有主题')
     expect(migratedOne.copy).toEqual(expectedCopy)
     expect(migratedOne.hero).toEqual(current.hero)
 
     const migratedZero = parseThemeProfile({ id, name: '旧主题', version: 0, colors: { accent: '#123456' } })
-    expect(migratedZero.version).toBe(12)
+    expect(migratedZero.version).toBe(13)
     expect(migratedZero.colors.accent).toBe('#123456')
     expect(migratedZero.colors.surface).toBe('#F7FFFF')
     expect(migratedZero.copy).toEqual(expectedCopy)
@@ -160,7 +223,7 @@ describe('theme schema and compiler', () => {
     const { mediaTransform: _heroTransform, ...versionElevenHero } = current.hero
     const { mediaTransform: _polaroidTransform, ...versionElevenPolaroid } = current.polaroid
     const migrated = parseThemeProfile({ ...current, version: 11, hero: versionElevenHero, polaroid: versionElevenPolaroid })
-    expect(migrated.version).toBe(12)
+    expect(migrated.version).toBe(13)
     expect(migrated.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
     expect(migrated.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
   })
@@ -227,7 +290,7 @@ describe('theme schema and compiler', () => {
     profile.polaroid.mode = 'fence'
     const { style: _style, ...versionNinePolaroid } = profile.polaroid
     const migrated = parseThemeProfile({ ...profile, version: 9, polaroid: versionNinePolaroid })
-    expect(migrated.version).toBe(12)
+    expect(migrated.version).toBe(13)
     expect(migrated.polaroid.mode).toBe('fence')
     expect(migrated.polaroid.style.shadow.blur).toBe(10)
     expect(() => parseThemeProfile({ ...profile, polaroid: { ...profile.polaroid, style: { ...profile.polaroid.style, opacity: 1.1 } } })).toThrow()
@@ -243,7 +306,7 @@ describe('theme schema and compiler', () => {
     expect(compiled.css).toContain('background-image: url("data:image/png;base64,PHNjcmlwdD4=")')
     expect(compiled.rendererPayload).not.toContain('<')
     expect(compiled.rendererPayload).toContain('headingTemplate')
-    expect(JSON.parse(compiled.rendererPayload).version).toBe(12)
+    expect(JSON.parse(compiled.rendererPayload).version).toBe(13)
     expect(compiled.rendererPayload).toContain('\\u003cb>')
     expect(compiled.rendererPayload).toContain(JSON.stringify(HOME_ACTIONS[0].label).slice(1, -1))
     expect(await compileTheme(profile, async () => 'data:image/png;base64,PHNjcmlwdD4=')).toEqual(compiled)

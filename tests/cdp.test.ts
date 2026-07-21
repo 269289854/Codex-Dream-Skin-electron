@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { WebSocketServer } from 'ws'
 import { describe, expect, it } from 'vitest'
-import { CdpWatcher, isSafeCdpWebSocketUrl, isThemeCdpTargetUrl } from '../src/main/cdp-watcher'
+import { CdpWatcher, isSafeCdpWebSocketUrl, isThemeCdpTargetUrl, MAX_THEME_PAYLOAD_BYTES } from '../src/main/cdp-watcher'
 
 describe('CDP endpoint validation', () => {
   it('only accepts the expected loopback endpoint and identity', () => {
@@ -12,6 +12,12 @@ describe('CDP endpoint validation', () => {
     expect(isSafeCdpWebSocketUrl('ws://127.0.0.1:9336/devtools/page/page-123', 9335, 'page', 'page-123')).toBe(false)
     expect(isSafeCdpWebSocketUrl('ws://127.0.0.1:9335/devtools/page/other', 9335, 'page', 'page-123')).toBe(false)
     expect(isSafeCdpWebSocketUrl('ws://user@127.0.0.1:9335/devtools/page/page-123', 9335, 'page', 'page-123')).toBe(false)
+  })
+
+  it('allows multi-font runtime payloads while retaining the size guard', () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    watcher.setPayload('x'.repeat(20_000_001))
+    expect(() => watcher.setPayload('x'.repeat(MAX_THEME_PAYLOAD_BYTES + 1))).toThrow('Theme payload is invalid.')
   })
 })
 

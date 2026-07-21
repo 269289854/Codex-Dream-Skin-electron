@@ -7,6 +7,8 @@
   const PROJECT_PROXY_ID = "codex-dream-skin-project-proxy";
   const HEADING_DECORATION_ID = "codex-dream-skin-heading-decoration";
   const projectAnchorRestorers = new WeakMap();
+  const sidebarNavRestorers = new WeakMap();
+  const sidebarCopyRestorers = new Map();
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
@@ -211,18 +213,18 @@
     nodes.filter((node) => node instanceof HTMLElement).forEach((node) => node.classList.add(className));
   };
 
-  const SIDEBAR_NAV_LABELS = [
-    "新建任务", "New task", "拉取请求", "Pull requests", "站点", "Sites",
-    "已安排", "Scheduled", "插件", "Plugins"
+  const SIDEBAR_NAV_FALLBACKS = [
+    { id: "newTask", copyField: "sidebarNavNewTask", iconSlot: "sidebarNavNewTask", previewTarget: "sidebar-nav-new-task", aliases: ["新建任务", "New task"] },
+    { id: "pullRequests", copyField: "sidebarNavPullRequests", iconSlot: "sidebarNavPullRequests", previewTarget: "sidebar-nav-pull-requests", aliases: ["拉取请求", "Pull requests"] },
+    { id: "sites", copyField: "sidebarNavSites", iconSlot: "sidebarNavSites", previewTarget: "sidebar-nav-sites", aliases: ["站点", "Sites"] },
+    { id: "scheduled", copyField: "sidebarNavScheduled", iconSlot: "sidebarNavScheduled", previewTarget: "sidebar-nav-scheduled", aliases: ["已安排", "Scheduled"] },
+    { id: "plugins", copyField: "sidebarNavPlugins", iconSlot: "sidebarNavPlugins", previewTarget: "sidebar-nav-plugins", aliases: ["插件", "Plugins"] }
   ];
+  const sidebarNavigation = Array.isArray(themeConfig?.sidebarNavigation) && themeConfig.sidebarNavigation.length > 0 ? themeConfig.sidebarNavigation : SIDEBAR_NAV_FALLBACKS;
   const normalizedNodeLabel = (node) => `${node.textContent || ""} ${node.getAttribute?.("aria-label") || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
   const hasSidebarNavText = (node) => {
     const label = `${node.textContent || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
-    return SIDEBAR_NAV_LABELS.some((candidate) => label.includes(candidate.toLowerCase()));
-  };
-  const isNewTaskNavAction = (node) => {
-    const label = normalizedNodeLabel(node);
-    return label.includes("新建任务") || label.includes("new task");
+    return sidebarNavigation.some((item) => (item.aliases || []).some((candidate) => label.includes(String(candidate).toLowerCase())));
   };
   const findSidebarNavRow = (nav, action) => {
     let parent = action.parentElement;
@@ -239,25 +241,94 @@
     if (node.matches('[aria-current="page"], [aria-selected="true"], [data-active="true"], [data-state="active"]')) return true;
     return [...node.classList].some((token) => token === "bg-token-list-hover-background" || /(?:selected|active|current)/i.test(token));
   };
+  const findSidebarNavLabelNode = (button, item) => {
+    const aliases = (item.aliases || []).map((candidate) => String(candidate).toLowerCase());
+    const candidates = [...button.querySelectorAll("span")].filter((node) => node.children.length === 0 && node.textContent?.trim());
+    return candidates.find((node) => aliases.some((alias) => node.textContent.trim().toLowerCase() === alias)) || candidates.at(-1) || button;
+  };
+  const findSidebarNavIconNode = (button) => [...button.querySelectorAll("span")].find((node) => node.querySelector(":scope > svg")) || button.querySelector("svg")?.parentElement || null;
+  const restoreSidebarNav = (button) => {
+    const record = sidebarNavRestorers.get(button);
+    if (!record) return;
+    if (record.labelNode?.isConnected) record.labelNode.textContent = record.text;
+    if (record.iconNode?.isConnected) {
+      record.iconNode.innerHTML = record.iconHtml;
+      if (record.iconClass === null) record.iconNode.removeAttribute("class");
+      else record.iconNode.setAttribute("class", record.iconClass);
+    }
+    for (const className of record.classes) (record.row || button).classList.remove(className);
+    sidebarNavRestorers.delete(button);
+  };
   const ensureSidebarNavigation = () => {
-    const cleanup = () => {
-      for (const className of ["dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected"]) {
-        document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
-      }
-    };
     const sidebar = findVisible(document, "aside.app-shell-left-panel");
     const nav = sidebar && [...sidebar.querySelectorAll("nav")].find(isVisible);
     if (!nav) {
-      cleanup();
       return;
     }
-    cleanup();
-    const action = [...nav.querySelectorAll("a, button")].find(isNewTaskNavAction);
-    if (!(action instanceof HTMLElement)) return;
-    const row = findSidebarNavRow(nav, action);
-    row.classList.add("dream-sidebar-new-task-row");
-    const selected = isSidebarNavSelected(row) || [...row.querySelectorAll("*")].some(isSidebarNavSelected);
-    row.classList.toggle("dream-sidebar-new-task-row-selected", selected);
+    const actions = [...nav.querySelectorAll("a, button")].filter((node) => node instanceof HTMLElement);
+    const activeActions = new Set();
+    for (const item of sidebarNavigation) {
+      const action = actions.find((candidate) => candidate.dataset.dreamSidebarNav === item.id || (item.aliases || []).some((alias) => normalizedNodeLabel(candidate).includes(String(alias).toLowerCase())));
+      if (!(action instanceof HTMLElement)) continue;
+      activeActions.add(action);
+      const row = findSidebarNavRow(nav, action);
+      const existing = sidebarNavRestorers.get(action);
+      const labelNode = existing?.labelNode || findSidebarNavLabelNode(action, item);
+      const iconNode = existing?.iconNode || findSidebarNavIconNode(action);
+      if (!existing) sidebarNavRestorers.set(action, {
+        labelNode,
+        text: labelNode.textContent || "",
+        iconNode,
+        iconHtml: iconNode?.innerHTML || "",
+        iconClass: iconNode?.getAttribute("class") ?? null,
+        row,
+        classes: [`dream-sidebar-nav-${item.id}`, `dream-sidebar-nav-${item.id}-selected`, ...(item.id === "newTask" ? ["dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected"] : [])]
+      });
+      action.dataset.dreamSidebarNav = item.id;
+      const copy = themeConfig?.copy?.[item.copyField];
+      if (typeof copy === "string" && copy.trim()) labelNode.textContent = copy;
+      if (iconNode) {
+        iconNode.classList.add("dream-sidebar-nav-icon");
+        renderSlot(iconNode, item.iconSlot, "✦");
+      }
+      const classes = [`dream-sidebar-nav-${item.id}`, `dream-sidebar-nav-${item.id}-selected`];
+      row.classList.add(classes[0]);
+      if (item.id === "newTask") row.classList.add("dream-sidebar-new-task-row");
+      const selected = isSidebarNavSelected(row) || [...row.querySelectorAll("*")].some(isSidebarNavSelected);
+      row.classList.toggle(classes[1], selected);
+      if (item.id === "newTask") row.classList.toggle("dream-sidebar-new-task-row-selected", selected);
+    }
+    document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => {
+      if (!(node instanceof HTMLElement) || activeActions.has(node)) return;
+      restoreSidebarNav(node);
+      node.removeAttribute("data-dream-sidebar-nav");
+    });
+  };
+
+  const ensureSidebarFixedCopy = () => {
+    const sidebar = findVisible(document, "aside.app-shell-left-panel");
+    if (!sidebar) return;
+    const entries = [
+      { field: "sidebarModeTitle", aliases: ["Codex"], selector: 'button[aria-label^="切换模式"], button[aria-label^="Switch mode"]' },
+      { field: "sidebarProjectsTitle", aliases: ["项目", "Projects"], selector: 'button[data-app-action-sidebar-section-toggle]' },
+      { field: "sidebarTasksTitle", aliases: ["任务", "Tasks"], selector: 'button[data-app-action-sidebar-section-toggle]' }
+    ];
+    for (const entry of entries) {
+      const candidate = [...sidebar.querySelectorAll(entry.selector)].find((node) => {
+        const text = normalizedNodeLabel(node);
+        return entry.aliases.some((alias) => text.includes(alias.toLowerCase()));
+      });
+      if (!(candidate instanceof HTMLElement)) continue;
+      const labelNode = [...candidate.querySelectorAll("span")].find((node) => node.children.length === 0 && entry.aliases.some((alias) => node.textContent?.trim().toLowerCase() === alias.toLowerCase()));
+      if (!(labelNode instanceof HTMLElement)) continue;
+      if (!sidebarCopyRestorers.has(labelNode)) sidebarCopyRestorers.set(labelNode, { text: labelNode.textContent || "", button: candidate, ariaLabel: candidate.getAttribute("aria-label") });
+      const copy = themeConfig?.copy?.[entry.field];
+      if (typeof copy === "string" && copy.trim()) labelNode.textContent = copy;
+      if (entry.field === "sidebarModeTitle" && typeof copy === "string" && copy.trim() && candidate.hasAttribute("aria-label")) {
+        const ariaLabel = candidate.getAttribute("aria-label") || "";
+        candidate.setAttribute("aria-label", ariaLabel.replace(/Codex|当前模式：[^，]+|current mode:\s*[^,]+/i, (match) => match.includes("当前模式") ? `当前模式：${copy}` : match.toLowerCase().includes("current") ? `current mode: ${copy}` : String(copy)));
+      }
+    }
   };
 
   const ensureSidebarSurfaces = () => {
@@ -270,6 +341,7 @@
       return;
     }
     ensureSidebarNavigation();
+    ensureSidebarFixedCopy();
     replaceMarks(".dream-sidebar-header", "dream-sidebar-header", [...sidebar.querySelectorAll(":scope > header, :scope > div > header")]);
     replaceMarks(".dream-sidebar-search-button", "dream-sidebar-search-button", [...sidebar.querySelectorAll('button[aria-label*="搜索"], button[aria-label*="Search" i]')]);
     replaceMarks(".dream-sidebar-project-row", "dream-sidebar-project-row", [...sidebar.querySelectorAll('[role="listitem"][data-sidebar-project-kind] > span > [role="button"], [data-project-id], [data-testid*="project" i]')]);
@@ -1414,7 +1486,16 @@
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
-    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-project-row-selected", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar", "dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected"]) {
+    document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => { if (node instanceof HTMLElement) restoreSidebarNav(node); node.removeAttribute("data-dream-sidebar-nav"); });
+    for (const [labelNode, record] of sidebarCopyRestorers) {
+      if (labelNode.isConnected) labelNode.textContent = record.text;
+      if (record.button?.isConnected) {
+        if (record.ariaLabel === null) record.button.removeAttribute("aria-label");
+        else record.button.setAttribute("aria-label", record.ariaLabel);
+      }
+      sidebarCopyRestorers.delete(labelNode);
+    }
+    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-project-row-selected", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar", "dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected", ...sidebarNavigation.flatMap((item) => [`dream-sidebar-nav-${item.id}`, `dream-sidebar-nav-${item.id}-selected`])]) {
       document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
     }
     document.getElementById(PROJECT_PROXY_ID)?.remove();
