@@ -844,6 +844,29 @@ describe('renderer home DOM adaptation', () => {
     expect(overlay?.style.height).toBe('auto')
   })
 
+  it('keeps the theme enabled when the runtime is injected repeatedly', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div class="thread-scroll-container" data-app-action-timeline-scroll><div class="thread-content"><article data-message-author-role="assistant">Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></div></main>'
+    const background: RuntimeConversationBackgroundConfig = {
+      visible: true,
+      mode: 'color',
+      color: '#F7FFFF',
+      source: null,
+      opacity: 1,
+      overlayStyle: fullOverlayStyle,
+      focus: { x: .5, y: .5 },
+      scale: 1
+    }
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+
+    expect((window as unknown as { __CODEX_DREAM_SKIN_DISABLED__?: boolean }).__CODEX_DREAM_SKIN_DISABLED__).toBe(false)
+    expect(window.document.documentElement.classList.contains('codex-dream-skin')).toBe(true)
+    expect(window.document.querySelectorAll('.dream-conversation-background')).toHaveLength(1)
+    expect(window.document.querySelectorAll('.dream-conversation-background-overlay')).toHaveLength(1)
+  })
+
   it('starts a muted looping conversation video and removes it when the page changes', () => {
     const window = createWindow()
     Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: vi.fn(() => Promise.resolve()) })

@@ -93,6 +93,15 @@ describe('runtime appearance compilation', () => {
     expect(css).toContain('button[class~="bg-token-foreground"][data-preview-state="selected"]')
   })
 
+  it('leaves conversation overlay geometry to the validated runtime styles', async () => {
+    const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
+    const overlayRule = css.match(/html\.codex-dream-skin \.dream-conversation-background-overlay\s*\{([^}]*)\}/)?.[1]
+    expect(overlayRule).toContain('position: absolute !important')
+    expect(overlayRule).toContain('pointer-events: none !important')
+    expect(overlayRule).not.toMatch(/\b(?:inset|left|top|width|height)\s*:/)
+    expect(css).toMatch(/\.dream-conversation-background-color,\s*html\.codex-dream-skin \.dream-conversation-background-media\s*\{[^}]*inset:\s*0 !important;[^}]*width:\s*100% !important;[^}]*height:\s*100% !important;/)
+  })
+
   it('keeps native sidebar navigation items rounded in every state', async () => {
     const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
     expect(css).toMatch(/aside\.app-shell-left-panel nav > :is\(a, button\)\s*\{[^}]*border-radius:\s*10px !important;/)

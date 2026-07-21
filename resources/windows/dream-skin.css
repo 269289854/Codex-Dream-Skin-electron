@@ -280,7 +280,6 @@ html.codex-dream-skin .dream-conversation-viewport > .dream-conversation-backgro
 }
 
 html.codex-dream-skin .dream-conversation-background-color,
-html.codex-dream-skin .dream-conversation-background-overlay,
 html.codex-dream-skin .dream-conversation-background-media {
   position: absolute !important;
   inset: 0 !important;
@@ -296,6 +295,7 @@ html.codex-dream-skin .dream-conversation-background-media {
 }
 
 html.codex-dream-skin .dream-conversation-background-overlay {
+  position: absolute !important;
   pointer-events: none !important;
 }
 

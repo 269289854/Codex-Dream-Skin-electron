@@ -9,7 +9,6 @@
   const projectAnchorRestorers = new WeakMap();
   const sidebarNavRestorers = new WeakMap();
   const sidebarCopyRestorers = new Map();
-  window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
@@ -361,6 +360,7 @@
   if (previous?.timer) clearInterval(previous.timer);
   if (previous?.scheduler?.timeout) clearTimeout(previous.scheduler.timeout);
   if (previous?.artUrl) URL.revokeObjectURL(previous.artUrl);
+  window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
   const artUrl = (() => {
     const comma = artDataUrl.indexOf(",");
