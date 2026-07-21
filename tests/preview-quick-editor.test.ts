@@ -100,12 +100,12 @@ describe('preview quick editor', () => {
 
     expect(container.querySelectorAll('[data-icon-slot]')).toHaveLength(1)
     expect(container.querySelector('[data-icon-slot="composer"]')).not.toBeNull()
-    const select = container.querySelector<HTMLSelectElement>('select')
-    if (!select) throw new Error('Icon selector is missing.')
-    act(() => {
-      select.value = 'heart'
-      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
-    })
+    const trigger = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] .icon-picker-trigger')
+    if (!trigger) throw new Error('Icon selector is missing.')
+    act(() => trigger.click())
+    const heart = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] [data-icon-name="heart"]')
+    if (!heart) throw new Error('Heart icon option is missing.')
+    act(() => heart.click())
     expect(profile.icons.composer).toEqual({ kind: 'builtin', name: 'heart' })
   })
 
@@ -115,14 +115,14 @@ describe('preview quick editor', () => {
 
     expect(container.querySelector('[data-icon-slot="composerBadge"]')).not.toBeNull()
     expect(container.querySelector('[data-icon-slot="composer"]')).toBeNull()
-    const select = container.querySelector<HTMLSelectElement>('select')
+    const trigger = container.querySelector<HTMLButtonElement>('[data-icon-slot="composerBadge"] .icon-picker-trigger')
     const toggle = container.querySelector<HTMLInputElement>('.toggle-row input')
-    if (!select || !toggle) throw new Error('Composer badge controls are missing.')
-    act(() => {
-      select.value = 'heart'
-      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
-      toggle.click()
-    })
+    if (!trigger || !toggle) throw new Error('Composer badge controls are missing.')
+    act(() => trigger.click())
+    const heart = container.querySelector<HTMLButtonElement>('[data-icon-slot="composerBadge"] [data-icon-name="heart"]')
+    if (!heart) throw new Error('Heart icon option is missing.')
+    act(() => heart.click())
+    act(() => toggle.click())
 
     expect(profile.icons.composerBadge).toEqual({ kind: 'builtin', name: 'heart' })
     expect(profile.composerBadge.visible).toBe(false)
@@ -249,15 +249,17 @@ describe('preview quick editor', () => {
     act(() => rainMode.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     renderEditor(PREVIEW_TARGETS.sparkles, profile)
 
-    const icon = container.querySelector<HTMLSelectElement>('[data-icon-slot="backgroundRain"] select')
+    const icon = container.querySelector<HTMLButtonElement>('[data-icon-slot="backgroundRain"] .icon-picker-trigger')
     const speed = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '速度')?.querySelector<HTMLInputElement>('input')
     const count = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '数量')?.querySelector<HTMLInputElement>('input')
     const addColor = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('添加颜色'))
     const shuffle = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('重新排列'))
     if (!icon || !speed || !count || !addColor || !shuffle) throw new Error('Particle effect controls are missing.')
+    act(() => icon.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const star = container.querySelector<HTMLButtonElement>('[data-icon-slot="backgroundRain"] [data-icon-name="star"]')
+    if (!star) throw new Error('Star icon option is missing.')
     act(() => {
-      icon.value = 'star'
-      icon.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      star.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(speed, '1.5')
       speed.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
       Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(count, '12')

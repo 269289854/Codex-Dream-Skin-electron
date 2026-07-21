@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Plus, Sparkles, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, Plus, Sparkles, Trash2, Upload } from 'lucide-react'
 import { converter, formatHex, formatHex8, formatRgb, parse } from 'culori'
 import {
   APPEARANCE_COLOR_TOKENS,
@@ -15,7 +15,7 @@ import { resolveBuiltinIconGlyph } from '../../shared/icon-glyphs'
 import type { IconSlot, ThemeColors, ThemeProfile } from '../../shared/theme'
 import { BUILTIN_FONTS, type FontSelection } from '../../shared/typography'
 import type { TypographySlot } from './preview-editing'
-import { builtinIconOptions, builtinIcons } from './icons'
+import { builtinIconLabels, builtinIconOptions, builtinIcons } from './icons'
 
 export const colorLabels: Record<keyof ThemeColors, string> = {
   surface: '背景', ink: '正文', accent: '强调', pink: '粉色', lavender: '淡紫', border: '边框', success: '成功', danger: '危险'
@@ -205,7 +205,63 @@ interface ThemeIconControlProps { slot: IconSlot; profile: ThemeProfile; assets:
 
 export function ThemeIconControl({ slot, profile, assets, onChange, onImport, highlighted = false }: ThemeIconControlProps): React.JSX.Element {
   const source = profile.icons[slot]
-  return <div className={highlighted ? 'icon-slot inspector-highlight' : 'icon-slot'} data-icon-slot={slot} data-inspector-anchor={`icon-${slot}`}><span className="icon-preview"><RenderIcon slot={slot} profile={profile} assets={assets} /></span><label>{iconLabels[slot]}<select value={source.kind === 'builtin' ? source.name : '__asset'} onChange={(event) => { const value = event.currentTarget.value; if (value === '__asset') onImport(); else onChange(value) }}><option value="__asset">自定义图片</option>{builtinIconOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><button className="tool-button" type="button" title={source.kind === 'asset' ? `更换${iconLabels[slot]}图标` : `选择自定义${iconLabels[slot]}图标`} onClick={onImport}><Upload size={14} /></button></div>
+  const [open, setOpen] = React.useState(false)
+  const pickerRef = React.useRef<HTMLDivElement>(null)
+  const listId = `icon-picker-options-${slot}`
+
+  React.useEffect(() => {
+    if (!open) return undefined
+    const closeOnOutsidePointer = (event: PointerEvent): void => {
+      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+
+  const currentName = source.kind === 'builtin' ? source.name : null
+  const currentLabel = source.kind === 'asset' ? '自定义图片' : builtinIconLabels[source.name] ?? source.name
+  const togglePicker = (): void => setOpen((value) => !value)
+  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      setOpen(true)
+    }
+  }
+
+  return <div className={highlighted ? 'icon-slot inspector-highlight' : 'icon-slot'} data-icon-slot={slot} data-inspector-anchor={`icon-${slot}`} ref={pickerRef}>
+    <span className="icon-preview"><RenderIcon slot={slot} profile={profile} assets={assets} /></span>
+    <div className="icon-picker-field">
+      <span>{iconLabels[slot]}</span>
+      <div className="icon-picker">
+        <button className="icon-picker-trigger" type="button" aria-haspopup="listbox" aria-expanded={open} aria-controls={listId} onClick={togglePicker} onKeyDown={handleTriggerKeyDown}>
+          <span className="icon-picker-trigger-icon"><RenderIcon slot={slot} profile={profile} assets={assets} /></span>
+          <span className="icon-picker-trigger-label">{currentLabel}</span>
+          <ChevronDown size={13} aria-hidden="true" />
+        </button>
+        {open && <div className="icon-picker-menu" id={listId} role="listbox" aria-label={`${iconLabels[slot]}图标`}>
+          <button className={source.kind === 'asset' ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={source.kind === 'asset'} data-icon-name="__asset" onClick={() => { onImport(); setOpen(false) }}>
+            <span className="icon-picker-option-icon"><RenderIcon slot={slot} profile={{ ...profile, icons: { ...profile.icons, [slot]: { kind: 'builtin', name: 'image' } } }} assets={assets} /></span>
+            <span>自定义图片</span>
+          </button>
+          {builtinIconOptions.map((name) => {
+            const Icon = builtinIcons[name] ?? Sparkles
+            return <button className={currentName === name ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={currentName === name} data-icon-name={name} key={name} onClick={() => { onChange(name); setOpen(false) }}>
+              <span className="icon-picker-option-icon"><Icon size={16} aria-hidden="true" /></span>
+              <span>{builtinIconLabels[name] ?? name}</span>
+            </button>
+          })}
+        </div>}
+      </div>
+    </div>
+    <button className="tool-button" type="button" title={source.kind === 'asset' ? `更换${iconLabels[slot]}图标` : `选择自定义${iconLabels[slot]}图标`} onClick={onImport}><Upload size={14} /></button>
+  </div>
 }
 
 interface RenderIconProps { slot: IconSlot; profile: ThemeProfile; assets: Record<string, string>; injected?: boolean; fallbackGlyph?: string }

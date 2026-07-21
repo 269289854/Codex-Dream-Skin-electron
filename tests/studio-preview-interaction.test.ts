@@ -706,11 +706,14 @@ describe('Studio preview editing interaction', () => {
     if (!composerIcon) throw new Error('Composer icon target is missing.')
 
     pointerDown(composerIcon)
-    const quickSelect = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-icon-slot="composer"] select')
-    if (!quickSelect) throw new Error('Quick icon selector is missing.')
-    act(() => {
-      quickSelect.value = '__asset'
-      quickSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    const quickTrigger = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="composer"] .icon-picker-trigger')
+    if (!quickTrigger) throw new Error('Quick icon selector is missing.')
+    act(() => quickTrigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const quickAsset = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="composer"] [data-icon-name="__asset"]')
+    if (!quickAsset) throw new Error('Quick custom icon option is missing.')
+    await act(async () => {
+      quickAsset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
     expect(selectIcon).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000000')
 
@@ -721,11 +724,14 @@ describe('Studio preview editing interaction', () => {
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
 
-    const inspectorSelect = container.querySelector<HTMLSelectElement>('[data-inspector-anchor="icon-composer"] select')
-    if (!inspectorSelect) throw new Error('Inspector icon selector is missing.')
-    act(() => {
-      inspectorSelect.value = '__asset'
-      inspectorSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    const inspectorTrigger = container.querySelector<HTMLButtonElement>('[data-inspector-anchor="icon-composer"] .icon-picker-trigger')
+    if (!inspectorTrigger) throw new Error('Inspector icon selector is missing.')
+    act(() => inspectorTrigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const inspectorAsset = container.querySelector<HTMLButtonElement>('[data-inspector-anchor="icon-composer"] [data-icon-name="__asset"]')
+    if (!inspectorAsset) throw new Error('Inspector custom icon option is missing.')
+    await act(async () => {
+      inspectorAsset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
     expect(selectIcon).toHaveBeenCalledTimes(2)
   })
@@ -763,14 +769,16 @@ describe('Studio preview editing interaction', () => {
     if (!rainMode) throw new Error('Rain particle mode is missing.')
     act(() => rainMode.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-effect')).toBe('rain')
-    const rainIcon = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-icon-slot="backgroundRain"] select')
+    const rainIcon = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="backgroundRain"] .icon-picker-trigger')
     const speed = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '速度')?.querySelector<HTMLInputElement>('input')
     const shuffle = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('重新排列'))
     const addColor = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('添加颜色'))
     if (!rainIcon || !speed || !shuffle || !addColor) throw new Error('Particle arrangement controls are missing.')
+    act(() => rainIcon.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const rainStar = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="backgroundRain"] [data-icon-name="star"]')
+    if (!rainStar) throw new Error('Rain star icon option is missing.')
     act(() => {
-      rainIcon.value = 'star'
-      rainIcon.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      rainStar.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       setInputValue(speed, '1.5')
       speed.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
       shuffle.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)

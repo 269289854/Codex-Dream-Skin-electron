@@ -7,6 +7,7 @@ import { AppearanceColorControl, FontControl, PaintControl, RenderIcon, ThemeIco
 import type { ThemePaint } from '../src/shared/appearance'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { createDefaultTheme } from '../src/shared/theme'
+import { builtinIconOptions, builtinIcons } from '../src/renderer/src/icons'
 
 const GLOBAL_KEYS = ['window', 'document', 'navigator', 'Element', 'HTMLElement', 'Node', 'Event', 'InputEvent', 'MouseEvent', 'PointerEvent'] as const
 
@@ -171,18 +172,22 @@ describe('editor appearance controls', () => {
     const onImport = vi.fn()
     act(() => root.render(React.createElement(ThemeIconControl, { slot: 'composer', profile, assets: {}, onChange, onImport })))
 
-    const select = container.querySelector<HTMLSelectElement>('[data-icon-slot="composer"] select')
-    if (!select) throw new Error('Icon selector is missing.')
+    const trigger = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] .icon-picker-trigger')
+    if (!trigger) throw new Error('Icon selector is missing.')
     act(() => {
-      select.value = '__asset'
-      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      trigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
     })
+    const assetOption = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] [data-icon-name="__asset"]')
+    if (!assetOption) throw new Error('Custom image option is missing.')
+    act(() => assetOption.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onImport).toHaveBeenCalledOnce()
     expect(onChange).not.toHaveBeenCalled()
 
+    act(() => trigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const heartOption = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] [data-icon-name="heart"]')
+    if (!heartOption) throw new Error('Heart icon option is missing.')
     act(() => {
-      select.value = 'heart'
-      select.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      heartOption.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
     })
     expect(onChange).toHaveBeenLastCalledWith('heart')
     expect(onImport).toHaveBeenCalledOnce()
@@ -194,14 +199,28 @@ describe('editor appearance controls', () => {
     const onImport = vi.fn()
     act(() => root.render(React.createElement(ThemeIconControl, { slot: 'composer', profile, assets: { 'assets/custom.png': 'data:image/png;base64,AA==' }, onChange: vi.fn(), onImport })))
 
-    const select = container.querySelector<HTMLSelectElement>('[data-icon-slot="composer"] select')
-    const button = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] button')
-    if (!select || !button) throw new Error('Custom icon controls are missing.')
-    expect(select.value).toBe('__asset')
+    const trigger = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] .icon-picker-trigger')
+    const button = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] button[title]')
+    if (!trigger || !button) throw new Error('Custom icon controls are missing.')
+    expect(trigger.textContent).toContain('自定义图片')
     expect(button.title).toBe('更换输入框发送按钮图标')
     act(() => button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onImport).toHaveBeenCalledOnce()
     expect(container.querySelector('img.custom-icon')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+  })
+
+  it('offers at least 50 visual builtin icons with runtime glyph fallbacks', () => {
+    expect(builtinIconOptions.length).toBeGreaterThanOrEqual(50)
+    expect(Object.values(builtinIcons)).toHaveLength(builtinIconOptions.length)
+    expect(builtinIconOptions.every((name) => Boolean(BUILTIN_ICON_GLYPHS[name]))).toBe(true)
+
+    const profile = createDefaultTheme('00000000-0000-0000-0000-000000000000')
+    act(() => root.render(React.createElement(ThemeIconControl, { slot: 'composer', profile, assets: {}, onChange: vi.fn(), onImport: vi.fn() })))
+    const trigger = container.querySelector<HTMLButtonElement>('.icon-picker-trigger')
+    if (!trigger) throw new Error('Icon picker trigger is missing.')
+    act(() => trigger.click())
+    expect(container.querySelectorAll('.icon-picker-option[data-icon-name]:not([data-icon-name="__asset"])')).toHaveLength(builtinIconOptions.length)
+    expect(container.querySelectorAll('.icon-picker-option:not([data-icon-name="__asset"]) svg')).toHaveLength(builtinIconOptions.length)
   })
 
   it('renders the runtime glyphs for injected sidebar and brand preview slots', () => {
