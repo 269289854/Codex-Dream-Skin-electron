@@ -383,7 +383,7 @@ const versionTwelveThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionThirteenThemeFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   version: z.literal(13),
@@ -398,6 +398,18 @@ export const themeProfileSchema = z.object({
   decorations: decorationsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
+}
+
+const versionThirteenThemeSchema = z.object(versionThirteenThemeFields).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(14),
+  resetColors: themeColorsSchema
 }).strict().superRefine((profile, context) => {
   if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
     context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
@@ -506,11 +518,12 @@ export interface ThemeSummary {
   system: boolean
 }
 
-export function createDefaultTheme(id: string, name = '初音未来'): ThemeProfile {
+export function createDefaultTheme(id: string, name = '初音未来', resetColors: ThemeColors = DEFAULT_THEME_COLORS): ThemeProfile {
+  const palette = { ...resetColors }
   return {
     id,
     name,
-    version: 13,
+    version: 14,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
@@ -538,7 +551,8 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       mediaTransform: createDefaultMediaTransform()
     },
     conversationBackground: createDefaultConversationBackground(),
-    colors: { ...DEFAULT_THEME_COLORS },
+    colors: { ...palette },
+    resetColors: { ...palette },
     icons: {
       sidebarMode: { kind: 'builtin', name: 'music' },
       branding: { kind: 'builtin', name: 'sparkles' },
@@ -580,12 +594,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 13) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 14) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
-    Object.defineProperty(parsed.hero, 'sourceImage', { value: parsed.hero.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
-    Object.defineProperty(parsed.polaroid, 'sourceImage', { value: parsed.polaroid.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
-    return parsed
+    return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 13) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionThirteen(versionThirteenThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 12) {
     const candidate = normalizeCurrentMediaReferences(stripSidebarFields(structuredClone(input) as Record<string, unknown>))
@@ -634,6 +650,7 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     const migrated = createDefaultTheme(legacy.id, legacy.name)
     migrated.polaroid.mode = 'fence'
     migrated.colors = { ...migrated.colors, ...legacy.colors }
+    migrated.resetColors = { ...migrated.colors }
     return themeProfileSchema.parse(migrated)
   }
   throw new Error('Unsupported theme profile version.')
@@ -755,13 +772,27 @@ function migrateVersionEleven(legacy: z.infer<typeof versionElevenThemeSchema>):
 function migrateVersionTwelve(legacy: z.infer<typeof versionTwelveThemeSchema>): ThemeProfile {
   const sidebarIcons = Object.fromEntries(SIDEBAR_NAV_ITEMS.map((item) => [item.iconSlot, { kind: 'builtin', name: item.iconName }]))
   const sidebarFonts = Object.fromEntries(SIDEBAR_NAV_ITEMS.map((item) => [item.fontSlot, { kind: 'inherit' }]))
-  return themeProfileSchema.parse({
+  return migrateVersionThirteen(versionThirteenThemeSchema.parse({
     ...legacy,
     version: 13,
     copy: { ...legacy.copy, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     icons: { ...legacy.icons, ...sidebarIcons },
     typography: { ...legacy.typography, slots: { ...legacy.typography.slots, ...sidebarFonts } }
-  })
+  }))
+}
+
+function migrateVersionThirteen(legacy: z.infer<typeof versionThirteenThemeSchema>): ThemeProfile {
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 14,
+    resetColors: { ...legacy.colors }
+  }))
+}
+
+function addSourceImageHints(profile: ThemeProfile): ThemeProfile {
+  Object.defineProperty(profile.hero, 'sourceImage', { value: profile.hero.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
+  Object.defineProperty(profile.polaroid, 'sourceImage', { value: profile.polaroid.source?.asset ?? null, enumerable: false, configurable: true, writable: true })
+  return profile
 }
 
 function inferLegacyMediaReference(asset: string): MediaReference {

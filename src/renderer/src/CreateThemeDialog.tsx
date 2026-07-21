@@ -34,6 +34,12 @@ export function CreateThemeDialog({ onClose, onCreate }: CreateThemeDialogProps)
   const nameValidationError = themeNameError(name)
   const visibleError = (nameTouched && nameValidationError) || error
 
+  const updateName = (value: string): void => {
+    setName(value)
+    setNameTouched(true)
+    setError(null)
+  }
+
   useLayoutEffect(() => {
     nameInputRef.current?.focus()
   }, [])
@@ -71,7 +77,7 @@ export function CreateThemeDialog({ onClose, onCreate }: CreateThemeDialogProps)
       <section className="theme-dialog create-theme-dialog" role="dialog" aria-modal="true" aria-labelledby="create-theme-title">
         <header><span><Palette size={16} /></span><h2 id="create-theme-title">新建主题</h2><button type="button" title="关闭" disabled={busy} onClick={close}><X size={16} /></button></header>
         <form onSubmit={(event) => { event.preventDefault(); void submit() }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); close() } }}>
-          <label className="theme-dialog-field"><span>主题名称</span><input ref={nameInputRef} value={name} placeholder="新主题" maxLength={80} disabled={busy} aria-invalid={nameTouched && Boolean(nameValidationError)} aria-describedby={visibleError ? 'create-theme-error' : undefined} onInput={(event) => { setName(event.currentTarget.value); setNameTouched(true); setError(null) }} /></label>
+          <label className="theme-dialog-field"><span>主题名称</span><input ref={nameInputRef} type="text" autoFocus value={name} placeholder="新主题" maxLength={80} disabled={busy} aria-invalid={nameTouched && Boolean(nameValidationError)} aria-describedby={visibleError ? 'create-theme-error' : undefined} onInput={(event) => updateName(event.currentTarget.value)} onChange={(event) => updateName(event.currentTarget.value)} /></label>
           <fieldset className="create-theme-palettes" disabled={busy}>
             <legend>主题配色</legend>
             <div className="create-theme-palette-grid" role="radiogroup" aria-label="主题配色">

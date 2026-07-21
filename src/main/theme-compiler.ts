@@ -45,7 +45,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 13, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 14, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground }).replace(/</g, '\\u003c'),
     assets
   }
 }

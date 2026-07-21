@@ -28,6 +28,7 @@ describe('theme share packages', () => {
     const font = await store.importFontAsset(original.id, fontSource)
     const draft = structuredClone(original)
     draft.copy.brandTitle = '尚未保存的分享标题'
+    draft.colors.accent = '#123456'
     draft.hero.sourceImage = image.relativePath
     draft.polaroid.sourceImage = image.relativePath
     draft.hero.mediaTransform = { flipHorizontal: true, flipVertical: false }
@@ -42,11 +43,14 @@ describe('theme share packages', () => {
     expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, 'manifest.json', 'theme.json'].sort())
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(checked.profile.resetColors.accent).toBe(original.resetColors.accent)
 
     const imported = await store.importSharePackage(packagePath)
     expect(imported.id).not.toBe(original.id)
     expect(imported.name).toBe(draft.name)
     expect(imported.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(imported.colors).toEqual(draft.colors)
+    expect(imported.resetColors).toEqual(draft.colors)
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: true })
     expect(Date.parse(imported.updatedAt)).toBeGreaterThanOrEqual(Date.parse(original.updatedAt))
@@ -67,9 +71,11 @@ describe('theme share packages', () => {
     const image = await store.importAsset(original.id, source, 'hero')
     const current = structuredClone(original)
     current.hero.sourceImage = image.relativePath
+    current.colors.accent = '#2878B8'
     const { mediaTransform: _heroTransform, ...hero } = current.hero
     const { mediaTransform: _polaroidTransform, ...polaroid } = current.polaroid
-    const legacy = { ...current, version: 11, hero, polaroid }
+    const { resetColors: _resetColors, ...currentWithoutResetColors } = current
+    const legacy = { ...currentWithoutResetColors, version: 11, hero, polaroid }
     const packagePath = join(root, 'v11.cdstheme')
     await store.exportSharePackage(legacy, packagePath)
     const archive = unzipSync(await readFile(packagePath))
@@ -79,7 +85,9 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(13)
+    expect(imported.version).toBe(14)
+    expect(imported.resetColors).toEqual(imported.colors)
+    expect(imported.resetColors.accent).toBe('#2878B8')
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
   })

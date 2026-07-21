@@ -111,8 +111,7 @@ export class ProfileStore {
 
   async create(input: unknown): Promise<ThemeProfile> {
     const request = createThemeInputSchema.parse(typeof input === 'string' ? { name: input, colors: DEFAULT_THEME_COLORS } : input)
-    const profile = createDefaultTheme(randomUUID(), request.name)
-    profile.colors = { ...request.colors }
+    const profile = createDefaultTheme(randomUUID(), request.name, request.colors)
     await this.writeProfile(profile)
     return profile
   }
@@ -120,7 +119,7 @@ export class ProfileStore {
   async getDefault(id: string): Promise<ThemeProfile> {
     const current = await this.get(id)
     const settings = await this.readSettings()
-    const profile = createDefaultTheme(current.id, current.name)
+    const profile = createDefaultTheme(current.id, current.name, current.resetColors)
     if (id === settings.systemThemeId) await this.applyBundledSystemPreset(profile)
     return profile
   }
@@ -225,7 +224,7 @@ export class ProfileStore {
       }
       for (const asset of manifest.assets) if (!entries.has(asset.path)) throw new Error(`分享包缺少素材: ${asset.path}`)
 
-      const imported = { ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString() }
+      const imported = { ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString(), resetColors: { ...source.colors } }
       const importedRoot = this.themeRoot(imported.id)
       this.throwIfAborted(signal, '主题导入已取消。')
       await this.writeJsonAtomic(join(temporaryRoot, 'theme.json'), imported)

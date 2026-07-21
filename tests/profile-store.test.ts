@@ -28,11 +28,38 @@ describe('ProfileStore', () => {
     const created = await store.create({ name: '  海盐主题  ', colors })
     expect(created.name).toBe('海盐主题')
     expect(created.colors).toEqual(colors)
+    expect(created.resetColors).toEqual(colors)
+    expect(created.resetColors).not.toBe(created.colors)
     expect(created.hero.source).toBeNull()
     expect(created.polaroid.source).toBeNull()
-    expect(await store.get(created.id)).toMatchObject({ name: '海盐主题', colors })
+    expect(await store.get(created.id)).toMatchObject({ name: '海盐主题', colors, resetColors: colors })
+
+    created.colors.accent = '#123456'
+    created.copy.sidebarNavSites = '自定义站点'
+    await store.update(created)
+    const reset = await store.getDefault(created.id)
+    expect(reset).toMatchObject({ id: created.id, name: '海盐主题', colors, resetColors: colors, copy: { sidebarNavSites: '站点' } })
+    expect(reset.colors).not.toBe(reset.resetColors)
+    expect((await store.get(created.id)).colors.accent).toBe('#123456')
     await expect(store.create({ name: '非法主题', colors: { ...colors, accent: 'invalid' } })).rejects.toThrow()
     expect((await readdir(join(root, 'themes'))).filter((entry) => !entry.startsWith('.'))).toHaveLength(2)
+  })
+
+  it('uses a version thirteen theme current colors as its reset baseline', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-reset-colors-migration-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const colors = { ...DEFAULT_THEME_COLORS, accent: '#B94F7B', pink: '#E478A4' }
+    const created = await store.create({ name: '旧版主题', colors })
+    const { resetColors: _resetColors, ...legacy } = created
+    await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({ ...legacy, version: 13 }, null, 2)}\n`, 'utf8')
+
+    const migrated = await store.get(created.id)
+    expect(migrated).toMatchObject({ version: 14, colors, resetColors: colors })
+    migrated.colors.accent = '#123456'
+    await store.update(migrated)
+    expect((await store.getDefault(created.id)).colors).toEqual(colors)
   })
 
   it('persists named profiles atomically and confines assets', async () => {
@@ -75,7 +102,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 13,
+      version: 14,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
@@ -211,6 +238,8 @@ describe('ProfileStore', () => {
 
     const custom = await store.create('自定义主题')
     const customReset = await store.getDefault(custom.id)
+    expect(customReset.colors).toEqual(custom.resetColors)
+    expect(customReset.resetColors).toEqual(custom.resetColors)
     expect(customReset.hero.source).toBeNull()
     expect(customReset.polaroid.source).toBeNull()
     expect(customReset.decorations.sparkles).toMatchObject({ effect: 'twinkle', count: 6 })
@@ -265,7 +294,8 @@ describe('ProfileStore', () => {
     roots.push(root)
     const store = new ProfileStore(root)
     await store.initialize()
-    const profile = await store.create('原主题')
+    const resetColors = { ...DEFAULT_THEME_COLORS, accent: '#2878B8', danger: '#CF4A5B' }
+    const profile = await store.create({ name: '原主题', colors: resetColors })
     const imageSource = join(root, 'art.png')
     const fontSource = join(root, 'title.woff2')
     await writeFile(imageSource, TEST_PNG)
@@ -274,6 +304,7 @@ describe('ProfileStore', () => {
     const font = await store.importFontAsset(profile.id, fontSource)
 
     profile.copy.brandTitle = '尚未保存的标题'
+    profile.colors.accent = '#123456'
     profile.hero.sourceImage = image.relativePath
     profile.polaroid.sourceImage = image.relativePath
     profile.icons.cardPrimary = { kind: 'asset', asset: image.relativePath }
@@ -288,6 +319,8 @@ describe('ProfileStore', () => {
 
     const duplicate = await store.duplicate(profile, ' 当前设计副本 ')
     expect(duplicate).toMatchObject({ name: '当前设计副本', copy: { brandTitle: '尚未保存的标题' } })
+    expect(duplicate.colors.accent).toBe('#123456')
+    expect(duplicate.resetColors).toEqual(resetColors)
     expect(duplicate.id).not.toBe(profile.id)
     expect(Date.parse(duplicate.updatedAt)).toBeGreaterThanOrEqual(Date.parse(profile.updatedAt))
     expect((await store.get(profile.id)).copy.brandTitle).not.toBe('尚未保存的标题')

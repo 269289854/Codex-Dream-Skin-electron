@@ -263,6 +263,8 @@ describe('Studio preview editing interaction', () => {
     const input = dialog?.querySelector<HTMLInputElement>('input[placeholder="新主题"]')
     if (!dialog || !input) throw new Error('Create theme dialog is missing.')
     expect(dialog.querySelector('h2')?.textContent).toBe('新建主题')
+    expect(input.disabled).toBe(false)
+    expect(input.readOnly).toBe(false)
     expect(browserWindow.document.activeElement).toBe(input)
     expect(dialog.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
 
