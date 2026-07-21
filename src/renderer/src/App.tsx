@@ -588,6 +588,17 @@ export function App(): React.JSX.Element {
     try { setRuntime(await operation()) } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
   }
 
+  const runSavedRuntime = async (operation: (themeId: string) => Promise<RuntimeStatus>): Promise<void> => {
+    if (!draft) return
+    setRuntimeBusy(true)
+    setError(null)
+    try {
+      const themeId = draft.id
+      if (!(await save())) return
+      setRuntime(await operation(themeId))
+    } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
+  }
+
   const startTheme = async (): Promise<void> => {
     if (!draft) return
     setRuntimeBusy(true)
@@ -814,9 +825,9 @@ export function App(): React.JSX.Element {
             <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{runtime.message}</strong><dl><div><dt>阶段</dt><dd>{runtime.phase}</dd></div><div><dt>端口</dt><dd>{runtime.port}</dd></div><div><dt>页面</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{runtime.lastError}</p>}</div></Property>
             <Property title="Codex 控制"><div className="runtime-commands">
               <button disabled={runtimeBusy} onClick={() => void runRuntime(async () => { await window.studio.codex.detect(); return window.studio.runtime.getStatus() })}><MonitorPlay size={15} />检测 Codex</button>
-              <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.installTheme(draft.id))}><Save size={15} />安装配置</button>
+              <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.installTheme(themeId))}><Save size={15} />安装配置</button>
               <button className="accent" disabled={runtimeBusy} onClick={() => void startTheme()}><Play size={15} />启动并应用</button>
-              <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.reinject(draft.id))}><RotateCcw size={15} />重新注入</button>
+              <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.reinject(themeId))}><RotateCcw size={15} />重新注入</button>
               <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.verify())}><Check size={15} />验证主题</button>
               <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.stop())}><Box size={15} />停止注入</button>
             </div></Property>

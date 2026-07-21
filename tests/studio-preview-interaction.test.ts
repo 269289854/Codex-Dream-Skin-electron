@@ -41,6 +41,8 @@ describe('Studio preview editing interaction', () => {
   let getDefaultTheme: ReturnType<typeof vi.fn>
   let duplicateTheme: ReturnType<typeof vi.fn>
   let activateTheme: ReturnType<typeof vi.fn>
+  let installTheme: ReturnType<typeof vi.fn>
+  let reinjectTheme: ReturnType<typeof vi.fn>
   let exportTheme: ReturnType<typeof vi.fn>
   let importTheme: ReturnType<typeof vi.fn>
   let importThemePath: ReturnType<typeof vi.fn>
@@ -85,6 +87,8 @@ describe('Studio preview editing interaction', () => {
       activeThemeId = id
       return selected
     })
+    installTheme = vi.fn(async () => runtimeStatus)
+    reinjectTheme = vi.fn(async () => runtimeStatus)
     exportTheme = vi.fn(async () => ({ filePath: 'C:\\Shares\\design.cdstheme' }))
     importTheme = vi.fn(async () => null)
     importThemePath = vi.fn(async () => { throw new Error('未设置拖放导入结果') })
@@ -130,10 +134,10 @@ describe('Studio preview editing interaction', () => {
       operations: { cancel: async () => undefined, subscribeProgress: () => () => undefined },
       codex: {
         detect: async () => ({ found: true, version: 'test', executable: '', packageFamilyName: '', running: false, backupAvailable: false }),
-        installTheme: async () => runtimeStatus,
+        installTheme,
         start: async () => runtimeStatus,
         verify: async () => runtimeStatus,
-        reinject: async () => runtimeStatus,
+        reinject: reinjectTheme,
         stop: async () => runtimeStatus,
         restore: async () => runtimeStatus
       },
@@ -734,6 +738,33 @@ describe('Studio preview editing interaction', () => {
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
     expect(selectIcon).toHaveBeenCalledTimes(2)
+  })
+
+  it('saves the current draft before installing or reinjecting runtime changes', async () => {
+    const iconSettings = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('图标样式'))
+    if (!iconSettings) throw new Error('Icon settings navigation is missing.')
+    act(() => iconSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
+    const trigger = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] .icon-picker-trigger')
+    if (!trigger) throw new Error('Composer icon selector is missing.')
+    act(() => trigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const heart = container.querySelector<HTMLButtonElement>('[data-icon-slot="composer"] [data-icon-name="heart"]')
+    if (!heart) throw new Error('Heart icon option is missing.')
+    act(() => heart.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(savedProfiles).toHaveLength(0)
+
+    const runtimeSettings = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('运行设置'))
+    if (!runtimeSettings) throw new Error('Runtime settings navigation is missing.')
+    act(() => runtimeSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const reinject = [...container.querySelectorAll('.runtime-commands button')].find((button) => button.textContent?.includes('重新注入'))
+    if (!reinject) throw new Error('Reinject command is missing.')
+    await act(async () => {
+      reinject.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 30))
+    })
+
+    expect(savedProfiles.at(-1)?.icons.composer).toEqual({ kind: 'builtin', name: 'heart' })
+    expect(reinjectTheme).toHaveBeenCalledWith(profile.id)
   })
 
   it('keeps particles and composer melody synchronized across home and conversation previews', async () => {
