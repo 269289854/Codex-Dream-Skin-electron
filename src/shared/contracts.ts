@@ -1,4 +1,4 @@
-import type { MediaReference, ThemeProfile, ThemeSummary } from './theme'
+import type { CreateThemeInput, MediaReference, ThemeProfile, ThemeSummary } from './theme'
 import type { ImportedFontFormat } from './typography'
 
 export interface AppInfo {
@@ -81,7 +81,7 @@ export interface StudioApi {
   themes: {
     list: () => Promise<ThemeSummary[]>
     get: (id: string) => Promise<ThemeProfile>
-    create: (name: string) => Promise<ThemeProfile>
+    create: (input: CreateThemeInput) => Promise<ThemeProfile>
     getDefault: (id: string) => Promise<ThemeProfile>
     duplicate: (profile: ThemeProfile, name: string) => Promise<ThemeProfile>
     update: (profile: ThemeProfile) => Promise<ThemeProfile>

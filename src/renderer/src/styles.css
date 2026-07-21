@@ -28,6 +28,21 @@ button { cursor: pointer; }
 .theme-dialog footer .secondary-command { width: auto; min-width: 68px; padding: 0 12px; }
 .theme-dialog footer .primary-button { min-width: 96px; }
 .theme-dialog button:disabled { opacity: .5; cursor: default; }
+.create-theme-dialog { width: min(560px,calc(100vw - 32px)); max-height: calc(100vh - 74px); }
+.create-theme-dialog form { min-height: 0; max-height: calc(100vh - 122px); overflow-y: auto; }
+.create-theme-palettes { min-width: 0; margin: 0; padding: 0; border: 0; }
+.create-theme-palettes legend { margin-bottom: 6px; color: #58757a; font-size: 10px; font-weight: 600; }
+.create-theme-palette-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+.create-theme-palette { position: relative; min-width: 0; min-height: 57px; display: grid; align-content: center; gap: 8px; padding: 8px; border: 1px solid #cedbdd; border-radius: 5px; text-align: left; background: #fff; }
+.create-theme-palette:hover { border-color: #8ebec2; background: #f6fbfb; }
+.create-theme-palette.active { border-color: #168f96; background: #eefafa; box-shadow: 0 0 0 2px rgba(22,143,150,.1); }
+.create-theme-palette-name { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; font-size: 10px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.create-theme-palette-swatches { height: 10px; display: grid; grid-template-columns: repeat(8,1fr); overflow: hidden; border: 1px solid rgba(22,75,89,.14); border-radius: 3px; }
+.create-theme-palette-swatches > span { min-width: 0; }
+.create-theme-palette-check { position: absolute; top: 5px; right: 5px; padding: 1px; border-radius: 50%; color: #fff; background: #168f96; }
+.create-theme-custom-colors { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; padding: 9px; border: 1px solid #d9e4e5; border-radius: 5px; background: #f5f9f9; }
+.create-theme-color { min-width: 0; padding: 7px; border: 1px solid #dce6e7; border-radius: 4px; background: #fff; }
+.create-theme-color .solid-color-heading { padding-right: 0; }
 .workspace { min-height: 0; display: grid; grid-template-columns: 224px minmax(620px, 1fr) 310px; }
 .theme-sidebar, .inspector { min-height: 0; padding: 18px 14px; overflow-y: auto; background: #f8fbfb; }
 .theme-sidebar { display: flex; flex-direction: column; border-right: 1px solid #d6e1e3; }.inspector { border-left: 1px solid #d6e1e3; }

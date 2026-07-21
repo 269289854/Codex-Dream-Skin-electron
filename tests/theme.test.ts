@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTIONS, PROJECT_PLACEHOLDER, splitHeadingTemplate } from '../src/shared/home-layout'
-import { createDefaultTheme, parseThemeProfile } from '../src/shared/theme'
+import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, THEME_COLOR_PRESETS } from '../src/shared/theme'
 import { compileTheme } from '../src/main/theme-compiler'
 import { buildDynamicThemeCss } from '../src/main/codex-service'
 import { buildThemeStyleVariables } from '../src/shared/runtime-theme'
@@ -8,6 +8,21 @@ import { buildThemeStyleVariables } from '../src/shared/runtime-theme'
 const id = '11111111-1111-4111-8111-111111111111'
 
 describe('theme schema and compiler', () => {
+  it('provides validated creation palettes and clones default colors per theme', () => {
+    for (const preset of THEME_COLOR_PRESETS) {
+      expect(createThemeInputSchema.parse({ name: ` ${preset.name} `, colors: preset.colors })).toMatchObject({ name: preset.name, colors: preset.colors })
+    }
+    expect(() => createThemeInputSchema.parse({ name: ' ', colors: DEFAULT_THEME_COLORS })).toThrow()
+    expect(() => createThemeInputSchema.parse({ name: '主题', colors: { ...DEFAULT_THEME_COLORS, accent: 'not-a-color' } })).toThrow()
+    expect(() => createThemeInputSchema.parse({ name: '主题', colors: { ...DEFAULT_THEME_COLORS, danger: undefined } })).toThrow()
+
+    const first = createDefaultTheme(id, '第一个')
+    const second = createDefaultTheme('22222222-2222-4222-8222-222222222222', '第二个')
+    first.colors.accent = '#000000'
+    expect(second.colors).toEqual(DEFAULT_THEME_COLORS)
+    expect(first.colors).not.toBe(DEFAULT_THEME_COLORS)
+  })
+
   it('validates current themes and migrates version zero through nine profiles', () => {
     const current = createDefaultTheme(id)
     const expectedCopy = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }

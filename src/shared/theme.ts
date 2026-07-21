@@ -127,7 +127,7 @@ const legacyColorsSchema = z.object({
   danger: legacyColor
 }).strict()
 
-const colorsSchema = z.object({
+export const themeColorsSchema = z.object({
   surface: cssColorSchema,
   ink: cssColorSchema,
   accent: cssColorSchema,
@@ -137,6 +137,35 @@ const colorsSchema = z.object({
   success: cssColorSchema,
   danger: cssColorSchema
 }).strict()
+
+export type ThemeColors = z.infer<typeof themeColorsSchema>
+
+export const createThemeInputSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  colors: themeColorsSchema
+}).strict()
+
+export type CreateThemeInput = z.infer<typeof createThemeInputSchema>
+
+export const DEFAULT_THEME_COLORS: ThemeColors = {
+  surface: '#F7FFFF',
+  ink: '#164B59',
+  accent: '#20BCC3',
+  pink: '#F06EA9',
+  lavender: '#B9A7E8',
+  border: '#BFDADD',
+  success: '#169B68',
+  danger: '#D84A5D'
+}
+
+export const THEME_COLOR_PRESETS = [
+  { id: 'miku', name: '初音青粉', colors: DEFAULT_THEME_COLORS },
+  { id: 'ocean', name: '海盐蓝', colors: { surface: '#F7FBFF', ink: '#183B56', accent: '#2878B8', pink: '#39A6B8', lavender: '#7189C9', border: '#AFC7D8', success: '#17845D', danger: '#CF4A5B' } },
+  { id: 'sakura', name: '樱花莓粉', colors: { surface: '#FFF9FC', ink: '#563247', accent: '#B94F7B', pink: '#E478A4', lavender: '#A884CF', border: '#D9B8C8', success: '#21845E', danger: '#C84458' } },
+  { id: 'forest', name: '森林青绿', colors: { surface: '#F7FCF8', ink: '#214537', accent: '#287F5F', pink: '#6AA878', lavender: '#92A95F', border: '#B7CDBF', success: '#147653', danger: '#C64A54' } },
+  { id: 'sunset', name: '暖阳珊瑚', colors: { surface: '#FFF9F3', ink: '#563B2C', accent: '#C8672F', pink: '#E48762', lavender: '#A9798F', border: '#D8B9A7', success: '#2F7D59', danger: '#C84646' } },
+  { id: 'midnight', name: '夜幕霓虹', colors: { surface: '#171A21', ink: '#F0F5F7', accent: '#43C6CE', pink: '#F17DAA', lavender: '#9A8BE8', border: '#778491', success: '#49C98B', danger: '#FF737F' } }
+] as const satisfies ReadonlyArray<{ id: string; name: string; colors: ThemeColors }>
 
 const polaroidStyleSchema = z.object({
   opacity: normalized,
@@ -240,7 +269,7 @@ const legacyCommonProfileFields = {
 const versionNineThemeSchema = z.object({
   ...legacyCommonProfileFields,
   version: z.literal(9),
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
@@ -255,7 +284,7 @@ const versionTenThemeSchema = z.object({
   ...legacyCommonProfileFields,
   polaroid: currentPolaroidSchema,
   version: z.literal(10),
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
@@ -296,7 +325,7 @@ const versionElevenThemeSchema = z.object({
   updatedAt: z.string().datetime(),
   hero: versionElevenHeroSchema,
   polaroid: versionElevenPolaroidMediaSchema,
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
@@ -320,7 +349,7 @@ export const themeProfileSchema = z.object({
   hero: currentHeroSchema,
   polaroid: currentPolaroidMediaSchema,
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
@@ -336,7 +365,7 @@ export const themeProfileSchema = z.object({
 const versionEightThemeSchema = z.object({
   ...legacyCommonProfileFields,
   version: z.literal(8),
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
@@ -348,7 +377,7 @@ const versionEightThemeSchema = z.object({
 const versionSevenThemeSchema = z.object({
   ...legacyCommonProfileFields,
   version: z.literal(7),
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: versionSevenIconsSchema,
   composerBadge: composerBadgeSchema,
@@ -360,7 +389,7 @@ const versionSevenThemeSchema = z.object({
 const versionSixThemeSchema = z.object({
   ...legacyCommonProfileFields,
   version: z.literal(6),
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentIconsSchema,
   composerBadge: composerBadgeSchema,
@@ -371,7 +400,7 @@ const versionSixThemeSchema = z.object({
 const versionFiveThemeSchema = z.object({
   ...legacyCommonProfileFields,
   version: z.literal(5),
-  colors: colorsSchema,
+  colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: versionFiveIconsSchema,
   appearance: themeAppearanceSchema,
@@ -424,7 +453,6 @@ export type ThemeProfile = CurrentThemeProfile & {
   hero: CurrentThemeProfile['hero'] & { sourceImage?: string | null }
   polaroid: CurrentThemeProfile['polaroid'] & { sourceImage?: string | null }
 }
-export type ThemeColors = ThemeProfile['colors']
 export type IconSlotMap = ThemeProfile['icons']
 export type IconSlot = keyof IconSlotMap
 
@@ -468,16 +496,7 @@ export function createDefaultTheme(id: string, name = '初音未来'): ThemeProf
       mediaTransform: createDefaultMediaTransform()
     },
     conversationBackground: createDefaultConversationBackground(),
-    colors: {
-      surface: '#F7FFFF',
-      ink: '#164B59',
-      accent: '#20BCC3',
-      pink: '#F06EA9',
-      lavender: '#B9A7E8',
-      border: '#BFDADD',
-      success: '#169B68',
-      danger: '#D84A5D'
-    },
+    colors: { ...DEFAULT_THEME_COLORS },
     icons: {
       sidebarMode: { kind: 'builtin', name: 'music' },
       branding: { kind: 'builtin', name: 'sparkles' },

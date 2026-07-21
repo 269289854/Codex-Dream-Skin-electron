@@ -46,7 +46,7 @@ function registerIpc(): void {
   ipcMain.handle('app:get-info', () => ({ version: app.getVersion(), platform: process.platform }))
   ipcMain.handle('themes:list', () => store.list())
   ipcMain.handle('themes:get', (_event, id: string) => store.get(id))
-  ipcMain.handle('themes:create', (_event, name: string) => store.create(name))
+  ipcMain.handle('themes:create', (_event, input: unknown) => store.create(input))
   ipcMain.handle('themes:get-default', (_event, id: string) => store.getDefault(id))
   ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => store.duplicate(profile, name))
   ipcMain.handle('themes:update', (_event, profile: unknown) => store.update(profile))

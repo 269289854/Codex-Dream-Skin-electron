@@ -9,7 +9,7 @@ import mediaInfoFactory, { isTrackType } from 'mediainfo.js'
 const nodeRequire = createRequire(import.meta.url)
 const archiver = nodeRequire('archiver') as typeof import('archiver')
 const yauzl = nodeRequire('yauzl') as typeof import('yauzl')
-import { createDefaultTheme, parseThemeProfile, type ThemeProfile, type ThemeSummary } from '../shared/theme'
+import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type ThemeProfile, type ThemeSummary } from '../shared/theme'
 import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset, MediaSelectionKind } from '../shared/contracts'
 import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
@@ -109,8 +109,10 @@ export class ProfileStore {
     return profile
   }
 
-  async create(name: string): Promise<ThemeProfile> {
-    const profile = createDefaultTheme(randomUUID(), this.cleanName(name))
+  async create(input: unknown): Promise<ThemeProfile> {
+    const request = createThemeInputSchema.parse(typeof input === 'string' ? { name: input, colors: DEFAULT_THEME_COLORS } : input)
+    const profile = createDefaultTheme(randomUUID(), request.name)
+    profile.colors = { ...request.colors }
     await this.writeProfile(profile)
     return profile
   }

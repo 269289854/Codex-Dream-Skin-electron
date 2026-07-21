@@ -4,7 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
-import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
+import { createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { App } from '../src/renderer/src/App'
 import { ICON_PREVIEW_TARGETS, PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
 
@@ -45,6 +45,7 @@ describe('Studio preview editing interaction', () => {
   let importTheme: ReturnType<typeof vi.fn>
   let importThemePath: ReturnType<typeof vi.fn>
   let getPathForFile: ReturnType<typeof vi.fn>
+  let createTheme: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
@@ -88,6 +89,11 @@ describe('Studio preview editing interaction', () => {
     importTheme = vi.fn(async () => null)
     importThemePath = vi.fn(async () => { throw new Error('未设置拖放导入结果') })
     getPathForFile = vi.fn(() => 'C:\\Shares\\design.cdstheme')
+    createTheme = vi.fn(async (input: CreateThemeInput) => {
+      const created = { ...createDefaultTheme('00000000-0000-4000-8000-000000000002', input.name), colors: { ...input.colors } }
+      themeProfiles.push(created)
+      return created
+    })
     const studio: StudioApi = {
       app: { getInfo: async () => ({ version: 'test', platform: 'win32' }) },
       themes: {
@@ -97,7 +103,7 @@ describe('Studio preview editing interaction', () => {
           if (!selected) throw new Error('Theme not found.')
           return selected
         },
-        create: async () => profile,
+        create: createTheme,
         getDefault: getDefaultTheme,
         duplicate: duplicateTheme,
         update: async (next) => {
@@ -242,6 +248,74 @@ describe('Studio preview editing interaction', () => {
     })
     expect(container.querySelector('.theme-item.active small')?.textContent).toBe('自定义主题 · 当前')
     expect(container.querySelector<HTMLButtonElement>('button[title="删除主题"]')?.disabled).toBe(false)
+  })
+
+  it('opens the new theme dialog, selects a preset, edits custom colors, and creates an active theme', async () => {
+    const add = container.querySelector<HTMLButtonElement>('button[title="新建主题"]')
+    if (!add) throw new Error('Create theme command is missing.')
+    act(() => add.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
+    const dialog = container.querySelector<HTMLElement>('.create-theme-dialog')
+    const input = dialog?.querySelector<HTMLInputElement>('input[placeholder="新主题"]')
+    if (!dialog || !input) throw new Error('Create theme dialog is missing.')
+    expect(dialog.querySelector('h2')?.textContent).toBe('新建主题')
+    expect(browserWindow.document.activeElement).toBe(input)
+    expect(dialog.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
+
+    const ocean = [...dialog.querySelectorAll<HTMLButtonElement>('button[role="radio"]')].find((button) => button.textContent?.includes(THEME_COLOR_PRESETS[1].name))
+    if (!ocean) throw new Error('Ocean palette option is missing.')
+    act(() => ocean.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(ocean.getAttribute('aria-checked')).toBe('true')
+
+    const custom = [...dialog.querySelectorAll<HTMLButtonElement>('button[role="radio"]')].find((button) => button.textContent?.includes('自定义'))
+    if (!custom) throw new Error('Custom palette option is missing.')
+    act(() => custom.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(dialog.querySelectorAll('[data-color-key]')).toHaveLength(8)
+    const accent = dialog.querySelector<HTMLInputElement>('input[aria-label="强调颜色值"]')
+    if (!accent) throw new Error('Custom accent color control is missing.')
+    act(() => setInputValue(accent, '#123456'))
+    act(() => setInputValue(input, '海盐自定义'))
+
+    const submit = dialog.querySelector<HTMLButtonElement>('button[type="submit"]')
+    if (!submit) throw new Error('Create theme submit command is missing.')
+    expect(input.value).toBe('海盐自定义')
+    expect(submit.disabled).toBe(false)
+    await act(async () => {
+      submit.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+
+    expect(createTheme).toHaveBeenCalledTimes(1)
+    const submitted = createTheme.mock.calls[0]?.[0] as CreateThemeInput
+    expect(submitted).toMatchObject({ name: '海盐自定义', colors: { accent: '#123456' } })
+    expect(submitted.colors).toEqual({ ...THEME_COLOR_PRESETS[1].colors, accent: '#123456' })
+    expect(activateTheme).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000002')
+    expect(container.querySelector('.create-theme-dialog')).toBeNull()
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('已创建主题“海盐自定义”')
+  })
+
+  it('validates and preserves the new theme dialog when creation fails', async () => {
+    createTheme.mockRejectedValueOnce(new Error('创建主题失败'))
+    const add = container.querySelector<HTMLButtonElement>('button[title="新建主题"]')
+    if (!add) throw new Error('Create theme command is missing.')
+    act(() => add.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const dialog = container.querySelector<HTMLElement>('.create-theme-dialog')
+    const input = dialog?.querySelector<HTMLInputElement>('input[placeholder="新主题"]')
+    const submit = dialog?.querySelector<HTMLButtonElement>('button[type="submit"]')
+    if (!dialog || !input || !submit) throw new Error('Create theme controls are missing.')
+    act(() => setInputValue(input, '失败主题'))
+    await act(async () => {
+      submit.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(createTheme).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.create-theme-dialog')).not.toBeNull()
+    expect(container.querySelector('#create-theme-error')?.textContent).toBe('创建主题失败')
+    expect(submit.disabled).toBe(false)
+
+    act(() => input.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) as unknown as KeyboardEvent))
+    expect(container.querySelector('.create-theme-dialog')).toBeNull()
   })
 
   it('opens an accessible duplicate dialog, validates the name, and cancels with Escape', () => {

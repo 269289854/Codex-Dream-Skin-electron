@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
+import { DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
@@ -18,6 +19,22 @@ afterEach(async () => {
 })
 
 describe('ProfileStore', () => {
+  it('creates a clean theme with validated custom colors', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-create-input-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const colors = { ...DEFAULT_THEME_COLORS, accent: '#2878B8', danger: '#CF4A5B' }
+    const created = await store.create({ name: '  海盐主题  ', colors })
+    expect(created.name).toBe('海盐主题')
+    expect(created.colors).toEqual(colors)
+    expect(created.hero.source).toBeNull()
+    expect(created.polaroid.source).toBeNull()
+    expect(await store.get(created.id)).toMatchObject({ name: '海盐主题', colors })
+    await expect(store.create({ name: '非法主题', colors: { ...colors, accent: 'invalid' } })).rejects.toThrow()
+    expect((await readdir(join(root, 'themes'))).filter((entry) => !entry.startsWith('.'))).toHaveLength(2)
+  })
+
   it('persists named profiles atomically and confines assets', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-store-'))
     roots.push(root)

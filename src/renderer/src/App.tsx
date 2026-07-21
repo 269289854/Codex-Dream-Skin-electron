@@ -14,10 +14,11 @@ import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPO
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { mediaFlipCssTransform } from '../../shared/media'
-import type { IconSlot, ThemeProfile, ThemeSummary } from '../../shared/theme'
+import type { CreateThemeInput, IconSlot, ThemeProfile, ThemeSummary } from '../../shared/theme'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { ConversationBackgroundControls } from './ConversationBackgroundControls'
+import { CreateThemeDialog, themeNameError } from './CreateThemeDialog'
 import { FenceEditor } from './FenceEditor'
 import { MediaFlipControls } from './MediaFlipControls'
 import { PolaroidControls } from './PolaroidControls'
@@ -52,6 +53,7 @@ export function App(): React.JSX.Element {
   const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [duplicateName, setDuplicateName] = useState('')
   const [duplicateBusy, setDuplicateBusy] = useState(false)
@@ -290,15 +292,13 @@ export function App(): React.JSX.Element {
     } finally { setSaving(false) }
   }
 
-  const createTheme = async (): Promise<void> => {
-    const name = window.prompt('主题名称', '新主题')?.trim()
-    if (!name) return
-    try {
-      const profile = await window.studio.themes.create(name)
-      await window.studio.themes.activate(profile.id)
-      await refreshThemes()
-      await loadTheme(profile.id)
-    } catch (reason) { setError(messageOf(reason)) }
+  const createTheme = async (input: CreateThemeInput): Promise<void> => {
+    const profile = await window.studio.themes.create(input)
+    await window.studio.themes.activate(profile.id)
+    await refreshThemes()
+    await loadTheme(profile.id)
+    setCreateDialogOpen(false)
+    setNotice(`已创建主题“${profile.name}”`)
   }
 
   const openDuplicateDialog = (): void => {
@@ -663,6 +663,7 @@ export function App(): React.JSX.Element {
       <header className="titlebar"><span className="brand-mark"><Sparkles size={16} /></span><strong>Codex Dream Skin Studio</strong><span className="title-status">Windows Theme Editor</span></header>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
       {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>释放 .cdstheme 文件以导入主题</strong><span>将创建新的本地主题，不会覆盖现有主题</span></div>}
+      {createDialogOpen && <CreateThemeDialog onClose={() => setCreateDialogOpen(false)} onCreate={createTheme} />}
       {duplicateDialogOpen && <div className="theme-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDuplicateDialog() }}>
         <section className="theme-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-theme-title">
           <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">复制主题</h2><button type="button" title="关闭" disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
@@ -675,7 +676,7 @@ export function App(): React.JSX.Element {
       </div>}
       <section className="workspace">
         <aside className="theme-sidebar">
-          <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>我的主题</h2></div><button className="icon-button" title="新建主题" onClick={() => void createTheme()}><Plus size={17} /></button></div>
+          <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>我的主题</h2></div><button className="icon-button" title="新建主题" onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
           <div className="theme-list">
             {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} onClick={() => { void window.studio.themes.activate(theme.id).then(() => refreshThemes()); void loadTheme(theme.id) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题'}</small></span></button>)}
           </div>
@@ -968,11 +969,4 @@ function assignFontSlot(profile: ThemeProfile, slot: TypographySlot, selection: 
 
 function messageOf(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
-}
-
-function themeNameError(name: string): string | null {
-  const trimmed = name.trim()
-  if (!trimmed) return '主题名称不能为空。'
-  if (trimmed.length > 80) return '主题名称不能超过 80 个字符。'
-  return null
 }
