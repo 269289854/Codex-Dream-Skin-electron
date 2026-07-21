@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PARTICLE_EFFECT_IDS, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, type SparkleParticle } from '../src/shared/particle-effects'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
+import type { ConversationOverlayStyle } from '../src/shared/conversation-overlay'
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 
 let template = ''
@@ -106,10 +107,24 @@ type RuntimeConversationBackgroundConfig = {
   source?: { asset: string; kind: 'image' | 'video'; mimeType: string } | null
   dataUrl?: string | null
   opacity: number
-  overlayColor: string
-  overlayOpacity: number
+  overlayStyle?: ConversationOverlayStyle
+  overlayColor?: string
+  overlayOpacity?: number
   focus: { x: number; y: number }
   scale: number
+}
+
+const fullOverlayStyle: ConversationOverlayStyle = {
+  background: '#FFFFFF',
+  opacity: '0.2',
+  inset: '0',
+  left: '0',
+  top: '0',
+  width: 'auto',
+  height: 'auto',
+  transform: 'none',
+  borderRadius: '0',
+  filter: 'none'
 }
 
 function inject(window: Window, icons: Record<string, { name?: string; dataUrl?: string }> = {
@@ -695,8 +710,19 @@ describe('renderer home DOM adaptation', () => {
       source: { asset: 'assets/background.gif', kind: 'image', mimeType: 'image/gif' },
       dataUrl: 'data:image/gif;base64,AA==',
       opacity: .8,
-      overlayColor: '#FFFFFF',
-      overlayOpacity: .2,
+      overlayStyle: {
+        ...fullOverlayStyle,
+        background: 'linear-gradient(120deg, #FFFFFF 0%, #123456 100%)',
+        opacity: '0.35',
+        inset: 'auto',
+        left: '42%',
+        top: '55%',
+        width: '72%',
+        height: '62%',
+        transform: 'translate(-50%, -50%)',
+        borderRadius: '28px',
+        filter: 'blur(18px)'
+      },
       focus: { x: .2, y: .7 },
       scale: 1.4
     }
@@ -713,7 +739,15 @@ describe('renderer home DOM adaptation', () => {
     expect(backgroundLayer?.firstElementChild?.classList.contains('dream-conversation-background-media')).toBe(true)
     expect(image?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
     expect(image?.style.objectPosition).toBe('20% 70%')
-    expect(backgroundLayer?.querySelector(':scope > .dream-conversation-background-overlay')?.classList.contains('dream-conversation-background-overlay')).toBe(true)
+    const overlay = backgroundLayer?.querySelector(':scope > .dream-conversation-background-overlay') as HTMLElement | null
+    expect(overlay?.classList.contains('dream-conversation-background-overlay')).toBe(true)
+    expect(overlay?.style.background).toContain('linear-gradient(120deg')
+    expect(overlay?.style.left).toBe('42%')
+    expect(overlay?.style.top).toBe('55%')
+    expect(overlay?.style.width).toBe('72%')
+    expect(overlay?.style.height).toBe('62%')
+    expect(overlay?.style.borderRadius).toBe('28px')
+    expect(overlay?.style.filter).toBe('blur(18px)')
     expect(backgroundLayer?.nextElementSibling).toBe(surface)
     expect(surface?.firstElementChild?.classList.contains('thread-content')).toBe(true)
     stateOf(window).ensure()
@@ -735,8 +769,7 @@ describe('renderer home DOM adaptation', () => {
       color: '#F7FFFF',
       source: null,
       opacity: 1,
-      overlayColor: '#FFFFFF',
-      overlayOpacity: .2,
+      overlayStyle: { ...fullOverlayStyle, background: 'radial-gradient(circle at 50% 40%, #FFFFFF 0%, transparent 100%)' },
       focus: { x: .5, y: .5 },
       scale: 1
     }
@@ -765,6 +798,50 @@ describe('renderer home DOM adaptation', () => {
     expect(surface.querySelector(':scope > .dream-conversation-background')).toBeNull()
     expect(viewport.querySelectorAll(':scope > .dream-conversation-background')).toHaveLength(1)
     expect(surface.scrollTop).toBe(420)
+
+    const overlay = backgroundLayer.querySelector(':scope > .dream-conversation-background-overlay') as HTMLElement | null
+    if (!overlay) throw new Error('Conversation overlay fixture is missing.')
+    overlay.style.inset = 'auto'
+    overlay.style.left = '42%'
+    overlay.style.top = '55%'
+    overlay.style.width = '72%'
+    overlay.style.height = '62%'
+    overlay.style.transform = 'translate(-50%, -50%)'
+    overlay.style.borderRadius = '28px'
+    overlay.style.filter = 'blur(18px)'
+    stateOf(window).ensure()
+    expect(overlay.style.left).toBe('0px')
+    expect(overlay.style.top).toBe('0px')
+    expect(overlay.style.width).toBe('auto')
+    expect(overlay.style.height).toBe('auto')
+    expect(overlay.style.transform).toBe('none')
+    expect(overlay.style.borderRadius).toBe('0px')
+    expect(overlay.style.filter).toBe('none')
+  })
+
+  it('keeps legacy overlay fallbacks full-size when generated styles are absent', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div class="thread-scroll-container" data-app-action-timeline-scroll><div class="thread-content"><article data-message-author-role="assistant">Reply</article><div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div></div></div></main>'
+    const background: RuntimeConversationBackgroundConfig = {
+      visible: true,
+      mode: 'color',
+      color: '#F7FFFF',
+      source: null,
+      opacity: 1,
+      overlayColor: '#123456',
+      overlayOpacity: .35,
+      focus: { x: .5, y: .5 },
+      scale: 1
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+
+    const overlay = window.document.querySelector('.dream-conversation-background-overlay') as HTMLElement | null
+    expect(overlay?.style.background).toBe('#123456')
+    expect(overlay?.style.opacity).toBe('0.35')
+    expect(overlay?.style.left).toBe('0px')
+    expect(overlay?.style.top).toBe('0px')
+    expect(overlay?.style.width).toBe('auto')
+    expect(overlay?.style.height).toBe('auto')
   })
 
   it('starts a muted looping conversation video and removes it when the page changes', () => {
@@ -779,8 +856,7 @@ describe('renderer home DOM adaptation', () => {
       source: { asset: 'assets/background.mp4', kind: 'video', mimeType: 'video/mp4' },
       dataUrl: 'blob:conversation-background',
       opacity: 1,
-      overlayColor: '#000000',
-      overlayOpacity: .3,
+      overlayStyle: { ...fullOverlayStyle, background: '#000000', opacity: '0.3' },
       focus: { x: .5, y: .5 },
       scale: 1
     }

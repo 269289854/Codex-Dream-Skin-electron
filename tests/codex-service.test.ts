@@ -49,6 +49,15 @@ describe('CodexService operation queue', () => {
     const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
     profile.updatedAt = '2026-07-20T00:00:00.000Z'
     profile.polaroid.source = { asset: 'asset-polaroid', kind: 'video', mimeType: 'video/mp4' }
+    profile.conversationBackground.overlay = {
+      paint: { kind: 'linear', angle: 120, stops: [{ color: '#123456', position: 0 }, { color: '#abcdef', position: 1 }] },
+      opacity: .4,
+      shape: 'ellipse',
+      position: { x: .3, y: .6 },
+      size: { width: .5, height: .4 },
+      softness: 12,
+      cornerRadius: 28
+    }
     const store = {
       root,
       themesRoot: join(root, 'themes'),
@@ -67,6 +76,10 @@ describe('CodexService operation queue', () => {
     expect(firstVersion).toMatch(/^studio-2026-07-20T00:00:00\.000Z-[0-9a-f-]{36}$/)
     expect(secondVersion).not.toBe(firstVersion)
     expect(first).toContain('"asset":"asset-polaroid"')
+    expect(first).toContain('"overlayStyle":{"background":"linear-gradient(120deg, #123456 0%, #abcdef 100%)"')
+    expect(first).toContain('"left":"30%","top":"60%","width":"50%","height":"40%"')
+    expect(first).toContain('"borderRadius":"50%","filter":"blur(12px)"')
+    expect(first).not.toContain('"overlay":{"paint"')
   })
 
 })

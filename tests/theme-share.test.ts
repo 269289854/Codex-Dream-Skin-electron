@@ -85,7 +85,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(14)
+    expect(imported.version).toBe(15)
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.resetColors.accent).toBe('#2878B8')
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })

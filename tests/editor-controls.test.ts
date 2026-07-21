@@ -139,6 +139,16 @@ describe('editor appearance controls', () => {
     expect(container.querySelector<HTMLButtonElement>('.add-stop-button')?.disabled).toBe(true)
   })
 
+  it('renders a paint editor with a standalone label', () => {
+    act(() => root.render(React.createElement(PaintControl, {
+      label: '遮罩颜色',
+      value: { kind: 'solid', color: '#FFFFFF' },
+      onChange: vi.fn()
+    })))
+    expect(container.querySelector('.paint-control-heading strong')?.textContent).toBe('遮罩颜色')
+    expect(container.querySelector('.paint-control')?.hasAttribute('data-paint-token')).toBe(false)
+  })
+
   it('reuses one imported font across font slots', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     profile.typography.importedFonts.push({ id: 'font-test', family: 'Test Font', asset: 'assets/font-test.woff2', originalName: 'test.woff2', format: 'woff2' })

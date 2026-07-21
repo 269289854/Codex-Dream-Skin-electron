@@ -631,7 +631,7 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('[data-inspector-anchor="typography"]')?.classList.contains('inspector-highlight')).toBe(true)
   })
 
-  it('opens conversation background editing from the preview and persists the color mode', async () => {
+  it('edits and persists a shaped gradient conversation overlay from the preview', async () => {
     const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
     if (!conversation) throw new Error('Conversation preview command is missing.')
     act(() => conversation.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
@@ -656,13 +656,70 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector<HTMLElement>('.preview-conversation-background-color')?.style.opacity).toBe('0.72')
     expect(container.querySelector<HTMLElement>('.preview-conversation-background-overlay')?.style.opacity).toBe('0.24')
 
+    const overlayControls = container.querySelector<HTMLElement>('[role="dialog"] .conversation-overlay-controls')
+    if (!overlayControls) throw new Error('Conversation overlay controls are missing.')
+    const linear = [...overlayControls.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === '线性')
+    if (!linear) throw new Error('Linear overlay control is missing.')
+    act(() => linear.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
+    const angle = [...overlayControls.querySelectorAll<HTMLElement>('.range-row')].find((row) => row.querySelector('span')?.textContent === '角度')?.querySelector<HTMLInputElement>('input')
+    if (!angle) throw new Error('Gradient overlay angle is missing.')
+    act(() => {
+      setInputValue(angle, '210')
+      angle.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    })
+    const secondColor = overlayControls.querySelectorAll<HTMLInputElement>('.gradient-stop .color-text-input')[1]
+    if (!secondColor) throw new Error('Gradient overlay color is missing.')
+    act(() => setInputValue(secondColor, '#123456'))
+
+    const roundedRect = [...overlayControls.querySelectorAll<HTMLButtonElement>('.conversation-overlay-shapes button')].find((button) => button.textContent === '圆角矩形')
+    if (!roundedRect) throw new Error('Rounded rectangle overlay control is missing.')
+    act(() => roundedRect.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
+    const setOverlayRange = (label: string, value: string): void => {
+      const input = [...container.querySelectorAll<HTMLElement>('[role="dialog"] .conversation-overlay-geometry .range-row')].find((row) => row.querySelector('span')?.textContent === label)?.querySelector<HTMLInputElement>('input')
+      if (!input) throw new Error(`${label} control is missing.`)
+      act(() => {
+        setInputValue(input, value)
+        input.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+      })
+    }
+    setOverlayRange('水平位置', '.47')
+    setOverlayRange('垂直位置', '.55')
+    setOverlayRange('遮罩宽度', '.64')
+    setOverlayRange('遮罩高度', '.52')
+    setOverlayRange('边缘柔化', '22')
+    setOverlayRange('圆角', '36')
+
+    const overlayPreview = container.querySelector<HTMLElement>('.preview-conversation-background-overlay')
+    expect(overlayPreview?.style.background).toContain('linear-gradient(210deg')
+    expect(overlayPreview?.style.background).toContain('#123456 100%')
+    expect(overlayPreview?.style.left).toBe('47%')
+    expect(overlayPreview?.style.top).toBe('55%')
+    expect(overlayPreview?.style.width).toBe('64%')
+    expect(overlayPreview?.style.height).toBe('52%')
+    expect(overlayPreview?.style.borderRadius).toBe('36px')
+    expect(overlayPreview?.style.filter).toBe('blur(22px)')
+
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
     await act(async () => {
       save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await Promise.resolve()
     })
-    expect(savedProfiles.at(-1)?.conversationBackground).toMatchObject({ visible: true, mode: 'color', opacity: .72 })
+    expect(savedProfiles.at(-1)?.conversationBackground).toMatchObject({
+      visible: true,
+      mode: 'color',
+      opacity: .72,
+      overlay: {
+        paint: { kind: 'linear', angle: 210, stops: [{ color: '#FFFFFF', position: 0 }, { color: '#123456', position: 1 }] },
+        shape: 'roundedRect',
+        position: { x: .47, y: .55 },
+        size: { width: .64, height: .52 },
+        softness: 22,
+        cornerRadius: 36
+      }
+    })
   })
 
   it('keeps cancelled media selection unchanged and previews image, GIF, and video modes', async () => {

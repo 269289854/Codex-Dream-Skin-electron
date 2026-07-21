@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema } from './appearance'
+import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema, themePaintSchema } from './appearance'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
 import { PARTICLE_EFFECT_IDS } from './particle-effects'
 import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
@@ -233,17 +233,44 @@ export type VideoPlayback = z.infer<typeof videoPlaybackSchema>
 export const conversationBackgroundModeSchema = z.enum(['color', 'image', 'gif', 'video'])
 export type ConversationBackgroundMode = z.infer<typeof conversationBackgroundModeSchema>
 
-const conversationBackgroundSchema = z.object({
+const conversationBackgroundFields = {
   visible: z.boolean(),
   mode: conversationBackgroundModeSchema,
   color: cssColorSchema,
   source: mediaReferenceSchema.nullable(),
   opacity: normalized,
-  overlayColor: cssColorSchema,
-  overlayOpacity: normalized,
   focus: pointSchema,
   scale: z.number().finite().min(1).max(3)
-}).strict().superRefine((background, context) => {
+}
+
+const versionFourteenConversationBackgroundSchema = z.object({
+  ...conversationBackgroundFields,
+  overlayColor: cssColorSchema,
+  overlayOpacity: normalized
+}).strict().superRefine(refineConversationBackground)
+
+const conversationBackgroundOverlaySchema = z.object({
+  paint: themePaintSchema,
+  opacity: normalized,
+  shape: z.enum(['full', 'ellipse', 'roundedRect']),
+  position: pointSchema,
+  size: z.object({
+    width: z.number().finite().min(0.1).max(1),
+    height: z.number().finite().min(0.1).max(1)
+  }).strict(),
+  softness: z.number().finite().min(0).max(80),
+  cornerRadius: z.number().finite().min(0).max(160)
+}).strict()
+
+const conversationBackgroundSchema = z.object({
+  ...conversationBackgroundFields,
+  overlay: conversationBackgroundOverlaySchema
+}).strict().superRefine(refineConversationBackground)
+
+function refineConversationBackground(background: {
+  mode: ConversationBackgroundMode
+  source: MediaReference | null
+}, context: z.RefinementCtx): void {
   if (background.mode === 'color') {
     if (background.source !== null) context.addIssue({ code: 'custom', path: ['source'], message: '颜色背景不能引用媒体。' })
     return
@@ -257,9 +284,10 @@ const conversationBackgroundSchema = z.object({
   if (background.mode === 'gif' && background.source.mimeType !== 'image/gif') context.addIssue({ code: 'custom', path: ['source', 'mimeType'], message: 'GIF 背景必须使用 GIF 素材。' })
   if (background.mode === 'gif' && background.source.kind !== 'image') context.addIssue({ code: 'custom', path: ['source', 'kind'], message: 'GIF 背景必须使用图片素材。' })
   if (background.mode === 'image' && (background.source.kind !== 'image' || background.source.mimeType === 'image/gif')) context.addIssue({ code: 'custom', path: ['source'], message: '图片背景只支持 PNG、WebP 或 JPEG。' })
-})
+}
 
 export type ConversationBackground = z.infer<typeof conversationBackgroundSchema>
+export type ConversationBackgroundOverlay = z.infer<typeof conversationBackgroundOverlaySchema>
 
 const legacyCommonProfileFields = {
   id: z.string().uuid(),
@@ -369,7 +397,7 @@ const versionTwelveThemeSchema = z.object({
   updatedAt: z.string().datetime(),
   hero: currentHeroSchema,
   polaroid: currentPolaroidMediaSchema,
-  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  conversationBackground: versionFourteenConversationBackgroundSchema.default(createDefaultVersionFourteenConversationBackground()),
   colors: themeColorsSchema,
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
@@ -390,7 +418,7 @@ const versionThirteenThemeFields = {
   updatedAt: z.string().datetime(),
   hero: currentHeroSchema,
   polaroid: currentPolaroidMediaSchema,
-  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  conversationBackground: versionFourteenConversationBackgroundSchema.default(createDefaultVersionFourteenConversationBackground()),
   colors: themeColorsSchema,
   copy: currentThemeCopySchema,
   icons: currentSidebarIconsSchema,
@@ -406,9 +434,20 @@ const versionThirteenThemeSchema = z.object(versionThirteenThemeFields).strict()
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionFourteenThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(14),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(15),
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   resetColors: themeColorsSchema
 }).strict().superRefine((profile, context) => {
   if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
@@ -523,7 +562,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 14,
+    version: 15,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
@@ -594,10 +633,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 14) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 15) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 14) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionFourteen(versionFourteenThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 13) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -782,10 +825,26 @@ function migrateVersionTwelve(legacy: z.infer<typeof versionTwelveThemeSchema>):
 }
 
 function migrateVersionThirteen(legacy: z.infer<typeof versionThirteenThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionFourteen(versionFourteenThemeSchema.parse({
     ...legacy,
     version: 14,
     resetColors: { ...legacy.colors }
+  }))
+}
+
+function migrateVersionFourteen(legacy: z.infer<typeof versionFourteenThemeSchema>): ThemeProfile {
+  const { overlayColor, overlayOpacity, ...conversationBackground } = legacy.conversationBackground
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 15,
+    conversationBackground: {
+      ...conversationBackground,
+      overlay: {
+        ...createDefaultConversationOverlay(),
+        paint: { kind: 'solid', color: overlayColor },
+        opacity: overlayOpacity
+      }
+    }
   }))
 }
 
@@ -846,10 +905,35 @@ function createDefaultConversationBackground(): ConversationBackground {
     color: '#F7FFFF',
     source: null,
     opacity: 1,
+    overlay: createDefaultConversationOverlay(),
+    focus: { x: 0.5, y: 0.5 },
+    scale: 1
+  }
+}
+
+function createDefaultVersionFourteenConversationBackground(): z.infer<typeof versionFourteenConversationBackgroundSchema> {
+  return {
+    visible: false,
+    mode: 'color',
+    color: '#F7FFFF',
+    source: null,
+    opacity: 1,
     overlayColor: '#FFFFFF',
     overlayOpacity: 0.24,
     focus: { x: 0.5, y: 0.5 },
     scale: 1
+  }
+}
+
+function createDefaultConversationOverlay(): ConversationBackgroundOverlay {
+  return {
+    paint: { kind: 'solid', color: '#FFFFFF' },
+    opacity: 0.24,
+    shape: 'full',
+    position: { x: 0.5, y: 0.5 },
+    size: { width: 0.72, height: 0.62 },
+    softness: 18,
+    cornerRadius: 28
   }
 }
 

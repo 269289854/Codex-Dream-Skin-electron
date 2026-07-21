@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Image, Trash2, Upload, Video } from 'lucide-react'
 import type { MediaSelectionKind } from '../../shared/contracts'
 import type { ThemeProfile } from '../../shared/theme'
-import { Range, SolidColorControl } from './editor-controls'
+import { PaintControl, Range, SolidColorControl } from './editor-controls'
 
 interface ConversationBackgroundControlsProps {
   profile: ThemeProfile
@@ -20,8 +20,15 @@ const modes: Array<{ value: ThemeProfile['conversationBackground']['mode']; labe
   { value: 'video', label: '视频' }
 ]
 
+const overlayShapes: Array<{ value: ThemeProfile['conversationBackground']['overlay']['shape']; label: string }> = [
+  { value: 'full', label: '全屏' },
+  { value: 'ellipse', label: '椭圆' },
+  { value: 'roundedRect', label: '圆角矩形' }
+]
+
 export function ConversationBackgroundControls({ profile, backgroundUrl, mediaBusy = false, onChange, onInteractionEnd, onSelectMedia }: ConversationBackgroundControlsProps): React.JSX.Element {
   const background = profile.conversationBackground
+  const overlay = background.overlay
   const mediaMode = background.mode === 'image' || background.mode === 'gif' || background.mode === 'video'
   const chooseMode = (mode: ThemeProfile['conversationBackground']['mode']): void => {
     if (mode === 'color') {
@@ -52,7 +59,20 @@ export function ConversationBackgroundControls({ profile, backgroundUrl, mediaBu
       <Range label="垂直焦点" min={0} max={1} step={.01} value={background.focus.y} onChange={(value) => onChange((next) => { next.conversationBackground.focus.y = value }, 'conversation-background-focus-y')} onChangeEnd={onInteractionEnd} />
       <Range label="缩放" min={1} max={3} step={.01} value={background.scale} onChange={(value) => onChange((next) => { next.conversationBackground.scale = value }, 'conversation-background-scale')} onChangeEnd={onInteractionEnd} />
     </>}
-    <SolidColorControl label="遮罩颜色" value={background.overlayColor} onChange={(value) => onChange((next) => { next.conversationBackground.overlayColor = value }, 'conversation-background-overlay-color')} onChangeEnd={onInteractionEnd} />
-    <Range label="遮罩透明度" min={0} max={1} step={.01} value={background.overlayOpacity} onChange={(value) => onChange((next) => { next.conversationBackground.overlayOpacity = value }, 'conversation-background-overlay-opacity')} onChangeEnd={onInteractionEnd} />
+    <section className="conversation-overlay-controls" aria-label="对话背景遮罩">
+      <PaintControl label="遮罩颜色" value={overlay.paint} onChange={(paint, continuous) => onChange((next) => { next.conversationBackground.overlay.paint = paint }, continuous ? 'conversation-background-overlay-paint' : undefined)} onChangeEnd={onInteractionEnd} />
+      <Range label="遮罩透明度" min={0} max={1} step={.01} value={overlay.opacity} onChange={(value) => onChange((next) => { next.conversationBackground.overlay.opacity = value }, 'conversation-background-overlay-opacity')} onChangeEnd={onInteractionEnd} />
+      <div className="segmented-control conversation-overlay-shapes" aria-label="遮罩形状">
+        {overlayShapes.map((shape) => <button type="button" key={shape.value} className={overlay.shape === shape.value ? 'active' : ''} onClick={() => onChange((next) => { next.conversationBackground.overlay.shape = shape.value })}>{shape.label}</button>)}
+      </div>
+      {overlay.shape !== 'full' && <div className="conversation-overlay-geometry">
+        <Range label="水平位置" min={0} max={1} step={.01} value={overlay.position.x} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.conversationBackground.overlay.position.x = value }, 'conversation-background-overlay-position-x')} onChangeEnd={onInteractionEnd} />
+        <Range label="垂直位置" min={0} max={1} step={.01} value={overlay.position.y} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.conversationBackground.overlay.position.y = value }, 'conversation-background-overlay-position-y')} onChangeEnd={onInteractionEnd} />
+        <Range label="遮罩宽度" min={.1} max={1} step={.01} value={overlay.size.width} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.conversationBackground.overlay.size.width = value }, 'conversation-background-overlay-width')} onChangeEnd={onInteractionEnd} />
+        <Range label="遮罩高度" min={.1} max={1} step={.01} value={overlay.size.height} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.conversationBackground.overlay.size.height = value }, 'conversation-background-overlay-height')} onChangeEnd={onInteractionEnd} />
+        <Range label="边缘柔化" min={0} max={80} step={1} suffix="px" value={overlay.softness} onChange={(value) => onChange((next) => { next.conversationBackground.overlay.softness = value }, 'conversation-background-overlay-softness')} onChangeEnd={onInteractionEnd} />
+        {overlay.shape === 'roundedRect' && <Range label="圆角" min={0} max={160} step={1} suffix="px" value={overlay.cornerRadius} onChange={(value) => onChange((next) => { next.conversationBackground.overlay.cornerRadius = value }, 'conversation-background-overlay-corner-radius')} onChangeEnd={onInteractionEnd} />}
+      </div>}
+    </section>
   </div>
 }

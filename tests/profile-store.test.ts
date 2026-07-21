@@ -53,10 +53,19 @@ describe('ProfileStore', () => {
     const colors = { ...DEFAULT_THEME_COLORS, accent: '#B94F7B', pink: '#E478A4' }
     const created = await store.create({ name: '旧版主题', colors })
     const { resetColors: _resetColors, ...legacy } = created
-    await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({ ...legacy, version: 13 }, null, 2)}\n`, 'utf8')
+    const { overlay, ...legacyConversationBackground } = created.conversationBackground
+    await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({
+      ...legacy,
+      version: 13,
+      conversationBackground: {
+        ...legacyConversationBackground,
+        overlayColor: overlay.paint.kind === 'solid' ? overlay.paint.color : '#FFFFFF',
+        overlayOpacity: overlay.opacity
+      }
+    }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 14, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 15, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -102,7 +111,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 14,
+      version: 15,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },

@@ -8,6 +8,7 @@ import {
 import type { MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
+import { buildConversationOverlayStyle } from '../../shared/conversation-overlay'
 import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
 import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
@@ -921,7 +922,7 @@ function ConversationPreview({ profile, assets }: { profile: ThemeProfile; asset
       {background.visible && background.mode === 'color' && <div className="preview-conversation-background-color" style={{ background: background.color, opacity: background.opacity }} />}
       {background.visible && sourceUrl && background.mode === 'video' && <video className="preview-conversation-background-media" src={sourceUrl} muted autoPlay loop playsInline style={mediaStyle} />}
       {background.visible && sourceUrl && background.mode !== 'color' && background.mode !== 'video' && <img className="preview-conversation-background-media" src={sourceUrl} alt="" draggable={false} style={mediaStyle} />}
-      {background.visible && <div className="preview-conversation-background-overlay" style={{ background: background.overlayColor, opacity: background.overlayOpacity }} />}
+      {background.visible && <div className="preview-conversation-background-overlay" style={buildConversationOverlayStyle(background.overlay)} />}
     </div>
     <div className="preview-message-list"><article className="preview-message user" data-preview-target="conversation-message" tabIndex={0}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article><article className="preview-message assistant" data-preview-target="conversation-message" tabIndex={0}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p><button className="preview-primary-command" data-preview-target="primary-button" type="button">查看改动</button></article></div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div>
   </div></div>

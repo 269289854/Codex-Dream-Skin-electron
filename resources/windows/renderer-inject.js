@@ -725,6 +725,32 @@
     }
     background?.querySelector(':scope > .dream-conversation-background-media')?.remove();
   };
+  const ensureConversationOverlay = (background, config) => {
+    let overlay = background.querySelector(':scope > .dream-conversation-background-overlay');
+    if (!(overlay instanceof HTMLElement)) {
+      overlay = document.createElement('div');
+      overlay.className = 'dream-conversation-background-overlay';
+    }
+    background.appendChild(overlay);
+    const style = config?.overlayStyle && typeof config.overlayStyle === 'object' ? config.overlayStyle : {};
+    const fallbackOpacity = `${clamp(Number(config?.overlayOpacity) || 0, 0, 1)}`;
+    const properties = [
+      ['background', 'background', typeof config?.overlayColor === 'string' ? config.overlayColor : '#FFFFFF'],
+      ['opacity', 'opacity', fallbackOpacity],
+      ['inset', 'inset', '0'],
+      ['left', 'left', '0'],
+      ['top', 'top', '0'],
+      ['width', 'width', 'auto'],
+      ['height', 'height', 'auto'],
+      ['transform', 'transform', 'none'],
+      ['borderRadius', 'border-radius', '0'],
+      ['filter', 'filter', 'none']
+    ];
+    properties.forEach(([key, property, fallback]) => {
+      setInlineStyle(overlay, property, typeof style[key] === 'string' ? style[key] : fallback);
+    });
+    return overlay;
+  };
   const ensureConversationBackground = () => {
     const config = conversationBackgroundConfig();
     const configuredMode = typeof config?.mode === 'string' ? config.mode : 'color';
@@ -775,14 +801,7 @@
       }
       setInlineStyle(color, 'background', typeof config?.color === 'string' ? config.color : 'var(--dream-main-surface)');
       setInlineStyle(color, 'opacity', `${opacity}`);
-      let overlay = background.querySelector(':scope > .dream-conversation-background-overlay');
-      if (!(overlay instanceof HTMLElement)) {
-        overlay = document.createElement('div');
-        overlay.className = 'dream-conversation-background-overlay';
-        background.appendChild(overlay);
-      }
-      setInlineStyle(overlay, 'background', typeof config?.overlayColor === 'string' ? config.overlayColor : '#FFFFFF');
-      setInlineStyle(overlay, 'opacity', `${clamp(Number(config?.overlayOpacity) || 0, 0, 1)}`);
+      ensureConversationOverlay(background, config);
       return;
     }
     background.querySelector(':scope > .dream-conversation-background-color')?.remove();
@@ -836,14 +855,7 @@
       setInlineStyle(media, 'opacity', `${opacity}`);
       setInlineStyle(media, 'transform', `scale(${scale})`);
     }
-    let overlay = background.querySelector(':scope > .dream-conversation-background-overlay');
-    if (!(overlay instanceof HTMLElement)) {
-      overlay = document.createElement('div');
-      overlay.className = 'dream-conversation-background-overlay';
-      background.appendChild(overlay);
-    }
-    setInlineStyle(overlay, 'background', typeof config?.overlayColor === 'string' ? config.overlayColor : '#FFFFFF');
-    setInlineStyle(overlay, 'opacity', `${clamp(Number(config?.overlayOpacity) || 0, 0, 1)}`);
+    ensureConversationOverlay(background, config);
   };
 
   const clearComposerSendIcon = (button) => {

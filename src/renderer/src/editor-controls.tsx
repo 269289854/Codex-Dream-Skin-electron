@@ -37,12 +37,15 @@ interface RangeProps {
   max: number
   step: number
   suffix?: string
+  displayScale?: number
   disabled?: boolean
   onChangeEnd?: () => void
 }
 
-export function Range({ label, value, onChange, min, max, step, suffix = '', disabled = false, onChangeEnd }: RangeProps): React.JSX.Element {
-  return <label className={disabled ? 'range-row is-disabled' : 'range-row'}><span>{label}</span><input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onInput={(event) => onChange(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} /><output>{Number.isInteger(step) ? value : value.toFixed(2)}{suffix}</output></label>
+export function Range({ label, value, onChange, min, max, step, suffix = '', displayScale = 1, disabled = false, onChangeEnd }: RangeProps): React.JSX.Element {
+  const displayValue = value * displayScale
+  const formattedValue = Number.isInteger(step * displayScale) ? displayValue.toFixed(0) : displayValue.toFixed(2)
+  return <label className={disabled ? 'range-row is-disabled' : 'range-row'}><span>{label}</span><input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onInput={(event) => onChange(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} /><output>{formattedValue}{suffix}</output></label>
 }
 
 export interface SolidColorControlProps {
@@ -110,14 +113,15 @@ export function AppearanceColorControl({ token, value, onChange, onChangeEnd }: 
 }
 
 interface PaintControlProps {
-  token: AppearancePaintToken
+  token?: AppearancePaintToken
+  label?: string
   value: ThemePaint
   onChange: (paint: ThemePaint, continuous?: boolean) => void
   onChangeEnd?: () => void
 }
 
-export function PaintControl({ token, value, onChange, onChangeEnd }: PaintControlProps): React.JSX.Element {
-  const label = APPEARANCE_PAINT_TOKENS[token].label
+export function PaintControl({ token, label: providedLabel, value, onChange, onChangeEnd }: PaintControlProps): React.JSX.Element {
+  const label = providedLabel ?? (token ? APPEARANCE_PAINT_TOKENS[token].label : '颜色')
   const switchKind = (kind: ThemePaint['kind']): void => {
     if (kind === value.kind) return
     const color = value.kind === 'solid' ? value.color : value.stops[0]?.color ?? '#000000'
