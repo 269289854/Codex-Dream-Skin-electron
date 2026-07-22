@@ -5,6 +5,7 @@ import { unzipSync, zipSync } from 'fflate'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { decodeShareZip, sha256, validateShareContents } from '../src/main/theme-share'
+import { DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
@@ -92,11 +93,45 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(16)
+    expect(imported.version).toBe(17)
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.resetColors.accent).toBe('#2878B8')
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
+  })
+
+  it('repairs generated version sixteen title colors while importing shares', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-v16-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const original = await store.create({ name: '版本十六分享主题', colors: { ...DEFAULT_THEME_COLORS, ink: '#214537' } })
+    const packagePath = join(root, 'v16.cdstheme')
+    await store.exportSharePackage(original, packagePath)
+    const archive = unzipSync(await readFile(packagePath))
+    const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as { profileVersion: number }
+    const generatedColor = '#556677'
+    const legacy = {
+      ...original,
+      version: 16,
+      appearance: {
+        ...original.appearance,
+        colors: {
+          sidebarProjectsTitleText: generatedColor,
+          sidebarProjectsTitleHoverText: generatedColor,
+          sidebarTasksTitleText: generatedColor,
+          sidebarTasksTitleHoverText: '#abcdef'
+        }
+      }
+    }
+    manifest.profileVersion = 16
+    archive['theme.json'] = Buffer.from(JSON.stringify(legacy))
+    await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
+
+    const imported = await store.importSharePackage(packagePath)
+    expect(imported.version).toBe(17)
+    expect(imported.resetColors).toEqual(imported.colors)
+    expect(imported.appearance.colors).toEqual({ sidebarTasksTitleHoverText: '#abcdef' })
   })
 
   it('rejects altered manifests without creating a theme', async () => {

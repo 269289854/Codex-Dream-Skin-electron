@@ -68,9 +68,9 @@ export const APPEARANCE_COLOR_TOKENS = {
   sidebarMutedText: colorToken('侧边栏弱化文字', 'sidebar', '--dream-sidebar-muted-text', 'border', ['sidebar']),
   sidebarHeaderText: colorToken('侧边栏头部文字', 'sidebar', '--dream-sidebar-header-text', 'ink', ['sidebar-header']),
   sidebarProjectsTitleText: colorToken('项目标题普通文字', 'sidebar', '--dream-sidebar-projects-title-text', 'ink', ['sidebar-project-title']),
-  sidebarProjectsTitleHoverText: colorToken('项目标题悬停文字', 'sidebar', '--dream-sidebar-projects-title-hover-text', 'ink', ['sidebar-project-title'], 'hover'),
+  sidebarProjectsTitleHoverText: colorToken('项目标题悬停文字', 'sidebar', '--dream-sidebar-projects-title-hover-text', 'accent', ['sidebar-project-title'], 'hover'),
   sidebarTasksTitleText: colorToken('任务标题普通文字', 'sidebar', '--dream-sidebar-tasks-title-text', 'ink', ['sidebar-task-title']),
-  sidebarTasksTitleHoverText: colorToken('任务标题悬停文字', 'sidebar', '--dream-sidebar-tasks-title-hover-text', 'ink', ['sidebar-task-title'], 'hover'),
+  sidebarTasksTitleHoverText: colorToken('任务标题悬停文字', 'sidebar', '--dream-sidebar-tasks-title-hover-text', 'accent', ['sidebar-task-title'], 'hover'),
   sidebarCodexText: colorToken('Codex 文字', 'sidebar', '--dream-sidebar-codex-text', 'ink', ['sidebar-codex']),
   sidebarArrow: colorToken('Codex 箭头', 'sidebar', '--dream-sidebar-arrow', 'accent', ['sidebar-arrow']),
   sidebarModeIcon: colorToken('模式图标', 'sidebar', '--dream-sidebar-mode-icon', 'pink', ['icon-sidebar-mode']),
@@ -287,9 +287,7 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
       return linear(180, [[colors.surface, 0], [tint(colors.accent, 0.08), 0.58], [tint(colors.lavender, 0.1), 1]])
     case 'sidebarHeader':
     case 'sidebarProjectsTitleBackground':
-    case 'sidebarProjectsTitleHoverBackground':
     case 'sidebarTasksTitleBackground':
-    case 'sidebarTasksTitleHoverBackground':
     case 'sidebarModeBadge':
     case 'sidebarSearchButton':
     case 'sidebarNavItem':
@@ -300,6 +298,8 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
       return { kind: 'solid', color: 'transparent' }
     case 'sidebarSearchButtonHover':
     case 'sidebarNavItemHover':
+    case 'sidebarProjectsTitleHoverBackground':
+    case 'sidebarTasksTitleHoverBackground':
     case 'sidebarProjectRowHover':
     case 'sidebarTaskRowHover':
     case 'composerToolButtonHover':

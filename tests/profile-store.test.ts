@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
+import { resolveAppearanceColor } from '../src/shared/appearance'
 import { DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
@@ -25,22 +26,32 @@ describe('ProfileStore', () => {
     roots.push(root)
     const store = new ProfileStore(root)
     await store.initialize()
-    const colors = { ...DEFAULT_THEME_COLORS, accent: '#2878B8', danger: '#CF4A5B' }
+    const colors = { ...DEFAULT_THEME_COLORS, ink: '#183B56', accent: '#2878B8', danger: '#CF4A5B' }
     const created = await store.create({ name: '  海盐主题  ', colors })
     expect(created.name).toBe('海盐主题')
     expect(created.colors).toEqual(colors)
     expect(created.resetColors).toEqual(colors)
     expect(created.resetColors).not.toBe(created.colors)
+    expect(created.appearance.colors.sidebarProjectsTitleText).toBeUndefined()
+    expect(created.appearance.colors.sidebarTasksTitleHoverText).toBeUndefined()
+    expect(resolveAppearanceColor(created.appearance, created.colors, 'sidebarProjectsTitleText')).toBe('#183B56')
+    expect(resolveAppearanceColor(created.appearance, created.colors, 'sidebarTasksTitleHoverText')).toBe('#2878B8')
     expect(created.hero.source).toBeNull()
     expect(created.polaroid.source).toBeNull()
     expect(await store.get(created.id)).toMatchObject({ name: '海盐主题', colors, resetColors: colors })
 
     created.colors.accent = '#123456'
+    created.colors.ink = '#345678'
     created.copy.sidebarNavSites = '自定义站点'
     await store.update(created)
     const reset = await store.getDefault(created.id)
     expect(reset).toMatchObject({ id: created.id, name: '海盐主题', colors, resetColors: colors, copy: { sidebarNavSites: '站点' } })
     expect(reset.colors).not.toBe(reset.resetColors)
+    const edited = await store.get(created.id)
+    expect(resolveAppearanceColor(edited.appearance, edited.colors, 'sidebarProjectsTitleText')).toBe('#345678')
+    expect(resolveAppearanceColor(reset.appearance, reset.colors, 'sidebarProjectsTitleText')).toBe('#183B56')
+    expect(resolveAppearanceColor(reset.appearance, reset.colors, 'sidebarProjectsTitleHoverText')).toBe('#2878B8')
+    expect(reset.appearance.colors.sidebarProjectsTitleText).toBeUndefined()
     expect((await store.get(created.id)).colors.accent).toBe('#123456')
     await expect(store.create({ name: '非法主题', colors: { ...colors, accent: 'invalid' } })).rejects.toThrow()
     expect((await readdir(join(root, 'themes'))).filter((entry) => !entry.startsWith('.'))).toHaveLength(2)
@@ -66,7 +77,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 16, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 17, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -126,7 +137,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 16,
+      version: 17,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
@@ -311,6 +322,39 @@ describe('ProfileStore', () => {
     const assetDirectory = join(store.themesRoot, profile.id, 'assets')
     expect(await readFile(join(store.themesRoot, profile.id, imported.relativePath))).toEqual(TEST_PNG)
     expect((await readdir(assetDirectory)).some((entry) => entry.endsWith('.tmp'))).toBe(false)
+  })
+
+  it('repairs persisted version sixteen generated section title colors', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-v16-title-colors-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const created = await store.create({ name: '版本十六主题', colors: { ...DEFAULT_THEME_COLORS, ink: '#214537' } })
+    const generatedColor = '#556677'
+    await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({
+      ...created,
+      version: 16,
+      appearance: {
+        ...created.appearance,
+        colors: {
+          sidebarProjectsTitleText: generatedColor,
+          sidebarProjectsTitleHoverText: generatedColor,
+          sidebarTasksTitleText: generatedColor,
+          sidebarTasksTitleHoverText: generatedColor
+        }
+      }
+    }, null, 2)}\n`, 'utf8')
+
+    const migrated = await store.get(created.id)
+    expect(migrated.version).toBe(17)
+    expect(migrated.appearance.colors).toEqual({})
+    expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
+    migrated.colors.ink = '#123456'
+    migrated.colors.accent = '#abcdef'
+    await store.update(migrated)
+    const reloaded = await store.get(created.id)
+    expect(resolveAppearanceColor(reloaded.appearance, reloaded.colors, 'sidebarProjectsTitleText')).toBe('#123456')
+    expect(resolveAppearanceColor(reloaded.appearance, reloaded.colors, 'sidebarTasksTitleHoverText')).toBe('#abcdef')
   })
 
   it('imports, validates, compiles, and duplicates a composer GIF reference', async () => {

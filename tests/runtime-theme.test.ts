@@ -78,6 +78,22 @@ describe('runtime appearance compilation', () => {
 
   it('resolves independent sidebar section title fonts and two-state appearance', () => {
     const profile = createDefaultTheme(id)
+    const defaults = buildThemeStyleVariables(profile)
+    expect(defaults['--dream-sidebar-projects-title-text']).toBe(profile.colors.ink)
+    expect(defaults['--dream-sidebar-projects-title-hover-text']).toBe(profile.colors.accent)
+    expect(defaults['--dream-sidebar-tasks-title-text']).toBe(profile.colors.ink)
+    expect(defaults['--dream-sidebar-tasks-title-hover-text']).toBe(profile.colors.accent)
+    expect(defaults['--dream-sidebar-projects-title-hover-background']).toBe(defaults['--dream-sidebar-project-row-hover'])
+    expect(defaults['--dream-sidebar-tasks-title-hover-background']).toBe(defaults['--dream-sidebar-task-row-hover'])
+    profile.colors.ink = '#214537'
+    profile.colors.accent = '#287F5F'
+    const recolored = buildThemeStyleVariables(profile)
+    expect(recolored['--dream-sidebar-projects-title-text']).toBe('#214537')
+    expect(recolored['--dream-sidebar-tasks-title-hover-text']).toBe('#287F5F')
+    expect(recolored['--dream-sidebar-project-text']).toBe('#214537')
+    expect(recolored['--dream-sidebar-projects-title-hover-background']).toBe(recolored['--dream-sidebar-project-row-hover'])
+    expect(recolored['--dream-sidebar-projects-title-hover-background']).not.toBe(defaults['--dream-sidebar-projects-title-hover-background'])
+
     profile.typography.slots.sidebarProjectsTitle = { kind: 'builtin', id: 'jetbrains-mono' }
     profile.appearance.colors.sidebarProjectsTitleText = '#123456'
     profile.appearance.colors.sidebarProjectsTitleHoverText = '#654321'

@@ -1125,7 +1125,7 @@ describe('Studio preview editing interaction', () => {
     expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-text')).toBe('#123456')
     expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-hover-text')).toBe('#654321')
     expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-background')).toBe('#fefefe')
-    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-hover-background')).toBe('#fedcba')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-hover-background')).toContain('#fedcba')
     expect(canvas.style.getPropertyValue('--dream-sidebar-tasks-title-text')).not.toBe('#123456')
 
     const moreSettings = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .preview-edit-popover-footer button')].find((button) => button.textContent?.includes('更多设置'))
@@ -1161,7 +1161,54 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.copy).toMatchObject({ sidebarProjectsTitle: '作品集', sidebarTasksTitle: '工作项' })
     expect(savedProfiles.at(-1)?.typography.slots).toMatchObject({ sidebarProjectsTitle: { kind: 'builtin', id: 'jetbrains-mono' }, sidebarTasksTitle: { kind: 'builtin', id: 'noto-serif-sc' } })
     expect(savedProfiles.at(-1)?.appearance.colors).toMatchObject({ sidebarProjectsTitleText: '#123456', sidebarProjectsTitleHoverText: '#654321', sidebarTasksTitleText: '#0a0b0c' })
-    expect(savedProfiles.at(-1)?.appearance.paints).toMatchObject({ sidebarProjectsTitleBackground: { kind: 'solid', color: '#fefefe' }, sidebarProjectsTitleHoverBackground: { kind: 'solid', color: '#fedcba' } })
+    expect(savedProfiles.at(-1)?.appearance.paints.sidebarProjectsTitleBackground).toEqual({ kind: 'solid', color: '#fefefe' })
+    const savedHoverBackground = savedProfiles.at(-1)?.appearance.paints.sidebarProjectsTitleHoverBackground
+    expect(savedHoverBackground?.kind).toBe('linear')
+    if (savedHoverBackground?.kind !== 'linear') throw new Error('Project title hover background should remain a gradient.')
+    expect(savedHoverBackground.stops[0]?.color).toBe('#fedcba')
+  })
+
+  it('restores section title appearance overrides to theme-following values', async () => {
+    const projectTitle = container.querySelector('[data-preview-target="sidebar-project-title"]')
+    const canvas = container.querySelector<HTMLElement>('.codex-preview')
+    if (!projectTitle || !canvas) throw new Error('Project title preview is missing.')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-text')).toBe(profile.colors.ink)
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-hover-text')).toBe(profile.colors.accent)
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-background')).toBe('transparent')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-hover-background')).toBe(canvas.style.getPropertyValue('--dream-sidebar-project-row-hover'))
+
+    pointerDown(projectTitle)
+    const textInput = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="sidebarProjectsTitleText"] .color-text-input')
+    const backgroundInput = container.querySelector<HTMLInputElement>('[role="dialog"] [data-paint-token="sidebarProjectsTitleBackground"] .color-text-input')
+    if (!textInput || !backgroundInput) throw new Error('Project title appearance controls are missing.')
+    act(() => {
+      setInputValue(textInput, '#123456')
+      setInputValue(backgroundInput, '#abcdef')
+    })
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-text')).toBe('#123456')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-background')).toBe('#abcdef')
+
+    const moreSettings = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .preview-edit-popover-footer button')].find((button) => button.textContent?.includes('更多设置'))
+    if (!moreSettings) throw new Error('Section title inspector command is missing.')
+    act(() => moreSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const textReset = container.querySelector('[data-inspector-anchor="visual-sidebar-section-titles"] [data-color-token="sidebarProjectsTitleText"]')?.closest('.token-control')?.querySelector<HTMLButtonElement>('.reset-token')
+    const backgroundReset = container.querySelector('[data-inspector-anchor="visual-sidebar-section-titles"] [data-paint-token="sidebarProjectsTitleBackground"]')?.closest('.token-control')?.querySelector<HTMLButtonElement>('.reset-token')
+    if (!textReset || !backgroundReset) throw new Error('Project title reset commands are missing.')
+    act(() => {
+      textReset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      backgroundReset.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+    })
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-text')).toBe(profile.colors.ink)
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-background')).toBe('transparent')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.appearance.colors.sidebarProjectsTitleText).toBeUndefined()
+    expect(savedProfiles.at(-1)?.appearance.paints.sidebarProjectsTitleBackground).toBeUndefined()
   })
 
   it('saves the current draft before installing or reinjecting runtime changes', async () => {
