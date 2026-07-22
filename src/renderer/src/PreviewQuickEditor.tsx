@@ -17,6 +17,7 @@ import { AppearanceColorControl, FontControl, PaintControl, Range, ThemeIconCont
 import { MediaFlipControls } from './MediaFlipControls'
 import { ParticleEffectControls } from './ParticleEffectControls'
 import { PolaroidControls } from './PolaroidControls'
+import { WindowBackgroundControls } from './WindowBackgroundControls'
 import type { PopoverPosition, PreviewCopyField, PreviewTargetDefinition, TypographySlot } from './preview-editing'
 
 const copyFieldConfig: Record<PreviewCopyField, { label: string; maxLength: number; rows?: number }> = {
@@ -42,6 +43,7 @@ interface PreviewQuickEditorProps {
   heroUrl?: string
   polaroidUrl?: string
   conversationBackgroundUrl?: string
+  windowBackgroundUrl?: string
   mediaBusy?: boolean
   position: PopoverPosition | null
   popoverRef: React.RefObject<HTMLDivElement | null>
@@ -55,7 +57,7 @@ interface PreviewQuickEditorProps {
   onClose: () => void
 }
 
-export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidUrl, conversationBackgroundUrl, mediaBusy = false, position, popoverRef, onChange, onInteractionEnd, onSelectImage, onImportIcon, onImportFont, onStateChange, onMore, onClose }: PreviewQuickEditorProps): React.JSX.Element {
+export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidUrl, conversationBackgroundUrl, windowBackgroundUrl, mediaBusy = false, position, popoverRef, onChange, onInteractionEnd, onSelectImage, onImportIcon, onImportFont, onStateChange, onMore, onClose }: PreviewQuickEditorProps): React.JSX.Element {
   const editor = target.editor
   const [state, setState] = React.useState<AppearanceState>('normal')
   React.useEffect(() => { setState('normal'); onStateChange('normal') }, [target, onStateChange])
@@ -83,6 +85,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {editor.kind === 'hero' && <><button className="quick-asset-command" type="button" onClick={() => onSelectImage('hero')}>{heroUrl ? (profile.hero.source?.kind === 'video' ? <video src={heroUrl} muted playsInline style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />{heroUrl ? '更换图片' : '选择图片'}</span></button>{profile.hero.source && heroUrl && <MediaFlipControls value={profile.hero.mediaTransform} onChange={(field, value) => onChange((next) => { next.hero.mediaTransform[field] = value })} />}<Range label="缩放" min={.5} max={3} step={.01} value={profile.hero.scale} onChange={(value) => onChange((next) => { next.hero.scale = value }, 'hero-scale')} onChangeEnd={onInteractionEnd} /></>}
       {editor.kind === 'polaroid' && <PolaroidControls profile={profile} polaroidUrl={polaroidUrl} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectImage={() => onSelectImage('polaroid')} />}
       {editor.kind === 'conversationBackground' && <ConversationBackgroundControls profile={profile} backgroundUrl={conversationBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('conversationBackground', kind)} />}
+      {editor.kind === 'windowBackground' && <WindowBackgroundControls compact profile={profile} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('windowBackground', kind)} />}
 
       {editor.kind === 'style' && !decoration && editor.colors.filter((token) => tokenState(APPEARANCE_COLOR_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
       {editor.kind === 'style' && !decoration && editor.paints.filter((token) => tokenState(APPEARANCE_PAINT_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}

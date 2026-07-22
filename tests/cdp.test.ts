@@ -56,7 +56,7 @@ describe('CDP media binding', () => {
         if (command.method === 'Runtime.evaluate') {
           const expression = String(command.params.expression ?? '')
           const value = expression.includes('__CODEX_DREAM_SKIN_PREPARE_MEDIA__')
-            ? { hero: 'codex-dream-skin-media-hero', polaroid: 'codex-dream-skin-media-polaroid' }
+            ? { hero: 'codex-dream-skin-media-hero', polaroid: 'codex-dream-skin-media-polaroid', windowBackground: 'codex-dream-skin-media-windowBackground' }
             : true
           result = { result: { value } }
         } else if (command.method === 'DOM.getDocument') {
@@ -66,10 +66,11 @@ describe('CDP media binding', () => {
             socket.send(JSON.stringify({ id: command.id, error: { message: 'Could not find node with given id' } }))
             return
           }
-          result = { nodeId: rootNodeId + (String(command.params.selector).endsWith('hero') ? 1 : 2) }
+          const selector = String(command.params.selector)
+          result = { nodeId: rootNodeId + (selector.endsWith('hero') ? 1 : selector.endsWith('polaroid') ? 2 : 3) }
         } else if (command.method === 'DOM.setFileInputFiles') {
           const nodeId = Number(command.params.nodeId)
-          if (nodeId !== rootNodeId + 1 && nodeId !== rootNodeId + 2) {
+          if (nodeId !== rootNodeId + 1 && nodeId !== rootNodeId + 2 && nodeId !== rootNodeId + 3) {
             socket.send(JSON.stringify({ id: command.id, error: { message: 'Input node belongs to another session' } }))
             return
           }
@@ -86,12 +87,14 @@ describe('CDP media binding', () => {
       watcher.setPayload('true')
       watcher.setMediaBindings([
         { role: 'hero', path: 'C:\\theme\\hero.mp4', mimeType: 'video/mp4' },
-        { role: 'polaroid', path: 'C:\\theme\\polaroid.webm', mimeType: 'video/webm' }
+        { role: 'polaroid', path: 'C:\\theme\\polaroid.webm', mimeType: 'video/webm' },
+        { role: 'windowBackground', path: 'C:\\theme\\window.mp4', mimeType: 'video/mp4' }
       ])
 
       await expect(watcher.inject()).resolves.toEqual({ connected: true, targetCount: 1 })
-      expect(boundFiles.map((binding) => binding.files[0])).toEqual(['C:\\theme\\hero.mp4', 'C:\\theme\\polaroid.webm'])
+      expect(boundFiles.map((binding) => binding.files[0])).toEqual(['C:\\theme\\hero.mp4', 'C:\\theme\\polaroid.webm', 'C:\\theme\\window.mp4'])
       expect(boundFiles[0]!.nodeId - 1).toBe(boundFiles[1]!.nodeId - 2)
+      expect(boundFiles[0]!.nodeId - 1).toBe(boundFiles[2]!.nodeId - 3)
     } finally {
       for (const client of webSockets.clients) client.terminate()
       await new Promise<void>((resolve) => webSockets.close(() => resolve()))

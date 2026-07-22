@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
-import { buildConversationOverlayStyle } from '../shared/conversation-overlay'
+import { paintToCss } from '../shared/appearance'
+import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../shared/conversation-overlay'
 import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
@@ -257,8 +258,21 @@ export class CodexService {
       source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
     ]))
     const { overlay, ...conversationBackground } = profile.conversationBackground
+    const windowBackground = profile.windowBackground
+    const windowBackgroundSource = windowBackground.source
     const composerMelody = profile.decorations.composerMelody
     const conversationOverlayStyle = buildConversationOverlayStyle(overlay)
+    const windowBackgroundStyle = {
+      background: paintToCss(windowBackground.paint),
+      opacity: String(windowBackground.opacity),
+      objectPosition: `${windowBackground.focus.x * 100}% ${windowBackground.focus.y * 100}%`,
+      transform: `scale(${windowBackground.scale}) ${mediaFlipCssTransform(windowBackground.mediaTransform)}`
+    }
+    const windowBackgroundMasks = windowBackground.masks.map((mask) => ({
+      id: mask.id,
+      visible: mask.visible,
+      style: buildBackgroundOverlayStyle(mask)
+    }))
     const runtimeVersion = `studio-${profile.updatedAt}-${randomUUID()}`
     return renderer
       .replace('__DREAM_VERSION_JSON__', JSON.stringify(runtimeVersion))
@@ -271,7 +285,10 @@ export class CodexService {
           polaroid: profile.polaroid.source ? { asset: profile.polaroid.source.asset, kind: profile.polaroid.source.kind, mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback, transform: profile.polaroid.mediaTransform } : null,
           conversationBackground: profile.conversationBackground.source
             ? { ...conversationBackground, overlayStyle: conversationOverlayStyle, kind: profile.conversationBackground.source.kind, mimeType: profile.conversationBackground.source.mimeType, asset: profile.conversationBackground.source.asset, dataUrl: profile.conversationBackground.source.kind === 'image' ? compiled.assets[profile.conversationBackground.source.asset] : null }
-            : { ...conversationBackground, overlayStyle: conversationOverlayStyle, dataUrl: null }
+            : { ...conversationBackground, overlayStyle: conversationOverlayStyle, dataUrl: null },
+          windowBackground: windowBackgroundSource
+            ? { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, kind: windowBackgroundSource.kind, mimeType: windowBackgroundSource.mimeType, asset: windowBackgroundSource.asset, dataUrl: windowBackgroundSource.kind === 'image' ? compiled.assets[windowBackgroundSource.asset] : null }
+            : { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, dataUrl: null }
         },
         icons,
         decorations: {

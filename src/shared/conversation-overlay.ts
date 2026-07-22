@@ -1,7 +1,7 @@
 import { paintToCss } from './appearance'
-import type { ConversationBackgroundOverlay } from './theme'
+import type { ConversationBackgroundOverlay, WindowBackgroundMask } from './theme'
 
-export interface ConversationOverlayStyle {
+export interface BackgroundOverlayStyle {
   background: string
   opacity: string
   inset: string
@@ -14,7 +14,7 @@ export interface ConversationOverlayStyle {
   filter: string
 }
 
-export function buildConversationOverlayStyle(overlay: ConversationBackgroundOverlay): ConversationOverlayStyle {
+export function buildBackgroundOverlayStyle(overlay: ConversationBackgroundOverlay | WindowBackgroundMask): BackgroundOverlayStyle {
   const common = {
     background: paintToCss(overlay.paint),
     opacity: formatNumber(overlay.opacity)
@@ -44,6 +44,9 @@ export function buildConversationOverlayStyle(overlay: ConversationBackgroundOve
     filter: overlay.softness > 0 ? `blur(${formatNumber(overlay.softness)}px)` : 'none'
   }
 }
+
+export type ConversationOverlayStyle = BackgroundOverlayStyle
+export const buildConversationOverlayStyle = buildBackgroundOverlayStyle
 
 function percent(value: number): string {
   return `${formatNumber(value * 100)}%`

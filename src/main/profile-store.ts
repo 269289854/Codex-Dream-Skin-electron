@@ -442,7 +442,7 @@ export class ProfileStore {
   async getMediaPreviewUrl(themeId: unknown, asset: unknown): Promise<string> {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体预览参数无效。')
     const profile = await this.get(themeId)
-    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source].find((media) => media?.asset === asset)
+    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source].find((media) => media?.asset === asset)
     if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被当前主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
@@ -453,7 +453,7 @@ export class ProfileStore {
   async resolveReferencedMedia(themeId: unknown, asset: unknown): Promise<{ path: string; mimeType: string; size: number }> {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体参数无效。')
     const profile = await this.get(themeId)
-    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source].find((media) => media?.asset === asset)
+    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source].find((media) => media?.asset === asset)
     if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
@@ -467,10 +467,10 @@ export class ProfileStore {
     return settings.systemThemeId === themeId
   }
 
-  async getRuntimeMediaBindings(themeId: string): Promise<Array<{ role: 'hero' | 'polaroid' | 'conversationBackground'; path: string; mimeType: string }>> {
+  async getRuntimeMediaBindings(themeId: string): Promise<Array<{ role: 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground'; path: string; mimeType: string }>> {
     const profile = await this.get(themeId)
-    const bindings: Array<{ role: 'hero' | 'polaroid' | 'conversationBackground'; path: string; mimeType: string }> = []
-    for (const [role, reference] of [['hero', profile.hero.source], ['polaroid', profile.polaroid.source], ['conversationBackground', profile.conversationBackground.source]] as const) {
+    const bindings: Array<{ role: 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground'; path: string; mimeType: string }> = []
+    for (const [role, reference] of [['hero', profile.hero.source], ['polaroid', profile.polaroid.source], ['conversationBackground', profile.conversationBackground.source], ['windowBackground', profile.windowBackground.source]] as const) {
       if (reference?.kind !== 'video') continue
       const resolved = await this.resolveReferencedMedia(themeId, reference.asset)
       bindings.push({ role, path: resolved.path, mimeType: resolved.mimeType })
@@ -821,7 +821,7 @@ export class ProfileStore {
 
   private async validateProfileMedia(profile: ThemeProfile): Promise<void> {
     this.validateProfileAssetReferences(profile)
-    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
+    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
       if (!reference) continue
       const extension = extname(reference.asset).toLowerCase()
       if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
@@ -849,7 +849,7 @@ export class ProfileStore {
   }
 
   private validateProfileAssetReferences(profile: ThemeProfile): void {
-    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
+    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
       if (!reference) continue
       const extension = extname(reference.asset).toLowerCase()
       if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')

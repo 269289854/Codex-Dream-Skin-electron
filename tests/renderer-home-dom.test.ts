@@ -116,6 +116,17 @@ type RuntimeConversationBackgroundConfig = {
   scale: number
 }
 
+type RuntimeWindowBackgroundConfig = {
+  visible: boolean
+  mode: 'color' | 'image' | 'gif' | 'video'
+  asset?: string
+  kind?: 'image' | 'video'
+  mimeType?: string
+  dataUrl?: string | null
+  backgroundStyle: { background: string; opacity: string; objectPosition: string; transform: string }
+  masks: Array<{ id: string; visible: boolean; style: ConversationOverlayStyle }>
+}
+
 type RuntimeDecorations = Omit<ThemeProfile['decorations'], 'composerMelody'> & {
   composerMelody: ThemeProfile['decorations']['composerMelody'] & { dataUrl?: string | null }
 }
@@ -138,7 +149,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null } = { hero: null, polaroid: null }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -908,6 +919,75 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-conversation-surface')).toBeNull()
     expect(window.document.querySelector('.dream-conversation-viewport')).toBeNull()
     expect(window.document.querySelector('.dream-conversation-background')).toBeNull()
+  })
+
+  it('keeps one fixed window background, composites masks in foreground order, and cleans every state', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const windowBackground: RuntimeWindowBackgroundConfig = {
+      visible: true,
+      mode: 'color',
+      dataUrl: null,
+      backgroundStyle: {
+        background: 'linear-gradient(135deg, #123456 0%, #abcdef 100%)',
+        opacity: '.84',
+        objectPosition: '35% 65%',
+        transform: 'scale(1.25) scaleX(-1) scaleY(1)'
+      },
+      masks: [
+        { id: '22222222-2222-4222-8222-222222222222', visible: true, style: { ...fullOverlayStyle, background: '#ff0000', opacity: '.45', inset: 'auto', left: '30%', top: '60%', width: '50%', height: '40%', transform: 'translate(-50%, -50%)', borderRadius: '50%', filter: 'blur(12px)' } },
+        { id: '33333333-3333-4333-8333-333333333333', visible: false, style: { ...fullOverlayStyle, background: 'radial-gradient(circle at 40% 60%, #ffffff 0%, transparent 100%)' } }
+      ]
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, windowBackground })
+
+    const background = window.document.getElementById('codex-dream-skin-window-background')
+    const base = background?.querySelector('.dream-window-background-color') as HTMLElement | null
+    const masks = background ? [...background.querySelectorAll(':scope > .dream-window-background-mask')] as unknown as HTMLElement[] : []
+    expect(window.document.documentElement.classList.contains('dream-window-background-active')).toBe(true)
+    expect(background?.parentElement).toBe(window.document.body)
+    expect(base?.style.background).toContain('linear-gradient(135deg')
+    expect(base?.style.opacity).toBe('.84')
+    expect(masks).toHaveLength(2)
+    expect(masks[0]?.dataset.dreamMaskId).toBe(windowBackground.masks[0]?.id)
+    expect(masks[0]?.style.zIndex).toBe('2')
+    expect(masks[0]?.style.left).toBe('30%')
+    expect(masks[0]?.style.filter).toBe('blur(12px)')
+    expect(masks[1]?.style.display).toBe('none')
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('#codex-dream-skin-window-background')).toHaveLength(1)
+    expect(window.document.querySelectorAll('.dream-window-background-mask')).toHaveLength(2)
+
+    stateOf(window).cleanup()
+    expect(window.document.getElementById('codex-dream-skin-window-background')).toBeNull()
+    expect(window.document.documentElement.classList.contains('dream-window-background-active')).toBe(false)
+  })
+
+  it('starts a muted looping window video and exposes its restricted CDP input role', () => {
+    const window = createWindow()
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', { configurable: true, value: vi.fn(() => Promise.resolve()) })
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const windowBackground: RuntimeWindowBackgroundConfig = {
+      visible: true,
+      mode: 'video',
+      asset: 'assets/window.mp4',
+      kind: 'video',
+      mimeType: 'video/mp4',
+      dataUrl: 'blob:window-background',
+      backgroundStyle: { background: '#FFFFFF', opacity: '1', objectPosition: '50% 50%', transform: 'scale(1) scaleX(1) scaleY(1)' },
+      masks: []
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, windowBackground })
+
+    const video = window.document.querySelector('.dream-window-background-video') as HTMLVideoElement | null
+    const prepared = (window as unknown as { __CODEX_DREAM_SKIN_PREPARE_MEDIA__?: () => Record<string, string> }).__CODEX_DREAM_SKIN_PREPARE_MEDIA__?.()
+    expect(prepared?.windowBackground).toBe('codex-dream-skin-media-windowBackground')
+    expect(video?.muted).toBe(true)
+    expect(video?.autoplay).toBe(true)
+    expect(video?.loop).toBe(true)
+    expect(video?.controls).toBe(false)
+    expect(video?.playsInline).toBe(true)
   })
 
   it('keeps the conversation background outside the scrolling content during streaming updates', () => {

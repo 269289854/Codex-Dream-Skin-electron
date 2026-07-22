@@ -77,7 +77,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 17, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 18, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -137,7 +137,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 17,
+      version: 18,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
@@ -324,6 +324,29 @@ describe('ProfileStore', () => {
     expect((await readdir(assetDirectory)).some((entry) => entry.endsWith('.tmp'))).toBe(false)
   })
 
+  it('persists, compiles, previews, and duplicates a window GIF background', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-window-background-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('窗口背景主题')
+    const source = join(root, 'window.gif')
+    await writeFile(source, TEST_GIF)
+
+    const imported = await store.importMediaAsset(profile.id, source, 'windowBackground', 'gif')
+    profile.windowBackground.visible = true
+    profile.windowBackground.mode = 'gif'
+    profile.windowBackground.source = imported.reference
+    await store.update(profile)
+
+    expect((await store.get(profile.id)).windowBackground.source).toEqual(imported.reference)
+    await expect(store.getMediaPreviewUrl(profile.id, imported.relativePath)).resolves.toContain('studio-media://')
+    expect((await store.compile(profile.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    const duplicate = await store.duplicate(profile, '窗口背景副本')
+    expect(duplicate.windowBackground.source).toEqual(imported.reference)
+    expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+  })
+
   it('repairs persisted version sixteen generated section title colors', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-v16-title-colors-'))
     roots.push(root)
@@ -346,7 +369,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(17)
+    expect(migrated.version).toBe(18)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'

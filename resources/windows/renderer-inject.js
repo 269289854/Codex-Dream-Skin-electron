@@ -6,6 +6,7 @@
   const CARD_GRID_ID = "codex-dream-skin-actions";
   const PROJECT_PROXY_ID = "codex-dream-skin-project-proxy";
   const HEADING_DECORATION_ID = "codex-dream-skin-heading-decoration";
+  const WINDOW_BACKGROUND_ID = "codex-dream-skin-window-background";
   const projectAnchorRestorers = new WeakMap();
   const sidebarNavRestorers = new WeakMap();
   const sidebarCopyRestorers = new Map();
@@ -469,8 +470,8 @@
   const mediaInputId = (role) => `codex-dream-skin-media-${role}`;
   const prepareMedia = () => {
     const result = {};
-    for (const role of ["hero", "polaroid", "conversationBackground"]) {
-      const isVideo = role === "conversationBackground" ? mediaConfig?.[role]?.mode === "video" : mediaConfig?.[role]?.kind === "video";
+    for (const role of ["hero", "polaroid", "conversationBackground", "windowBackground"]) {
+      const isVideo = role === "conversationBackground" || role === "windowBackground" ? mediaConfig?.[role]?.mode === "video" : mediaConfig?.[role]?.kind === "video";
       if (!isVideo) continue;
       let input = document.getElementById(mediaInputId(role));
       if (!(input instanceof HTMLInputElement)) {
@@ -489,7 +490,7 @@
     return result;
   };
   const attachMedia = () => {
-    for (const role of ["hero", "polaroid", "conversationBackground"]) {
+    for (const role of ["hero", "polaroid", "conversationBackground", "windowBackground"]) {
       const input = mediaInputs[role] || document.getElementById(mediaInputId(role));
       const file = input instanceof HTMLInputElement ? input.files?.[0] : null;
       if (!file) continue;
@@ -690,6 +691,146 @@
     video.load();
     if (state) state.sourceChanging = false;
     return true;
+  };
+  const applySafeStyle = (node, style, properties) => {
+    const values = style && typeof style === "object" ? style : {};
+    for (const [key, property, fallback] of properties) {
+      setInlineStyle(node, property, typeof values[key] === "string" ? values[key] : fallback);
+    }
+  };
+  const clearWindowBackground = () => {
+    const background = document.getElementById(WINDOW_BACKGROUND_ID);
+    const video = background?.querySelector(":scope > .dream-window-background-video");
+    if (video instanceof HTMLVideoElement) {
+      clearPlaybackGuard(video);
+      video.pause();
+    }
+    retainedMediaNodes.windowBackground = null;
+    background?.remove();
+    document.documentElement.classList.remove("dream-window-background-active");
+  };
+  const ensureWindowBackground = () => {
+    const config = mediaConfig?.windowBackground || null;
+    const configuredMode = typeof config?.mode === "string" ? config.mode : "color";
+    const mode = configuredMode === "image" || configuredMode === "gif" || configuredMode === "video" ? configuredMode : "color";
+    const source = config?.dataUrl || mediaUrls.windowBackground || "";
+    if (config?.visible !== true || (mode !== "color" && !source) || !document.body) {
+      clearWindowBackground();
+      return;
+    }
+
+    document.documentElement.classList.add("dream-window-background-active");
+    let background = document.getElementById(WINDOW_BACKGROUND_ID);
+    if (!(background instanceof HTMLElement)) {
+      background?.remove();
+      background = document.createElement("div");
+      background.id = WINDOW_BACKGROUND_ID;
+      background.className = "dream-window-background";
+      background.setAttribute("aria-hidden", "true");
+      document.body.prepend(background);
+    } else if (background.parentElement !== document.body) document.body.prepend(background);
+    background.dataset.dreamBackgroundMode = mode;
+
+    const styleProperties = [
+      ["background", "background", "#FFFFFF"],
+      ["opacity", "opacity", "1"],
+      ["objectPosition", "object-position", "50% 50%"],
+      ["transform", "transform", "scale(1) scaleX(1) scaleY(1)"]
+    ];
+    let base = null;
+    if (mode === "color") {
+      const video = background.querySelector(":scope > .dream-window-background-video");
+      if (video instanceof HTMLVideoElement) {
+        clearPlaybackGuard(video);
+        video.pause();
+        video.remove();
+      }
+      retainedMediaNodes.windowBackground = null;
+      background.querySelector(":scope > .dream-window-background-media")?.remove();
+      base = background.querySelector(":scope > .dream-window-background-color");
+      if (!(base instanceof HTMLElement)) {
+        base?.remove();
+        base = document.createElement("div");
+        base.className = "dream-window-background-base dream-window-background-color";
+        background.prepend(base);
+      }
+    } else if (mode === "video") {
+      background.querySelector(":scope > .dream-window-background-color")?.remove();
+      background.querySelector(":scope > .dream-window-background-media:not(.dream-window-background-video)")?.remove();
+      let video = background.querySelector(":scope > .dream-window-background-video");
+      if (!(video instanceof HTMLVideoElement)) {
+        video?.remove();
+        video = document.createElement("video");
+        video.id = mediaVideoId("windowBackground");
+        video.className = "dream-window-background-base dream-window-background-media dream-window-background-video";
+        video.setAttribute("aria-hidden", "true");
+        video.muted = true;
+        video.autoplay = true;
+        video.loop = true;
+        video.controls = false;
+        video.playsInline = true;
+        video.setAttribute("playsinline", "");
+        background.prepend(video);
+      }
+      retainedMediaNodes.windowBackground = video;
+      const sourceChanged = setVideoSource(video, "windowBackground");
+      const playback = { autoplay: true, loop: true, sound: false, volume: 0 };
+      const configured = configureVideo(video, playback);
+      if ((configured.changed || sourceChanged || video.paused) && !document.hidden) video.play().catch(() => undefined);
+      base = video;
+    } else {
+      background.querySelector(":scope > .dream-window-background-color")?.remove();
+      const video = background.querySelector(":scope > .dream-window-background-video");
+      if (video instanceof HTMLVideoElement) {
+        clearPlaybackGuard(video);
+        video.pause();
+        video.remove();
+      }
+      retainedMediaNodes.windowBackground = null;
+      let image = background.querySelector(":scope > .dream-window-background-media");
+      if (!(image instanceof HTMLImageElement)) {
+        image?.remove();
+        image = document.createElement("img");
+        image.className = "dream-window-background-base dream-window-background-media";
+        image.alt = "";
+        image.draggable = false;
+        background.prepend(image);
+      }
+      if (image.src !== source) image.src = source;
+      base = image;
+    }
+    if (base instanceof HTMLElement) applySafeStyle(base, config?.backgroundStyle, styleProperties);
+
+    const masks = Array.isArray(config?.masks) ? config.masks.slice(0, 8) : [];
+    const expected = new Set();
+    masks.forEach((mask, index) => {
+      if (!mask || typeof mask.id !== "string") return;
+      expected.add(mask.id);
+      let node = [...background.querySelectorAll(":scope > .dream-window-background-mask")].find((candidate) => candidate.dataset.dreamMaskId === mask.id);
+      if (!(node instanceof HTMLElement)) {
+        node = document.createElement("div");
+        node.className = "dream-window-background-mask";
+        node.dataset.dreamMaskId = mask.id;
+        background.appendChild(node);
+      }
+      setInlineStyle(node, "display", mask.visible === false ? "none" : "block");
+      setInlineStyle(node, "z-index", `${masks.length - index}`);
+      applySafeStyle(node, mask.style, [
+        ["background", "background", "transparent"],
+        ["opacity", "opacity", "0"],
+        ["inset", "inset", "0"],
+        ["left", "left", "0"],
+        ["top", "top", "0"],
+        ["width", "width", "auto"],
+        ["height", "height", "auto"],
+        ["transform", "transform", "none"],
+        ["borderRadius", "border-radius", "0"],
+        ["filter", "filter", "none"]
+      ]);
+    });
+    background.querySelectorAll(":scope > .dream-window-background-mask").forEach((node) => {
+      if (!expected.has(node.dataset.dreamMaskId)) node.remove();
+    });
   };
   const ensureHeroMedia = (hero) => {
     if (!(hero instanceof HTMLElement)) return;
@@ -1479,6 +1620,7 @@
     ensureComposerBadge(composerSurface);
     ensureComposerMelody(composerSurface);
     ensureComposerSendIcon(composerSurface);
+    ensureWindowBackground();
     ensureConversationBackground();
 
     if (!shellMain || !document.body) return;
@@ -1580,6 +1722,7 @@
       node.classList.remove("dream-conversation-viewport");
       node.querySelectorAll(":scope > .dream-conversation-background").forEach(clearConversationBackgroundNode);
     });
+    clearWindowBackground();
     document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
     document.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
@@ -1610,11 +1753,12 @@
     if (state?.scheduler?.timeout) clearTimeout(state.scheduler.timeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
     for (const url of Object.values(mediaUrls)) if (url) URL.revokeObjectURL(url);
-    const mediaNodes = new Set([...document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video, .dream-conversation-background-video"), ...Object.values(retainedMediaNodes)]);
+    const mediaNodes = new Set([...document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
     mediaNodes.forEach((node) => { if (node instanceof HTMLVideoElement) clearPlaybackGuard(node); if (node instanceof HTMLMediaElement) node.pause(); if (node instanceof Element) node.remove(); });
     retainedMediaNodes.hero = null;
     retainedMediaNodes.polaroid = null;
     retainedMediaNodes.conversationBackground = null;
+    retainedMediaNodes.windowBackground = null;
     document.querySelectorAll("input[id^='codex-dream-skin-media-']").forEach((node) => node.remove());
     delete window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__;
     delete window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__;
@@ -1624,7 +1768,7 @@
 
   const scheduler = { timeout: null };
   const visibilityHandler = () => {
-    const videos = new Set([...document.querySelectorAll(".dream-hero-video, .dream-polaroid-video, .dream-conversation-background-video"), ...Object.values(retainedMediaNodes)]);
+    const videos = new Set([...document.querySelectorAll(".dream-hero-video, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
     videos.forEach((node) => {
       if (!(node instanceof HTMLVideoElement)) return;
       if (document.hidden) node.pause();

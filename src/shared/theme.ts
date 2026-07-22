@@ -251,6 +251,9 @@ export type VideoPlayback = z.infer<typeof videoPlaybackSchema>
 export const conversationBackgroundModeSchema = z.enum(['color', 'image', 'gif', 'video'])
 export type ConversationBackgroundMode = z.infer<typeof conversationBackgroundModeSchema>
 
+export const windowBackgroundModeSchema = conversationBackgroundModeSchema
+export type WindowBackgroundMode = z.infer<typeof windowBackgroundModeSchema>
+
 const conversationBackgroundFields = {
   visible: z.boolean(),
   mode: conversationBackgroundModeSchema,
@@ -267,7 +270,7 @@ const versionFourteenConversationBackgroundSchema = z.object({
   overlayOpacity: normalized
 }).strict().superRefine(refineConversationBackground)
 
-const conversationBackgroundOverlaySchema = z.object({
+const backgroundOverlayFields = {
   paint: themePaintSchema,
   opacity: normalized,
   shape: z.enum(['full', 'ellipse', 'roundedRect']),
@@ -278,11 +281,39 @@ const conversationBackgroundOverlaySchema = z.object({
   }).strict(),
   softness: z.number().finite().min(0).max(80),
   cornerRadius: z.number().finite().min(0).max(160)
-}).strict()
+}
+
+const conversationBackgroundOverlaySchema = z.object(backgroundOverlayFields).strict()
 
 const conversationBackgroundSchema = z.object({
   ...conversationBackgroundFields,
   overlay: conversationBackgroundOverlaySchema
+}).strict().superRefine(refineConversationBackground)
+
+const windowBackgroundMaskSchema = z.object({
+  id: z.string().uuid(),
+  visible: z.boolean(),
+  ...backgroundOverlayFields
+}).strict()
+
+const windowBackgroundMasksSchema = z.array(windowBackgroundMaskSchema).max(8).superRefine((masks, context) => {
+  const ids = new Set<string>()
+  masks.forEach((mask, index) => {
+    if (ids.has(mask.id)) context.addIssue({ code: 'custom', path: [index, 'id'], message: '窗口遮罩 ID 必须唯一。' })
+    ids.add(mask.id)
+  })
+})
+
+const windowBackgroundSchema = z.object({
+  visible: z.boolean(),
+  mode: windowBackgroundModeSchema,
+  paint: themePaintSchema,
+  source: mediaReferenceSchema.nullable(),
+  opacity: normalized,
+  focus: pointSchema,
+  scale: z.number().finite().min(1).max(3),
+  mediaTransform: mediaTransformSchema,
+  masks: windowBackgroundMasksSchema
 }).strict().superRefine(refineConversationBackground)
 
 function refineConversationBackground(background: {
@@ -306,6 +337,8 @@ function refineConversationBackground(background: {
 
 export type ConversationBackground = z.infer<typeof conversationBackgroundSchema>
 export type ConversationBackgroundOverlay = z.infer<typeof conversationBackgroundOverlaySchema>
+export type WindowBackground = z.infer<typeof windowBackgroundSchema>
+export type WindowBackgroundMask = z.infer<typeof windowBackgroundMaskSchema>
 
 const legacyCommonProfileFields = {
   id: z.string().uuid(),
@@ -484,10 +517,22 @@ const versionSixteenThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionSeventeenThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(17),
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(18),
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
   resetColors: themeColorsSchema
 }).strict().superRefine((profile, context) => {
   if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
@@ -602,7 +647,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 17,
+    version: 18,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
@@ -630,6 +675,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
       mediaTransform: createDefaultMediaTransform()
     },
     conversationBackground: createDefaultConversationBackground(),
+    windowBackground: createDefaultWindowBackground(),
     colors: { ...palette },
     resetColors: { ...palette },
     icons: {
@@ -661,6 +707,11 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
+  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version < 18) {
+    const legacy = structuredClone(input) as Record<string, unknown>
+    delete legacy.windowBackground
+    input = legacy
+  }
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 1 && input.version <= 10) {
     const legacy = structuredClone(input) as Record<string, unknown>
     stripSidebarFields(legacy)
@@ -673,10 +724,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 17) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 18) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 17) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionSeventeen(versionSeventeenThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 16) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -935,10 +990,18 @@ function migrateVersionSixteen(legacy: z.infer<typeof versionSixteenThemeSchema>
     }
   }
 
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionSeventeen(versionSeventeenThemeSchema.parse({
     ...legacy,
     version: 17,
     appearance: { ...legacy.appearance, colors }
+  }))
+}
+
+function migrateVersionSeventeen(legacy: z.infer<typeof versionSeventeenThemeSchema>): ThemeProfile {
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 18,
+    windowBackground: createDefaultWindowBackground()
   }))
 }
 
@@ -1002,6 +1065,28 @@ function createDefaultConversationBackground(): ConversationBackground {
     overlay: createDefaultConversationOverlay(),
     focus: { x: 0.5, y: 0.5 },
     scale: 1
+  }
+}
+
+export function createDefaultWindowBackground(): WindowBackground {
+  return {
+    visible: false,
+    mode: 'color',
+    paint: { kind: 'solid', color: '#FFFFFF' },
+    source: null,
+    opacity: 1,
+    focus: { x: 0.5, y: 0.5 },
+    scale: 1,
+    mediaTransform: createDefaultMediaTransform(),
+    masks: []
+  }
+}
+
+export function createDefaultWindowBackgroundMask(id: string): WindowBackgroundMask {
+  return {
+    id,
+    visible: true,
+    ...createDefaultConversationOverlay()
   }
 }
 

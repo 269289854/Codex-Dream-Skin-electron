@@ -7,10 +7,10 @@ export const MAX_THEME_PAYLOAD_BYTES = 64 * 1024 * 1024
 
 interface CdpVersion { webSocketDebuggerUrl: string }
 interface CdpTarget { id: string; type: string; url: string; webSocketDebuggerUrl: string }
-export interface CdpMediaBinding { role: 'hero' | 'polaroid' | 'conversationBackground'; path: string; mimeType: string }
+export interface CdpMediaBinding { role: 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground'; path: string; mimeType: string }
 type CdpCommand = (method: string, params: Record<string, unknown>) => Promise<unknown>
 
-const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); return true; })()'
+const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin", "dream-window-background-active"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); document.getElementById("codex-dream-skin-window-background")?.remove(); return true; })()'
 
 export function isThemeCdpTargetUrl(value: string): boolean {
   try {

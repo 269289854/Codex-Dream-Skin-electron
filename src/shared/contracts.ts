@@ -59,7 +59,7 @@ export interface OperationProgress {
   message: string
 }
 
-export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'composerMelody'
+export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'composerMelody'
 export type AssetPurpose = MediaAssetPurpose | 'icon' | 'font'
 export type MediaSelectionKind = 'image' | 'gif' | 'video'
 

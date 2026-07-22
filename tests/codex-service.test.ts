@@ -60,11 +60,29 @@ describe('CodexService operation queue', () => {
       softness: 12,
       cornerRadius: 28
     }
+    profile.windowBackground.visible = true
+    profile.windowBackground.mode = 'image'
+    profile.windowBackground.source = { asset: 'assets/window.png', kind: 'image', mimeType: 'image/png' }
+    profile.windowBackground.opacity = .82
+    profile.windowBackground.focus = { x: .35, y: .65 }
+    profile.windowBackground.scale = 1.25
+    profile.windowBackground.mediaTransform.flipHorizontal = true
+    profile.windowBackground.masks = [{
+      id: '22222222-2222-4222-8222-222222222222',
+      visible: true,
+      paint: { kind: 'radial', center: { x: .4, y: .6 }, stops: [{ color: '#FFFFFF', position: 0 }, { color: 'transparent', position: 1 }] },
+      opacity: .45,
+      shape: 'roundedRect',
+      position: { x: .3, y: .7 },
+      size: { width: .5, height: .4 },
+      softness: 16,
+      cornerRadius: 32
+    }]
     const store = {
       root,
       themesRoot: join(root, 'themes'),
       get: vi.fn().mockResolvedValue(profile),
-      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==' } })
+      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', 'assets/window.png': 'data:image/png;base64,AA==' } })
     }
     const service = new CodexService(store as never, join(process.cwd(), 'resources', 'windows'), () => undefined)
     const builder = service as unknown as { buildPayload(themeId: string): Promise<string> }
@@ -83,6 +101,11 @@ describe('CodexService operation queue', () => {
     expect(first).toContain('"left":"30%","top":"60%","width":"50%","height":"40%"')
     expect(first).toContain('"borderRadius":"50%","filter":"blur(12px)"')
     expect(first).not.toContain('"overlay":{"paint"')
+    expect(first).toContain('"windowBackground":{"visible":true,"mode":"image"')
+    expect(first).toContain('"backgroundStyle":{"background":"#FFFFFF","opacity":"0.82","objectPosition":"35% 65%","transform":"scale(1.25) scaleX(-1) scaleY(1)"}')
+    expect(first).toContain('"dataUrl":"data:image/png;base64,AA=="')
+    expect(first).toContain('"id":"22222222-2222-4222-8222-222222222222","visible":true,"style":{"background":"radial-gradient(circle at 40% 60%, #FFFFFF 0%, transparent 100%)"')
+    expect(first).not.toContain('"windowBackground":{"visible":true,"mode":"image","paint"')
   })
 
 })

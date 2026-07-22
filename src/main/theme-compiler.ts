@@ -17,6 +17,7 @@ export async function compileTheme(
   if (profile.polaroid.source?.kind === 'image') assetNames.add(profile.polaroid.source.asset)
   else if (!profile.polaroid.source && profile.polaroid.sourceImage) assetNames.add(profile.polaroid.sourceImage)
   if (profile.conversationBackground.source?.kind === 'image') assetNames.add(profile.conversationBackground.source.asset)
+  if (profile.windowBackground.source?.kind === 'image') assetNames.add(profile.windowBackground.source.asset)
   if (profile.decorations.composerMelody.source) assetNames.add(profile.decorations.composerMelody.source.asset)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
   for (const font of profile.typography.importedFonts) assetNames.add(font.asset)
@@ -32,6 +33,9 @@ export async function compileTheme(
   const conversationBackground = profile.conversationBackground.source?.kind === 'image'
     ? assets[profile.conversationBackground.source.asset]
     : null
+  const windowBackground = profile.windowBackground.source?.kind === 'image'
+    ? assets[profile.windowBackground.source.asset]
+    : null
   const polaroidLayout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, profile.polaroid.fence as Fence) : null
   const showPolaroid = profile.polaroid.visible && Boolean(polaroid && polaroidLayout)
   const polaroidStyle = profile.polaroid.style
@@ -46,7 +50,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 17, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 18, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground, windowBackground }).replace(/</g, '\\u003c'),
     assets
   }
 }

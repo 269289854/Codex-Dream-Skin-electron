@@ -8,6 +8,49 @@ html.codex-dream-skin body {
   font-family: var(--dream-font-ui) !important;
 }
 
+html.codex-dream-skin #codex-dream-skin-window-background {
+  position: fixed !important;
+  z-index: 0 !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+html.codex-dream-skin #codex-dream-skin-window-background > .dream-window-background-base {
+  position: absolute !important;
+  z-index: 0 !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  transform-origin: center !important;
+  pointer-events: none !important;
+}
+
+html.codex-dream-skin #codex-dream-skin-window-background > .dream-window-background-media {
+  display: block !important;
+  object-fit: cover !important;
+}
+
+html.codex-dream-skin #codex-dream-skin-window-background > .dream-window-background-mask {
+  position: absolute !important;
+  pointer-events: none !important;
+}
+
+html.codex-dream-skin.dream-window-background-active body,
+html.codex-dream-skin.dream-window-background-active #root,
+html.codex-dream-skin.dream-window-background-active [class~="group/application-menu-top-bar"],
+html.codex-dream-skin.dream-window-background-active aside.app-shell-left-panel,
+html.codex-dream-skin.dream-window-background-active aside.app-shell-left-panel :is(header, footer, .dream-sidebar-header, .dream-sidebar-footer),
+html.codex-dream-skin.dream-window-background-active main.main-surface,
+html.codex-dream-skin.dream-window-background-active main.main-surface > header.app-header-tint {
+  background: transparent !important;
+}
+
+html.codex-dream-skin.dream-window-background-active #root {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
 html.codex-dream-skin aside.app-shell-left-panel {
   background: var(--dream-sidebar-surface) !important;
   border: 1px solid var(--dream-sidebar-border) !important;

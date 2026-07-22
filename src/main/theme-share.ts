@@ -29,7 +29,7 @@ const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(17),
+  profileVersion: z.number().int().min(0).max(18),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -37,14 +37,14 @@ export type ThemeShareAsset = z.infer<typeof assetManifestSchema>
 export type ThemeShareManifest = z.infer<typeof manifestSchema>
 
 export function collectThemeAssets(profile: ThemeProfile): string[] {
-  const assets: Array<string | null> = [profile.hero.source?.asset ?? profile.hero.sourceImage ?? null, profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null, profile.conversationBackground.source?.asset ?? null, profile.decorations.composerMelody.source?.asset ?? null]
+  const assets: Array<string | null> = [profile.hero.source?.asset ?? profile.hero.sourceImage ?? null, profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null, profile.conversationBackground.source?.asset ?? null, profile.windowBackground.source?.asset ?? null, profile.decorations.composerMelody.source?.asset ?? null]
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assets.push(icon.asset)
   for (const font of profile.typography.importedFonts) assets.push(font.asset)
   return [...new Set(assets.filter((value): value is string => Boolean(value)))]
 }
 
 export function validateThemeAssetReferences(profile: ThemeProfile): void {
-  for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
+  for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
     if (!reference) continue
     const extension = extname(reference.asset).toLowerCase()
     const expectedKind = extension === '.mp4' || extension === '.webm' ? 'video' : extension === '.png' || extension === '.webp' || extension === '.jpg' || extension === '.jpeg' || extension === '.gif' ? 'image' : null
@@ -87,7 +87,7 @@ export function shareProfileVersionMatches(manifest: ThemeShareManifest, seriali
   if (!serializedProfile || typeof serializedProfile !== 'object' || !('version' in serializedProfile)) return false
   const serializedVersion = serializedProfile.version
   if (typeof serializedVersion !== 'number' || manifest.profileVersion !== serializedVersion) return false
-  return serializedVersion === parsedVersion || (parsedVersion === 17 && serializedVersion >= 0 && serializedVersion <= 16)
+  return serializedVersion === parsedVersion || (parsedVersion === 18 && serializedVersion >= 0 && serializedVersion <= 17)
 }
 
 export function assertSharePath(path: string): void {

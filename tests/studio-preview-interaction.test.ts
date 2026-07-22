@@ -945,6 +945,57 @@ describe('Studio preview editing interaction', () => {
     expect(video?.autoplay).toBe(true)
   })
 
+  it('edits a gradient window background and manages eight ordered mask layers', async () => {
+    const target = container.querySelector<HTMLElement>('[data-preview-target="window-background"]')
+    if (!target) throw new Error('Window background target is missing.')
+    pointerDown(target)
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"]')
+    if (!dialog) throw new Error('Window background quick editor is missing.')
+
+    const visible = dialog.querySelector<HTMLInputElement>('.window-background-controls > .toggle-row input')
+    if (!visible) throw new Error('Window background visibility control is missing.')
+    act(() => visible.click())
+    const linear = [...dialog.querySelectorAll<HTMLButtonElement>('.window-background-controls > .paint-control .segmented-control button')].find((button) => button.textContent === '线性')
+    if (!linear) throw new Error('Window background linear paint control is missing.')
+    act(() => linear.click())
+    expect(container.querySelector<HTMLElement>('.codex-preview')?.classList.contains('window-background-active')).toBe(true)
+    expect(container.querySelector<HTMLElement>('.preview-window-background-color')?.style.background).toContain('linear-gradient(135deg')
+
+    const add = dialog.querySelector<HTMLButtonElement>('.window-mask-controls > header button[title="添加遮罩"]')
+    if (!add) throw new Error('Add mask control is missing.')
+    for (let index = 0; index < 8; index += 1) act(() => add.click())
+    expect(dialog.querySelectorAll('.window-mask-layer')).toHaveLength(8)
+    expect(add.disabled).toBe(true)
+    expect(dialog.querySelectorAll<HTMLButtonElement>('button[title="复制遮罩"]')[0]?.disabled).toBe(true)
+    expect(container.querySelectorAll('.preview-window-background-mask')).toHaveLength(8)
+
+    const firstLayer = dialog.querySelector<HTMLElement>('.window-mask-layer')
+    const ellipse = firstLayer ? [...firstLayer.querySelectorAll<HTMLButtonElement>('.window-mask-shapes button')].find((button) => button.textContent === '椭圆') : null
+    if (!firstLayer || !ellipse) throw new Error('First mask editor is missing.')
+    act(() => ellipse.click())
+    const firstPreviewMask = container.querySelector<HTMLElement>('.preview-window-background-mask')
+    expect(firstPreviewMask?.style.borderRadius).toBe('50%')
+    expect(firstPreviewMask?.style.zIndex).toBe('8')
+
+    const secondLayer = dialog.querySelectorAll<HTMLElement>('.window-mask-layer')[1]
+    const moveUp = secondLayer?.querySelector<HTMLButtonElement>('button[title="上移遮罩"]')
+    if (!moveUp) throw new Error('Move mask control is missing.')
+    act(() => moveUp.click())
+    const remove = dialog.querySelector<HTMLButtonElement>('.window-mask-layer button[title="删除遮罩"]')
+    if (!remove) throw new Error('Delete mask control is missing.')
+    act(() => remove.click())
+    expect(dialog.querySelectorAll('.window-mask-layer')).toHaveLength(7)
+    expect(add.disabled).toBe(false)
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.windowBackground).toMatchObject({ visible: true, mode: 'color', paint: { kind: 'linear', angle: 135 }, masks: expect.arrayContaining([expect.objectContaining({ shape: 'ellipse' })]) })
+  })
+
   it('selects a composer GIF once and keeps it synchronized across preview modes', async () => {
     const melody = container.querySelector<HTMLElement>('[data-preview-target="composer-melody"]')
     if (!melody) throw new Error('Composer decoration target is missing.')

@@ -6,9 +6,9 @@ import {
   Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
-import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
+import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
-import { buildConversationOverlayStyle } from '../../shared/conversation-overlay'
+import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
 import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
 import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
@@ -29,6 +29,7 @@ import { ParticleEffectControls } from './ParticleEffectControls'
 import { PreviewVideo } from './PreviewVideo'
 import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
+import { WindowBackgroundControls } from './WindowBackgroundControls'
 import {
   ICON_PREVIEW_TARGETS,
   findPreviewTarget,
@@ -97,7 +98,7 @@ export function App(): React.JSX.Element {
       setDraft(profile)
       const nextAssets = { ...compiled.assets }
       if (window.studio.assets.getPreviewUrl) {
-        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
+        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
           if (!source) continue
           try { nextAssets[source.asset] = await window.studio.assets.getPreviewUrl(id, source.asset) } catch { /* missing media is shown as fallback */ }
         }
@@ -342,7 +343,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.themes.getDefault(themeId)
       const restoredAssets: Record<string, string> = {}
-      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
+      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
         if (!source) continue
         restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
       }
@@ -510,6 +511,11 @@ export function App(): React.JSX.Element {
           profile.conversationBackground.visible = true
           profile.conversationBackground.mode = mode
           profile.conversationBackground.source = imported.reference
+        } else if (purpose === 'windowBackground') {
+          const mode = imported.reference.mimeType === 'image/gif' ? 'gif' : imported.reference.kind === 'video' ? 'video' : 'image'
+          profile.windowBackground.visible = true
+          profile.windowBackground.mode = mode
+          profile.windowBackground.source = imported.reference
         } else {
           profile.decorations.composerMelody.source = imported.reference
           profile.decorations.composerMelody.mode = 'gif'
@@ -687,6 +693,8 @@ export function App(): React.JSX.Element {
   const heroUrl = draft.hero.source ? assets[draft.hero.source.asset] : draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
   const polaroidUrl = draft.polaroid.source ? assets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
   const conversationBackgroundUrl = draft.conversationBackground.source ? assets[draft.conversationBackground.source.asset] : undefined
+  const windowBackgroundUrl = draft.windowBackground.source ? assets[draft.windowBackground.source.asset] : undefined
+  const windowBackgroundVisible = draft.windowBackground.visible && (draft.windowBackground.mode === 'color' || Boolean(windowBackgroundUrl))
   const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
   const homeHeadingVisible = draft.decorations.homeHeading.visible && draft.decorations.homeHeading.text.length > 0
   const homeCopyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
@@ -812,7 +820,7 @@ export function App(): React.JSX.Element {
             <div className="preview-frame" style={{ width: HOME_PREVIEW_VIEWPORT.width * previewScale, height: HOME_PREVIEW_VIEWPORT.height * previewScale }}>
               <div
                 ref={previewCanvasRef}
-                className="codex-preview"
+                className={windowBackgroundVisible ? 'codex-preview window-background-active' : 'codex-preview'}
                 data-preview-target="surface-canvas"
                 onPointerDownCapture={selectPreviewTarget}
                 onKeyDownCapture={selectPreviewTargetWithKeyboard}
@@ -822,6 +830,7 @@ export function App(): React.JSX.Element {
                 style={{ ...previewStyle, transform: `scale(${previewScale})` }}
                 >
                   {previewFontCss && <style>{previewFontCss}</style>}
+                  <WindowBackgroundPreview profile={draft} backgroundUrl={windowBackgroundUrl} />
                   <CodexSidebarPreview profile={draft} assets={assets} />
                 <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
                   <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
@@ -870,6 +879,7 @@ export function App(): React.JSX.Element {
               heroUrl={heroUrl}
               polaroidUrl={polaroidUrl}
               conversationBackgroundUrl={conversationBackgroundUrl}
+              windowBackgroundUrl={windowBackgroundUrl}
               mediaBusy={mediaBusy}
               position={popoverPosition}
               popoverRef={popoverRef}
@@ -888,6 +898,7 @@ export function App(): React.JSX.Element {
         <aside className="inspector" ref={inspectorRef}>
           <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
+            <Property title="整个窗口背景" anchor="visual-window-background" highlighted={inspectorAnchor === 'visual-window-background'}><WindowBackgroundControls profile={draft} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('windowBackground', kind) }} /></Property>
             <Property title="侧栏固定文案" anchor="visual-sidebar-copy" highlighted={inspectorAnchor === 'visual-sidebar-copy'}>
               <label className="copy-field">模式标题<input value={draft.copy.sidebarModeTitle} maxLength={80} aria-invalid={!draft.copy.sidebarModeTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarModeTitle = value }) }} /></label>
               {SIDEBAR_NAV_ITEMS.map((item) => <label className="copy-field" key={item.id}>{item.label}<input value={draft.copy[item.copyField]} maxLength={80} aria-invalid={!draft.copy[item.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy[item.copyField] = value }) }} /></label>)}
@@ -1056,6 +1067,23 @@ function ComposerDecorationText({ text, effect, direction, speed }: { text: stri
     return <>{[0, 1, 2].map((lane) => <span className={`dream-composer-decoration-text dream-composer-decoration-barrage dream-composer-decoration-direction-${direction}`} style={{ top: `${(lane + .5) / 3 * 100}%`, animationDelay: `${-7 / speed * lane / 3}s` }} key={lane}>{text}</span>)}</>
   }
   return <span className={`dream-composer-decoration-text dream-composer-decoration-${effect}${effect === 'scroll' ? ` dream-composer-decoration-direction-${direction}` : ''}`}>{text}</span>
+}
+
+function WindowBackgroundPreview({ profile, backgroundUrl }: { profile: ThemeProfile; backgroundUrl?: string }): React.JSX.Element {
+  const background = profile.windowBackground
+  const visible = background.visible && (background.mode === 'color' || Boolean(backgroundUrl))
+  const baseStyle: React.CSSProperties = {
+    opacity: background.opacity,
+    objectPosition: `${background.focus.x * 100}% ${background.focus.y * 100}%`,
+    transform: `scale(${background.scale}) ${mediaFlipCssTransform(background.mediaTransform)}`
+  }
+  return <div className="preview-window-background">
+    {visible && background.mode === 'color' && <div className="preview-window-background-base preview-window-background-color" aria-hidden="true" style={{ ...baseStyle, background: paintToCss(background.paint) }} />}
+    {visible && backgroundUrl && background.mode === 'video' && <video className="preview-window-background-base preview-window-background-media" src={backgroundUrl} muted autoPlay loop playsInline aria-hidden="true" style={baseStyle} />}
+    {visible && backgroundUrl && background.mode !== 'color' && background.mode !== 'video' && <img className="preview-window-background-base preview-window-background-media" src={backgroundUrl} alt="" draggable={false} aria-hidden="true" style={baseStyle} />}
+    {visible && background.masks.map((mask, index) => mask.visible && <div className="preview-window-background-mask" aria-hidden="true" key={mask.id} style={{ ...buildBackgroundOverlayStyle(mask), zIndex: background.masks.length - index }} />)}
+    <button className="preview-window-background-edit" type="button" title="编辑整个窗口背景" aria-label="编辑整个窗口背景" data-preview-target="window-background"><Palette size={14} /></button>
+  </div>
 }
 
 function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {

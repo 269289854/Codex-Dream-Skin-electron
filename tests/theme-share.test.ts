@@ -29,6 +29,7 @@ describe('theme share packages', () => {
     await writeFile(gifSource, gif)
     await writeFile(fontSource, Buffer.from('wOF2'))
     const image = await store.importAsset(original.id, source, 'hero')
+    const windowReference = { asset: image.relativePath, kind: 'image' as const, mimeType: 'image/png' as const }
     const composerGif = await store.importMediaAsset(original.id, gifSource, 'composerMelody', 'gif')
     const font = await store.importFontAsset(original.id, fontSource)
     const draft = structuredClone(original)
@@ -38,6 +39,20 @@ describe('theme share packages', () => {
     draft.polaroid.sourceImage = image.relativePath
     draft.hero.mediaTransform = { flipHorizontal: true, flipVertical: false }
     draft.polaroid.mediaTransform = { flipHorizontal: false, flipVertical: true }
+    draft.windowBackground.visible = true
+    draft.windowBackground.mode = 'image'
+    draft.windowBackground.source = windowReference
+    draft.windowBackground.masks = [{
+      id: '22222222-2222-4222-8222-222222222222',
+      visible: true,
+      paint: { kind: 'solid', color: '#123456' },
+      opacity: .4,
+      shape: 'ellipse',
+      position: { x: .5, y: .5 },
+      size: { width: .6, height: .5 },
+      softness: 18,
+      cornerRadius: 28
+    }]
     draft.icons.branding = { kind: 'asset', asset: image.relativePath }
     draft.decorations.composerMelody.source = composerGif.reference
     draft.typography.importedFonts.push({ id: font.id, family: font.family, asset: font.relativePath, originalName: font.originalName, format: font.format })
@@ -50,6 +65,7 @@ describe('theme share packages', () => {
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
     expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
+    expect(checked.profile.windowBackground.source).toEqual(windowReference)
     expect(checked.profile.resetColors.accent).toBe(original.resetColors.accent)
 
     const imported = await store.importSharePackage(packagePath)
@@ -60,11 +76,13 @@ describe('theme share packages', () => {
     expect(imported.resetColors).toEqual(draft.colors)
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: true })
+    expect(imported.windowBackground).toMatchObject({ visible: true, mode: 'image', source: windowReference, masks: [{ id: '22222222-2222-4222-8222-222222222222', shape: 'ellipse' }] })
     expect(Date.parse(imported.updatedAt)).toBeGreaterThanOrEqual(Date.parse(original.updatedAt))
     expect((await store.get(original.id)).copy.brandTitle).not.toBe(imported.copy.brandTitle)
     expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await store.compile(imported.id)).assets[font.relativePath]).toBe(font.dataUrl)
     expect((await store.compile(imported.id)).assets[composerGif.relativePath]).toBe(`data:image/gif;base64,${gif.toString('base64')}`)
+    expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
   })
 
@@ -93,7 +111,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(17)
+    expect(imported.version).toBe(18)
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.resetColors.accent).toBe('#2878B8')
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
@@ -129,7 +147,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(17)
+    expect(imported.version).toBe(18)
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.appearance.colors).toEqual({ sidebarTasksTitleHoverText: '#abcdef' })
   })
