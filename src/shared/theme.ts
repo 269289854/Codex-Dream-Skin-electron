@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema, themePaintSchema } from './appearance'
+import { createEmptyAppearance, cssColorSchema, resolveAppearanceColor, themeAppearanceSchema, themePaintSchema } from './appearance'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
 import { PARTICLE_EFFECT_IDS } from './particle-effects'
 import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
@@ -462,9 +462,20 @@ const versionFourteenThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionFifteenThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(15),
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(16),
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   resetColors: themeColorsSchema
 }).strict().superRefine((profile, context) => {
@@ -580,7 +591,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 15,
+    version: 16,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
@@ -651,10 +662,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 15) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 16) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 15) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionFifteen(versionFifteenThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 14) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -852,7 +867,7 @@ function migrateVersionThirteen(legacy: z.infer<typeof versionThirteenThemeSchem
 
 function migrateVersionFourteen(legacy: z.infer<typeof versionFourteenThemeSchema>): ThemeProfile {
   const { overlayColor, overlayOpacity, ...conversationBackground } = legacy.conversationBackground
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionFifteen(versionFifteenThemeSchema.parse({
     ...legacy,
     version: 15,
     conversationBackground: {
@@ -861,6 +876,32 @@ function migrateVersionFourteen(legacy: z.infer<typeof versionFourteenThemeSchem
         ...createDefaultConversationOverlay(),
         paint: { kind: 'solid', color: overlayColor },
         opacity: overlayOpacity
+      }
+    }
+  }))
+}
+
+function migrateVersionFifteen(legacy: z.infer<typeof versionFifteenThemeSchema>): ThemeProfile {
+  const legacyTitleColor = resolveAppearanceColor(legacy.appearance, legacy.colors, 'sidebarHeaderText')
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 16,
+    appearance: {
+      colors: {
+        ...legacy.appearance.colors,
+        sidebarProjectsTitleText: legacy.appearance.colors.sidebarProjectsTitleText ?? legacyTitleColor,
+        sidebarProjectsTitleHoverText: legacy.appearance.colors.sidebarProjectsTitleHoverText ?? legacyTitleColor,
+        sidebarTasksTitleText: legacy.appearance.colors.sidebarTasksTitleText ?? legacyTitleColor,
+        sidebarTasksTitleHoverText: legacy.appearance.colors.sidebarTasksTitleHoverText ?? legacyTitleColor
+      },
+      paints: { ...legacy.appearance.paints }
+    },
+    typography: {
+      ...legacy.typography,
+      slots: {
+        ...legacy.typography.slots,
+        sidebarProjectsTitle: legacy.typography.slots.sidebarProjectsTitle ?? { kind: 'inherit' },
+        sidebarTasksTitle: legacy.typography.slots.sidebarTasksTitle ?? { kind: 'inherit' }
       }
     }
   }))

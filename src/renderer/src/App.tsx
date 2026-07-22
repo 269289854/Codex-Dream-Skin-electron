@@ -890,10 +890,9 @@ export function App(): React.JSX.Element {
           {activeInspector === 'visual' && <>
             <Property title="侧栏固定文案" anchor="visual-sidebar-copy" highlighted={inspectorAnchor === 'visual-sidebar-copy'}>
               <label className="copy-field">模式标题<input value={draft.copy.sidebarModeTitle} maxLength={80} aria-invalid={!draft.copy.sidebarModeTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarModeTitle = value }) }} /></label>
-              <label className="copy-field">项目标题<input value={draft.copy.sidebarProjectsTitle} maxLength={80} aria-invalid={!draft.copy.sidebarProjectsTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarProjectsTitle = value }) }} /></label>
-              <label className="copy-field">任务标题<input value={draft.copy.sidebarTasksTitle} maxLength={80} aria-invalid={!draft.copy.sidebarTasksTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarTasksTitle = value }) }} /></label>
               {SIDEBAR_NAV_ITEMS.map((item) => <label className="copy-field" key={item.id}>{item.label}<input value={draft.copy[item.copyField]} maxLength={80} aria-invalid={!draft.copy[item.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy[item.copyField] = value }) }} /></label>)}
             </Property>
+            <SidebarSectionTitleInspector profile={draft} highlighted={inspectorAnchor === 'visual-sidebar-section-titles'} onChange={change} onInteractionEnd={endHistoryGroup} onImportFont={(slot) => { void importFont(slot) }} />
             <Property title="品牌文案" anchor="visual-brand-copy" highlighted={inspectorAnchor === 'visual-brand-copy'}>
               <label className="copy-field">品牌主标题<input value={draft.copy.brandTitle} maxLength={80} aria-invalid={!draft.copy.brandTitle.trim() || draft.copy.brandTitle.length > 80} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandTitle = value }) }} /></label>
               <label className="copy-field">品牌副标题<textarea value={draft.copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSubtitle = value }) }} /></label>
@@ -1115,12 +1114,58 @@ function Property({ title, children, anchor, highlighted = false }: { title: str
 }
 
 function AppearanceInspectorGroup({ group, profile, highlighted, onChange, onInteractionEnd }: { group: AppearanceGroup; profile: ThemeProfile; highlighted: boolean; onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void; onInteractionEnd: () => void }): React.JSX.Element {
-  const colorTokens = (Object.keys(APPEARANCE_COLOR_TOKENS) as AppearanceColorToken[]).filter((token) => APPEARANCE_COLOR_TOKENS[token].group === group && APPEARANCE_COLOR_TOKENS[token].editable)
-  const paintTokens = (Object.keys(APPEARANCE_PAINT_TOKENS) as AppearancePaintToken[]).filter((token) => APPEARANCE_PAINT_TOKENS[token].group === group && APPEARANCE_PAINT_TOKENS[token].editable)
+  const colorTokens = (Object.keys(APPEARANCE_COLOR_TOKENS) as AppearanceColorToken[]).filter((token) => APPEARANCE_COLOR_TOKENS[token].group === group && APPEARANCE_COLOR_TOKENS[token].editable && !sidebarSectionTitleColorTokens.has(token))
+  const paintTokens = (Object.keys(APPEARANCE_PAINT_TOKENS) as AppearancePaintToken[]).filter((token) => APPEARANCE_PAINT_TOKENS[token].group === group && APPEARANCE_PAINT_TOKENS[token].editable && !sidebarSectionTitlePaintTokens.has(token))
   return <Property title={appearanceGroupLabels[group]} anchor={`appearance-${group}`} highlighted={highlighted}><div className="appearance-editor">
     {colorTokens.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
     {paintTokens.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
   </div></Property>
+}
+
+const sidebarSectionTitleSettings = [
+  {
+    label: '项目标题',
+    copyField: 'sidebarProjectsTitle',
+    fontSlot: 'sidebarProjectsTitle',
+    colors: ['sidebarProjectsTitleText', 'sidebarProjectsTitleHoverText'],
+    paints: ['sidebarProjectsTitleBackground', 'sidebarProjectsTitleHoverBackground']
+  },
+  {
+    label: '任务标题',
+    copyField: 'sidebarTasksTitle',
+    fontSlot: 'sidebarTasksTitle',
+    colors: ['sidebarTasksTitleText', 'sidebarTasksTitleHoverText'],
+    paints: ['sidebarTasksTitleBackground', 'sidebarTasksTitleHoverBackground']
+  }
+] as const satisfies ReadonlyArray<{
+  label: string
+  copyField: 'sidebarProjectsTitle' | 'sidebarTasksTitle'
+  fontSlot: TypographySlot
+  colors: readonly AppearanceColorToken[]
+  paints: readonly AppearancePaintToken[]
+}>
+
+const sidebarSectionTitleColorTokens = new Set<AppearanceColorToken>(sidebarSectionTitleSettings.flatMap((setting) => [...setting.colors]))
+const sidebarSectionTitlePaintTokens = new Set<AppearancePaintToken>(sidebarSectionTitleSettings.flatMap((setting) => [...setting.paints]))
+
+function SidebarSectionTitleInspector({ profile, highlighted, onChange, onInteractionEnd, onImportFont }: {
+  profile: ThemeProfile
+  highlighted: boolean
+  onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void
+  onInteractionEnd: () => void
+  onImportFont: (slot: TypographySlot) => void
+}): React.JSX.Element {
+  return <Property title="侧栏分区标题" anchor="visual-sidebar-section-titles" highlighted={highlighted}>
+    <div className="sidebar-section-title-settings">{sidebarSectionTitleSettings.map((setting) => <section key={setting.copyField}>
+      <h4>{setting.label}</h4>
+      <label className="copy-field">显示文字<input value={profile.copy[setting.copyField]} maxLength={80} aria-invalid={!profile.copy[setting.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; onChange((next) => { next.copy[setting.copyField] = value }, `copy-${setting.copyField}`) }} onBlur={onInteractionEnd} /></label>
+      <FontControl slot={setting.fontSlot} profile={profile} onChange={(selection) => onChange((next) => assignFontSlot(next, setting.fontSlot, selection))} onImport={() => onImportFont(setting.fontSlot)} />
+      <div className="appearance-editor">
+        {setting.colors.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
+        {setting.paints.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
+      </div>
+    </section>)}</div>
+  </Property>
 }
 
 function assignFontSlot(profile: ThemeProfile, slot: TypographySlot, selection: ThemeProfile['typography']['slots'][TypographySlot]): void {

@@ -393,18 +393,21 @@
     if (!sidebar) return;
     const entries = [
       { field: "sidebarModeTitle", aliases: ["Codex"], selector: 'button[aria-label^="切换模式"], button[aria-label^="Switch mode"]' },
-      { field: "sidebarProjectsTitle", aliases: ["项目", "Projects"], selector: 'button[data-app-action-sidebar-section-toggle]' },
-      { field: "sidebarTasksTitle", aliases: ["任务", "Tasks"], selector: 'button[data-app-action-sidebar-section-toggle]' }
+      { field: "sidebarProjectsTitle", aliases: ["项目", "Projects"], selector: 'button[data-app-action-sidebar-section-toggle]', className: "dream-sidebar-projects-title" },
+      { field: "sidebarTasksTitle", aliases: ["任务", "Tasks"], selector: 'button[data-app-action-sidebar-section-toggle]', className: "dream-sidebar-tasks-title" }
     ];
     for (const entry of entries) {
-      const candidate = [...sidebar.querySelectorAll(entry.selector)].find((node) => {
+      const marked = entry.className ? sidebar.querySelector(`.${entry.className}`) : null;
+      const candidate = marked || [...sidebar.querySelectorAll(entry.selector)].find((node) => {
         const text = normalizedNodeLabel(node);
         return entry.aliases.some((alias) => text.includes(alias.toLowerCase()));
       });
       if (!(candidate instanceof HTMLElement)) continue;
-      const labelNode = [...candidate.querySelectorAll("span")].find((node) => node.children.length === 0 && entry.aliases.some((alias) => node.textContent?.trim().toLowerCase() === alias.toLowerCase()));
+      const existingLabel = [...sidebarCopyRestorers].find(([, record]) => record.button === candidate)?.[0];
+      const labelNode = existingLabel || [...candidate.querySelectorAll("span")].find((node) => node.children.length === 0 && entry.aliases.some((alias) => node.textContent?.trim().toLowerCase() === alias.toLowerCase()));
       if (!(labelNode instanceof HTMLElement)) continue;
       if (!sidebarCopyRestorers.has(labelNode)) sidebarCopyRestorers.set(labelNode, { text: labelNode.textContent || "", button: candidate, ariaLabel: candidate.getAttribute("aria-label") });
+      if (entry.className) candidate.classList.add(entry.className);
       const copy = themeConfig?.copy?.[entry.field];
       if (typeof copy === "string" && copy.trim()) labelNode.textContent = copy;
       if (entry.field === "sidebarModeTitle" && typeof copy === "string" && copy.trim() && candidate.hasAttribute("aria-label")) {
@@ -1591,7 +1594,7 @@
       }
       sidebarCopyRestorers.delete(labelNode);
     }
-    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-project-row-selected", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar", "dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected", ...sidebarNavigation.flatMap((item) => [`dream-sidebar-nav-${item.id}`, `dream-sidebar-nav-${item.id}-selected`])]) {
+    for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-projects-title", "dream-sidebar-tasks-title", "dream-sidebar-project-row", "dream-sidebar-project-row-selected", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar", "dream-sidebar-new-task-row", "dream-sidebar-new-task-row-selected", ...sidebarNavigation.flatMap((item) => [`dream-sidebar-nav-${item.id}`, `dream-sidebar-nav-${item.id}-selected`])]) {
       document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
     }
     document.getElementById(PROJECT_PROXY_ID)?.remove();

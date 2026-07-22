@@ -67,6 +67,10 @@ export const APPEARANCE_COLOR_TOKENS = {
   sidebarText: colorToken('侧边栏正文', 'sidebar', '--dream-sidebar-text', 'ink', ['sidebar']),
   sidebarMutedText: colorToken('侧边栏弱化文字', 'sidebar', '--dream-sidebar-muted-text', 'border', ['sidebar']),
   sidebarHeaderText: colorToken('侧边栏头部文字', 'sidebar', '--dream-sidebar-header-text', 'ink', ['sidebar-header']),
+  sidebarProjectsTitleText: colorToken('项目标题普通文字', 'sidebar', '--dream-sidebar-projects-title-text', 'ink', ['sidebar-project-title']),
+  sidebarProjectsTitleHoverText: colorToken('项目标题悬停文字', 'sidebar', '--dream-sidebar-projects-title-hover-text', 'ink', ['sidebar-project-title'], 'hover'),
+  sidebarTasksTitleText: colorToken('任务标题普通文字', 'sidebar', '--dream-sidebar-tasks-title-text', 'ink', ['sidebar-task-title']),
+  sidebarTasksTitleHoverText: colorToken('任务标题悬停文字', 'sidebar', '--dream-sidebar-tasks-title-hover-text', 'ink', ['sidebar-task-title'], 'hover'),
   sidebarCodexText: colorToken('Codex 文字', 'sidebar', '--dream-sidebar-codex-text', 'ink', ['sidebar-codex']),
   sidebarArrow: colorToken('Codex 箭头', 'sidebar', '--dream-sidebar-arrow', 'accent', ['sidebar-arrow']),
   sidebarModeIcon: colorToken('模式图标', 'sidebar', '--dream-sidebar-mode-icon', 'pink', ['icon-sidebar-mode']),
@@ -185,6 +189,10 @@ export const APPEARANCE_PAINT_TOKENS = {
   primaryButtonSelected: paintToken('主要按钮选中', 'conversation', '--dream-primary-button-selected', 'lavender', ['primary-button'], 'selected'),
   sidebarSurface: paintToken('侧边栏表面', 'sidebar', '--dream-sidebar-surface', 'surface', ['sidebar']),
   sidebarHeader: paintToken('侧边栏头部', 'sidebar', '--dream-sidebar-header', 'surface', ['sidebar-header']),
+  sidebarProjectsTitleBackground: paintToken('项目标题普通背景', 'sidebar', '--dream-sidebar-projects-title-background', 'surface', ['sidebar-project-title']),
+  sidebarProjectsTitleHoverBackground: paintToken('项目标题悬停背景', 'sidebar', '--dream-sidebar-projects-title-hover-background', 'surface', ['sidebar-project-title'], 'hover'),
+  sidebarTasksTitleBackground: paintToken('任务标题普通背景', 'sidebar', '--dream-sidebar-tasks-title-background', 'surface', ['sidebar-task-title']),
+  sidebarTasksTitleHoverBackground: paintToken('任务标题悬停背景', 'sidebar', '--dream-sidebar-tasks-title-hover-background', 'surface', ['sidebar-task-title'], 'hover'),
   sidebarModeBadge: paintToken('模式图标底色', 'sidebar', '--dream-sidebar-mode-badge', 'lavender', ['icon-sidebar-mode']),
   sidebarSearchButton: paintToken('搜索按钮', 'sidebar', '--dream-sidebar-search-button', 'surface', ['sidebar-search']),
   sidebarSearchButtonHover: paintToken('搜索按钮悬停', 'sidebar', '--dream-sidebar-search-button-hover', 'lavender', ['sidebar-search'], 'hover'),
@@ -278,6 +286,10 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
     case 'sidebarSurface':
       return linear(180, [[colors.surface, 0], [tint(colors.accent, 0.08), 0.58], [tint(colors.lavender, 0.1), 1]])
     case 'sidebarHeader':
+    case 'sidebarProjectsTitleBackground':
+    case 'sidebarProjectsTitleHoverBackground':
+    case 'sidebarTasksTitleBackground':
+    case 'sidebarTasksTitleHoverBackground':
     case 'sidebarModeBadge':
     case 'sidebarSearchButton':
     case 'sidebarNavItem':

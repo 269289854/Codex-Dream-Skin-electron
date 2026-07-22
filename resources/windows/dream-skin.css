@@ -62,6 +62,36 @@ html.codex-dream-skin aside.app-shell-left-panel [class~="bg-token-list-hover-ba
   box-shadow: 0 4px 15px color-mix(in srgb, var(--dream-sidebar-border) 24%, transparent) !important;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-projects-title {
+  background: var(--dream-sidebar-projects-title-background) !important;
+  color: var(--dream-sidebar-projects-title-text) !important;
+  font-family: var(--dream-font-sidebar-projects-title) !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-projects-title:hover {
+  background: var(--dream-sidebar-projects-title-hover-background) !important;
+  color: var(--dream-sidebar-projects-title-hover-text) !important;
+  box-shadow: none !important;
+  transform: none;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-tasks-title {
+  background: var(--dream-sidebar-tasks-title-background) !important;
+  color: var(--dream-sidebar-tasks-title-text) !important;
+  font-family: var(--dream-font-sidebar-tasks-title) !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-tasks-title:hover {
+  background: var(--dream-sidebar-tasks-title-hover-background) !important;
+  color: var(--dream-sidebar-tasks-title-hover-text) !important;
+  box-shadow: none !important;
+  transform: none;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel :is(.dream-sidebar-projects-title, .dream-sidebar-tasks-title) svg {
+  color: currentColor !important;
+}
+
 html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row {
   width: 100% !important;
   display: flex !important;

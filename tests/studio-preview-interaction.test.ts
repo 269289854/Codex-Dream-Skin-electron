@@ -1083,6 +1083,87 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.appearance.colors).toMatchObject({ sidebarNavNewTaskText: '#123456', sidebarNavNewTaskSelectedText: '#654321' })
   })
 
+  it('edits project and task section titles with independent copy, fonts, and two-state appearance', async () => {
+    const projectTitle = container.querySelector('[data-preview-target="sidebar-project-title"]')
+    const taskTitle = container.querySelector('[data-preview-target="sidebar-task-title"]')
+    const canvas = container.querySelector<HTMLElement>('.codex-preview')
+    if (!projectTitle || !taskTitle || !canvas) throw new Error('Sidebar section title preview is missing.')
+    const originalTaskText = taskTitle.textContent
+
+    pointerDown(projectTitle)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('项目标题快捷配置')
+    enterQuickCopy('作品集')
+    const projectFont = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="sidebarProjectsTitle"] select')
+    if (!projectFont) throw new Error('Project title font control is missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLSelectElement.prototype, 'value')?.set?.call(projectFont, 'builtin:jetbrains-mono')
+      projectFont.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    const projectNormalText = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="sidebarProjectsTitleText"] .color-text-input')
+    const projectNormalBackground = container.querySelector<HTMLInputElement>('[role="dialog"] [data-paint-token="sidebarProjectsTitleBackground"] .color-text-input')
+    if (!projectNormalText || !projectNormalBackground) throw new Error('Project title normal appearance controls are missing.')
+    act(() => {
+      setInputValue(projectNormalText, '#123456')
+      setInputValue(projectNormalBackground, '#fefefe')
+    })
+
+    const hoverTab = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .state-tabs button')].find((button) => button.textContent === '悬停')
+    if (!hoverTab) throw new Error('Project title hover state is missing.')
+    act(() => hoverTab.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const projectHoverText = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="sidebarProjectsTitleHoverText"] .color-text-input')
+    const projectHoverBackground = container.querySelector<HTMLInputElement>('[role="dialog"] [data-paint-token="sidebarProjectsTitleHoverBackground"] .color-text-input')
+    if (!projectHoverText || !projectHoverBackground) throw new Error('Project title hover appearance controls are missing.')
+    act(() => {
+      setInputValue(projectHoverText, '#654321')
+      setInputValue(projectHoverBackground, '#fedcba')
+    })
+
+    expect(projectTitle.getAttribute('data-preview-state')).toBe('hover')
+    expect(projectTitle.textContent).toContain('作品集')
+    expect(taskTitle.textContent).toBe(originalTaskText)
+    expect(canvas.style.getPropertyValue('--dream-font-sidebar-projects-title')).toContain('Dream JetBrains Mono')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-text')).toBe('#123456')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-hover-text')).toBe('#654321')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-background')).toBe('#fefefe')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-hover-background')).toBe('#fedcba')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-tasks-title-text')).not.toBe('#123456')
+
+    const moreSettings = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .preview-edit-popover-footer button')].find((button) => button.textContent?.includes('更多设置'))
+    if (!moreSettings) throw new Error('Section title inspector command is missing.')
+    act(() => moreSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelector('[data-inspector-anchor="visual-sidebar-section-titles"]')).not.toBeNull()
+    expect(container.querySelector('[data-inspector-anchor="visual-sidebar-section-titles"] [data-font-slot="sidebarProjectsTitle"]')).not.toBeNull()
+    expect(container.querySelector('[data-inspector-anchor="appearance-sidebar"] [data-color-token="sidebarProjectsTitleText"]')).toBeNull()
+
+    pointerDown(taskTitle)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('任务标题快捷配置')
+    expect(container.querySelector<HTMLInputElement>('[role="dialog"] .quick-copy-field input')?.value).toBe(profile.copy.sidebarTasksTitle)
+    enterQuickCopy('工作项')
+    const taskFont = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="sidebarTasksTitle"] select')
+    const taskNormalText = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="sidebarTasksTitleText"] .color-text-input')
+    if (!taskFont || !taskNormalText) throw new Error('Task title controls are missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLSelectElement.prototype, 'value')?.set?.call(taskFont, 'builtin:noto-serif-sc')
+      taskFont.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      setInputValue(taskNormalText, '#0a0b0c')
+    })
+    expect(projectTitle.textContent).toContain('作品集')
+    expect(taskTitle.textContent).toContain('工作项')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-projects-title-text')).toBe('#123456')
+    expect(canvas.style.getPropertyValue('--dream-sidebar-tasks-title-text')).toBe('#0a0b0c')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.copy).toMatchObject({ sidebarProjectsTitle: '作品集', sidebarTasksTitle: '工作项' })
+    expect(savedProfiles.at(-1)?.typography.slots).toMatchObject({ sidebarProjectsTitle: { kind: 'builtin', id: 'jetbrains-mono' }, sidebarTasksTitle: { kind: 'builtin', id: 'noto-serif-sc' } })
+    expect(savedProfiles.at(-1)?.appearance.colors).toMatchObject({ sidebarProjectsTitleText: '#123456', sidebarProjectsTitleHoverText: '#654321', sidebarTasksTitleText: '#0a0b0c' })
+    expect(savedProfiles.at(-1)?.appearance.paints).toMatchObject({ sidebarProjectsTitleBackground: { kind: 'solid', color: '#fefefe' }, sidebarProjectsTitleHoverBackground: { kind: 'solid', color: '#fedcba' } })
+  })
+
   it('saves the current draft before installing or reinjecting runtime changes', async () => {
     const iconSettings = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('图标样式'))
     if (!iconSettings) throw new Error('Icon settings navigation is missing.')

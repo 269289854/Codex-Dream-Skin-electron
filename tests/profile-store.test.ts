@@ -66,7 +66,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 15, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 16, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -87,9 +87,23 @@ describe('ProfileStore', () => {
     expect((await store.list()).find((item) => item.id === created.id)?.active).toBe(true)
     const originalPlacement = activated.polaroid.placement
     activated.polaroid.placement = { ...originalPlacement, x: 0.24, y: 0.68 }
+    activated.copy.sidebarProjectsTitle = '作品集'
+    activated.typography.slots.sidebarProjectsTitle = { kind: 'builtin', id: 'jetbrains-mono' }
+    activated.appearance.colors.sidebarProjectsTitleText = '#123456'
+    activated.appearance.colors.sidebarProjectsTitleHoverText = '#654321'
+    activated.appearance.paints.sidebarProjectsTitleBackground = { kind: 'solid', color: 'transparent' }
+    activated.appearance.paints.sidebarProjectsTitleHoverBackground = { kind: 'solid', color: '#abcdef' }
     const moved = await store.update(activated)
     expect(moved.polaroid.placement).toEqual({ ...originalPlacement, x: 0.24, y: 0.68 })
     expect(moved.name).toBe('中文主题')
+    expect(await store.get(created.id)).toMatchObject({
+      copy: { sidebarProjectsTitle: '作品集', sidebarTasksTitle: '任务' },
+      typography: { slots: { sidebarProjectsTitle: { kind: 'builtin', id: 'jetbrains-mono' }, sidebarTasksTitle: { kind: 'inherit' } } },
+      appearance: {
+        colors: { sidebarProjectsTitleText: '#123456', sidebarProjectsTitleHoverText: '#654321' },
+        paints: { sidebarProjectsTitleBackground: { kind: 'solid', color: 'transparent' }, sidebarProjectsTitleHoverBackground: { kind: 'solid', color: '#abcdef' } }
+      }
+    })
     expect(() => store.resolveAsset(created.id, '../outside.png')).toThrow('escapes')
     expect(() => store.resolveAsset(created.id, 'theme.json')).toThrow('escapes')
 
@@ -112,7 +126,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 15,
+      version: 16,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },

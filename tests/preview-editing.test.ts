@@ -56,6 +56,26 @@ describe('preview editing registry', () => {
   })
 
   it('maps each editable copy target to its independent font slot', () => {
+    expect(PREVIEW_TARGETS['sidebar-project-title']).toMatchObject({
+      inspectorAnchor: 'visual-sidebar-section-titles',
+      editor: {
+        kind: 'style',
+        copyField: 'sidebarProjectsTitle',
+        fontSlot: 'sidebarProjectsTitle',
+        colors: ['sidebarProjectsTitleText', 'sidebarProjectsTitleHoverText'],
+        paints: ['sidebarProjectsTitleBackground', 'sidebarProjectsTitleHoverBackground']
+      }
+    })
+    expect(PREVIEW_TARGETS['sidebar-task-title']).toMatchObject({
+      inspectorAnchor: 'visual-sidebar-section-titles',
+      editor: {
+        kind: 'style',
+        copyField: 'sidebarTasksTitle',
+        fontSlot: 'sidebarTasksTitle',
+        colors: ['sidebarTasksTitleText', 'sidebarTasksTitleHoverText'],
+        paints: ['sidebarTasksTitleBackground', 'sidebarTasksTitleHoverBackground']
+      }
+    })
     expect(PREVIEW_TARGETS['copy-heading']).toMatchObject({
       inspectorAnchor: 'appearance-home',
       editor: { kind: 'style', copyField: 'headingTemplate', fontSlot: 'homeHeading' }

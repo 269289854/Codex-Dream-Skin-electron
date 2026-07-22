@@ -16,6 +16,8 @@ describe('typography model', () => {
         brandSignature: { kind: 'builtin', id: 'segoe-script' },
         homeHeadingDecoration: { kind: 'inherit' },
         composerMelody: { kind: 'inherit' },
+        sidebarProjectsTitle: { kind: 'inherit' },
+        sidebarTasksTitle: { kind: 'inherit' },
         sidebarNavNewTask: { kind: 'inherit' },
         sidebarNavPullRequests: { kind: 'inherit' },
         sidebarNavSites: { kind: 'inherit' },

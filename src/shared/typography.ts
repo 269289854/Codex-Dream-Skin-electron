@@ -35,6 +35,8 @@ export interface ThemeTypography {
     brandSignature: FontSelection
     homeHeadingDecoration: FontSelection
     composerMelody: FontSelection
+    sidebarProjectsTitle: FontSelection
+    sidebarTasksTitle: FontSelection
     sidebarNavNewTask: FontSelection
     sidebarNavPullRequests: FontSelection
     sidebarNavSites: FontSelection
@@ -77,6 +79,8 @@ const currentTypographySlotsSchema = typographySlotsV7Schema.extend({
   homeHeading: fontSelectionSchema.default({ kind: 'inherit' }),
   homeSubtitle: fontSelectionSchema.default({ kind: 'inherit' }),
   homeHeadingDecoration: fontSelectionSchema.default({ kind: 'inherit' }),
+  sidebarProjectsTitle: fontSelectionSchema.default({ kind: 'inherit' }),
+  sidebarTasksTitle: fontSelectionSchema.default({ kind: 'inherit' }),
   sidebarNavNewTask: fontSelectionSchema.default({ kind: 'inherit' }),
   sidebarNavPullRequests: fontSelectionSchema.default({ kind: 'inherit' }),
   sidebarNavSites: fontSelectionSchema.default({ kind: 'inherit' }),
@@ -121,6 +125,8 @@ export function createDefaultTypography(): ThemeTypography {
       brandSignature: { kind: 'builtin', id: 'segoe-script' },
       homeHeadingDecoration: { kind: 'inherit' },
       composerMelody: { kind: 'inherit' },
+      sidebarProjectsTitle: { kind: 'inherit' },
+      sidebarTasksTitle: { kind: 'inherit' },
       sidebarNavNewTask: { kind: 'inherit' },
       sidebarNavPullRequests: { kind: 'inherit' },
       sidebarNavSites: { kind: 'inherit' },

@@ -272,6 +272,8 @@ describe('renderer home DOM adaptation', () => {
     expect(navButtons[2]?.classList.contains('dream-sidebar-nav-sites-selected')).toBe(true)
     expect(window.document.querySelector('button[aria-label^="切换模式"] span')?.textContent).toBe('Dream')
     expect([...window.document.querySelectorAll('button[data-app-action-sidebar-section-toggle] span')].map((node) => node.textContent)).toEqual(['作品集', '工作项'])
+    expect(window.document.querySelector('.dream-sidebar-projects-title')?.textContent).toContain('作品集')
+    expect(window.document.querySelector('.dream-sidebar-tasks-title')?.textContent).toContain('工作项')
 
     stateOf(window).ensure()
     expect(window.document.querySelectorAll('[data-dream-sidebar-nav]')).toHaveLength(5)
@@ -281,6 +283,52 @@ describe('renderer home DOM adaptation', () => {
     expect(navButtons[1]?.querySelector('.native-icon')?.getAttribute('class')).toBe('native-icon')
     expect(window.document.querySelector('button[aria-label^="切换模式"] span')?.textContent).toBe('Codex')
     expect([...window.document.querySelectorAll('button[data-app-action-sidebar-section-toggle] span')].map((node) => node.textContent)).toEqual(['项目', '任务'])
+    expect(window.document.querySelector('.dream-sidebar-projects-title')).toBeNull()
+    expect(window.document.querySelector('.dream-sidebar-tasks-title')).toBeNull()
+  })
+
+  it('rebinds recreated section titles and keeps equal custom labels independent', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <aside class="app-shell-left-panel">
+        <button data-app-action-sidebar-section-toggle><span>项目</span><svg><path d="projects" /></svg></button>
+        <button data-app-action-sidebar-section-toggle><span>任务</span><svg><path d="tasks" /></svg></button>
+      </aside><main class="main-surface"><div role="main"><article>Reply</article></div></main>`
+    inject(window, {}, {
+      ...DEFAULT_HOME_COPY,
+      ...DEFAULT_BRAND_COPY,
+      sidebarProjectsTitle: '共同分区',
+      sidebarTasksTitle: '共同分区'
+    })
+
+    const originalProject = window.document.querySelector('.dream-sidebar-projects-title')
+    const task = window.document.querySelector('.dream-sidebar-tasks-title')
+    const sidebar = window.document.querySelector('aside.app-shell-left-panel') as unknown as HTMLElement | null
+    expect(originalProject?.querySelector('span')?.textContent).toBe('共同分区')
+    expect(task?.querySelector('span')?.textContent).toBe('共同分区')
+
+    if (!sidebar) throw new Error('Sidebar fixture is missing.')
+    sidebar.style.visibility = 'hidden'
+    stateOf(window).ensure()
+    expect(originalProject?.classList.contains('dream-sidebar-projects-title')).toBe(true)
+    expect(task?.classList.contains('dream-sidebar-tasks-title')).toBe(true)
+    sidebar.style.visibility = 'visible'
+    stateOf(window).ensure()
+
+    const replacement = window.document.createElement('button')
+    replacement.setAttribute('data-app-action-sidebar-section-toggle', '')
+    replacement.innerHTML = '<span>项目</span><svg><path d="projects-new" /></svg>'
+    originalProject?.replaceWith(replacement)
+    stateOf(window).ensure()
+
+    expect(replacement.classList.contains('dream-sidebar-projects-title')).toBe(true)
+    expect(replacement.querySelector('span')?.textContent).toBe('共同分区')
+    expect(task?.classList.contains('dream-sidebar-tasks-title')).toBe(true)
+    stateOf(window).cleanup()
+    expect(replacement.classList.contains('dream-sidebar-projects-title')).toBe(false)
+    expect(replacement.querySelector('span')?.textContent).toBe('项目')
+    expect(task?.classList.contains('dream-sidebar-tasks-title')).toBe(false)
+    expect(task?.querySelector('span')?.textContent).toBe('任务')
   })
 
   it('marks the real project folder row without marking its action buttons', () => {

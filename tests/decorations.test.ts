@@ -82,7 +82,7 @@ describe('theme decorations', () => {
     for (const field of ['mode', 'source', 'effect', 'direction', 'speed', 'gifWidth']) delete legacy.decorations.composerMelody[field]
 
     const parsed = parseThemeProfile(legacy)
-    expect(parsed.version).toBe(15)
+    expect(parsed.version).toBe(16)
     expect(parsed.decorations.composerMelody).toMatchObject({ mode: 'text', source: null, effect: 'none', direction: 'left', speed: 1, gifWidth: 96 })
     expect(COMPOSER_DECORATION_EFFECT_IDS).toEqual(['none', 'wave', 'barrage', 'scroll', 'float', 'pulse'])
     expect(COMPOSER_DECORATION_DIRECTION_IDS).toEqual(['left', 'right'])

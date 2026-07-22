@@ -173,12 +173,17 @@ button { cursor: pointer; }
 .property-group,.icon-slot { transition: background-color .18s ease,box-shadow .18s ease; }
 .property-group.inspector-highlight { margin-inline: -8px; padding-inline: 8px; border-radius: 5px; background: #eaf8f8; box-shadow: inset 3px 0 #159ca3; }
 .icon-slot.inspector-highlight { margin-inline: -5px; padding: 5px; border-radius: 5px; background: #eaf8f8; box-shadow: inset 3px 0 #159ca3; }
+.sidebar-section-title-settings { display: grid; gap: 14px; }.sidebar-section-title-settings > section { display: grid; gap: 9px; }.sidebar-section-title-settings > section + section { padding-top: 14px; border-top: 1px solid #e0e8e9; }.sidebar-section-title-settings h4 { margin: 0; font-size: 10px; }
 
 /* Theme preview consumes the same appearance variables as the injected Codex UI. */
 .codex-preview { color: var(--dream-global-text); background: var(--dream-canvas); font-family: var(--dream-font-ui); }
 .codex-sidebar { color: var(--dream-sidebar-text); background: var(--dream-sidebar-surface); border-color: var(--dream-sidebar-border); box-shadow: 10px 0 30px color-mix(in srgb,var(--dream-sidebar-border) 20%,transparent); }
 .codex-sidebar-header { color: var(--dream-sidebar-header-text); background: var(--dream-sidebar-header); }
-.codex-section-heading { color: var(--dream-sidebar-header-text); }
+.codex-section-heading svg { color: currentColor; }
+.codex-project-heading { color: var(--dream-sidebar-projects-title-text); background: var(--dream-sidebar-projects-title-background) !important; font-family: var(--dream-font-sidebar-projects-title); }
+.codex-project-heading:hover,.codex-project-heading[data-preview-state="hover"] { color: var(--dream-sidebar-projects-title-hover-text); background: var(--dream-sidebar-projects-title-hover-background) !important; }
+.codex-task-heading { color: var(--dream-sidebar-tasks-title-text); background: var(--dream-sidebar-tasks-title-background) !important; font-family: var(--dream-font-sidebar-tasks-title); }
+.codex-task-heading:hover,.codex-task-heading[data-preview-state="hover"] { color: var(--dream-sidebar-tasks-title-hover-text); background: var(--dream-sidebar-tasks-title-hover-background) !important; }
 .codex-mode-button strong { color: var(--dream-sidebar-codex-text); }.codex-mode-button > span:not(.codex-mode-icon) { color: var(--dream-sidebar-arrow); }
 .codex-mode-icon { color: var(--dream-sidebar-mode-icon); background: var(--dream-sidebar-mode-badge); border-radius: 5px; }
 .codex-sidebar-icon-button { color: var(--dream-sidebar-search-icon) !important; background: var(--dream-sidebar-search-button) !important; }.codex-sidebar-icon-button:hover,.codex-sidebar-icon-button[data-preview-state="hover"] { background: var(--dream-sidebar-search-button-hover) !important; }

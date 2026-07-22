@@ -33,6 +33,8 @@ describe('runtime appearance compilation', () => {
     expect(variables['--dream-font-home-heading']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-home-subtitle']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-brand-title']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-sidebar-projects-title']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-sidebar-tasks-title']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-sidebar-nav-new-task']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-sidebar-nav-pull-requests']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-sidebar-nav-sites']).toBe('var(--dream-font-ui)')
@@ -53,6 +55,8 @@ describe('runtime appearance compilation', () => {
     for (const definition of Object.values(APPEARANCE_PAINT_TOKENS)) expect(css, definition.cssVariable).toContain(`var(${definition.cssVariable})`)
     expect(css).toContain('font-family: var(--dream-font-home-heading)')
     expect(css).toContain('font-family: var(--dream-font-home-subtitle)')
+    expect(css).toContain('font-family: var(--dream-font-sidebar-projects-title)')
+    expect(css).toContain('font-family: var(--dream-font-sidebar-tasks-title)')
     expect(css).toContain('font-family: var(--dream-font-sidebar-nav-new-task)')
     expect(css).toContain('font-family: var(--dream-font-sidebar-nav-plugins)')
     expect(css).toMatch(/\.dream-project-proxy\s*\{[^}]*font-family:\s*inherit;/)
@@ -70,6 +74,23 @@ describe('runtime appearance compilation', () => {
 
     profile.typography.slots.homeSubtitle = { kind: 'inherit' }
     expect(buildThemeStyleVariables(profile)['--dream-font-home-subtitle']).toBe('var(--dream-font-ui)')
+  })
+
+  it('resolves independent sidebar section title fonts and two-state appearance', () => {
+    const profile = createDefaultTheme(id)
+    profile.typography.slots.sidebarProjectsTitle = { kind: 'builtin', id: 'jetbrains-mono' }
+    profile.appearance.colors.sidebarProjectsTitleText = '#123456'
+    profile.appearance.colors.sidebarProjectsTitleHoverText = '#654321'
+    profile.appearance.paints.sidebarProjectsTitleBackground = { kind: 'solid', color: 'transparent' }
+    profile.appearance.paints.sidebarProjectsTitleHoverBackground = { kind: 'solid', color: 'rgb(10 20 30 / .5)' }
+
+    const variables = buildThemeStyleVariables(profile)
+    expect(variables['--dream-font-sidebar-projects-title']).toBe('"Dream JetBrains Mono", monospace')
+    expect(variables['--dream-font-sidebar-tasks-title']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-sidebar-projects-title-text']).toBe('#123456')
+    expect(variables['--dream-sidebar-projects-title-hover-text']).toBe('#654321')
+    expect(variables['--dream-sidebar-projects-title-background']).toBe('transparent')
+    expect(variables['--dream-sidebar-projects-title-hover-background']).toBe('rgb(10 20 30 / .5)')
   })
 
   it('draws the brand surface once on the native header without covering injected copy', async () => {
