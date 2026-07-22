@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Copy, Download,
+  Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download,
   GitBranch, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
@@ -1089,8 +1089,7 @@ function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; asset
         {SIDEBAR_NAV_ITEMS.map((item) => <button type="button" data-preview-target={item.previewTarget} key={item.id}><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /><span>{profile.copy[item.copyField]}</span></button>)}
       </nav>
       <section className="codex-project-section">
-        <div className="codex-project-heading" data-preview-target="sidebar-project-title" tabIndex={0} role="button">{profile.copy.sidebarProjectsTitle}</div>
-        <div className="codex-task-heading" data-preview-target="sidebar-task-title" tabIndex={0} role="button">{profile.copy.sidebarTasksTitle}</div>
+        <button className="codex-section-heading codex-project-heading" data-preview-target="sidebar-project-title" type="button" aria-expanded="true"><span>{profile.copy.sidebarProjectsTitle}</span><ChevronDown size={14} aria-hidden="true" /></button>
         <div className="codex-project-scroll">
           {PREVIEW_SIDEBAR_PROJECTS.map((project) => (
             <div className="codex-project-group" key={project.name}>
@@ -1104,6 +1103,7 @@ function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; asset
             </div>
           ))}
         </div>
+        <button className="codex-section-heading codex-task-heading" data-preview-target="sidebar-task-title" type="button" aria-expanded="false"><span>{profile.copy.sidebarTasksTitle}</span><ChevronRight size={14} aria-hidden="true" /></button>
       </section>
       <footer className="codex-sidebar-footer" data-preview-target="sidebar-footer"><span className="codex-team-avatar" data-preview-target="sidebar-avatar" tabIndex={0} role="button">{PREVIEW_SIDEBAR_TEAM.avatar}</span><span>{PREVIEW_SIDEBAR_TEAM.label}</span><CircleHelp size={18} /></footer>
     </aside>

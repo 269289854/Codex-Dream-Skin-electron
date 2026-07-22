@@ -419,6 +419,22 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector<HTMLButtonElement>('button[title="删除主题"]')?.disabled).toBe(false)
   })
 
+  it('matches the Codex project and task section order', () => {
+    const section = container.querySelector<HTMLElement>('.codex-project-section')
+    const projectHeading = section?.querySelector<HTMLButtonElement>('.codex-project-heading')
+    const projectList = section?.querySelector<HTMLElement>('.codex-project-scroll')
+    const taskHeading = section?.querySelector<HTMLButtonElement>('.codex-task-heading')
+    if (!section || !projectHeading || !projectList || !taskHeading) throw new Error('Sidebar section preview is missing.')
+
+    expect([...section.children]).toEqual([projectHeading, projectList, taskHeading])
+    expect(projectHeading.getAttribute('aria-expanded')).toBe('true')
+    expect(taskHeading.getAttribute('aria-expanded')).toBe('false')
+    expect(projectHeading.querySelector('svg')).not.toBeNull()
+    expect(taskHeading.querySelector('svg')).not.toBeNull()
+    expect(projectList.querySelector('.codex-project-row')).not.toBeNull()
+    expect(projectList.querySelector('.codex-task-row')).not.toBeNull()
+  })
+
   it('opens the new theme dialog, selects a preset, edits custom colors, and creates an active theme', async () => {
     const add = container.querySelector<HTMLButtonElement>('button[title="新建主题"]')
     if (!add) throw new Error('Create theme command is missing.')
