@@ -10,6 +10,7 @@ async function invokeIpcResult<T>(channel: string, ...args: unknown[]): Promise<
 const api: StudioApi = {
   app: {
     getInfo: () => ipcRenderer.invoke('app:get-info'),
+    quit: () => ipcRenderer.send('app:quit'),
     getUpdateStatus: () => ipcRenderer.invoke('app:get-update-status'),
     checkForUpdates: () => invokeIpcResult('app:check-for-updates'),
     downloadUpdate: () => invokeIpcResult('app:download-update'),

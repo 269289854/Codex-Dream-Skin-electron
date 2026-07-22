@@ -88,6 +88,7 @@ export interface RuntimeStatus {
 export interface StudioApi {
   app: {
     getInfo: () => Promise<AppInfo>
+    quit: () => void
     getUpdateStatus: () => Promise<AppUpdateStatus>
     checkForUpdates: () => Promise<AppUpdateStatus>
     downloadUpdate: () => Promise<AppUpdateStatus>

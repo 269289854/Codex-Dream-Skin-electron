@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download,
-  GitBranch, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
+  GitBranch, Home, Image, Laptop, LogOut, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
@@ -958,6 +958,7 @@ export function App(): React.JSX.Element {
               <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.reinject(themeId))}><RotateCcw size={15} />重新注入</button>
               <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.verify())}><Check size={15} />验证主题</button>
               <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.stop())}><Box size={15} />停止注入</button>
+              {runtime.phase === 'active' && <button className="runtime-exit-command" disabled={runtimeBusy} title="退出 Studio 并保留当前已注入主题" onClick={() => window.studio.app.quit()}><LogOut size={15} />退出 Studio</button>}
             </div></Property>
             <button className="danger-command" disabled={runtimeBusy} onClick={() => { if (window.confirm('恢复 Codex 原始配置并正常重启 Codex？')) void runRuntime(() => window.studio.codex.restore(true)) }}><Undo2 size={15} />恢复并重启 Codex</button>
             {runtimeBusy && <div className="runtime-progress">操作进行中</div>}

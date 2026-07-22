@@ -54,6 +54,9 @@ describe('Studio preview editing interaction', () => {
   let checkAppUpdate: ReturnType<typeof vi.fn>
   let downloadAppUpdate: ReturnType<typeof vi.fn>
   let installAppUpdate: ReturnType<typeof vi.fn>
+  let quitStudio: ReturnType<typeof vi.fn>
+  let stopTheme: ReturnType<typeof vi.fn>
+  let restoreCodex: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
@@ -105,6 +108,9 @@ describe('Studio preview editing interaction', () => {
     checkAppUpdate = vi.fn(async () => appUpdateStatus)
     downloadAppUpdate = vi.fn(async () => appUpdateStatus)
     installAppUpdate = vi.fn(async () => undefined)
+    quitStudio = vi.fn()
+    stopTheme = vi.fn(async () => runtimeStatus)
+    restoreCodex = vi.fn(async () => runtimeStatus)
     createTheme = vi.fn(async (input: CreateThemeInput) => {
       const created = { ...createDefaultTheme('00000000-0000-4000-8000-000000000002', input.name), colors: { ...input.colors } }
       themeProfiles.push(created)
@@ -113,6 +119,7 @@ describe('Studio preview editing interaction', () => {
     const studio: StudioApi = {
       app: {
         getInfo: async () => ({ version: 'test', platform: 'win32' }),
+        quit: quitStudio,
         getUpdateStatus: async () => appUpdateStatus,
         checkForUpdates: checkAppUpdate,
         downloadUpdate: downloadAppUpdate,
@@ -160,8 +167,8 @@ describe('Studio preview editing interaction', () => {
         start: async () => runtimeStatus,
         verify: async () => runtimeStatus,
         reinject: reinjectTheme,
-        stop: async () => runtimeStatus,
-        restore: async () => runtimeStatus
+        stop: stopTheme,
+        restore: restoreCodex
       },
       runtime: {
         getStatus: async () => runtimeStatus,
@@ -1287,6 +1294,28 @@ describe('Studio preview editing interaction', () => {
 
     expect(savedProfiles.at(-1)?.icons.composer).toEqual({ kind: 'builtin', name: 'heart' })
     expect(reinjectTheme).toHaveBeenCalledWith(profile.id)
+  })
+
+  it('offers direct Studio exit after a successful injection without stopping or restoring Codex', async () => {
+    const runtimeSettings = [...container.querySelectorAll('aside button')].find((button) => button.textContent?.includes('运行设置'))
+    if (!runtimeSettings) throw new Error('Runtime settings navigation is missing.')
+    act(() => runtimeSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelector('.runtime-exit-command')).toBeNull()
+
+    reinjectTheme.mockResolvedValueOnce({ ...runtimeStatus, phase: 'active', connected: true, targetCount: 1, message: '主题已重新注入 1 个页面' })
+    const reinject = [...container.querySelectorAll('.runtime-commands button')].find((button) => button.textContent?.includes('重新注入'))
+    if (!reinject) throw new Error('Reinject command is missing.')
+    await act(async () => {
+      reinject.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 30))
+    })
+
+    const exit = container.querySelector<HTMLButtonElement>('.runtime-exit-command')
+    expect(exit?.textContent).toContain('退出 Studio')
+    act(() => exit?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(quitStudio).toHaveBeenCalledTimes(1)
+    expect(stopTheme).not.toHaveBeenCalled()
+    expect(restoreCodex).not.toHaveBeenCalled()
   })
 
   it('keeps particles and composer melody synchronized across home and conversation previews', async () => {

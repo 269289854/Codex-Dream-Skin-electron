@@ -30,6 +30,11 @@ function showWindow(): void {
   mainWindow?.focus()
 }
 
+function quitStudio(): void {
+  quitting = true
+  app.quit()
+}
+
 function updateTray(): void {
   if (codexService.isActive() && !tray && trayIcon) {
     tray = new Tray(trayIcon)
@@ -38,6 +43,7 @@ function updateTray(): void {
       { label: '显示主题工作台', click: showWindow },
       { label: '验证当前主题', click: () => void codexService.verify().catch(() => showWindow()) },
       { type: 'separator' },
+      { label: '退出 Studio（保留当前主题）', click: quitStudio },
       { label: '恢复 Codex 并退出', click: () => void codexService.restore(true).finally(() => { quitting = true; app.quit() }) }
     ]))
     tray.on('double-click', showWindow)
@@ -49,6 +55,7 @@ function updateTray(): void {
 
 function registerIpc(): void {
   ipcMain.handle('app:get-info', () => ({ version: app.getVersion(), platform: process.platform }))
+  ipcMain.on('app:quit', () => quitStudio())
   ipcMain.handle('app:get-update-status', () => appUpdateService.getStatus())
   ipcMain.handle('app:check-for-updates', () => captureIpcResult(() => appUpdateService.checkForUpdates()))
   ipcMain.handle('app:download-update', () => captureIpcResult(() => appUpdateService.downloadUpdate()))
