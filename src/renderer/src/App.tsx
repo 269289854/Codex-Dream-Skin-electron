@@ -944,7 +944,7 @@ function PreviewComposerDecoration({ profile, assets }: { profile: ThemeProfile;
 
 function ComposerDecorationText({ text, effect, direction, speed }: { text: string; effect: ThemeProfile['decorations']['composerMelody']['effect']; direction: ThemeProfile['decorations']['composerMelody']['direction']; speed: number }): React.JSX.Element {
   if (effect === 'wave') {
-    return <span className="dream-composer-decoration-text dream-composer-decoration-wave">{Array.from(text).map((character, index) => <span className="dream-composer-decoration-character" style={{ animationDelay: `${index * .06 / speed}s` }} key={`${index}-${character}`}>{character === ' ' ? '\u00a0' : character}</span>)}</span>
+    return <span className="dream-composer-decoration-text dream-composer-decoration-wave">{Array.from(text).map((character, index) => <span className="dream-composer-decoration-character" style={{ animationDelay: `${-index * .06 / speed}s` }} key={`${index}-${character}`}>{character === ' ' ? '\u00a0' : character}</span>)}</span>
   }
   if (effect === 'barrage') {
     return <>{[0, 1, 2].map((lane) => <span className={`dream-composer-decoration-text dream-composer-decoration-barrage dream-composer-decoration-direction-${direction}`} style={{ top: `${(lane + .5) / 3 * 100}%`, animationDelay: `${-7 / speed * lane / 3}s` }} key={lane}>{text}</span>)}</>

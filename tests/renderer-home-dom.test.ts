@@ -667,7 +667,10 @@ describe('renderer home DOM adaptation', () => {
       expect(melody?.dataset.dreamComposerEffect).toBe(effect)
       expect(melody?.querySelector('b')).toBeNull()
       if (effect === 'wave') {
-        expect(melody?.querySelectorAll('.dream-composer-decoration-character')).toHaveLength(Array.from('<b>波浪</b>').length)
+        const characters = [...(melody?.querySelectorAll('.dream-composer-decoration-character') ?? [])] as HTMLElement[]
+        expect(characters).toHaveLength(Array.from('<b>波浪</b>').length)
+        expect(characters[0]?.style.animationDelay).toBe('0s')
+        expect(characters[1]?.style.animationDelay).toBe('-0.03s')
         expect(melody?.style.getPropertyValue('--dream-composer-effect-duration')).toBe('0.7s')
         expect(melody?.dataset.dreamComposerDirection).toBeUndefined()
       } else if (effect === 'barrage') {
@@ -688,6 +691,29 @@ describe('renderer home DOM adaptation', () => {
     expect(homeLayoutCss).toContain('.dream-composer-decoration-character { animation: none !important; }')
     expect(homeLayoutCss).toContain('.dream-composer-decoration-wave { padding-block: 4px; }')
     expect(homeLayoutCss).toContain('.dream-composer-decoration-direction-right { animation-direction: reverse; }')
+  })
+
+  it('keeps wave character nodes stable across repeated synchronization and repairs damaged content', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Stable-Wave')
+    const decorations = structuredClone(defaultDecorations) as RuntimeDecorations
+    decorations.composerMelody = { ...decorations.composerMelody, text: '波浪效果', effect: 'wave' }
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+
+    const melody = window.document.querySelector('.dream-composer-melody') as HTMLElement | null
+    const characters = [...(melody?.querySelectorAll('.dream-composer-decoration-character') ?? [])]
+    expect(characters).toHaveLength(Array.from('波浪效果').length)
+
+    stateOf(window).ensure()
+    stateOf(window).ensure()
+    const synchronized = [...(melody?.querySelectorAll('.dream-composer-decoration-character') ?? [])]
+    expect(synchronized).toEqual(characters)
+    synchronized[1]?.remove()
+
+    stateOf(window).ensure()
+    const repaired = [...(melody?.querySelectorAll('.dream-composer-decoration-character') ?? [])]
+    expect(repaired).toHaveLength(Array.from('波浪效果').length)
+    expect(repaired[0]).not.toBe(characters[0])
   })
 
   it('renders GIF frames without text effect classes and cleans mode switches idempotently', () => {

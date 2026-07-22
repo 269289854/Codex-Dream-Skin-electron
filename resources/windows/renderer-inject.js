@@ -206,8 +206,38 @@
     const speed = clamp(Number(config?.speed) || 1, 0.5, 2);
     const baseDuration = { none: 0, wave: 1.4, barrage: 7, scroll: 6, float: 2.6, pulse: 2 }[effect];
     const trackEffect = effect === "barrage" || effect === "scroll";
+    const text = typeof config.text === "string" ? config.text : "♫ · · · ♡ · · · ♪";
+    const gifWidth = clamp(Number(config.gifWidth) || 96, 32, 240);
+    const dataUrl = mode === "gif" && typeof config.dataUrl === "string" && /^data:image\/gif;base64,/i.test(config.dataUrl) ? config.dataUrl : null;
+    if (mode === "gif" && !dataUrl) {
+      melody.remove();
+      return;
+    }
+    const renderKey = JSON.stringify({ mode, effect, direction, speed, text: mode === "text" ? text : null, gifWidth: mode === "gif" ? gifWidth : null });
+    const contentMatches = (() => {
+      if (melody.dataset.dreamComposerRenderKey !== renderKey) return false;
+      if (mode === "gif") {
+        const image = melody.querySelector(":scope > .dream-composer-decoration-gif");
+        return melody.children.length === 1 && image instanceof HTMLImageElement && image.getAttribute("src") === dataUrl;
+      }
+      if (effect === "wave") {
+        const wave = melody.querySelector(":scope > .dream-composer-decoration-wave");
+        const characters = wave ? [...wave.children] : [];
+        const renderedText = [...text].map((character) => character === " " ? "\u00a0" : character).join("");
+        return melody.children.length === 1 && wave instanceof HTMLElement && characters.length === [...text].length &&
+          characters.every((node) => node.classList.contains("dream-composer-decoration-character")) && wave.textContent === renderedText;
+      }
+      if (effect === "barrage") {
+        const lanes = [...melody.querySelectorAll(":scope > .dream-composer-decoration-barrage")];
+        return melody.children.length === 3 && lanes.length === 3 && lanes.every((node) =>
+          node.classList.contains(`dream-composer-decoration-direction-${direction}`) && node.textContent === text
+        );
+      }
+      const node = melody.querySelector(`:scope > .dream-composer-decoration-${effect}`);
+      return melody.children.length === 1 && node instanceof HTMLElement && node.textContent === text &&
+        (effect !== "scroll" || node.classList.contains(`dream-composer-decoration-direction-${direction}`));
+    })();
     melody.className = `dream-composer-melody dream-composer-decoration${trackEffect ? " dream-composer-decoration-track" : ""}`;
-    melody.replaceChildren();
     melody.dataset.dreamComposerMode = mode;
     melody.dataset.dreamComposerEffect = effect;
     if (trackEffect) melody.dataset.dreamComposerDirection = direction;
@@ -218,47 +248,45 @@
     melody.style.fontSize = `${clamp(Number(config.fontSize) || 16, 10, 32)}px`;
     melody.style.setProperty("--dream-composer-effect-duration", `${baseDuration / speed}s`);
 
-    if (mode === "gif") {
-      const dataUrl = typeof config.dataUrl === "string" && /^data:image\/gif;base64,/i.test(config.dataUrl) ? config.dataUrl : null;
-      if (!dataUrl) {
-        melody.remove();
-        return;
-      }
-      const image = document.createElement("img");
-      image.className = "dream-composer-decoration-gif";
-      image.alt = "";
-      image.draggable = false;
-      image.src = dataUrl;
-      image.style.width = `${clamp(Number(config.gifWidth) || 96, 32, 240)}px`;
-      melody.appendChild(image);
-    } else {
-      const text = typeof config.text === "string" ? config.text : "♫ · · · ♡ · · · ♪";
-      if (effect === "wave") {
-        const wave = document.createElement("span");
-        wave.className = "dream-composer-decoration-text dream-composer-decoration-wave";
-        [...text].forEach((character, index) => {
-          const node = document.createElement("span");
-          node.className = "dream-composer-decoration-character";
-          node.textContent = character === " " ? "\u00a0" : character;
-          node.style.animationDelay = `${index * 0.06 / speed}s`;
-          wave.appendChild(node);
-        });
-        melody.appendChild(wave);
-      } else if (effect === "barrage") {
-        [0, 1, 2].forEach((lane) => {
-          const node = document.createElement("span");
-          node.className = `dream-composer-decoration-text dream-composer-decoration-barrage dream-composer-decoration-direction-${direction}`;
-          node.textContent = text;
-          node.style.top = `${(lane + 0.5) / 3 * 100}%`;
-          node.style.animationDelay = `${-7 / speed * lane / 3}s`;
-          melody.appendChild(node);
-        });
+    if (!contentMatches) {
+      melody.replaceChildren();
+      if (mode === "gif") {
+        const image = document.createElement("img");
+        image.className = "dream-composer-decoration-gif";
+        image.alt = "";
+        image.draggable = false;
+        image.src = dataUrl;
+        image.style.width = `${gifWidth}px`;
+        melody.appendChild(image);
       } else {
-        const node = document.createElement("span");
-        node.className = `dream-composer-decoration-text dream-composer-decoration-${effect}${effect === "scroll" ? ` dream-composer-decoration-direction-${direction}` : ""}`;
-        node.textContent = text;
-        melody.appendChild(node);
+        if (effect === "wave") {
+          const wave = document.createElement("span");
+          wave.className = "dream-composer-decoration-text dream-composer-decoration-wave";
+          [...text].forEach((character, index) => {
+            const node = document.createElement("span");
+            node.className = "dream-composer-decoration-character";
+            node.textContent = character === " " ? "\u00a0" : character;
+            node.style.animationDelay = `${-index * 0.06 / speed}s`;
+            wave.appendChild(node);
+          });
+          melody.appendChild(wave);
+        } else if (effect === "barrage") {
+          [0, 1, 2].forEach((lane) => {
+            const node = document.createElement("span");
+            node.className = `dream-composer-decoration-text dream-composer-decoration-barrage dream-composer-decoration-direction-${direction}`;
+            node.textContent = text;
+            node.style.top = `${(lane + 0.5) / 3 * 100}%`;
+            node.style.animationDelay = `${-7 / speed * lane / 3}s`;
+            melody.appendChild(node);
+          });
+        } else {
+          const node = document.createElement("span");
+          node.className = `dream-composer-decoration-text dream-composer-decoration-${effect}${effect === "scroll" ? ` dream-composer-decoration-direction-${direction}` : ""}`;
+          node.textContent = text;
+          melody.appendChild(node);
+        }
       }
+      melody.dataset.dreamComposerRenderKey = renderKey;
     }
     melody.classList.toggle("dream-composer-melody-hidden", Boolean(config.hideWhenTyping && composerHasContent(composer)));
   };

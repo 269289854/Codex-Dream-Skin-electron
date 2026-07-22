@@ -1016,6 +1016,14 @@ describe('Studio preview editing interaction', () => {
     const effect = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-decoration-controls="composer-melody"] .quick-copy-field select')
     if (!effect) throw new Error('Composer effect control is missing.')
     act(() => {
+      effect.value = 'wave'
+      effect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    const waveCharacters = container.querySelectorAll<HTMLElement>('[data-preview-target="composer-melody"] .dream-composer-decoration-character')
+    expect(waveCharacters).toHaveLength(Array.from('<b>自定义旋律 ♪</b>').length)
+    expect(waveCharacters[0]?.style.animationDelay).toBe('0s')
+    expect(waveCharacters[1]?.style.animationDelay).toBe('-0.06s')
+    act(() => {
       effect.value = 'scroll'
       effect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
     })
