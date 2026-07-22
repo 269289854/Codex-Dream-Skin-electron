@@ -257,6 +257,7 @@ export class CodexService {
       source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
     ]))
     const { overlay, ...conversationBackground } = profile.conversationBackground
+    const composerMelody = profile.decorations.composerMelody
     const conversationOverlayStyle = buildConversationOverlayStyle(overlay)
     const runtimeVersion = `studio-${profile.updatedAt}-${randomUUID()}`
     return renderer
@@ -273,7 +274,13 @@ export class CodexService {
             : { ...conversationBackground, overlayStyle: conversationOverlayStyle, dataUrl: null }
         },
         icons,
-        decorations: profile.decorations,
+        decorations: {
+          ...profile.decorations,
+          composerMelody: {
+            ...composerMelody,
+            dataUrl: composerMelody.source ? compiled.assets[composerMelody.source.asset] ?? null : null
+          }
+        },
         particleViewportTop: PARTICLE_VIEWPORT_TOP,
         sparkleIconSlot: particleEffectIconSlot(profile.decorations.sparkles.effect),
         sparkleParticles: createSparkleParticles(profile.decorations.sparkles),

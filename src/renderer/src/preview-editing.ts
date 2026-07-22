@@ -105,7 +105,7 @@ export const PREVIEW_TARGETS = {
   'composer-model': styleTarget('模型文字', 'composer', { colors: ['composerModelText'], fontSlot: 'ui' }),
   'icon-composer': styleTarget('发送按钮', 'composer', { colors: ['composerSendIcon'], paints: ['composerSendButton', 'composerSendButtonHover', 'composerSendButtonSelected'], iconSlot: 'composer' }),
   'icon-composer-badge': styleTarget('输入框装饰', 'composer', { colors: ['composerBadgeIcon'], paints: ['composerBadgeBackground'], iconSlot: 'composerBadge', visibility: 'composerBadge' }),
-  'composer-melody': styleTarget('输入框旋律', 'composer', { colors: ['wave'], fontSlot: 'composerMelody', decoration: 'composerMelody', inspectorAnchor: 'visual-composer-melody' }),
+  'composer-melody': styleTarget('输入框装饰', 'composer', { colors: ['wave'], fontSlot: 'composerMelody', decoration: 'composerMelody', inspectorAnchor: 'visual-composer-melody' }),
 
   sparkles: styleTarget('背景粒子', 'decoration', { colors: ['sparkle'], iconSlot: 'backgroundSparkle', decoration: 'sparkles', inspectorAnchor: 'visual-sparkles' }),
   polaroid: { label: '拍立得', inspector: 'visual', inspectorAnchor: 'visual-polaroid', editor: { kind: 'polaroid' } },

@@ -10,7 +10,7 @@ import {
 import { headingTemplateError } from '../../shared/home-layout'
 import { mediaFlipCssTransform } from '../../shared/media'
 import type { ThemeProfile } from '../../shared/theme'
-import type { MediaSelectionKind } from '../../shared/contracts'
+import type { MediaAssetPurpose, MediaSelectionKind } from '../../shared/contracts'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { ConversationBackgroundControls } from './ConversationBackgroundControls'
 import { AppearanceColorControl, FontControl, PaintControl, Range, ThemeIconControl } from './editor-controls'
@@ -47,7 +47,7 @@ interface PreviewQuickEditorProps {
   popoverRef: React.RefObject<HTMLDivElement | null>
   onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void
   onInteractionEnd: () => void
-  onSelectImage: (purpose: 'hero' | 'polaroid' | 'conversationBackground', kind?: MediaSelectionKind) => void
+  onSelectImage: (purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => void
   onImportIcon: (slot: keyof ThemeProfile['icons']) => void
   onImportFont: (slot: TypographySlot) => void
   onStateChange: (state: AppearanceState) => void
@@ -90,7 +90,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {editor.kind === 'style' && !decoration && editor.iconSlot && <div className="icon-editor quick-icon-editor"><ThemeIconControl slot={editor.iconSlot} profile={profile} assets={assets} onChange={(name) => onChange((next) => { next.icons[editor.iconSlot!] = { kind: 'builtin', name } })} onImport={() => onImportIcon(editor.iconSlot!)} /></div>}
       {decoration === 'sparkles' && <ParticleEffectControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} />}
       {decoration === 'homeHeading' && <HomeHeadingDecorationControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
-      {decoration === 'composerMelody' && <ComposerMelodyControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
+      {decoration === 'composerMelody' && <ComposerMelodyControls profile={profile} assets={assets} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} onSelectGif={() => onSelectImage('composerMelody', 'gif')} />}
     </div>
     <footer className="preview-edit-popover-footer">
       <button type="button" onClick={() => onMore()}><PanelRightOpen size={15} />更多设置</button>

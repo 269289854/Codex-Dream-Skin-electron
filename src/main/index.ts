@@ -73,8 +73,9 @@ function registerIpc(): void {
   })
   ipcMain.handle('assets:select-media', async (_event, themeId: unknown, purpose: unknown, requestedKind: unknown) => {
     if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
-    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground') throw new Error('媒体用途无效。')
+    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'composerMelody') throw new Error('媒体用途无效。')
     if (requestedKind !== undefined && requestedKind !== 'image' && requestedKind !== 'gif' && requestedKind !== 'video') throw new Error('媒体类型无效。')
+    if (purpose === 'composerMelody' && requestedKind !== 'gif') throw new Error('输入框装饰只能选择 GIF 文件。')
     const kind = requestedKind as MediaSelectionKind | undefined
     const filters = kind === 'image'
       ? [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
@@ -84,7 +85,7 @@ function registerIpc(): void {
           ? [{ name: 'Video', extensions: ['mp4', 'webm'] }]
           : [{ name: 'Images and Video', extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
     const options: OpenDialogOptions = {
-      title: purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : '选择对话区域背景',
+      title: purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : '选择输入框 GIF 装饰',
       properties: ['openFile'],
       filters
     }

@@ -52,19 +52,21 @@ describe('preview quick editor', () => {
     onMore = vi.fn(),
     onChange = (mutator: (next: ThemeProfile) => void): void => mutator(profile),
     heroUrl?: string,
-    polaroidUrl?: string
+    polaroidUrl?: string,
+    onSelectImage = vi.fn(),
+    assets: Record<string, string> = {}
   ): void => {
     act(() => root.render(createElement(PreviewQuickEditor, {
       target,
       profile,
-      assets: {},
+      assets,
       heroUrl,
       polaroidUrl,
       position: { left: 20, top: 30, placement: 'right' },
       popoverRef: createRef<HTMLDivElement>(),
       onChange,
       onInteractionEnd: vi.fn(),
-      onSelectImage: vi.fn(),
+      onSelectImage,
       onImportIcon: vi.fn(),
       onImportFont: vi.fn(),
       onStateChange: vi.fn(),
@@ -279,28 +281,74 @@ describe('preview quick editor', () => {
     expect(container.querySelector<HTMLFieldSetElement>('.particle-effect-settings')?.disabled).toBe(true)
   })
 
-  it('edits composer melody presets, text, font, position, and typing behavior', () => {
+  it('edits composer decoration presets, effect, speed, font, position, and typing behavior', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     renderEditor(PREVIEW_TARGETS['composer-melody'], profile)
     const starWish = [...container.querySelectorAll('button')].find((button) => button.textContent === '星愿')
     const text = container.querySelector<HTMLTextAreaElement>('[data-decoration-controls="composer-melody"] textarea')
     const font = container.querySelector<HTMLSelectElement>('[data-font-slot="composerMelody"] select')
+    const effect = container.querySelector<HTMLSelectElement>('[data-decoration-controls="composer-melody"] .quick-copy-field select')
     const x = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '水平位置')?.querySelector<HTMLInputElement>('input')
-    const toggles = container.querySelectorAll<HTMLInputElement>('[data-decoration-controls="composer-melody"] .toggle-row input')
-    if (!starWish || !text || !font || !x || toggles.length !== 2) throw new Error('Composer melody controls are missing.')
+    if (!starWish || !text || !font || !effect || !x) throw new Error('Composer decoration controls are missing.')
     act(() => {
       starWish.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       Object.getOwnPropertyDescriptor(browserWindow.HTMLTextAreaElement.prototype, 'value')?.set?.call(text, '自定义旋律 ♪')
       text.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
       font.value = 'builtin:jetbrains-mono'
       font.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      effect.value = 'wave'
+      effect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
       Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(x, '0.7')
       x.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+    })
+    renderEditor(PREVIEW_TARGETS['composer-melody'], profile)
+    const speed = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === '动效速度')?.querySelector<HTMLInputElement>('input')
+    const toggles = container.querySelectorAll<HTMLInputElement>('[data-decoration-controls="composer-melody"] .toggle-row input')
+    if (!speed || toggles.length !== 2) throw new Error('Composer effect controls are missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(speed, '1.6')
+      speed.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
       toggles[1]!.click()
     })
 
-    expect(profile.decorations.composerMelody).toMatchObject({ text: '自定义旋律 ♪', position: { x: 0.7, y: 0.35 }, hideWhenTyping: false })
+    expect(profile.decorations.composerMelody).toMatchObject({ text: '自定义旋律 ♪', effect: 'wave', speed: 1.6, position: { x: 0.7, y: 0.35 }, hideWhenTyping: false })
     expect(profile.typography.slots.composerMelody).toEqual({ kind: 'builtin', id: 'jetbrains-mono' })
+    profile.decorations.composerMelody.effect = 'scroll'
+    renderEditor(PREVIEW_TARGETS['composer-melody'], profile)
+    expect([...container.querySelectorAll('.range-row')].some((row) => row.querySelector('span')?.textContent === '水平位置')).toBe(false)
+    const right = [...container.querySelectorAll<HTMLButtonElement>('.composer-decoration-directions button')].find((button) => button.textContent === '向右')
+    if (!right) throw new Error('Composer direction control is missing.')
+    act(() => right.click())
+    expect(profile.decorations.composerMelody.direction).toBe('right')
+  })
+
+  it('selects, sizes, preserves, and removes a composer GIF', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    const onSelectImage = vi.fn()
+    renderEditor(PREVIEW_TARGETS['composer-melody'], profile, vi.fn(), (mutator) => mutator(profile), undefined, undefined, onSelectImage)
+    const gifMode = [...container.querySelectorAll('button')].find((button) => button.textContent === 'GIF')
+    if (!gifMode) throw new Error('GIF mode button is missing.')
+    act(() => gifMode.click())
+    expect(onSelectImage).toHaveBeenCalledWith('composerMelody', 'gif')
+    expect(profile.decorations.composerMelody.mode).toBe('text')
+
+    profile.decorations.composerMelody.source = { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' }
+    renderEditor(PREVIEW_TARGETS['composer-melody'], profile, vi.fn(), (mutator) => mutator(profile), undefined, undefined, onSelectImage, { 'assets/composer.gif': 'data:image/gif;base64,AA==' })
+    const storedGifMode = [...container.querySelectorAll('button')].find((button) => button.textContent === 'GIF')
+    if (!storedGifMode) throw new Error('Stored GIF mode button is missing.')
+    act(() => storedGifMode.click())
+    renderEditor(PREVIEW_TARGETS['composer-melody'], profile, vi.fn(), (mutator) => mutator(profile), undefined, undefined, onSelectImage, { 'assets/composer.gif': 'data:image/gif;base64,AA==' })
+    expect(container.querySelector('.composer-decoration-asset-picker img')?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
+    const width = [...container.querySelectorAll('.range-row')].find((row) => row.querySelector('span')?.textContent === 'GIF 宽度')?.querySelector<HTMLInputElement>('input')
+    const remove = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('移除 GIF'))
+    if (!width || !remove) throw new Error('GIF controls are missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(width, '144')
+      width.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+    })
+    expect(profile.decorations.composerMelody.gifWidth).toBe(144)
+    act(() => remove.click())
+    expect(profile.decorations.composerMelody).toMatchObject({ mode: 'text', source: null })
   })
 
   it('edits the home heading decoration text, font, visibility, color, and size', () => {

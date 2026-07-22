@@ -37,14 +37,14 @@ export type ThemeShareAsset = z.infer<typeof assetManifestSchema>
 export type ThemeShareManifest = z.infer<typeof manifestSchema>
 
 export function collectThemeAssets(profile: ThemeProfile): string[] {
-  const assets: Array<string | null> = [profile.hero.source?.asset ?? profile.hero.sourceImage ?? null, profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null, profile.conversationBackground.source?.asset ?? null]
+  const assets: Array<string | null> = [profile.hero.source?.asset ?? profile.hero.sourceImage ?? null, profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null, profile.conversationBackground.source?.asset ?? null, profile.decorations.composerMelody.source?.asset ?? null]
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assets.push(icon.asset)
   for (const font of profile.typography.importedFonts) assets.push(font.asset)
   return [...new Set(assets.filter((value): value is string => Boolean(value)))]
 }
 
 export function validateThemeAssetReferences(profile: ThemeProfile): void {
-  for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source]) {
+  for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
     if (!reference) continue
     const extension = extname(reference.asset).toLowerCase()
     const expectedKind = extension === '.mp4' || extension === '.webm' ? 'video' : extension === '.png' || extension === '.webp' || extension === '.jpg' || extension === '.jpeg' || extension === '.gif' ? 'image' : null

@@ -8,6 +8,7 @@ import { decodeShareZip, sha256, validateShareContents } from '../src/main/theme
 
 const roots: string[] = []
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
+const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -21,10 +22,13 @@ describe('theme share packages', () => {
     await store.initialize()
     const original = await store.create('分享主题')
     const source = join(root, 'hero.png')
+    const gifSource = join(root, 'composer.gif')
     const fontSource = join(root, 'title.woff2')
     await writeFile(source, png)
+    await writeFile(gifSource, gif)
     await writeFile(fontSource, Buffer.from('wOF2'))
     const image = await store.importAsset(original.id, source, 'hero')
+    const composerGif = await store.importMediaAsset(original.id, gifSource, 'composerMelody', 'gif')
     const font = await store.importFontAsset(original.id, fontSource)
     const draft = structuredClone(original)
     draft.copy.brandTitle = '尚未保存的分享标题'
@@ -34,15 +38,17 @@ describe('theme share packages', () => {
     draft.hero.mediaTransform = { flipHorizontal: true, flipVertical: false }
     draft.polaroid.mediaTransform = { flipHorizontal: false, flipVertical: true }
     draft.icons.branding = { kind: 'asset', asset: image.relativePath }
+    draft.decorations.composerMelody.source = composerGif.reference
     draft.typography.importedFonts.push({ id: font.id, family: font.family, asset: font.relativePath, originalName: font.originalName, format: font.format })
     draft.typography.slots.brandTitle = { kind: 'imported', id: font.id }
     const packagePath = join(root, 'design.cdstheme')
     await store.exportSharePackage(draft, packagePath)
     expect((await stat(packagePath)).isFile()).toBe(true)
     const archive = unzipSync(await readFile(packagePath))
-    expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, 'manifest.json', 'theme.json'].sort())
+    expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
     expect(checked.profile.resetColors.accent).toBe(original.resetColors.accent)
 
     const imported = await store.importSharePackage(packagePath)
@@ -57,6 +63,7 @@ describe('theme share packages', () => {
     expect((await store.get(original.id)).copy.brandTitle).not.toBe(imported.copy.brandTitle)
     expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await store.compile(imported.id)).assets[font.relativePath]).toBe(font.dataUrl)
+    expect((await store.compile(imported.id)).assets[composerGif.relativePath]).toBe(`data:image/gif;base64,${gif.toString('base64')}`)
     expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
   })
 

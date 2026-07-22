@@ -5,7 +5,7 @@ import {
   GitBranch, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
-import type { MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
+import type { MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildConversationOverlayStyle } from '../../shared/conversation-overlay'
@@ -94,7 +94,7 @@ export function App(): React.JSX.Element {
       setDraft(profile)
       const nextAssets = { ...compiled.assets }
       if (window.studio.assets.getPreviewUrl) {
-        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source]) {
+        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
           if (!source) continue
           try { nextAssets[source.asset] = await window.studio.assets.getPreviewUrl(id, source.asset) } catch { /* missing media is shown as fallback */ }
         }
@@ -322,7 +322,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.themes.getDefault(themeId)
       const restoredAssets: Record<string, string> = {}
-      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source]) {
+      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.decorations.composerMelody.source]) {
         if (!source) continue
         restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
       }
@@ -463,14 +463,14 @@ export function App(): React.JSX.Element {
     } catch (reason) { setError(messageOf(reason)) }
   }
 
-  const selectImage = async (purpose: 'hero' | 'polaroid' | 'conversationBackground', requestedKind?: MediaSelectionKind): Promise<void> => {
+  const selectImage = async (purpose: MediaAssetPurpose, requestedKind?: MediaSelectionKind): Promise<void> => {
     if (!draft || mediaBusyRef.current) return
     mediaBusyRef.current = true
     setMediaBusy(true)
     try {
       const imported = window.studio.assets.selectMedia
         ? await window.studio.assets.selectMedia(draft.id, purpose, requestedKind)
-        : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
+        : purpose === 'composerMelody' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
@@ -485,11 +485,14 @@ export function App(): React.JSX.Element {
           profile.polaroid.source = imported.reference
           profile.polaroid.sourceSize = { width: imported.width, height: imported.height }
           if (imported.reference.kind === 'video') profile.polaroid.playback = { ...profile.polaroid.playback, sound: false }
-        } else {
+        } else if (purpose === 'conversationBackground') {
           const mode = imported.reference.mimeType === 'image/gif' ? 'gif' : imported.reference.kind === 'video' ? 'video' : 'image'
           profile.conversationBackground.visible = true
           profile.conversationBackground.mode = mode
           profile.conversationBackground.source = imported.reference
+        } else {
+          profile.decorations.composerMelody.source = imported.reference
+          profile.decorations.composerMelody.mode = 'gif'
         }
       })
     } catch (reason) { setError(messageOf(reason)) }
@@ -818,7 +821,7 @@ export function App(): React.JSX.Element {
               {polaroidUrl && draft.polaroid.mode === 'fence' && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
             </Property>
             <Property title="背景粒子" anchor="visual-sparkles" highlighted={inspectorAnchor === 'visual-sparkles'}><ParticleEffectControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} /></Property>
-            <Property title="输入框旋律" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
+            <Property title="输入框装饰" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={assets} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} onSelectGif={() => { void selectImage('composerMelody', 'gif') }} /></Property>
             <Property title="字体" anchor="typography" highlighted={inspectorAnchor === 'typography'}>
               <div className="font-editor">{(Object.keys(draft.typography.slots) as TypographySlot[]).map((slot) => <FontControl key={slot} slot={slot} profile={draft} onChange={(selection) => change((profile) => assignFontSlot(profile, slot, selection))} onImport={() => void importFont(slot)} />)}</div>
               {draft.typography.importedFonts.length > 0 && <div className="font-library">{draft.typography.importedFonts.map((font) => <div key={font.id}><span><strong>{font.family}</strong><small>{font.originalName}</small></span><button className="mini-icon-button" type="button" title="移除字体" onClick={() => removeImportedFont(font.id)}><Trash2 size={13} /></button></div>)}</div>}
@@ -906,7 +909,47 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
 
 function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
   const melody = profile.decorations.composerMelody
-  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <span className="dream-composer-melody preview-composer-melody" data-preview-target="composer-melody" tabIndex={0} role="button" aria-label="编辑输入框旋律" style={{ left: `${melody.position.x * 100}%`, top: `${melody.position.y * 100}%`, fontSize: `${melody.fontSize}px` }}>{melody.text}</span>}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="添加"><Plus size={18} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="语音输入"><Mic size={17} /></button><button className="preview-send-command bg-token-foreground" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
+  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <PreviewComposerDecoration profile={profile} assets={assets} />}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="添加"><Plus size={18} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="语音输入"><Mic size={17} /></button><button className="preview-send-command bg-token-foreground" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
+}
+
+function PreviewComposerDecoration({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+  const config = profile.decorations.composerMelody
+  const trackEffect = config.mode === 'text' && (config.effect === 'barrage' || config.effect === 'scroll')
+  const baseDuration = { none: 0, wave: 1.4, barrage: 7, scroll: 6, float: 2.6, pulse: 2 }[config.effect]
+  const style = {
+    left: trackEffect ? '48px' : `${config.position.x * 100}%`,
+    right: trackEffect ? '48px' : 'auto',
+    top: `${config.position.y * 100}%`,
+    fontSize: `${config.fontSize}px`,
+    '--dream-composer-effect-duration': `${baseDuration / config.speed}s`
+  } as React.CSSProperties
+  const gifUrl = config.source ? assets[config.source.asset] : undefined
+
+  return <span
+    className={`dream-composer-melody dream-composer-decoration preview-composer-melody${trackEffect ? ' dream-composer-decoration-track' : ''}`}
+    data-preview-target="composer-melody"
+    data-dream-composer-mode={config.mode}
+    data-dream-composer-effect={config.mode === 'text' ? config.effect : 'none'}
+    data-dream-composer-direction={trackEffect ? config.direction : undefined}
+    tabIndex={0}
+    role="button"
+    aria-label="编辑输入框装饰"
+    style={style}
+  >
+    {config.mode === 'gif'
+      ? gifUrl && <img className="dream-composer-decoration-gif" src={gifUrl} alt="" draggable={false} style={{ width: `${config.gifWidth}px` }} />
+      : <ComposerDecorationText text={config.text} effect={config.effect} direction={config.direction} speed={config.speed} />}
+  </span>
+}
+
+function ComposerDecorationText({ text, effect, direction, speed }: { text: string; effect: ThemeProfile['decorations']['composerMelody']['effect']; direction: ThemeProfile['decorations']['composerMelody']['direction']; speed: number }): React.JSX.Element {
+  if (effect === 'wave') {
+    return <span className="dream-composer-decoration-text dream-composer-decoration-wave">{Array.from(text).map((character, index) => <span className="dream-composer-decoration-character" style={{ animationDelay: `${index * .06 / speed}s` }} key={`${index}-${character}`}>{character === ' ' ? '\u00a0' : character}</span>)}</span>
+  }
+  if (effect === 'barrage') {
+    return <>{[0, 1, 2].map((lane) => <span className={`dream-composer-decoration-text dream-composer-decoration-barrage dream-composer-decoration-direction-${direction}`} style={{ top: `${(lane + .5) / 3 * 100}%`, animationDelay: `${-7 / speed * lane / 3}s` }} key={lane}>{text}</span>)}</>
+  }
+  return <span className={`dream-composer-decoration-text dream-composer-decoration-${effect}${effect === 'scroll' ? ` dream-composer-decoration-direction-${direction}` : ''}`}>{text}</span>
 }
 
 function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {

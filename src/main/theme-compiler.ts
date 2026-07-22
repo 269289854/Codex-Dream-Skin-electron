@@ -17,6 +17,7 @@ export async function compileTheme(
   if (profile.polaroid.source?.kind === 'image') assetNames.add(profile.polaroid.source.asset)
   else if (!profile.polaroid.source && profile.polaroid.sourceImage) assetNames.add(profile.polaroid.sourceImage)
   if (profile.conversationBackground.source?.kind === 'image') assetNames.add(profile.conversationBackground.source.asset)
+  if (profile.decorations.composerMelody.source) assetNames.add(profile.decorations.composerMelody.source.asset)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
   for (const font of profile.typography.importedFonts) assetNames.add(font.asset)
 

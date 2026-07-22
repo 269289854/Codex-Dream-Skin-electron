@@ -7,6 +7,7 @@ import { DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
+const TEST_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 
 async function writeBundledSystemAssets(root: string): Promise<{ hero: string; polaroid: string }> {
   const assets = { hero: join(root, 'bundled-hero.png'), polaroid: join(root, 'bundled-polaroid.png') }
@@ -296,6 +297,32 @@ describe('ProfileStore', () => {
     const assetDirectory = join(store.themesRoot, profile.id, 'assets')
     expect(await readFile(join(store.themesRoot, profile.id, imported.relativePath))).toEqual(TEST_PNG)
     expect((await readdir(assetDirectory)).some((entry) => entry.endsWith('.tmp'))).toBe(false)
+  })
+
+  it('imports, validates, compiles, and duplicates a composer GIF reference', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-composer-gif-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('GIF 装饰主题')
+    const gifSource = join(root, 'composer.gif')
+    const fakeGif = join(root, 'fake.gif')
+    const pngSource = join(root, 'not-gif.png')
+    await Promise.all([writeFile(gifSource, TEST_GIF), writeFile(fakeGif, TEST_PNG), writeFile(pngSource, TEST_PNG)])
+
+    const imported = await store.importMediaAsset(profile.id, gifSource, 'composerMelody', 'gif')
+    expect(imported.reference).toEqual({ asset: imported.relativePath, kind: 'image', mimeType: 'image/gif' })
+    profile.decorations.composerMelody.source = imported.reference
+    profile.decorations.composerMelody.mode = 'gif'
+    await store.update(profile)
+
+    await expect(store.getMediaPreviewUrl(profile.id, imported.relativePath)).resolves.toContain('studio-media://')
+    expect((await store.compile(profile.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    const duplicate = await store.duplicate(profile, 'GIF 装饰副本')
+    expect(duplicate.decorations.composerMelody.source).toEqual(imported.reference)
+    expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    await expect(store.importMediaAsset(profile.id, pngSource, 'composerMelody', 'gif')).rejects.toThrow('GIF')
+    await expect(store.importMediaAsset(profile.id, fakeGif, 'composerMelody', 'gif')).rejects.toThrow('内容与扩展名不匹配')
   })
 
   it('duplicates the current draft and every referenced asset without changing the source profile', async () => {

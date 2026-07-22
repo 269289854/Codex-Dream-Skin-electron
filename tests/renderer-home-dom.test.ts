@@ -11,16 +11,18 @@ import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 let template = ''
 let particleEffectsCss = ''
 let previewParticleEffectsCss = ''
+let homeLayoutCss = ''
 const themeId = '11111111-1111-4111-8111-111111111111'
 const windows: Window[] = []
 const defaultProfile = createDefaultTheme(themeId)
 const defaultDecorations = defaultProfile.decorations
 
 beforeAll(async () => {
-  ;[template, particleEffectsCss, previewParticleEffectsCss] = await Promise.all([
+  ;[template, particleEffectsCss, previewParticleEffectsCss, homeLayoutCss] = await Promise.all([
     readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8'),
     readFile(join(process.cwd(), 'resources', 'windows', 'dream-particle-effects.css'), 'utf8'),
-    readFile(join(process.cwd(), 'src', 'renderer', 'src', 'particle-effects.css'), 'utf8')
+    readFile(join(process.cwd(), 'src', 'renderer', 'src', 'particle-effects.css'), 'utf8'),
+    readFile(join(process.cwd(), 'resources', 'windows', 'dream-home-layout.css'), 'utf8')
   ])
 })
 
@@ -114,6 +116,10 @@ type RuntimeConversationBackgroundConfig = {
   scale: number
 }
 
+type RuntimeDecorations = Omit<ThemeProfile['decorations'], 'composerMelody'> & {
+  composerMelody: ThemeProfile['decorations']['composerMelody'] & { dataUrl?: string | null }
+}
+
 const fullOverlayStyle: ConversationOverlayStyle = {
   background: '#FFFFFF',
   opacity: '0.2',
@@ -132,7 +138,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: ThemeProfile['decorations'] = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null } = { hero: null, polaroid: null }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null } = { hero: null, polaroid: null }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -607,7 +613,7 @@ describe('renderer home DOM adaptation', () => {
     composer?.appendChild(emptyAttachments)
     const decorations = structuredClone(defaultDecorations)
     decorations.composerMelody = {
-      visible: true,
+      ...decorations.composerMelody,
       text: '<b>♫</b>',
       fontSize: 20,
       position: { x: 0.4, y: 0.25 },
@@ -645,6 +651,76 @@ describe('renderer home DOM adaptation', () => {
     composer?.appendChild(attachment)
     stateOf(window).ensure()
     expect(melody?.classList.contains('dream-composer-melody-hidden')).toBe(true)
+  })
+
+  it('renders all composer text effects with bounded structured nodes', () => {
+    const effects = ['wave', 'barrage', 'scroll', 'float', 'pulse'] as const
+    for (const effect of effects) {
+      const window = createWindow()
+      window.document.body.innerHTML = homeFixture(`Effect-${effect}`)
+      const decorations = structuredClone(defaultDecorations) as RuntimeDecorations
+      decorations.composerMelody = { ...decorations.composerMelody, text: '<b>波浪</b>', effect, direction: 'right', speed: 2 }
+      inject(window, undefined, undefined, undefined, undefined, decorations)
+
+      const melody = window.document.querySelector('.dream-composer-melody') as HTMLElement | null
+      expect(melody?.dataset.dreamComposerMode).toBe('text')
+      expect(melody?.dataset.dreamComposerEffect).toBe(effect)
+      expect(melody?.querySelector('b')).toBeNull()
+      if (effect === 'wave') {
+        expect(melody?.querySelectorAll('.dream-composer-decoration-character')).toHaveLength(Array.from('<b>波浪</b>').length)
+        expect(melody?.style.getPropertyValue('--dream-composer-effect-duration')).toBe('0.7s')
+        expect(melody?.dataset.dreamComposerDirection).toBeUndefined()
+      } else if (effect === 'barrage') {
+        expect(melody?.querySelectorAll('.dream-composer-decoration-barrage')).toHaveLength(3)
+        expect(melody?.querySelectorAll('.dream-composer-decoration-direction-right')).toHaveLength(3)
+        expect(melody?.dataset.dreamComposerDirection).toBe('right')
+        expect(melody?.style.left).toBe('48px')
+        expect(melody?.style.right).toBe('48px')
+      } else {
+        expect(melody?.querySelector(`.dream-composer-decoration-${effect}`)?.textContent).toBe('<b>波浪</b>')
+        if (effect === 'scroll') {
+          expect(melody?.querySelector('.dream-composer-decoration-direction-right')).not.toBeNull()
+          expect(melody?.dataset.dreamComposerDirection).toBe('right')
+        }
+      }
+    }
+    expect(homeLayoutCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(homeLayoutCss).toContain('.dream-composer-decoration-character { animation: none !important; }')
+    expect(homeLayoutCss).toContain('.dream-composer-decoration-wave { padding-block: 4px; }')
+    expect(homeLayoutCss).toContain('.dream-composer-decoration-direction-right { animation-direction: reverse; }')
+  })
+
+  it('renders GIF frames without text effect classes and cleans mode switches idempotently', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Composer-GIF')
+    const decorations = structuredClone(defaultDecorations) as RuntimeDecorations
+    decorations.composerMelody = {
+      ...decorations.composerMelody,
+      mode: 'gif',
+      source: { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' },
+      effect: 'wave',
+      gifWidth: 144,
+      dataUrl: 'data:image/gif;base64,AA=='
+    }
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+
+    const gifDecoration = window.document.querySelector('.dream-composer-melody') as HTMLElement | null
+    const image = gifDecoration?.querySelector('.dream-composer-decoration-gif') as HTMLImageElement | null
+    expect(gifDecoration?.dataset.dreamComposerMode).toBe('gif')
+    expect(gifDecoration?.dataset.dreamComposerEffect).toBe('none')
+    expect(image?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
+    expect(image?.style.width).toBe('144px')
+    expect(gifDecoration?.querySelector('[class*="dream-composer-decoration-wave"]')).toBeNull()
+
+    decorations.composerMelody = { ...decorations.composerMelody, mode: 'text', effect: 'float' }
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+    expect(window.document.querySelectorAll('.dream-composer-melody')).toHaveLength(1)
+    expect(window.document.querySelector('.dream-composer-decoration-gif')).toBeNull()
+    expect(window.document.querySelector('.dream-composer-decoration-float')).not.toBeNull()
+
+    decorations.composerMelody = { ...decorations.composerMelody, mode: 'gif', dataUrl: 'data:image/png;base64,AA==' }
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+    expect(window.document.querySelector('.dream-composer-melody')).toBeNull()
   })
 
   it('removes disabled sparkles and melody instead of leaving stale nodes', () => {

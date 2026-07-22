@@ -383,19 +383,96 @@
   position: absolute;
   z-index: 1;
   max-width: calc(100% - 96px);
-  overflow: hidden;
   color: var(--dream-wave);
   font-family: var(--dream-font-composer-melody);
   line-height: 1;
   letter-spacing: 0;
   white-space: nowrap;
-  text-overflow: ellipsis;
-  opacity: .78;
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
 
+.dream-composer-decoration-track {
+  max-width: none;
+  height: 3.6em;
+  overflow: hidden;
+  text-align: center;
+  transform: translateY(-50%);
+}
+
+.dream-composer-decoration-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: .78;
+  white-space: nowrap;
+}
+
+.dream-composer-decoration-wave { padding-block: 4px; }
+
+.dream-composer-decoration-character {
+  display: inline-block;
+  animation: dream-composer-wave var(--dream-composer-effect-duration, 1.4s) ease-in-out infinite;
+}
+
+.dream-composer-decoration-barrage,
+.dream-composer-decoration-scroll {
+  position: absolute;
+  left: 100%;
+  transform: translate(0, -50%);
+  animation: dream-composer-track var(--dream-composer-effect-duration, 7s) linear infinite;
+}
+
+.dream-composer-decoration-scroll { top: 50%; }
+.dream-composer-decoration-direction-right { animation-direction: reverse; }
+
+.dream-composer-decoration-float {
+  animation: dream-composer-float var(--dream-composer-effect-duration, 2.6s) ease-in-out infinite;
+}
+
+.dream-composer-decoration-pulse {
+  animation: dream-composer-pulse var(--dream-composer-effect-duration, 2s) ease-in-out infinite;
+}
+
+.dream-composer-decoration-gif {
+  display: block;
+  max-width: 100%;
+  max-height: 72px;
+  object-fit: contain;
+}
+
 .dream-composer-melody-hidden { display: none; }
+
+@keyframes dream-composer-wave {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-4px); }
+  75% { transform: translateY(4px); }
+}
+
+@keyframes dream-composer-track {
+  from { left: 100%; transform: translate(0, -50%); }
+  to { left: 0; transform: translate(-100%, -50%); }
+}
+
+@keyframes dream-composer-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes dream-composer-pulse {
+  0%, 100% { opacity: .45; transform: scale(.96); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dream-composer-decoration-text,
+  .dream-composer-decoration-character { animation: none !important; }
+  .dream-composer-decoration-track { height: 1.2em; }
+  .dream-composer-decoration-barrage,
+  .dream-composer-decoration-scroll { position: static; transform: none; }
+  .dream-composer-decoration-barrage:not(:first-child) { display: none; }
+}
 
 .dream-composer-badge {
   position: absolute;

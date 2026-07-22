@@ -92,38 +92,6 @@ const sparklesSchema = z.object({
   if (sparkles.minSize > sparkles.maxSize) context.addIssue({ code: 'custom', path: ['maxSize'], message: 'Sparkle maxSize must be greater than or equal to minSize.' })
 })
 
-const composerMelodySchema = z.object({
-  visible: z.boolean(),
-  text: z.string().max(64),
-  fontSize: z.number().int().min(10).max(32),
-  position: z.object({
-    x: z.number().finite().min(0.1).max(0.9),
-    y: z.number().finite().min(0.1).max(0.65)
-  }).strict(),
-  hideWhenTyping: z.boolean()
-}).strict()
-
-const homeHeadingDecorationSchema = z.object({
-  visible: z.boolean(),
-  text: z.string().max(64),
-  fontSize: z.number().int().min(10).max(32)
-}).strict()
-
-const decorationsSchema = z.object({
-  sparkles: sparklesSchema,
-  homeHeading: homeHeadingDecorationSchema.default({
-    visible: true,
-    text: DEFAULT_HOME_HEADING_DECORATION,
-    fontSize: 17
-  }),
-  composerMelody: composerMelodySchema
-}).strict()
-
-const versionSevenDecorationsSchema = z.object({
-  sparkles: versionSevenSparklesSchema,
-  composerMelody: composerMelodySchema
-}).strict()
-
 const legacyColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/)
 const legacyColorsSchema = z.object({
   surface: legacyColor,
@@ -214,6 +182,56 @@ export const mediaReferenceSchema = z.object({
   if (isVideo !== (media.kind === 'video')) context.addIssue({ code: 'custom', path: ['kind'], message: 'Media kind does not match its MIME type.' })
   if (!isVideo && media.mimeType === 'image/gif' && media.kind !== 'image') context.addIssue({ code: 'custom', path: ['kind'], message: 'GIF media must be an image.' })
 })
+
+export const COMPOSER_DECORATION_EFFECT_IDS = ['none', 'wave', 'barrage', 'scroll', 'float', 'pulse'] as const
+export type ComposerDecorationEffect = typeof COMPOSER_DECORATION_EFFECT_IDS[number]
+export const COMPOSER_DECORATION_DIRECTION_IDS = ['left', 'right'] as const
+export type ComposerDecorationDirection = typeof COMPOSER_DECORATION_DIRECTION_IDS[number]
+
+const composerMelodySchema = z.object({
+  visible: z.boolean(),
+  mode: z.enum(['text', 'gif']).default('text'),
+  text: z.string().max(64),
+  source: mediaReferenceSchema.nullable().default(null),
+  effect: z.enum(COMPOSER_DECORATION_EFFECT_IDS).default('none'),
+  direction: z.enum(COMPOSER_DECORATION_DIRECTION_IDS).default('left'),
+  speed: z.number().finite().min(0.5).max(2).default(1),
+  fontSize: z.number().int().min(10).max(32),
+  gifWidth: z.number().int().min(32).max(240).default(96),
+  position: z.object({
+    x: z.number().finite().min(0.1).max(0.9),
+    y: z.number().finite().min(0.1).max(0.65)
+  }).strict(),
+  hideWhenTyping: z.boolean()
+}).strict().superRefine((decoration, context) => {
+  if (decoration.source && (decoration.source.kind !== 'image' || decoration.source.mimeType !== 'image/gif')) {
+    context.addIssue({ code: 'custom', path: ['source'], message: '输入框 GIF 装饰必须使用 GIF 图片素材。' })
+  }
+  if (decoration.mode === 'gif' && !decoration.source) {
+    context.addIssue({ code: 'custom', path: ['source'], message: 'GIF 装饰必须引用 GIF 素材。' })
+  }
+})
+
+const homeHeadingDecorationSchema = z.object({
+  visible: z.boolean(),
+  text: z.string().max(64),
+  fontSize: z.number().int().min(10).max(32)
+}).strict()
+
+const decorationsSchema = z.object({
+  sparkles: sparklesSchema,
+  homeHeading: homeHeadingDecorationSchema.default({
+    visible: true,
+    text: DEFAULT_HOME_HEADING_DECORATION,
+    fontSize: 17
+  }),
+  composerMelody: composerMelodySchema
+}).strict()
+
+const versionSevenDecorationsSchema = z.object({
+  sparkles: versionSevenSparklesSchema,
+  composerMelody: composerMelodySchema
+}).strict()
 
 const videoPlaybackSchema = z.object({
   autoplay: z.boolean(),
@@ -953,8 +971,14 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
     },
     composerMelody: {
       visible: true,
+      mode: 'text',
       text: '♫ · · · ♡ · · · ♪',
+      source: null,
+      effect: 'none',
+      direction: 'left',
+      speed: 1,
       fontSize: 16,
+      gifWidth: 96,
       position: { x: 0.5, y: 0.35 },
       hideWhenTyping: true
     },

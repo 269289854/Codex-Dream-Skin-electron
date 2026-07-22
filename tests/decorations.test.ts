@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PARTICLE_EFFECT_IDS, PARTICLE_VIEWPORT_TOP, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../src/shared/particle-effects'
-import { createDefaultTheme, parseThemeProfile } from '../src/shared/theme'
+import { COMPOSER_DECORATION_DIRECTION_IDS, COMPOSER_DECORATION_EFFECT_IDS, createDefaultTheme, parseThemeProfile } from '../src/shared/theme'
 
 const id = '22222222-2222-4222-8222-222222222222'
 
@@ -68,5 +68,23 @@ describe('theme decorations', () => {
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, sparkles: { ...profile.decorations.sparkles, speed: 2.01 } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, text: 'x'.repeat(65) } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, position: { x: 0.05, y: 0.35 } } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, effect: 'spin' } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, direction: 'up' } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, speed: 2.01 } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, gifWidth: 241 } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, mode: 'gif', source: null } } })).toThrow('GIF')
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, source: { asset: 'assets/not-gif.png', kind: 'image', mimeType: 'image/png' } } } })).toThrow('GIF')
+  })
+
+  it('adds static text defaults to older version fifteen composer decorations', () => {
+    const profile = createDefaultTheme(id)
+    const legacy = structuredClone(profile) as unknown as { decorations: { composerMelody: Record<string, unknown> } }
+    for (const field of ['mode', 'source', 'effect', 'direction', 'speed', 'gifWidth']) delete legacy.decorations.composerMelody[field]
+
+    const parsed = parseThemeProfile(legacy)
+    expect(parsed.version).toBe(15)
+    expect(parsed.decorations.composerMelody).toMatchObject({ mode: 'text', source: null, effect: 'none', direction: 'left', speed: 1, gifWidth: 96 })
+    expect(COMPOSER_DECORATION_EFFECT_IDS).toEqual(['none', 'wave', 'barrage', 'scroll', 'float', 'pulse'])
+    expect(COMPOSER_DECORATION_DIRECTION_IDS).toEqual(['left', 'right'])
   })
 })

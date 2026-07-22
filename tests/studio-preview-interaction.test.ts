@@ -764,6 +764,50 @@ describe('Studio preview editing interaction', () => {
     expect(video?.autoplay).toBe(true)
   })
 
+  it('selects a composer GIF once and keeps it synchronized across preview modes', async () => {
+    const melody = container.querySelector<HTMLElement>('[data-preview-target="composer-melody"]')
+    if (!melody) throw new Error('Composer decoration target is missing.')
+    pointerDown(melody)
+    const modeButton = (label: string): HTMLButtonElement => {
+      const button = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .composer-decoration-modes button')].find((candidate) => candidate.textContent === label)
+      if (!button) throw new Error(`${label} composer mode is missing.`)
+      return button
+    }
+
+    await act(async () => {
+      modeButton('GIF').click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'composerMelody', 'gif')
+    expect(container.querySelector('[data-preview-target="composer-melody"]')?.getAttribute('data-dream-composer-mode')).toBe('text')
+
+    selectMedia.mockResolvedValueOnce({ reference: { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' }, relativePath: 'assets/composer.gif', previewUrl: 'data:image/gif;base64,AA==', originalName: 'composer.gif', width: 320, height: 120 })
+    await act(async () => {
+      modeButton('GIF').click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const image = container.querySelector<HTMLImageElement>('[data-preview-target="composer-melody"] .dream-composer-decoration-gif')
+    expect(image?.src).toContain('data:image/gif;base64,AA==')
+    expect(container.querySelector('[data-preview-target="composer-melody"]')?.getAttribute('data-dream-composer-effect')).toBe('none')
+    const width = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === 'GIF 宽度')?.querySelector<HTMLInputElement>('input')
+    if (!width) throw new Error('Composer GIF width control is missing.')
+    act(() => setInputValue(width, '144'))
+    expect(container.querySelector<HTMLImageElement>('[data-preview-target="composer-melody"] .dream-composer-decoration-gif')?.style.width).toBe('144px')
+
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.click())
+    expect(container.querySelector<HTMLImageElement>('[data-preview-target="composer-melody"] .dream-composer-decoration-gif')?.src).toContain('data:image/gif;base64,AA==')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.decorations.composerMelody).toMatchObject({ mode: 'gif', gifWidth: 144, source: { asset: 'assets/composer.gif', mimeType: 'image/gif' } })
+  })
+
   it('opens custom icon import from both quick editing and the full icon inspector', async () => {
     const composerIcon = container.querySelector('[data-preview-target="icon-composer"]')
     if (!composerIcon) throw new Error('Composer icon target is missing.')
@@ -952,7 +996,7 @@ describe('Studio preview editing interaction', () => {
     const melody = container.querySelector<HTMLElement>('[data-preview-target="composer-melody"]')
     if (!melody) throw new Error('Conversation melody target is missing.')
     pointerDown(melody)
-    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('输入框旋律快捷配置')
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('输入框装饰快捷配置')
     enterQuickCopy('<b>自定义旋律 ♪</b>')
     const fontSize = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '字号')?.querySelector<HTMLInputElement>('input')
     const positionX = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '水平位置')?.querySelector<HTMLInputElement>('input')
@@ -969,6 +1013,19 @@ describe('Studio preview editing interaction', () => {
     expect(updatedMelody?.style.fontSize).toBe('22px')
     expect(updatedMelody?.style.left).toBe('70%')
 
+    const effect = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-decoration-controls="composer-melody"] .quick-copy-field select')
+    if (!effect) throw new Error('Composer effect control is missing.')
+    act(() => {
+      effect.value = 'scroll'
+      effect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+    const right = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .composer-decoration-directions button')].find((button) => button.textContent === '向右')
+    if (!right) throw new Error('Composer direction control is missing.')
+    act(() => right.click())
+    const directedMelody = container.querySelector<HTMLElement>('[data-preview-target="composer-melody"]')
+    expect(directedMelody?.dataset.dreamComposerDirection).toBe('right')
+    expect(directedMelody?.querySelector('.dream-composer-decoration-scroll.dream-composer-decoration-direction-right')).not.toBeNull()
+
     const home = container.querySelector<HTMLButtonElement>('button[title="首页预览"]')
     if (!home) throw new Error('Home preview command is missing.')
     act(() => home.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
@@ -982,7 +1039,7 @@ describe('Studio preview editing interaction', () => {
     })
     expect(savedProfiles.at(-1)?.decorations).toMatchObject({
       sparkles: { effect: 'rain', speed: 1.5, seed: 1, extraColors: ['#20bcc3'] },
-      composerMelody: { text: '<b>自定义旋律 ♪</b>', fontSize: 22, position: { x: 0.7, y: 0.35 } }
+      composerMelody: { text: '<b>自定义旋律 ♪</b>', effect: 'scroll', direction: 'right', fontSize: 22, position: { x: 0.7, y: 0.35 } }
     })
     expect(savedProfiles.at(-1)?.icons).toMatchObject({ backgroundSparkle: { name: 'sparkles' }, backgroundRain: { name: 'star' } })
 

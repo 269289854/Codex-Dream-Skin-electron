@@ -49,7 +49,8 @@ export interface OperationProgress {
   message: string
 }
 
-export type AssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'icon' | 'font'
+export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'composerMelody'
+export type AssetPurpose = MediaAssetPurpose | 'icon' | 'font'
 export type MediaSelectionKind = 'image' | 'gif' | 'video'
 
 export type RuntimePhase = 'idle' | 'detecting' | 'ready' | 'installing' | 'starting' | 'injecting' | 'active' | 'stopped' | 'restoring' | 'error'
@@ -90,8 +91,8 @@ export interface StudioApi {
     compile: (id: string) => Promise<CompiledTheme>
   }
   assets: {
-    selectImage: (themeId: string, purpose: Exclude<AssetPurpose, 'icon' | 'font'>) => Promise<ImportedAsset | null>
-    selectMedia: (themeId: string, purpose: Exclude<AssetPurpose, 'icon' | 'font'>, kind?: MediaSelectionKind) => Promise<ImportedMediaAsset | null>
+    selectImage: (themeId: string, purpose: Exclude<MediaAssetPurpose, 'composerMelody'>) => Promise<ImportedAsset | null>
+    selectMedia: (themeId: string, purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => Promise<ImportedMediaAsset | null>
     getPreviewUrl: (themeId: string, asset: string) => Promise<string>
     selectIcon: (themeId: string) => Promise<ImportedAsset | null>
     selectFont: (themeId: string) => Promise<ImportedFontAsset | null>

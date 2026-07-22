@@ -49,6 +49,8 @@ describe('CodexService operation queue', () => {
     const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
     profile.updatedAt = '2026-07-20T00:00:00.000Z'
     profile.polaroid.source = { asset: 'asset-polaroid', kind: 'video', mimeType: 'video/mp4' }
+    profile.decorations.composerMelody.mode = 'gif'
+    profile.decorations.composerMelody.source = { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' }
     profile.conversationBackground.overlay = {
       paint: { kind: 'linear', angle: 120, stops: [{ color: '#123456', position: 0 }, { color: '#abcdef', position: 1 }] },
       opacity: .4,
@@ -62,7 +64,7 @@ describe('CodexService operation queue', () => {
       root,
       themesRoot: join(root, 'themes'),
       get: vi.fn().mockResolvedValue(profile),
-      compile: vi.fn().mockResolvedValue({ assets: {} })
+      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==' } })
     }
     const service = new CodexService(store as never, join(process.cwd(), 'resources', 'windows'), () => undefined)
     const builder = service as unknown as { buildPayload(themeId: string): Promise<string> }
@@ -76,6 +78,7 @@ describe('CodexService operation queue', () => {
     expect(firstVersion).toMatch(/^studio-2026-07-20T00:00:00\.000Z-[0-9a-f-]{36}$/)
     expect(secondVersion).not.toBe(firstVersion)
     expect(first).toContain('"asset":"asset-polaroid"')
+    expect(first).toContain('"dataUrl":"data:image/gif;base64,AA=="')
     expect(first).toContain('"overlayStyle":{"background":"linear-gradient(120deg, #123456 0%, #abcdef 100%)"')
     expect(first).toContain('"left":"30%","top":"60%","width":"50%","height":"40%"')
     expect(first).toContain('"borderRadius":"50%","filter":"blur(12px)"')

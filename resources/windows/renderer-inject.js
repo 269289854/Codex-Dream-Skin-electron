@@ -196,14 +196,70 @@
     let melody = composer.querySelector(":scope > .dream-composer-melody");
     if (!melody) {
       melody = document.createElement("span");
-      melody.className = "dream-composer-melody";
       melody.setAttribute("aria-hidden", "true");
       composer.appendChild(melody);
     }
-    melody.textContent = typeof config.text === "string" ? config.text : "♫ · · · ♡ · · · ♪";
-    melody.style.left = `${clamp(Number(config.position?.x) || 0.5, 0.1, 0.9) * 100}%`;
+    const mode = config?.mode === "gif" ? "gif" : "text";
+    const supportedEffects = new Set(["none", "wave", "barrage", "scroll", "float", "pulse"]);
+    const effect = mode === "text" && supportedEffects.has(config?.effect) ? config.effect : "none";
+    const direction = config?.direction === "right" ? "right" : "left";
+    const speed = clamp(Number(config?.speed) || 1, 0.5, 2);
+    const baseDuration = { none: 0, wave: 1.4, barrage: 7, scroll: 6, float: 2.6, pulse: 2 }[effect];
+    const trackEffect = effect === "barrage" || effect === "scroll";
+    melody.className = `dream-composer-melody dream-composer-decoration${trackEffect ? " dream-composer-decoration-track" : ""}`;
+    melody.replaceChildren();
+    melody.dataset.dreamComposerMode = mode;
+    melody.dataset.dreamComposerEffect = effect;
+    if (trackEffect) melody.dataset.dreamComposerDirection = direction;
+    else delete melody.dataset.dreamComposerDirection;
+    melody.style.left = trackEffect ? "48px" : `${clamp(Number(config.position?.x) || 0.5, 0.1, 0.9) * 100}%`;
+    melody.style.right = trackEffect ? "48px" : "auto";
     melody.style.top = `${clamp(Number(config.position?.y) || 0.35, 0.1, 0.65) * 100}%`;
     melody.style.fontSize = `${clamp(Number(config.fontSize) || 16, 10, 32)}px`;
+    melody.style.setProperty("--dream-composer-effect-duration", `${baseDuration / speed}s`);
+
+    if (mode === "gif") {
+      const dataUrl = typeof config.dataUrl === "string" && /^data:image\/gif;base64,/i.test(config.dataUrl) ? config.dataUrl : null;
+      if (!dataUrl) {
+        melody.remove();
+        return;
+      }
+      const image = document.createElement("img");
+      image.className = "dream-composer-decoration-gif";
+      image.alt = "";
+      image.draggable = false;
+      image.src = dataUrl;
+      image.style.width = `${clamp(Number(config.gifWidth) || 96, 32, 240)}px`;
+      melody.appendChild(image);
+    } else {
+      const text = typeof config.text === "string" ? config.text : "♫ · · · ♡ · · · ♪";
+      if (effect === "wave") {
+        const wave = document.createElement("span");
+        wave.className = "dream-composer-decoration-text dream-composer-decoration-wave";
+        [...text].forEach((character, index) => {
+          const node = document.createElement("span");
+          node.className = "dream-composer-decoration-character";
+          node.textContent = character === " " ? "\u00a0" : character;
+          node.style.animationDelay = `${index * 0.06 / speed}s`;
+          wave.appendChild(node);
+        });
+        melody.appendChild(wave);
+      } else if (effect === "barrage") {
+        [0, 1, 2].forEach((lane) => {
+          const node = document.createElement("span");
+          node.className = `dream-composer-decoration-text dream-composer-decoration-barrage dream-composer-decoration-direction-${direction}`;
+          node.textContent = text;
+          node.style.top = `${(lane + 0.5) / 3 * 100}%`;
+          node.style.animationDelay = `${-7 / speed * lane / 3}s`;
+          melody.appendChild(node);
+        });
+      } else {
+        const node = document.createElement("span");
+        node.className = `dream-composer-decoration-text dream-composer-decoration-${effect}${effect === "scroll" ? ` dream-composer-decoration-direction-${direction}` : ""}`;
+        node.textContent = text;
+        melody.appendChild(node);
+      }
+    }
     melody.classList.toggle("dream-composer-melody-hidden", Boolean(config.hideWhenTyping && composerHasContent(composer)));
   };
 
