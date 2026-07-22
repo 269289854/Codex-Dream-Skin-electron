@@ -4,14 +4,19 @@ import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import { extname, join } from 'node:path'
+import electronUpdater from 'electron-updater'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
+import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
 import { captureIpcResult } from '../shared/ipc-result'
 import type { AssetPurpose, MediaSelectionKind } from '../shared/contracts'
+
+const { autoUpdater } = electronUpdater
 
 let mainWindow: BrowserWindow | null = null
 let store: ProfileStore
 let codexService: CodexService
+let appUpdateService: AppUpdateService
 let tray: Tray | null = null
 let trayIcon: NativeImage | null = null
 let appIconPath = ''
@@ -44,6 +49,10 @@ function updateTray(): void {
 
 function registerIpc(): void {
   ipcMain.handle('app:get-info', () => ({ version: app.getVersion(), platform: process.platform }))
+  ipcMain.handle('app:get-update-status', () => appUpdateService.getStatus())
+  ipcMain.handle('app:check-for-updates', () => captureIpcResult(() => appUpdateService.checkForUpdates()))
+  ipcMain.handle('app:download-update', () => captureIpcResult(() => appUpdateService.downloadUpdate()))
+  ipcMain.handle('app:install-update', () => captureIpcResult(() => appUpdateService.installUpdate()))
   ipcMain.handle('themes:list', () => store.list())
   ipcMain.handle('themes:get', (_event, id: string) => store.get(id))
   ipcMain.handle('themes:create', (_event, input: unknown) => store.create(input))
@@ -250,8 +259,17 @@ if (!hasSingleInstanceLock) {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
       try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
     })
+    appUpdateService = new AppUpdateService(
+      new ElectronAppUpdateDriver(autoUpdater, () => { quitting = true }),
+      app.getVersion(),
+      isAppUpdateEnabled(app.isPackaged, process.execPath),
+      (status) => {
+        for (const window of BrowserWindow.getAllWindows()) window.webContents.send('app:update-status', status)
+      }
+    )
     registerIpc()
     createWindow()
+    appUpdateService.start()
     void codexService.resume()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -297,4 +315,4 @@ async function handleStudioMediaRequest(request: Request): Promise<Response> {
 }
 
 app.on('window-all-closed', () => { if (!codexService?.isActive()) app.quit() })
-app.on('before-quit', () => { quitting = true })
+app.on('before-quit', () => { quitting = true; appUpdateService?.stop() })

@@ -3,9 +3,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   Box, Check, ChevronDown, ChevronsUpDown, CircleHelp, Copy, Download,
   GitBranch, Home, Image, Laptop, MessageSquare, Mic, MonitorPlay, Palette, Play,
-  Plus, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
+  Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
-import type { MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
+import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildConversationOverlayStyle } from '../../shared/conversation-overlay'
@@ -66,6 +66,9 @@ export function App(): React.JSX.Element {
   const [shareDropActive, setShareDropActive] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
+  const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null)
+  const [appUpdateActionError, setAppUpdateActionError] = useState<string | null>(null)
+  const [appUpdateCheckBusy, setAppUpdateCheckBusy] = useState(false)
   const [draggingPlacement, setDraggingPlacement] = useState(false)
   const [previewScale, setPreviewScale] = useState(1)
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null)
@@ -123,6 +126,23 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     void window.studio.runtime.getStatus().then(setRuntime)
     return window.studio.runtime.subscribeStatus(setRuntime)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    let receivedUpdate = false
+    void window.studio.app.getUpdateStatus().then((status) => {
+      if (active && !receivedUpdate) setAppUpdate(status)
+    }).catch(() => undefined)
+    const unsubscribe = window.studio.app.subscribeUpdateStatus((status) => {
+      receivedUpdate = true
+      setAppUpdate(status)
+      if (!status.error) setAppUpdateActionError(null)
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
@@ -617,6 +637,30 @@ export function App(): React.JSX.Element {
     } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
   }
 
+  const runAppUpdate = async (): Promise<void> => {
+    if (!appUpdate || appUpdate.phase === 'downloading') return
+    setAppUpdateActionError(null)
+    try {
+      if (appUpdate.phase === 'downloaded') await window.studio.app.installUpdate()
+      else setAppUpdate(await window.studio.app.downloadUpdate())
+    } catch (reason) {
+      setAppUpdateActionError(messageOf(reason))
+    }
+  }
+
+  const runAppUpdateCheck = async (): Promise<void> => {
+    if (!appUpdate || appUpdate.phase === 'disabled' || appUpdateCheckBusy || appUpdate.phase === 'checking' || appUpdate.phase === 'downloading' || appUpdate.phase === 'downloaded') return
+    setAppUpdateCheckBusy(true)
+    setAppUpdateActionError(null)
+    try {
+      setAppUpdate(await window.studio.app.checkForUpdates())
+    } catch (reason) {
+      setAppUpdateActionError(messageOf(reason))
+    } finally {
+      setAppUpdateCheckBusy(false)
+    }
+  }
+
   const beginPlacementDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (!draft) return
     historyRef.current.push(structuredClone(draft))
@@ -654,6 +698,49 @@ export function App(): React.JSX.Element {
   const previewFontCss = buildPreviewImportedFontCss(draft, assets)
   const heroImage = buildPreviewHeroImageProps(heroUrl, draft.hero)
   const systemThemeSelected = themes.find((theme) => theme.id === draft.id)?.system === true
+  const updateVisible = Boolean(appUpdate?.availableVersion)
+  const updateVersion = appUpdate?.availableVersion ?? ''
+  const updateVersionLabel = updateVersion.startsWith('v') ? updateVersion : `v${updateVersion}`
+  const currentVersion = appUpdate?.currentVersion ?? ''
+  const currentVersionLabel = currentVersion ? currentVersion.startsWith('v') ? currentVersion : `v${currentVersion}` : '-'
+  const updateError = appUpdate?.error ?? appUpdateActionError
+  const updateMessage = updateError
+    ? `${updateVersionLabel} 下载失败`
+    : appUpdate?.phase === 'downloading'
+      ? `正在下载 ${updateVersionLabel} · ${Math.round(appUpdate.downloadPercent ?? 0)}%`
+      : appUpdate?.phase === 'downloaded'
+        ? `${updateVersionLabel} 已下载，重启即可安装`
+        : `发现新版本 ${updateVersionLabel}，可以更新`
+  const updateButtonLabel = appUpdate?.phase === 'downloaded' ? '重启并安装' : appUpdate?.phase === 'error' || updateError ? '重试更新' : '立即更新'
+  const updatePanelMessage = !appUpdate
+    ? '正在读取更新状态…'
+    : appUpdate.phase === 'disabled'
+      ? '仅安装版支持检查更新'
+      : appUpdate.phase === 'checking' || appUpdateCheckBusy
+        ? '正在检查更新…'
+        : updateError && !updateVisible
+          ? updateError
+          : appUpdate.phase === 'up-to-date'
+            ? `当前已是最新版本 ${currentVersionLabel}`
+            : appUpdate.phase === 'available'
+              ? `发现新版本 ${updateVersionLabel}，可以更新`
+              : appUpdate.phase === 'downloading'
+                ? `正在下载 ${updateVersionLabel} · ${Math.round(appUpdate.downloadPercent ?? 0)}%`
+                : appUpdate.phase === 'downloaded'
+                  ? `${updateVersionLabel} 已下载，重启即可安装`
+                  : appUpdate.phase === 'error'
+                    ? updateVisible ? `${updateVersionLabel} 下载失败` : updateError ?? '检查更新失败，请稍后重试。'
+                    : '可手动检查 GitHub 正式版本'
+  const updatePanelButtonLabel = appUpdate?.phase === 'downloaded'
+    ? '重启并安装'
+    : updateVisible
+      ? appUpdate?.phase === 'downloading' ? '下载中' : appUpdate?.phase === 'error' ? '重试更新' : '立即更新'
+      : appUpdate?.phase === 'checking' || appUpdateCheckBusy
+        ? '检查中'
+        : appUpdate?.phase === 'up-to-date' || appUpdate?.phase === 'error' || Boolean(updateError)
+          ? '重新检查'
+          : '检查更新'
+  const updatePanelDisabled = !appUpdate || appUpdate.phase === 'disabled' || appUpdate.phase === 'checking' || appUpdate.phase === 'downloading' || appUpdateCheckBusy
 
   return (
     <main
@@ -676,7 +763,19 @@ export function App(): React.JSX.Element {
       }}
       onDrop={(event) => { void dropTheme(event) }}
     >
-      <header className="titlebar"><span className="brand-mark"><Sparkles size={16} /></span><strong>Codex Dream Skin Studio</strong><span className="title-status">Windows Theme Editor</span></header>
+      <header className="titlebar">
+        <span className="brand-mark"><Sparkles size={16} /></span>
+        <strong>Codex Dream Skin Studio</strong>
+        <span className="title-status">Windows Theme Editor</span>
+        {updateVisible && <div className="app-update-notice" role="status" aria-live="polite" aria-atomic="true">
+          <span className="app-update-dot" aria-hidden="true" />
+          <span className="app-update-message">{updateMessage}</span>
+          <button type="button" disabled={appUpdate?.phase === 'downloading'} onClick={() => void runAppUpdate()}>
+            {appUpdate?.phase === 'downloaded' ? <RotateCcw size={12} /> : <Download size={12} />}
+            {appUpdate?.phase === 'downloading' ? '下载中' : updateButtonLabel}
+          </button>
+        </div>}
+      </header>
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
       {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>释放 .cdstheme 文件以导入主题</strong><span>将创建新的本地主题，不会覆盖现有主题</span></div>}
       {createDialogOpen && <CreateThemeDialog onClose={() => setCreateDialogOpen(false)} onCreate={createTheme} />}
@@ -834,6 +933,14 @@ export function App(): React.JSX.Element {
             : <ThemeIconControl key={slot} slot={slot} profile={draft} assets={assets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property><Property title="粒子动效素材"><div className="icon-editor">{particleIconSlots.map((slot) => <ThemeIconControl key={slot} slot={slot} profile={draft} assets={assets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property></>}
           {activeInspector === 'runtime' && <>
             <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{runtime.message}</strong><dl><div><dt>阶段</dt><dd>{runtime.phase}</dd></div><div><dt>端口</dt><dd>{runtime.port}</dd></div><div><dt>页面</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{runtime.lastError}</p>}</div></Property>
+            <Property title="应用更新"><div className="app-update-panel">
+              <div className="app-update-current"><span>当前版本</span><strong>{currentVersionLabel}</strong></div>
+              <p className={appUpdate?.phase === 'error' || updateError ? 'error' : ''} role="status" aria-live="polite" aria-atomic="true">{updatePanelMessage}</p>
+              <button className="secondary-command app-update-command" type="button" disabled={updatePanelDisabled} onClick={() => { void (updateVisible ? runAppUpdate() : runAppUpdateCheck()) }}>
+                {appUpdate?.phase === 'downloaded' ? <RotateCcw size={14} /> : updateVisible ? <Download size={14} /> : <RefreshCw size={14} />}
+                {updatePanelButtonLabel}
+              </button>
+            </div></Property>
             <Property title="Codex 控制"><div className="runtime-commands">
               <button disabled={runtimeBusy} onClick={() => void runRuntime(async () => { await window.studio.codex.detect(); return window.studio.runtime.getStatus() })}><MonitorPlay size={15} />检测 Codex</button>
               <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.installTheme(themeId))}><Save size={15} />安装配置</button>

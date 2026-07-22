@@ -18,6 +18,7 @@
   "dependencies": {
     "archiver": "^8.0.0",
     "culori": "^4.0.2",
+    "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
     "lucide-react": "^0.468.0",
     "mediainfo.js": "^0.3.7",
@@ -47,6 +48,14 @@
   "build": {
     "appId": "com.codexdreamskin.studio",
     "productName": "Codex Dream Skin Studio",
+    "artifactName": "Codex-Dream-Skin-Studio-Setup-${version}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "269289854",
+        "repo": "Codex-Dream-Skin-electron"
+      }
+    ],
     "directories": {
       "output": "release"
     },

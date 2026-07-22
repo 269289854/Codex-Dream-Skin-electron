@@ -3,7 +3,7 @@ import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
+import type { AppUpdateStatus, ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
 import { createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { App } from '../src/renderer/src/App'
 import { ICON_PREVIEW_TARGETS, PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
@@ -48,6 +48,12 @@ describe('Studio preview editing interaction', () => {
   let importThemePath: ReturnType<typeof vi.fn>
   let getPathForFile: ReturnType<typeof vi.fn>
   let createTheme: ReturnType<typeof vi.fn>
+  let appUpdateStatus: AppUpdateStatus
+  let appUpdateListener: ((status: AppUpdateStatus) => void) | null
+  let unsubscribeAppUpdate: ReturnType<typeof vi.fn>
+  let checkAppUpdate: ReturnType<typeof vi.fn>
+  let downloadAppUpdate: ReturnType<typeof vi.fn>
+  let installAppUpdate: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
@@ -93,13 +99,29 @@ describe('Studio preview editing interaction', () => {
     importTheme = vi.fn(async () => null)
     importThemePath = vi.fn(async () => { throw new Error('未设置拖放导入结果') })
     getPathForFile = vi.fn(() => 'C:\\Shares\\design.cdstheme')
+    appUpdateStatus = { phase: 'up-to-date', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: null }
+    appUpdateListener = null
+    unsubscribeAppUpdate = vi.fn(() => { appUpdateListener = null })
+    checkAppUpdate = vi.fn(async () => appUpdateStatus)
+    downloadAppUpdate = vi.fn(async () => appUpdateStatus)
+    installAppUpdate = vi.fn(async () => undefined)
     createTheme = vi.fn(async (input: CreateThemeInput) => {
       const created = { ...createDefaultTheme('00000000-0000-4000-8000-000000000002', input.name), colors: { ...input.colors } }
       themeProfiles.push(created)
       return created
     })
     const studio: StudioApi = {
-      app: { getInfo: async () => ({ version: 'test', platform: 'win32' }) },
+      app: {
+        getInfo: async () => ({ version: 'test', platform: 'win32' }),
+        getUpdateStatus: async () => appUpdateStatus,
+        checkForUpdates: checkAppUpdate,
+        downloadUpdate: downloadAppUpdate,
+        installUpdate: installAppUpdate,
+        subscribeUpdateStatus: (listener) => {
+          appUpdateListener = listener
+          return unsubscribeAppUpdate
+        }
+      },
       themes: {
         list: async () => themeProfiles.map((item) => ({ id: item.id, name: item.name, updatedAt: item.updatedAt, active: item.id === activeThemeId, system: item.id === profile.id })),
         get: async (id) => {
@@ -198,6 +220,7 @@ describe('Studio preview editing interaction', () => {
 
   afterEach(() => {
     act(() => root.unmount())
+    expect(unsubscribeAppUpdate).toHaveBeenCalledTimes(1)
     browserWindow.close()
     for (const key of GLOBAL_KEYS) {
       const descriptor = previous.get(key)
@@ -237,6 +260,148 @@ describe('Studio preview editing interaction', () => {
     if (!button) throw new Error(`Dialog button ${label} is missing.`)
     button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
   }
+
+  const emitAppUpdate = async (status: AppUpdateStatus): Promise<void> => {
+    appUpdateStatus = status
+    await act(async () => {
+      appUpdateListener?.(status)
+      await Promise.resolve()
+    })
+  }
+
+  const openRuntimeInspector = (): HTMLElement => {
+    const runtimeSettings = [...container.querySelectorAll<HTMLButtonElement>('aside button')].find((button) => button.textContent?.includes('运行设置'))
+    if (!runtimeSettings) throw new Error('Runtime settings navigation is missing.')
+    act(() => runtimeSettings.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const panel = container.querySelector<HTMLElement>('.app-update-panel')
+    if (!panel) throw new Error('Application update panel is missing.')
+    return panel
+  }
+
+  it('always shows the update entry and disables checks outside installed builds', async () => {
+    await emitAppUpdate({ phase: 'disabled', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: null })
+
+    const panel = openRuntimeInspector()
+    expect(panel.textContent).toContain('当前版本v1.0.3')
+    expect(panel.textContent).toContain('仅安装版支持检查更新')
+    expect(panel.querySelector<HTMLButtonElement>('button')?.disabled).toBe(true)
+    expect(checkAppUpdate).not.toHaveBeenCalled()
+  })
+
+  it('checks manually, disables the command while checking, and reports the latest version', async () => {
+    const idle: AppUpdateStatus = { phase: 'idle', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: null }
+    let finishCheck: (status: AppUpdateStatus) => void = () => { throw new Error('Manual update check has not started.') }
+    checkAppUpdate.mockImplementation(() => new Promise<AppUpdateStatus>((resolve) => { finishCheck = resolve }))
+    await emitAppUpdate(idle)
+    const panel = openRuntimeInspector()
+    const button = panel.querySelector<HTMLButtonElement>('button')
+    if (!button) throw new Error('Check for updates command is missing.')
+
+    act(() => button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    await act(async () => { await Promise.resolve() })
+    expect(checkAppUpdate).toHaveBeenCalledTimes(1)
+    expect(panel.textContent).toContain('正在检查更新…')
+    expect(button.disabled).toBe(true)
+
+    await act(async () => {
+      finishCheck({ ...idle, phase: 'up-to-date' })
+      await Promise.resolve()
+    })
+    expect(panel.textContent).toContain('当前已是最新版本 v1.0.3')
+    expect(button.textContent).toContain('重新检查')
+    expect(button.disabled).toBe(false)
+  })
+
+  it('downloads an available update from the update panel', async () => {
+    const available: AppUpdateStatus = { phase: 'available', currentVersion: '1.0.3', availableVersion: '1.1.0', downloadPercent: null, error: null }
+    downloadAppUpdate.mockResolvedValue({ ...available, phase: 'downloading', downloadPercent: 0 })
+    await emitAppUpdate(available)
+    const panel = openRuntimeInspector()
+    const button = panel.querySelector<HTMLButtonElement>('button')
+
+    expect(panel.textContent).toContain('发现新版本 v1.1.0，可以更新')
+    expect(button?.textContent).toContain('立即更新')
+    await act(async () => {
+      button?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(downloadAppUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a manual check failure and allows another check', async () => {
+    const idle: AppUpdateStatus = { phase: 'idle', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: null }
+    checkAppUpdate.mockRejectedValueOnce(new Error('检查更新失败，请稍后重试。')).mockResolvedValueOnce({ ...idle, phase: 'up-to-date' })
+    await emitAppUpdate(idle)
+    const panel = openRuntimeInspector()
+    const button = panel.querySelector<HTMLButtonElement>('button')
+
+    await act(async () => {
+      button?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(panel.textContent).toContain('检查更新失败，请稍后重试。')
+    expect(button?.textContent).toContain('重新检查')
+
+    await act(async () => {
+      button?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(checkAppUpdate).toHaveBeenCalledTimes(2)
+    expect(panel.textContent).toContain('当前已是最新版本 v1.0.3')
+  })
+
+  it('shows update copy and red dot, downloads with progress, then restarts to install', async () => {
+    expect(container.querySelector('.app-update-notice')).toBeNull()
+    const available: AppUpdateStatus = { phase: 'available', currentVersion: '1.0.3', availableVersion: '1.1.0', downloadPercent: null, error: null }
+    downloadAppUpdate.mockImplementation(async () => ({ ...available, phase: 'downloading', downloadPercent: 0 }))
+    await emitAppUpdate(available)
+
+    const notice = container.querySelector<HTMLElement>('.app-update-notice')
+    expect(notice?.querySelector('.app-update-dot')).not.toBeNull()
+    expect(notice?.textContent).toContain('发现新版本 v1.1.0，可以更新')
+    const updateButton = notice?.querySelector<HTMLButtonElement>('button')
+    expect(updateButton?.textContent).toContain('立即更新')
+
+    await act(async () => {
+      updateButton?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(downloadAppUpdate).toHaveBeenCalledTimes(1)
+
+    await emitAppUpdate({ ...available, phase: 'downloading', downloadPercent: 47.6 })
+    expect(notice?.textContent).toContain('正在下载 v1.1.0 · 48%')
+    expect(notice?.querySelector<HTMLButtonElement>('button')?.disabled).toBe(true)
+
+    await emitAppUpdate({ ...available, phase: 'downloaded', downloadPercent: 100 })
+    expect(notice?.textContent).toContain('v1.1.0 已下载，重启即可安装')
+    const installButton = notice?.querySelector<HTMLButtonElement>('button')
+    expect(installButton?.textContent).toContain('重启并安装')
+    await act(async () => {
+      installButton?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(installAppUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the version reminder visible when a download fails and retries', async () => {
+    const available: AppUpdateStatus = { phase: 'available', currentVersion: '1.0.3', availableVersion: '1.1.0', downloadPercent: null, error: null }
+    downloadAppUpdate.mockRejectedValueOnce(new Error('更新下载失败，请重试。')).mockResolvedValueOnce({ ...available, phase: 'downloading', downloadPercent: 0 })
+    await emitAppUpdate(available)
+    const button = container.querySelector<HTMLButtonElement>('.app-update-notice button')
+
+    await act(async () => {
+      button?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.app-update-notice')?.textContent).toContain('v1.1.0 下载失败')
+    expect(button?.textContent).toContain('重试更新')
+
+    await act(async () => {
+      button?.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(downloadAppUpdate).toHaveBeenCalledTimes(2)
+  })
 
   it('distinguishes system and custom themes and only enables deleting custom themes', async () => {
     expect(container.querySelector('.theme-item.active small')?.textContent).toBe('系统主题 · 当前')

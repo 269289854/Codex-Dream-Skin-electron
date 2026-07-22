@@ -6,6 +6,16 @@ export interface AppInfo {
   platform: NodeJS.Platform
 }
 
+export type AppUpdatePhase = 'disabled' | 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error'
+
+export interface AppUpdateStatus {
+  phase: AppUpdatePhase
+  currentVersion: string
+  availableVersion: string | null
+  downloadPercent: number | null
+  error: string | null
+}
+
 export interface ImportedAsset {
   relativePath: string
   dataUrl: string
@@ -78,6 +88,11 @@ export interface RuntimeStatus {
 export interface StudioApi {
   app: {
     getInfo: () => Promise<AppInfo>
+    getUpdateStatus: () => Promise<AppUpdateStatus>
+    checkForUpdates: () => Promise<AppUpdateStatus>
+    downloadUpdate: () => Promise<AppUpdateStatus>
+    installUpdate: () => Promise<void>
+    subscribeUpdateStatus: (listener: (status: AppUpdateStatus) => void) => () => void
   }
   themes: {
     list: () => Promise<ThemeSummary[]>

@@ -2,14 +2,23 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { StudioApi } from '../shared/contracts'
 import { unwrapIpcResult, type IpcResult } from '../shared/ipc-result'
 
-async function invokeCodex<T>(channel: string, ...args: unknown[]): Promise<T> {
+async function invokeIpcResult<T>(channel: string, ...args: unknown[]): Promise<T> {
   const result = await ipcRenderer.invoke(channel, ...args) as IpcResult<T>
   return unwrapIpcResult(result)
 }
 
 const api: StudioApi = {
   app: {
-    getInfo: () => ipcRenderer.invoke('app:get-info')
+    getInfo: () => ipcRenderer.invoke('app:get-info'),
+    getUpdateStatus: () => ipcRenderer.invoke('app:get-update-status'),
+    checkForUpdates: () => invokeIpcResult('app:check-for-updates'),
+    downloadUpdate: () => invokeIpcResult('app:download-update'),
+    installUpdate: () => invokeIpcResult('app:install-update'),
+    subscribeUpdateStatus: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: Parameters<typeof listener>[0]) => listener(status)
+      ipcRenderer.on('app:update-status', handler)
+      return () => ipcRenderer.removeListener('app:update-status', handler)
+    }
   },
   themes: {
     list: () => ipcRenderer.invoke('themes:list'),
@@ -46,13 +55,13 @@ const api: StudioApi = {
     }
   },
   codex: {
-    detect: () => invokeCodex('codex:detect'),
-    installTheme: (themeId) => invokeCodex('codex:install-theme', themeId),
-    start: (themeId, restartExisting) => invokeCodex('codex:start', themeId, restartExisting),
-    verify: () => invokeCodex('codex:verify'),
-    reinject: (themeId) => invokeCodex('codex:reinject', themeId),
-    stop: () => invokeCodex('codex:stop'),
-    restore: (restartCodex) => invokeCodex('codex:restore', restartCodex)
+    detect: () => invokeIpcResult('codex:detect'),
+    installTheme: (themeId) => invokeIpcResult('codex:install-theme', themeId),
+    start: (themeId, restartExisting) => invokeIpcResult('codex:start', themeId, restartExisting),
+    verify: () => invokeIpcResult('codex:verify'),
+    reinject: (themeId) => invokeIpcResult('codex:reinject', themeId),
+    stop: () => invokeIpcResult('codex:stop'),
+    restore: (restartCodex) => invokeIpcResult('codex:restore', restartCodex)
   },
   runtime: {
     getStatus: () => ipcRenderer.invoke('runtime:get-status'),
