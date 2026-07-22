@@ -782,7 +782,8 @@ describe('renderer home DOM adaptation', () => {
       }
     }
     expect(homeLayoutCss).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(homeLayoutCss).toContain('.dream-composer-decoration-character { animation: none !important; }')
+    expect(homeLayoutCss).toContain('animation-duration: calc(var(--dream-composer-effect-duration, 2s) * 1.8) !important;')
+    expect(homeLayoutCss).not.toContain('.dream-composer-decoration-character { animation: none !important; }')
     expect(homeLayoutCss).toContain('.dream-composer-decoration-wave { padding-block: 4px; }')
     expect(homeLayoutCss).toContain('.dream-composer-decoration-direction-right { animation-direction: reverse; }')
   })

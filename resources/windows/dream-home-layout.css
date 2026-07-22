@@ -467,11 +467,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dream-composer-decoration-text,
-  .dream-composer-decoration-character { animation: none !important; }
-  .dream-composer-decoration-track { height: 1.2em; }
-  .dream-composer-decoration-barrage,
-  .dream-composer-decoration-scroll { position: static; transform: none; }
-  .dream-composer-decoration-barrage:not(:first-child) { display: none; }
+  .dream-composer-decoration-character {
+    /* Keep an explicitly selected effect visible while reducing its frequency. */
+    animation-duration: calc(var(--dream-composer-effect-duration, 2s) * 1.8) !important;
+  }
 }
 
 .dream-composer-badge {
