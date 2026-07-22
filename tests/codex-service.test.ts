@@ -48,6 +48,7 @@ describe('CodexService operation queue', () => {
     const root = join(tmpdir(), `codex-dream-skin-payload-${process.pid}-${Date.now()}`)
     const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
     profile.updatedAt = '2026-07-20T00:00:00.000Z'
+    profile.conversationBubbles.visible = false
     profile.polaroid.source = { asset: 'asset-polaroid', kind: 'video', mimeType: 'video/mp4' }
     profile.decorations.composerMelody.mode = 'gif'
     profile.decorations.composerMelody.source = { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' }
@@ -106,6 +107,7 @@ describe('CodexService operation queue', () => {
     expect(first).toContain('"dataUrl":"data:image/png;base64,AA=="')
     expect(first).toContain('"id":"22222222-2222-4222-8222-222222222222","visible":true,"style":{"background":"radial-gradient(circle at 40% 60%, #FFFFFF 0%, transparent 100%)"')
     expect(first).not.toContain('"windowBackground":{"visible":true,"mode":"image","paint"')
+    expect(first).toContain('"conversationBubbles":{"visible":false}')
   })
 
 })

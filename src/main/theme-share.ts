@@ -29,7 +29,7 @@ const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(18),
+  profileVersion: z.number().int().min(0).max(19),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -87,7 +87,7 @@ export function shareProfileVersionMatches(manifest: ThemeShareManifest, seriali
   if (!serializedProfile || typeof serializedProfile !== 'object' || !('version' in serializedProfile)) return false
   const serializedVersion = serializedProfile.version
   if (typeof serializedVersion !== 'number' || manifest.profileVersion !== serializedVersion) return false
-  return serializedVersion === parsedVersion || (parsedVersion === 18 && serializedVersion >= 0 && serializedVersion <= 17)
+  return serializedVersion === parsedVersion || (parsedVersion === 19 && serializedVersion >= 0 && serializedVersion <= 18)
 }
 
 export function assertSharePath(path: string): void {

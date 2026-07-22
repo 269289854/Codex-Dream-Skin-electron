@@ -24,12 +24,18 @@ describe('runtime appearance compilation', () => {
       angle: 120,
       stops: [{ color: '#fff', position: 0 }, { color: 'rgb(10 20 30 / .5)', position: 1 }]
     }
+    profile.appearance.paints.conversationUserMessage = {
+      kind: 'radial',
+      center: { x: .25, y: .75 },
+      stops: [{ color: '#123456', position: 0 }, { color: '#abcdef', position: 1 }]
+    }
     const variables = buildThemeStyleVariables(profile)
 
     expect(variables['--dream-brand-title']).toBe('oklch(.42 .11 210 / .8)')
     expect(variables['--dream-sidebar-task-selected-text']).toBe('#0b3040')
     expect(variables['--dream-sidebar-task-row-selected']).toBe('linear-gradient(90deg, #102030 0%, #f0d0e0 100%)')
     expect(variables['--dream-canvas']).toBe('linear-gradient(120deg, #fff 0%, rgb(10 20 30 / .5) 100%)')
+    expect(variables['--dream-conversation-user-message']).toBe('radial-gradient(circle at 25% 75%, #123456 0%, #abcdef 100%)')
     expect(variables['--dream-font-home-heading']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-home-subtitle']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-brand-title']).toBe('var(--dream-font-ui)')
@@ -60,6 +66,8 @@ describe('runtime appearance compilation', () => {
     expect(css).toContain('font-family: var(--dream-font-sidebar-nav-new-task)')
     expect(css).toContain('font-family: var(--dream-font-sidebar-nav-plugins)')
     expect(css).toMatch(/\.dream-project-proxy\s*\{[^}]*font-family:\s*inherit;/)
+    expect(css).toContain('.dream-conversation-user-bubble')
+    expect(css).toContain('.dream-conversation-codex-bubble')
   })
 
   it('resolves independent home copy fonts while preserving global inheritance', () => {

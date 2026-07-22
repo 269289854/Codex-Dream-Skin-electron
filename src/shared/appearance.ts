@@ -60,8 +60,8 @@ export const APPEARANCE_COLOR_TOKENS = {
   globalCaret: colorToken('光标', 'global', '--dream-global-caret', 'accent', ['composer-text']),
   globalScrollbar: colorToken('滚动条', 'global', '--dream-global-scrollbar', 'border', ['canvas']),
   globalBorder: colorToken('全局边框', 'global', '--dream-global-border', 'border', ['canvas']),
-  conversationText: colorToken('会话正文', 'conversation', '--dream-conversation-text', 'ink', ['conversation-message']),
-  conversationLink: colorToken('会话链接', 'conversation', '--dream-conversation-link', 'accent', ['conversation-link']),
+  conversationText: colorToken('会话正文', 'conversation', '--dream-conversation-text', 'ink', ['conversation-user-message', 'conversation-codex-message']),
+  conversationLink: colorToken('会话链接', 'conversation', '--dream-conversation-link', 'accent', ['conversation-user-message', 'conversation-codex-message']),
   primaryButtonText: colorToken('主要按钮文字', 'conversation', '--dream-primary-button-text', 'surface', ['primary-button']),
   sidebarBorder: colorToken('侧边栏边框', 'sidebar', '--dream-sidebar-border', 'border', ['sidebar']),
   sidebarText: colorToken('侧边栏正文', 'sidebar', '--dream-sidebar-text', 'ink', ['sidebar']),
@@ -182,8 +182,10 @@ const paintToken = (
 export const APPEARANCE_PAINT_TOKENS = {
   canvas: paintToken('全局画布', 'global', '--dream-canvas', 'surface', ['canvas']),
   mainSurface: paintToken('主区域', 'global', '--dream-main-surface', 'surface', ['main-surface']),
-  conversationMessage: paintToken('会话消息', 'conversation', '--dream-conversation-message', 'surface', ['conversation-message']),
-  conversationMessageHover: paintToken('会话消息悬停', 'conversation', '--dream-conversation-message-hover', 'lavender', ['conversation-message'], 'hover'),
+  conversationUserMessage: paintToken('我的消息', 'conversation', '--dream-conversation-user-message', 'accent', ['conversation-user-message']),
+  conversationUserMessageHover: paintToken('我的消息悬停', 'conversation', '--dream-conversation-user-message-hover', 'lavender', ['conversation-user-message'], 'hover'),
+  conversationMessage: paintToken('Codex 回复', 'conversation', '--dream-conversation-message', 'surface', ['conversation-codex-message']),
+  conversationMessageHover: paintToken('Codex 回复悬停', 'conversation', '--dream-conversation-message-hover', 'lavender', ['conversation-codex-message'], 'hover'),
   primaryButton: paintToken('主要按钮', 'conversation', '--dream-primary-button', 'accent', ['primary-button']),
   primaryButtonHover: paintToken('主要按钮悬停', 'conversation', '--dream-primary-button-hover', 'pink', ['primary-button'], 'hover'),
   primaryButtonSelected: paintToken('主要按钮选中', 'conversation', '--dream-primary-button-selected', 'lavender', ['primary-button'], 'selected'),
@@ -273,6 +275,10 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
       return linear(135, [[colors.surface, 0], [tint(colors.lavender, 0.1), 0.52], [tint(colors.pink, 0.08), 1]])
     case 'mainSurface':
       return linear(180, [[tint(colors.accent, 0.03), 0], [colors.surface, 0.48], [tint(colors.pink, 0.06), 1]])
+    case 'conversationUserMessage':
+      return linear(145, [[tint(colors.accent, 0.14), 0], [tint(colors.lavender, 0.12), 0.54], [tint(colors.pink, 0.1), 1]])
+    case 'conversationUserMessageHover':
+      return linear(135, [[tint(colors.accent, 0.22), 0], [tint(colors.lavender, 0.2), 0.55], [tint(colors.pink, 0.16), 1]])
     case 'conversationMessage':
       return linear(145, [[colors.surface, 0], [tint(colors.lavender, 0.06), 0.54], [tint(colors.pink, 0.05), 1]])
     case 'conversationMessageHover':

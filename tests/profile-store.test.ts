@@ -77,7 +77,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 18, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 19, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -137,7 +137,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 18,
+      version: 19,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
@@ -369,7 +369,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(18)
+    expect(migrated.version).toBe(19)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'

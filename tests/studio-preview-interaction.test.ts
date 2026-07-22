@@ -819,6 +819,51 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('[data-inspector-anchor="typography"]')?.classList.contains('inspector-highlight')).toBe(true)
   })
 
+  it('edits and persists independent user and Codex chat bubbles from the preview', async () => {
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.click())
+    const userBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')
+    const codexBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
+    if (!userBubble || !codexBubble) throw new Error('Independent conversation bubble targets are missing.')
+    expect(userBubble.classList.contains('bubble')).toBe(true)
+    expect(codexBubble.classList.contains('bubble')).toBe(true)
+
+    pointerDown(userBubble)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('我的消息快捷配置')
+    expect(container.querySelector('[role="dialog"] [data-paint-token="conversationUserMessage"]')).not.toBeNull()
+    expect(container.querySelector('[role="dialog"] [data-paint-token="conversationMessage"]')).toBeNull()
+    const userColor = container.querySelector<HTMLInputElement>('[role="dialog"] [data-paint-token="conversationUserMessage"] .gradient-stop .color-text-input')
+    const toggle = container.querySelector<HTMLInputElement>('[role="dialog"] .toggle-row input')
+    if (!userColor || !toggle) throw new Error('User bubble controls are missing.')
+    act(() => {
+      setInputValue(userColor, '#123456')
+      toggle.click()
+    })
+    await act(async () => { await Promise.resolve() })
+    expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.classList.contains('bubble')).toBe(false)
+    expect(container.querySelector('[data-preview-target="conversation-codex-message"]')?.classList.contains('bubble')).toBe(false)
+
+    const refreshedCodexBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
+    if (!refreshedCodexBubble) throw new Error('Codex bubble target disappeared.')
+    pointerDown(refreshedCodexBubble)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Codex 回复快捷配置')
+    expect(container.querySelector('[role="dialog"] [data-paint-token="conversationMessage"]')).not.toBeNull()
+    expect(container.querySelector('[role="dialog"] [data-paint-token="conversationUserMessage"]')).toBeNull()
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.conversationBubbles.visible).toBe(false)
+    const savedUserPaint = savedProfiles.at(-1)?.appearance.paints.conversationUserMessage
+    expect(savedUserPaint?.kind).toBe('linear')
+    if (savedUserPaint?.kind !== 'linear') throw new Error('User bubble paint should remain a gradient.')
+    expect(savedUserPaint.stops[0]?.color).toBe('#123456')
+  })
+
   it('edits and persists a shaped gradient conversation overlay from the preview', async () => {
     const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
     if (!conversation) throw new Error('Conversation preview command is missing.')

@@ -1086,6 +1086,30 @@
     ensureConversationOverlay(background, config);
   };
 
+  const clearConversationBubbles = () => {
+    document.querySelectorAll('.dream-conversation-user-bubble').forEach((node) => node.classList.remove('dream-conversation-user-bubble'));
+    document.querySelectorAll('.dream-conversation-codex-bubble').forEach((node) => node.classList.remove('dream-conversation-codex-bubble'));
+  };
+  const ensureConversationBubbles = () => {
+    if (themeConfig?.conversationBubbles?.visible === false) {
+      clearConversationBubbles();
+      return;
+    }
+    const userBubbles = new Set([...document.querySelectorAll('[data-user-message-bubble]')].filter((node) => node instanceof HTMLElement));
+    document.querySelectorAll('.dream-conversation-user-bubble').forEach((node) => {
+      if (!userBubbles.has(node)) node.classList.remove('dream-conversation-user-bubble');
+    });
+    userBubbles.forEach((node) => node.classList.add('dream-conversation-user-bubble'));
+
+    const codexBubbles = new Set([...document.querySelectorAll('[data-response-annotation-conversation]')].filter((node) =>
+      node instanceof HTMLElement && (node.matches('[data-selected-text-overlay-target]') || node.querySelector('[data-selected-text-overlay-target]'))
+    ));
+    document.querySelectorAll('.dream-conversation-codex-bubble').forEach((node) => {
+      if (!codexBubbles.has(node)) node.classList.remove('dream-conversation-codex-bubble');
+    });
+    codexBubbles.forEach((node) => node.classList.add('dream-conversation-codex-bubble'));
+  };
+
   const clearComposerSendIcon = (button) => {
     button?.classList.remove("dream-composer-send-button", "dream-composer-send-button-customized");
     button?.querySelector(":scope > .dream-composer-send-icon")?.remove();
@@ -1622,6 +1646,7 @@
     ensureComposerSendIcon(composerSurface);
     ensureWindowBackground();
     ensureConversationBackground();
+    ensureConversationBubbles();
 
     if (!shellMain || !document.body) return;
     let chrome = document.getElementById(CHROME_ID) || chromeRoot;
@@ -1717,6 +1742,7 @@
     document.querySelectorAll(".dream-composer-badge").forEach((node) => node.remove());
     document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
     document.querySelectorAll(".dream-composer-send-button").forEach(clearComposerSendIcon);
+    clearConversationBubbles();
     document.querySelectorAll(".dream-conversation-surface").forEach(clearConversationSurface);
     document.querySelectorAll(".dream-conversation-viewport").forEach((node) => {
       node.classList.remove("dream-conversation-viewport");

@@ -111,7 +111,8 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(18)
+    expect(imported.version).toBe(19)
+    expect(imported.conversationBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.resetColors.accent).toBe('#2878B8')
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
@@ -147,7 +148,8 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(18)
+    expect(imported.version).toBe(19)
+    expect(imported.conversationBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.appearance.colors).toEqual({ sidebarTasksTitleHoverText: '#abcdef' })
   })

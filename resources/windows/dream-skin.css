@@ -372,17 +372,33 @@ html.codex-dream-skin .dream-conversation-background-overlay {
   pointer-events: none !important;
 }
 
-html.codex-dream-skin :is(article, [data-message-author-role]) {
-  border-radius: 18px;
-  background: var(--dream-conversation-message);
+html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble) {
+  box-sizing: border-box;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 16px 18px;
+  border-radius: 7px;
   color: var(--dream-conversation-text);
 }
 
-html.codex-dream-skin :is(article, [data-message-author-role]):hover {
+html.codex-dream-skin .dream-conversation-user-bubble {
+  background: var(--dream-conversation-user-message);
+}
+
+html.codex-dream-skin .dream-conversation-user-bubble:hover {
+  background: var(--dream-conversation-user-message-hover);
+}
+
+html.codex-dream-skin .dream-conversation-codex-bubble {
+  background: var(--dream-conversation-message);
+}
+
+html.codex-dream-skin .dream-conversation-codex-bubble:hover {
   background: var(--dream-conversation-message-hover);
 }
 
-html.codex-dream-skin :is(article, [data-message-author-role]) a {
+html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble) a {
   color: var(--dream-conversation-link) !important;
 }
 

@@ -149,7 +149,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: { visible: boolean } = { visible: true }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -159,6 +159,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
       media,
       icons,
       composerBadge,
+      conversationBubbles,
       decorations,
       particleViewportTop: PARTICLE_VIEWPORT_TOP,
       sparkleIconSlot: particleEffectIconSlot(decorations.sparkles.effect),
@@ -178,6 +179,40 @@ function stateOf(window: Window): { ensure: () => void; cleanup: () => void } {
 }
 
 describe('renderer home DOM adaptation', () => {
+  it('wraps only user and Codex prose, follows streaming additions, and clears bubble classes', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <main class="main-surface">
+        <div data-user-message-bubble>用户消息</div>
+        <div data-local-conversation-final-assistant>
+          <div data-response-annotation-conversation><div data-selected-text-overlay-target>Codex 正文</div></div>
+          <div data-tool-result>工具结果</div>
+          <div data-file-diff-card>文件差异</div>
+        </div>
+        <div data-response-annotation-conversation data-empty-response>无正文标记</div>
+      </main>`
+    inject(window)
+
+    expect(window.document.querySelector('[data-user-message-bubble]')?.classList.contains('dream-conversation-user-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-response-annotation-conversation]:not([data-empty-response])')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-empty-response]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-tool-result]')?.className).toBe('')
+    expect(window.document.querySelector('[data-file-diff-card]')?.className).toBe('')
+
+    const streaming = window.document.createElement('div')
+    streaming.setAttribute('data-response-annotation-conversation', '')
+    streaming.innerHTML = '<p data-selected-text-overlay-target>流式正文</p>'
+    window.document.querySelector('main')?.append(streaming)
+    stateOf(window).ensure()
+    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { visible: false })
+    expect(window.document.querySelector('.dream-conversation-user-bubble')).toBeNull()
+    expect(window.document.querySelector('.dream-conversation-codex-bubble')).toBeNull()
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('[data-user-message-bubble]')?.className).toBe('')
+  })
+
   it('renders brand copy as text and keeps the sidebar mode icon idempotent and removable', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')

@@ -340,6 +340,12 @@ export type ConversationBackgroundOverlay = z.infer<typeof conversationBackgroun
 export type WindowBackground = z.infer<typeof windowBackgroundSchema>
 export type WindowBackgroundMask = z.infer<typeof windowBackgroundMaskSchema>
 
+const conversationBubblesSchema = z.object({
+  visible: z.boolean()
+}).strict()
+
+export type ConversationBubbles = z.infer<typeof conversationBubblesSchema>
+
 const legacyCommonProfileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
@@ -528,11 +534,24 @@ const versionSeventeenThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionEighteenThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(18),
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(19),
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
   resetColors: themeColorsSchema
 }).strict().superRefine((profile, context) => {
   if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
@@ -647,7 +666,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 18,
+    version: 19,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
@@ -676,6 +695,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
     },
     conversationBackground: createDefaultConversationBackground(),
     windowBackground: createDefaultWindowBackground(),
+    conversationBubbles: createDefaultConversationBubbles(),
     colors: { ...palette },
     resetColors: { ...palette },
     icons: {
@@ -707,9 +727,10 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version < 18) {
+  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version < 19) {
     const legacy = structuredClone(input) as Record<string, unknown>
-    delete legacy.windowBackground
+    delete legacy.conversationBubbles
+    if (input.version < 18) delete legacy.windowBackground
     input = legacy
   }
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 1 && input.version <= 10) {
@@ -724,10 +745,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 18) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 19) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 18) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionEighteen(versionEighteenThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 17) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -998,10 +1023,26 @@ function migrateVersionSixteen(legacy: z.infer<typeof versionSixteenThemeSchema>
 }
 
 function migrateVersionSeventeen(legacy: z.infer<typeof versionSeventeenThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionEighteen(versionEighteenThemeSchema.parse({
     ...legacy,
     version: 18,
     windowBackground: createDefaultWindowBackground()
+  }))
+}
+
+function migrateVersionEighteen(legacy: z.infer<typeof versionEighteenThemeSchema>): ThemeProfile {
+  const paints: ThemeAppearance['paints'] = { ...legacy.appearance.paints }
+  if (paints.conversationMessage !== undefined && paints.conversationUserMessage === undefined) {
+    paints.conversationUserMessage = structuredClone(paints.conversationMessage)
+  }
+  if (paints.conversationMessageHover !== undefined && paints.conversationUserMessageHover === undefined) {
+    paints.conversationUserMessageHover = structuredClone(paints.conversationMessageHover)
+  }
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 19,
+    conversationBubbles: createDefaultConversationBubbles(),
+    appearance: { ...legacy.appearance, paints }
   }))
 }
 
@@ -1066,6 +1107,10 @@ function createDefaultConversationBackground(): ConversationBackground {
     focus: { x: 0.5, y: 0.5 },
     scale: 1
   }
+}
+
+function createDefaultConversationBubbles(): ConversationBubbles {
+  return { visible: true }
 }
 
 export function createDefaultWindowBackground(): WindowBackground {

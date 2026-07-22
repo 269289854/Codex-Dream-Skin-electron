@@ -96,6 +96,23 @@ describe('preview quick editor', () => {
     expect(container.querySelector('[data-paint-token="sidebarProjectRowSelected"]')).toBeNull()
   })
 
+  it('edits user and Codex bubble paints independently and toggles bubble visibility', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    renderEditor(PREVIEW_TARGETS['conversation-user-message'], profile)
+    expect([...container.querySelectorAll('[data-paint-token]')].map((node) => node.getAttribute('data-paint-token'))).toEqual(['conversationUserMessage'])
+    const toggle = container.querySelector<HTMLInputElement>('.toggle-row input')
+    if (!toggle) throw new Error('Conversation bubble visibility control is missing.')
+    act(() => toggle.click())
+    expect(profile.conversationBubbles.visible).toBe(false)
+
+    renderEditor(PREVIEW_TARGETS['conversation-codex-message'], profile)
+    expect([...container.querySelectorAll('[data-paint-token]')].map((node) => node.getAttribute('data-paint-token'))).toEqual(['conversationMessage'])
+    const hover = [...container.querySelectorAll<HTMLButtonElement>('.state-tabs button')].find((button) => button.textContent === '悬停')
+    if (!hover) throw new Error('Conversation bubble hover state is missing.')
+    act(() => hover.click())
+    expect([...container.querySelectorAll('[data-paint-token]')].map((node) => node.getAttribute('data-paint-token'))).toEqual(['conversationMessageHover'])
+  })
+
   it('changes the selected icon without exposing unrelated icon slots', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     renderEditor(PREVIEW_TARGETS['icon-composer'], profile)

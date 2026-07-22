@@ -4,7 +4,7 @@ import type { IconSlot, ThemeProfile } from '../../shared/theme'
 export type InspectorTab = 'visual' | 'icons'
 export type PreviewCopyField = keyof ThemeProfile['copy']
 export type TypographySlot = keyof ThemeProfile['typography']['slots']
-export type PreviewVisibilityField = 'composerBadge'
+export type PreviewVisibilityField = 'composerBadge' | 'conversationBubbles'
 export type PreviewDecorationEditor = 'sparkles' | 'homeHeading' | 'composerMelody'
 
 export interface PreviewStyleEditor {
@@ -53,7 +53,8 @@ const styleTarget = (label: string, group: AppearanceGroup, options: StyleTarget
 export const PREVIEW_TARGETS = {
   'surface-canvas': styleTarget('全局画布', 'global', { colors: ['globalText', 'globalMutedText', 'globalLink', 'globalCaret', 'globalScrollbar', 'globalBorder'], paints: ['canvas'], fontSlot: 'ui' }),
   'surface-main': styleTarget('主区域', 'global', { colors: ['globalText', 'globalBorder'], paints: ['mainSurface'], fontSlot: 'ui' }),
-  'conversation-message': styleTarget('会话消息', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationMessage', 'conversationMessageHover'], fontSlot: 'ui' }),
+  'conversation-user-message': styleTarget('我的消息', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationUserMessage', 'conversationUserMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles' }),
+  'conversation-codex-message': styleTarget('Codex 回复', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationMessage', 'conversationMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles' }),
   'primary-button': styleTarget('主要按钮', 'conversation', { colors: ['primaryButtonText'], paints: ['primaryButton', 'primaryButtonHover', 'primaryButtonSelected'], fontSlot: 'ui' }),
   'conversation-background': { label: '对话区域背景', inspector: 'visual', inspectorAnchor: 'visual-conversation-background', editor: { kind: 'conversationBackground' } },
   'window-background': { label: '整个窗口背景', inspector: 'visual', inspectorAnchor: 'visual-window-background', editor: { kind: 'windowBackground' } },

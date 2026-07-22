@@ -302,6 +302,7 @@ export class CodexService {
         sparkleIconSlot: particleEffectIconSlot(profile.decorations.sparkles.effect),
         sparkleParticles: createSparkleParticles(profile.decorations.sparkles),
         composerBadge: profile.composerBadge,
+        conversationBubbles: { visible: profile.conversationBubbles.visible },
         builtinGlyphs: BUILTIN_ICON_GLYPHS,
         actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
         copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
