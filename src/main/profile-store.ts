@@ -9,11 +9,12 @@ import mediaInfoFactory, { isTrackType } from 'mediainfo.js'
 const nodeRequire = createRequire(import.meta.url)
 const archiver = nodeRequire('archiver') as typeof import('archiver')
 const yauzl = nodeRequire('yauzl') as typeof import('yauzl')
-import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoAssetVariant } from '../shared/theme'
+import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type ConversationBubblePresetId, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoAssetVariant } from '../shared/theme'
 import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
 import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
 import { createVideoVariantReference, mediaMimeTypeForPath, mediaReferenceAssets, mediaReferenceForPath } from '../shared/media'
+import { conversationBubbleMediaReferences } from '../shared/conversation-bubbles'
 import {
   MAX_SHARE_ENTRIES,
   MAX_SHARE_FONT_BYTES,
@@ -42,6 +43,7 @@ interface LegacyStudioSettings {
 interface BundledSystemThemeAssets {
   hero: string
   polaroid: string
+  conversationBubbles?: Record<ConversationBubblePresetId, string>
 }
 
 const MAX_ASSET_BYTES = 30 * 1024 * 1024
@@ -54,6 +56,9 @@ const FONT_EXTENSIONS = new Set<ImportedFontFormat>(['ttf', 'otf', 'woff', 'woff
 const MIN_FREE_BYTES = 10 * 1024 * 1024 * 1024
 const MIN_FREE_RATIO = 0.15
 const MAX_VIDEO_DIMENSION = 4096
+const MAX_CONVERSATION_BUBBLE_BYTES = 10 * 1024 * 1024
+const MAX_CONVERSATION_BUBBLE_DIMENSION = 2048
+const MAX_CONVERSATION_BUBBLE_GIF_FRAMES = 180
 const MAX_SHARE_METADATA_BYTES = 5 * 1024 * 1024
 
 export class ProfileStore {
@@ -337,7 +342,15 @@ export class ProfileStore {
 
   async compile(id: string): Promise<CompiledTheme> {
     const profile = await this.get(id)
-    return compileTheme(profile, (asset) => this.readAssetDataUrl(id, asset))
+    const readPreset = this.bundledSystemAssets?.conversationBubbles
+      ? async (presetId: ConversationBubblePresetId): Promise<string> => {
+        const path = this.bundledSystemAssets?.conversationBubbles?.[presetId]
+        if (!path) throw new Error(`内置聊天气泡预设缺失: ${presetId}`)
+        const data = await readFile(path).catch(() => { throw new Error(`内置聊天气泡预设无法读取: ${presetId}`) })
+        return `data:image/png;base64,${data.toString('base64')}`
+      }
+      : undefined
+    return compileTheme(profile, (asset) => this.readAssetDataUrl(id, asset), readPreset)
   }
 
   resolveAsset(themeId: string, asset: string): string {
@@ -423,7 +436,14 @@ export class ProfileStore {
   }
 
   private mediaReferences(profile: ThemeProfile): Array<MediaReference | null> {
-    return [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]
+    return [
+      profile.hero.source,
+      profile.polaroid.source,
+      profile.conversationBackground.source,
+      profile.windowBackground.source,
+      profile.decorations.composerMelody.source,
+      ...conversationBubbleMediaReferences(profile)
+    ]
   }
 
   private mediaReferenceForRole(profile: ThemeProfile, role: VideoMediaRole): MediaReference | null {
@@ -472,15 +492,20 @@ export class ProfileStore {
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('所选媒体必须是文件。')
     const extension = extname(sourcePath).toLowerCase()
+    const conversationBubble = isConversationBubblePurpose(purpose)
     if (extension !== '.svg' && !MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('仅支持 PNG、WebP、JPEG、GIF、SVG、MP4 和 WebM。')
     if (purpose === 'composerMelody' && VIDEO_EXTENSIONS.has(extension)) throw new Error('输入框装饰只能选择图片或 GIF 文件。')
+    if (conversationBubble && VIDEO_EXTENSIONS.has(extension)) throw new Error('聊天气泡只能选择图片或 GIF 文件。')
     if (expectedKind === 'image' && (extension === '.gif' || VIDEO_EXTENSIONS.has(extension))) throw new Error('图片背景只支持 PNG、WebP、JPEG 或 SVG。')
     if (expectedKind === 'gif' && extension !== '.gif') throw new Error('GIF 背景必须选择 GIF 文件。')
     if (expectedKind === 'video' && !VIDEO_EXTENSIONS.has(extension)) throw new Error('视频背景只支持 MP4 或 WebM。')
-    if ((extension === '.svg' || MEDIA_IMAGE_EXTENSIONS.has(extension)) && sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
+    if (conversationBubble && expectedKind === 'video') throw new Error('聊天气泡不支持视频素材。')
+    if ((extension === '.svg' || MEDIA_IMAGE_EXTENSIONS.has(extension)) && sourceStat.size > (conversationBubble ? MAX_CONVERSATION_BUBBLE_BYTES : MAX_ASSET_BYTES)) {
+      throw new Error(conversationBubble ? '聊天气泡图片和 GIF 不能超过 10 MB。' : '图片和 GIF 文件不能超过 30 MB。')
+    }
     if (signal?.aborted) throw new Error('媒体导入已取消。')
 
-    let metadata: { width: number; height: number }
+    let metadata: { width: number; height: number; pages?: number }
     let videoInspection: VideoAssetInspection | null = null
     if (VIDEO_EXTENSIONS.has(extension)) {
       videoInspection = await this.inspectVideo(sourcePath, extension, sourceStat.size)
@@ -492,6 +517,7 @@ export class ProfileStore {
     } else {
       metadata = await this.inspectImage(sourcePath, extension)
     }
+    if (conversationBubble) this.assertConversationBubbleInspection(metadata, extension)
     await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
     if (videoInspection && optimizeVideo) {
       return this.importOptimizedVideo(themeId, sourcePath, purpose as VideoMediaRole, videoInspection, signal)
@@ -514,6 +540,9 @@ export class ProfileStore {
       const temporaryFile = await open(temporary, 'r+')
       try { await temporaryFile.sync() } finally { await temporaryFile.close() }
       await rename(temporary, destination)
+      if (conversationBubble && (await stat(destination)).size > MAX_CONVERSATION_BUBBLE_BYTES) {
+        throw new Error('聊天气泡图片和 GIF 不能超过 10 MB。')
+      }
     } catch (error) {
       await rm(temporary, { force: true }).catch(() => undefined)
       await rm(destination, { force: true }).catch(() => undefined)
@@ -706,7 +735,7 @@ export class ProfileStore {
 
       profile.hero.source = mediaReferenceForPath(heroAsset)
       profile.polaroid.source = mediaReferenceForPath(polaroidAsset)
-      profile.polaroid.sourceSize = polaroidSize
+      profile.polaroid.sourceSize = { width: polaroidSize.width, height: polaroidSize.height }
       profile.polaroid.placement = { x: 0.8278561014524648, y: 0.7127831468304384, width: 0.15, rotation: -15, hideBelowWidth: 920 }
       profile.icons.backgroundRain = { kind: 'builtin', name: 'wand-sparkles' }
       profile.decorations.sparkles = {
@@ -978,12 +1007,21 @@ export class ProfileStore {
     this.assertFontHeader(extension, data.subarray(0, 4))
   }
 
-  private async inspectImage(sourcePath: string, extension: string): Promise<{ width: number; height: number }> {
+  private async inspectImage(sourcePath: string, extension: string): Promise<{ width: number; height: number; pages: number }> {
     const metadata = await sharp(sourcePath, { animated: extension === '.gif' }).metadata().catch(() => null)
     if (!metadata?.width || !metadata.height) throw new Error('媒体图片无效或无法读取尺寸。')
     const expectedFormat = extension === '.jpg' || extension === '.jpeg' ? 'jpeg' : extension.slice(1)
     if (metadata.format !== expectedFormat) throw new Error('媒体图片内容与扩展名不匹配。')
-    return { width: metadata.width, height: metadata.height }
+    return { width: metadata.width, height: metadata.pageHeight ?? metadata.height, pages: metadata.pages ?? 1 }
+  }
+
+  private assertConversationBubbleInspection(metadata: { width: number; height: number; pages?: number }, extension: string): void {
+    if (Math.max(metadata.width, metadata.height) > MAX_CONVERSATION_BUBBLE_DIMENSION) {
+      throw new Error('聊天气泡图片最长边不能超过 2048px。')
+    }
+    if (extension === '.gif' && (metadata.pages ?? 1) > MAX_CONVERSATION_BUBBLE_GIF_FRAMES) {
+      throw new Error('聊天气泡 GIF 不能超过 180 帧。')
+    }
   }
 
   private async validateProfileMedia(profile: ThemeProfile): Promise<void> {
@@ -1004,6 +1042,14 @@ export class ProfileStore {
           await this.inspectImage(sourcePath, extension)
         }
       }
+    }
+    for (const reference of conversationBubbleMediaReferences(profile)) {
+      const sourcePath = this.resolveAsset(profile.id, reference.asset)
+      const sourceStat = await stat(sourcePath)
+      if (sourceStat.size > MAX_CONVERSATION_BUBBLE_BYTES) throw new Error('聊天气泡图片和 GIF 不能超过 10 MB。')
+      const extension = extname(reference.asset).toLowerCase()
+      const metadata = await this.inspectImage(sourcePath, extension)
+      this.assertConversationBubbleInspection(metadata, extension)
     }
   }
 
@@ -1169,6 +1215,10 @@ function numericMediaInfoValue(value: unknown): number {
 
 function isVideoMediaRole(value: unknown): value is VideoMediaRole {
   return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
+}
+
+function isConversationBubblePurpose(purpose: MediaAssetPurpose): purpose is 'conversationUserBubble' | 'conversationCodexBubble' {
+  return purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble'
 }
 
 function requireSeparator(): string {

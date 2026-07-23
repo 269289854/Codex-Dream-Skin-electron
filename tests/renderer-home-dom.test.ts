@@ -6,6 +6,7 @@ import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP,
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import type { ConversationOverlayStyle } from '../src/shared/conversation-overlay'
+import type { RuntimeConversationBubbleFrame } from '../src/shared/conversation-bubbles'
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 
 let template = ''
@@ -133,6 +134,12 @@ type RuntimeDecorations = Omit<ThemeProfile['decorations'], 'composerMelody'> & 
   composerMelody: ThemeProfile['decorations']['composerMelody'] & { dataUrl?: string | null }
 }
 
+type RuntimeConversationBubblesConfig = {
+  visible: boolean
+  user?: RuntimeConversationBubbleFrame
+  codex?: RuntimeConversationBubbleFrame
+}
+
 const fullOverlayStyle: ConversationOverlayStyle = {
   background: '#FFFFFF',
   opacity: '0.2',
@@ -151,7 +158,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: { visible: boolean } = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }): void {
   const runtimeConfig = {
     themeId,
     videoPlayback,
@@ -224,6 +231,65 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-conversation-codex-bubble')).toBeNull()
     stateOf(window).cleanup()
     expect(window.document.querySelector('[data-user-message-bubble]')?.className).toBe('')
+  })
+
+  it('applies role-specific frame variables without adding message children and clears them on cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <main class="main-surface">
+        <div data-user-message-bubble><span>用户消息</span></div>
+        <div data-local-conversation-final-assistant>
+          <div data-response-annotation-conversation><p data-selected-text-overlay-target>Codex 正文</p></div>
+        </div>
+      </main>`
+    const user = window.document.querySelector('[data-user-message-bubble]')
+    const codex = window.document.querySelector('[data-response-annotation-conversation]')
+    if (!user || !codex) throw new Error('Conversation bubble fixtures are missing.')
+    const childCounts = [user.childNodes.length, codex.childNodes.length]
+    const frames: RuntimeConversationBubblesConfig = {
+      visible: true,
+      user: {
+        mode: 'nineSlice',
+        dataUrl: 'data:image/png;base64,VVNFUg==',
+        slice: 25,
+        frameWidth: 24,
+        contentPadding: 20
+      },
+      codex: {
+        mode: 'stretch',
+        dataUrl: 'data:image/gif;base64,Q09ERVg=',
+        slice: 31,
+        frameWidth: 18,
+        contentPadding: 28
+      }
+    }
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, frames)
+    const root = window.document.documentElement
+    expect(root.getAttribute('data-dream-user-bubble-frame')).toBe('nineSlice')
+    expect(root.getAttribute('data-dream-codex-bubble-frame')).toBe('stretch')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-slice')).toBe('25%')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-width')).toBe('24px')
+    expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('28px')
+    expect([user.childNodes.length, codex.childNodes.length]).toEqual(childCounts)
+
+    stateOf(window).ensure()
+    expect([user.childNodes.length, codex.childNodes.length]).toEqual(childCounts)
+    const streaming = window.document.createElement('div')
+    streaming.setAttribute('data-response-annotation-conversation', '')
+    streaming.innerHTML = '<p data-selected-text-overlay-target>新增流式正文</p>'
+    window.document.querySelector('main')?.append(streaming)
+    stateOf(window).ensure()
+    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(streaming.childNodes).toHaveLength(1)
+
+    stateOf(window).cleanup()
+    expect(root.hasAttribute('data-dream-user-bubble-frame')).toBe(false)
+    expect(root.hasAttribute('data-dream-codex-bubble-frame')).toBe(false)
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-source')).toBe('')
+    expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('')
+    expect(user.classList.contains('dream-conversation-user-bubble')).toBe(false)
+    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(false)
   })
 
   it('marks only outermost tool activities and clears disabled, rebuilt, and cleaned nodes', () => {

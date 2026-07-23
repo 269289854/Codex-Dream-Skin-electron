@@ -4,7 +4,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppUpdateStatus, ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
-import { createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
+import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
+import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { App } from '../src/renderer/src/App'
 import { ICON_PREVIEW_TARGETS, PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
 
@@ -153,7 +154,17 @@ describe('Studio preview editing interaction', () => {
         },
         delete: async () => undefined,
         activate: activateTheme,
-        compile: async () => ({ css: '', rendererPayload: '', assets: { 'assets/polaroid.png': 'data:image/png;base64,AA==' } })
+        compile: async () => ({
+          css: '',
+          rendererPayload: '',
+          assets: {
+            'assets/polaroid.png': 'data:image/png;base64,AA==',
+            ...Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
+              conversationBubblePresetAssetKey(preset.id),
+              `data:image/png;base64,${preset.id}`
+            ]))
+          }
+        })
       },
     assets: {
       selectImage: async () => null,
@@ -874,6 +885,85 @@ describe('Studio preview editing interaction', () => {
     expect(savedUserPaint.stops[0]?.color).toBe('#123456')
   })
 
+  it('selects presets and custom GIF frames for each preview role without losing the prior style on cancel', async () => {
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.click())
+    const userBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')
+    if (!userBubble) throw new Error('User bubble preview is missing.')
+    pointerDown(userBubble)
+    expect(container.querySelector('[role="dialog"] [data-bubble-role-controls="user"]')).not.toBeNull()
+
+    const presetMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '预设')
+    if (!presetMode) throw new Error('Bubble preset mode is missing.')
+    act(() => presetMode.click())
+    expect(container.querySelectorAll('[role="dialog"] .conversation-bubble-preset-grid [role="radio"]')).toHaveLength(8)
+    const moonStars = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-preset-grid button')].find((button) => button.textContent?.includes('月亮星星'))
+    if (!moonStars) throw new Error('Moon and stars preset is missing.')
+    act(() => moonStars.click())
+    expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
+    expect(container.querySelector('[data-preview-target="conversation-codex-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('none')
+
+    selectMedia.mockResolvedValueOnce(null)
+    const customMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
+    if (!customMode) throw new Error('Custom bubble mode is missing.')
+    await act(async () => {
+      customMode.click()
+      await Promise.resolve()
+    })
+    expect(container.querySelector('[role="dialog"] .conversation-bubble-preset-grid')).not.toBeNull()
+    expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
+
+    selectMedia.mockResolvedValueOnce({
+      reference: { asset: 'assets/user-bubble.gif', kind: 'image', mimeType: 'image/gif' },
+      relativePath: 'assets/user-bubble.gif',
+      previewUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+      originalName: 'user-bubble.gif',
+      width: 768,
+      height: 384
+    })
+    const refreshedCustomMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
+    if (!refreshedCustomMode) throw new Error('Refreshed custom bubble mode is missing.')
+    await act(async () => {
+      refreshedCustomMode.click()
+      await Promise.resolve()
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationUserBubble', 'image')
+    const stretch = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-fit-tabs button')].find((button) => button.textContent === '整图拉伸')
+    if (!stretch) throw new Error('Stretch bubble fit is missing.')
+    act(() => stretch.click())
+    expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('stretch')
+
+    const codexBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
+    if (!codexBubble) throw new Error('Codex bubble preview is missing.')
+    pointerDown(codexBubble)
+    expect(container.querySelector('[role="dialog"] [data-bubble-role-controls="codex"]')).not.toBeNull()
+    const codexPresetMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '预设')
+    if (!codexPresetMode) throw new Error('Codex preset mode is missing.')
+    act(() => codexPresetMode.click())
+    const oceanShell = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-preset-grid button')].find((button) => button.textContent?.includes('海盐贝壳'))
+    if (!oceanShell) throw new Error('Ocean shell preset is missing.')
+    act(() => oceanShell.click())
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.conversationBubbles.user).toMatchObject({
+      source: { kind: 'custom', reference: { asset: 'assets/user-bubble.gif', mimeType: 'image/gif' } },
+      fit: 'stretch'
+    })
+    expect(savedProfiles.at(-1)?.conversationBubbles.codex).toEqual({
+      source: { kind: 'preset', presetId: 'ocean-shell' },
+      fit: 'nineSlice',
+      slice: 25,
+      frameWidth: 24,
+      contentPadding: 20
+    })
+  })
+
   it('edits, undoes, saves, and resets tool activity bubbles independently', async () => {
     const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
     if (!conversation) throw new Error('Conversation preview command is missing.')
@@ -922,7 +1012,11 @@ describe('Studio preview editing interaction', () => {
     await act(async () => { save.click(); await Promise.resolve() })
     const saved = savedProfiles.at(-1)
     expect(saved?.toolActivityBubbles).toEqual({ visible: false })
-    expect(saved?.conversationBubbles).toEqual({ visible: true })
+    expect(saved?.conversationBubbles).toEqual({
+      visible: true,
+      user: createDefaultConversationBubbleStyle(),
+      codex: createDefaultConversationBubbleStyle()
+    })
     expect(saved?.appearance.colors).toMatchObject({ conversationToolText: '#123456', conversationToolMutedText: '#607080' })
     expect(saved?.appearance.paints.conversationToolBackground).toBeDefined()
     expect(saved?.appearance.paints.conversationToolHoverBackground).toBeDefined()

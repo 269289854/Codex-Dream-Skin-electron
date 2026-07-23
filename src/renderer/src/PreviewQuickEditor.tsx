@@ -9,10 +9,12 @@ import {
 } from '../../shared/appearance'
 import { headingTemplateError } from '../../shared/home-layout'
 import { mediaFlipCssTransform } from '../../shared/media'
+import { conversationBubbleRolePurpose } from '../../shared/conversation-bubbles'
 import type { ThemeProfile } from '../../shared/theme'
 import type { MediaAssetPurpose, MediaSelectionKind } from '../../shared/contracts'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { ConversationBackgroundControls } from './ConversationBackgroundControls'
+import { ConversationBubbleControls } from './ConversationBubbleControls'
 import { AppearanceColorControl, FontControl, PaintControl, Range, ThemeIconControl } from './editor-controls'
 import { MediaFlipControls } from './MediaFlipControls'
 import { ParticleEffectControls } from './ParticleEffectControls'
@@ -78,7 +80,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
     {states.length > 1 && <div className="state-tabs segmented-control" aria-label="组件状态">{states.map((item) => <button type="button" className={state === item ? 'active' : ''} key={item} onClick={() => { setState(item); onStateChange(item) }}>{item === 'normal' ? '普通' : item === 'hover' ? '悬停' : '选中'}</button>)}</div>}
     <div className="preview-edit-popover-body">
       {editor.kind === 'style' && editor.visibility === 'composerBadge' && <label className="toggle-row"><span>显示输入框装饰</span><input type="checkbox" checked={profile.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.composerBadge.visible = visible }) }} /></label>}
-      {editor.kind === 'style' && editor.visibility === 'conversationBubbles' && <label className="toggle-row"><span>显示聊天气泡</span><input type="checkbox" checked={profile.conversationBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.conversationBubbles.visible = visible }) }} /></label>}
+      {editor.kind === 'style' && editor.conversationBubbleRole && <ConversationBubbleControls profile={profile} assets={assets} role={editor.conversationBubbleRole} mediaBusy={mediaBusy} showRoleTabs={false} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage(conversationBubbleRolePurpose(editor.conversationBubbleRole!), kind)} />}
       {editor.kind === 'style' && editor.visibility === 'toolActivityBubbles' && <label className="toggle-row"><span>显示工具活动气泡</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
       {copyField && copyConfig && <label className="quick-copy-field">{copyConfig.label}{copyConfig.rows
         ? <textarea value={profile.copy[copyField]} maxLength={copyConfig.maxLength} rows={copyConfig.rows} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />

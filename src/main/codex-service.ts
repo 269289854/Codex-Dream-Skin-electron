@@ -10,6 +10,7 @@ import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, 
 import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
+import { resolveConversationBubbles } from '../shared/conversation-bubbles'
 import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
@@ -300,7 +301,7 @@ export class CodexService {
       sparklePolicy: resolveParticleRenderPolicy(profile.decorations.sparkles.performanceMode, profile.decorations.sparkles.count),
       sparkleCyclePositionPolicy: resolveParticleCyclePositionPolicy(profile.decorations.sparkles.effect),
       composerBadge: profile.composerBadge,
-      conversationBubbles: { visible: profile.conversationBubbles.visible },
+      conversationBubbles: resolveConversationBubbles(profile.conversationBubbles, compiled.assets),
       toolActivityBubbles: { visible: profile.toolActivityBubbles.visible },
       builtinGlyphs: BUILTIN_ICON_GLYPHS,
       actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,

@@ -380,11 +380,67 @@ html.codex-dream-skin .dream-conversation-background-overlay {
 html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble) {
   box-sizing: border-box;
   display: block;
+  position: relative;
+  isolation: isolate;
   width: fit-content;
   max-width: 100%;
   padding: 16px 18px;
   border-radius: 7px;
   color: var(--dream-conversation-text);
+}
+
+html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble {
+  padding: var(--dream-user-bubble-content-padding);
+}
+
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble {
+  padding: var(--dream-codex-bubble-content-padding);
+}
+
+html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::before,
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::before {
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+}
+
+html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble > *,
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble > * {
+  position: relative;
+  z-index: 1;
+}
+
+html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversation-user-bubble::before {
+  border: var(--dream-user-bubble-frame-width) solid transparent;
+  border-image-source: var(--dream-user-bubble-frame-source);
+  border-image-slice: var(--dream-user-bubble-frame-slice);
+  border-image-width: var(--dream-user-bubble-frame-width);
+  border-image-repeat: stretch;
+}
+
+html.codex-dream-skin[data-dream-codex-bubble-frame="nineSlice"] .dream-conversation-codex-bubble::before {
+  border: var(--dream-codex-bubble-frame-width) solid transparent;
+  border-image-source: var(--dream-codex-bubble-frame-source);
+  border-image-slice: var(--dream-codex-bubble-frame-slice);
+  border-image-width: var(--dream-codex-bubble-frame-width);
+  border-image-repeat: stretch;
+}
+
+html.codex-dream-skin[data-dream-user-bubble-frame="stretch"] .dream-conversation-user-bubble::before {
+  background-image: var(--dream-user-bubble-frame-source);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+html.codex-dream-skin[data-dream-codex-bubble-frame="stretch"] .dream-conversation-codex-bubble::before {
+  background-image: var(--dream-codex-bubble-frame-source);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
 }
 
 html.codex-dream-skin .dream-conversation-user-bubble {
