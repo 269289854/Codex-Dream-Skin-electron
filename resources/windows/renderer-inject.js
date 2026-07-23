@@ -1110,6 +1110,24 @@
     codexBubbles.forEach((node) => node.classList.add('dream-conversation-codex-bubble'));
   };
 
+  const clearToolActivityBubbles = () => {
+    document.querySelectorAll('.dream-conversation-tool-bubble').forEach((node) => node.classList.remove('dream-conversation-tool-bubble'));
+  };
+  const ensureToolActivityBubbles = () => {
+    if (themeConfig?.toolActivityBubbles?.visible === false) {
+      clearToolActivityBubbles();
+      return;
+    }
+    const selector = '[data-local-conversation-item-target-ids]';
+    const toolActivities = new Set([...document.querySelectorAll(selector)].filter((node) =>
+      node instanceof HTMLElement && !node.parentElement?.closest(selector)
+    ));
+    document.querySelectorAll('.dream-conversation-tool-bubble').forEach((node) => {
+      if (!toolActivities.has(node)) node.classList.remove('dream-conversation-tool-bubble');
+    });
+    toolActivities.forEach((node) => node.classList.add('dream-conversation-tool-bubble'));
+  };
+
   const clearComposerSendIcon = (button) => {
     button?.classList.remove("dream-composer-send-button", "dream-composer-send-button-customized");
     button?.querySelector(":scope > .dream-composer-send-icon")?.remove();
@@ -1647,6 +1665,7 @@
     ensureWindowBackground();
     ensureConversationBackground();
     ensureConversationBubbles();
+    ensureToolActivityBubbles();
 
     if (!shellMain || !document.body) return;
     let chrome = document.getElementById(CHROME_ID) || chromeRoot;
@@ -1743,6 +1762,7 @@
     document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
     document.querySelectorAll(".dream-composer-send-button").forEach(clearComposerSendIcon);
     clearConversationBubbles();
+    clearToolActivityBubbles();
     document.querySelectorAll(".dream-conversation-surface").forEach(clearConversationSurface);
     document.querySelectorAll(".dream-conversation-viewport").forEach((node) => {
       node.classList.remove("dream-conversation-viewport");

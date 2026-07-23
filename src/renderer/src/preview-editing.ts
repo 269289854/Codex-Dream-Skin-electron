@@ -4,7 +4,7 @@ import type { IconSlot, ThemeProfile } from '../../shared/theme'
 export type InspectorTab = 'visual' | 'icons'
 export type PreviewCopyField = keyof ThemeProfile['copy']
 export type TypographySlot = keyof ThemeProfile['typography']['slots']
-export type PreviewVisibilityField = 'composerBadge' | 'conversationBubbles'
+export type PreviewVisibilityField = 'composerBadge' | 'conversationBubbles' | 'toolActivityBubbles'
 export type PreviewDecorationEditor = 'sparkles' | 'homeHeading' | 'composerMelody'
 
 export interface PreviewStyleEditor {
@@ -55,6 +55,7 @@ export const PREVIEW_TARGETS = {
   'surface-main': styleTarget('主区域', 'global', { colors: ['globalText', 'globalBorder'], paints: ['mainSurface'], fontSlot: 'ui' }),
   'conversation-user-message': styleTarget('我的消息', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationUserMessage', 'conversationUserMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles' }),
   'conversation-codex-message': styleTarget('Codex 回复', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationMessage', 'conversationMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles' }),
+  'conversation-tool-activity': styleTarget('工具活动', 'conversation', { colors: ['conversationToolText', 'conversationToolMutedText'], paints: ['conversationToolBackground', 'conversationToolHoverBackground'], visibility: 'toolActivityBubbles' }),
   'primary-button': styleTarget('主要按钮', 'conversation', { colors: ['primaryButtonText'], paints: ['primaryButton', 'primaryButtonHover', 'primaryButtonSelected'], fontSlot: 'ui' }),
   'conversation-background': { label: '对话区域背景', inspector: 'visual', inspectorAnchor: 'visual-conversation-background', editor: { kind: 'conversationBackground' } },
   'window-background': { label: '整个窗口背景', inspector: 'visual', inspectorAnchor: 'visual-window-background', editor: { kind: 'windowBackground' } },

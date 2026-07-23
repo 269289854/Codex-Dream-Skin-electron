@@ -50,7 +50,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: 19, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground, windowBackground, conversationBubbles: { visible: profile.conversationBubbles.visible } }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: 20, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground, windowBackground, conversationBubbles: { visible: profile.conversationBubbles.visible }, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
     assets
   }
 }

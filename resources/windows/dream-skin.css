@@ -402,6 +402,31 @@ html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-c
   color: var(--dream-conversation-link) !important;
 }
 
+html.codex-dream-skin .dream-conversation-tool-bubble {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 9px 11px;
+  border-radius: 7px;
+  color: var(--dream-conversation-tool-text);
+  background: var(--dream-conversation-tool-background);
+}
+
+html.codex-dream-skin .dream-conversation-tool-bubble:hover {
+  background: var(--dream-conversation-tool-hover-background);
+}
+
+html.codex-dream-skin .dream-conversation-tool-bubble :is([class~="group/command"], [data-tool-command]) {
+  color: var(--dream-conversation-tool-text);
+}
+
+html.codex-dream-skin .dream-conversation-tool-bubble :is([class~="group/output"], [data-tool-output], [data-testid*="tool-output"], [data-testid*="exec-output"], details > summary, small) {
+  color: var(--dream-conversation-tool-muted-text);
+}
+
+html.codex-dream-skin .dream-conversation-tool-bubble a {
+  color: var(--dream-conversation-link) !important;
+}
+
 html.codex-dream-skin a {
   color: var(--dream-global-link);
 }

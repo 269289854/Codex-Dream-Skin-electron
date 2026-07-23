@@ -149,7 +149,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: { visible: boolean } = { visible: true }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: { visible: boolean } = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }): void {
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
@@ -160,6 +160,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
       icons,
       composerBadge,
       conversationBubbles,
+      toolActivityBubbles,
       decorations,
       particleViewportTop: PARTICLE_VIEWPORT_TOP,
       sparkleIconSlot: particleEffectIconSlot(decorations.sparkles.effect),
@@ -211,6 +212,45 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-conversation-codex-bubble')).toBeNull()
     stateOf(window).cleanup()
     expect(window.document.querySelector('[data-user-message-bubble]')?.className).toBe('')
+  })
+
+  it('marks only outermost tool activities and clears disabled, rebuilt, and cleaned nodes', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <main class="main-surface">
+        <section id="batch" data-local-conversation-item-target-ids="exec-1 exec-2">
+          <div class="group/command">npm test</div>
+          <div class="group/output">Tests passed</div>
+          <div id="nested" data-local-conversation-item-target-ids="exec-2"><span data-tool-output>nested output</span></div>
+        </section>
+        <section id="file-edit" data-local-conversation-item-target-ids="edit-1"><div data-tool-output>Updated theme.ts</div></section>
+        <section id="mcp" data-local-conversation-item-target-ids="mcp-1"><small>MCP details</small></section>
+      </main>`
+    inject(window)
+
+    expect(window.document.querySelector('#batch')?.classList.contains('dream-conversation-tool-bubble')).toBe(true)
+    expect(window.document.querySelector('#file-edit')?.classList.contains('dream-conversation-tool-bubble')).toBe(true)
+    expect(window.document.querySelector('#mcp')?.classList.contains('dream-conversation-tool-bubble')).toBe(true)
+    expect(window.document.querySelector('#nested')?.classList.contains('dream-conversation-tool-bubble')).toBe(false)
+    expect(window.document.querySelectorAll('.dream-conversation-tool-bubble')).toHaveLength(3)
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('.dream-conversation-tool-bubble')).toHaveLength(3)
+
+    const replacement = window.document.createElement('section')
+    replacement.id = 'rebuilt'
+    replacement.setAttribute('data-local-conversation-item-target-ids', 'web-1')
+    replacement.textContent = 'Visited example.test'
+    window.document.querySelector('#batch')?.replaceWith(replacement)
+    stateOf(window).ensure()
+    expect(replacement.classList.contains('dream-conversation-tool-bubble')).toBe(true)
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { visible: false })
+    expect(window.document.querySelector('.dream-conversation-tool-bubble')).toBeNull()
+    inject(window)
+    expect(replacement.classList.contains('dream-conversation-tool-bubble')).toBe(true)
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-conversation-tool-bubble')).toBeNull()
+    expect(replacement.getAttribute('data-local-conversation-item-target-ids')).toBe('web-1')
   })
 
   it('renders brand copy as text and keeps the sidebar mode icon idempotent and removable', () => {

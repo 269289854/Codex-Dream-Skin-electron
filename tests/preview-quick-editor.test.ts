@@ -113,6 +113,25 @@ describe('preview quick editor', () => {
     expect([...container.querySelectorAll('[data-paint-token]')].map((node) => node.getAttribute('data-paint-token'))).toEqual(['conversationMessageHover'])
   })
 
+  it('edits tool activity colors and paints with an independent visibility toggle', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    renderEditor(PREVIEW_TARGETS['conversation-tool-activity'], profile)
+
+    expect([...container.querySelectorAll('[data-color-token]')].map((node) => node.getAttribute('data-color-token'))).toEqual(['conversationToolText', 'conversationToolMutedText'])
+    expect([...container.querySelectorAll('[data-paint-token]')].map((node) => node.getAttribute('data-paint-token'))).toEqual(['conversationToolBackground'])
+    const toggle = container.querySelector<HTMLInputElement>('.toggle-row input')
+    if (!toggle) throw new Error('Tool activity visibility control is missing.')
+    act(() => toggle.click())
+    expect(profile.toolActivityBubbles.visible).toBe(false)
+    expect(profile.conversationBubbles.visible).toBe(true)
+
+    const hover = [...container.querySelectorAll<HTMLButtonElement>('.state-tabs button')].find((button) => button.textContent === '悬停')
+    if (!hover) throw new Error('Tool activity hover state is missing.')
+    act(() => hover.click())
+    expect(container.querySelector('[data-color-token]')).toBeNull()
+    expect([...container.querySelectorAll('[data-paint-token]')].map((node) => node.getAttribute('data-paint-token'))).toEqual(['conversationToolHoverBackground'])
+  })
+
   it('changes the selected icon without exposing unrelated icon slots', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     renderEditor(PREVIEW_TARGETS['icon-composer'], profile)

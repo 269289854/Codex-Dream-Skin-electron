@@ -32,6 +32,7 @@ describe('ProfileStore', () => {
     expect(created.colors).toEqual(colors)
     expect(created.resetColors).toEqual(colors)
     expect(created.resetColors).not.toBe(created.colors)
+    expect(created.toolActivityBubbles).toEqual({ visible: true })
     expect(created.appearance.colors.sidebarProjectsTitleText).toBeUndefined()
     expect(created.appearance.colors.sidebarTasksTitleHoverText).toBeUndefined()
     expect(resolveAppearanceColor(created.appearance, created.colors, 'sidebarProjectsTitleText')).toBe('#183B56')
@@ -43,6 +44,7 @@ describe('ProfileStore', () => {
     created.colors.accent = '#123456'
     created.colors.ink = '#345678'
     created.copy.sidebarNavSites = '自定义站点'
+    created.toolActivityBubbles.visible = false
     await store.update(created)
     const reset = await store.getDefault(created.id)
     expect(reset).toMatchObject({ id: created.id, name: '海盐主题', colors, resetColors: colors, copy: { sidebarNavSites: '站点' } })
@@ -52,6 +54,8 @@ describe('ProfileStore', () => {
     expect(resolveAppearanceColor(reset.appearance, reset.colors, 'sidebarProjectsTitleText')).toBe('#183B56')
     expect(resolveAppearanceColor(reset.appearance, reset.colors, 'sidebarProjectsTitleHoverText')).toBe('#2878B8')
     expect(reset.appearance.colors.sidebarProjectsTitleText).toBeUndefined()
+    expect(reset.toolActivityBubbles).toEqual({ visible: true })
+    expect(edited.toolActivityBubbles).toEqual({ visible: false })
     expect((await store.get(created.id)).colors.accent).toBe('#123456')
     await expect(store.create({ name: '非法主题', colors: { ...colors, accent: 'invalid' } })).rejects.toThrow()
     expect((await readdir(join(root, 'themes'))).filter((entry) => !entry.startsWith('.'))).toHaveLength(2)
@@ -77,7 +81,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 19, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 20, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -137,7 +141,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 19,
+      version: 20,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
@@ -369,7 +373,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(19)
+    expect(migrated.version).toBe(20)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'
@@ -433,11 +437,13 @@ describe('ProfileStore', () => {
       format: font.format
     })
     profile.typography.slots.brandTitle = { kind: 'imported', id: font.id }
+    profile.toolActivityBubbles.visible = false
 
     const duplicate = await store.duplicate(profile, ' 当前设计副本 ')
     expect(duplicate).toMatchObject({ name: '当前设计副本', copy: { brandTitle: '尚未保存的标题' } })
     expect(duplicate.colors.accent).toBe('#123456')
     expect(duplicate.resetColors).toEqual(resetColors)
+    expect(duplicate.toolActivityBubbles).toEqual({ visible: false })
     expect(duplicate.id).not.toBe(profile.id)
     expect(Date.parse(duplicate.updatedAt)).toBeGreaterThanOrEqual(Date.parse(profile.updatedAt))
     expect((await store.get(profile.id)).copy.brandTitle).not.toBe('尚未保存的标题')

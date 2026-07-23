@@ -57,6 +57,7 @@ describe('theme share packages', () => {
     draft.decorations.composerMelody.source = composerGif.reference
     draft.typography.importedFonts.push({ id: font.id, family: font.family, asset: font.relativePath, originalName: font.originalName, format: font.format })
     draft.typography.slots.brandTitle = { kind: 'imported', id: font.id }
+    draft.toolActivityBubbles.visible = false
     const packagePath = join(root, 'design.cdstheme')
     await store.exportSharePackage(draft, packagePath)
     expect((await stat(packagePath)).isFile()).toBe(true)
@@ -67,6 +68,7 @@ describe('theme share packages', () => {
     expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
     expect(checked.profile.windowBackground.source).toEqual(windowReference)
     expect(checked.profile.resetColors.accent).toBe(original.resetColors.accent)
+    expect(checked.profile.toolActivityBubbles).toEqual({ visible: false })
 
     const imported = await store.importSharePackage(packagePath)
     expect(imported.id).not.toBe(original.id)
@@ -74,6 +76,7 @@ describe('theme share packages', () => {
     expect(imported.copy.brandTitle).toBe('尚未保存的分享标题')
     expect(imported.colors).toEqual(draft.colors)
     expect(imported.resetColors).toEqual(draft.colors)
+    expect(imported.toolActivityBubbles).toEqual({ visible: false })
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: true })
     expect(imported.windowBackground).toMatchObject({ visible: true, mode: 'image', source: windowReference, masks: [{ id: '22222222-2222-4222-8222-222222222222', shape: 'ellipse' }] })
@@ -111,12 +114,34 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(19)
+    expect(imported.version).toBe(20)
     expect(imported.conversationBubbles).toEqual({ visible: true })
+    expect(imported.toolActivityBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.resetColors.accent).toBe('#2878B8')
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
+  })
+
+  it('inherits tool activity visibility from version nineteen chat bubbles when importing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-v19-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const original = await store.create('版本十九分享主题')
+    const packagePath = join(root, 'v19.cdstheme')
+    await store.exportSharePackage(original, packagePath)
+    const archive = unzipSync(await readFile(packagePath))
+    const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as { profileVersion: number }
+    const { toolActivityBubbles: _toolActivityBubbles, ...legacy } = original
+    manifest.profileVersion = 19
+    archive['theme.json'] = Buffer.from(JSON.stringify({ ...legacy, version: 19, conversationBubbles: { visible: false } }))
+    await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
+
+    const imported = await store.importSharePackage(packagePath)
+    expect(imported.version).toBe(20)
+    expect(imported.conversationBubbles).toEqual({ visible: false })
+    expect(imported.toolActivityBubbles).toEqual({ visible: false })
   })
 
   it('repairs generated version sixteen title colors while importing shares', async () => {
@@ -148,8 +173,9 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(19)
+    expect(imported.version).toBe(20)
     expect(imported.conversationBubbles).toEqual({ visible: true })
+    expect(imported.toolActivityBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)
     expect(imported.appearance.colors).toEqual({ sidebarTasksTitleHoverText: '#abcdef' })
   })
