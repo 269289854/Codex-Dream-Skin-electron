@@ -1,5 +1,5 @@
 import type { AppearanceColorToken, AppearanceGroup, AppearancePaintToken } from '../../shared/appearance'
-import type { IconSlot, ThemeProfile } from '../../shared/theme'
+import type { ConversationBubbleRole, IconSlot, ThemeProfile } from '../../shared/theme'
 
 export type InspectorTab = 'visual' | 'icons'
 export type PreviewCopyField = keyof ThemeProfile['copy']
@@ -16,6 +16,7 @@ export interface PreviewStyleEditor {
   fontSlot?: TypographySlot
   visibility?: PreviewVisibilityField
   decoration?: PreviewDecorationEditor
+  conversationBubbleRole?: ConversationBubbleRole
 }
 
 export type PreviewEditor =
@@ -40,6 +41,7 @@ interface StyleTargetOptions {
   fontSlot?: TypographySlot
   visibility?: PreviewVisibilityField
   decoration?: PreviewDecorationEditor
+  conversationBubbleRole?: ConversationBubbleRole
   inspectorAnchor?: string
 }
 
@@ -47,14 +49,14 @@ const styleTarget = (label: string, group: AppearanceGroup, options: StyleTarget
   label,
   inspector: 'visual',
   inspectorAnchor: options.inspectorAnchor ?? `appearance-${group}`,
-  editor: { kind: 'style', colors: options.colors ?? [], paints: options.paints ?? [], copyField: options.copyField, iconSlot: options.iconSlot, fontSlot: options.fontSlot, visibility: options.visibility, decoration: options.decoration }
+  editor: { kind: 'style', colors: options.colors ?? [], paints: options.paints ?? [], copyField: options.copyField, iconSlot: options.iconSlot, fontSlot: options.fontSlot, visibility: options.visibility, decoration: options.decoration, conversationBubbleRole: options.conversationBubbleRole }
 })
 
 export const PREVIEW_TARGETS = {
   'surface-canvas': styleTarget('全局画布', 'global', { colors: ['globalText', 'globalMutedText', 'globalLink', 'globalCaret', 'globalScrollbar', 'globalBorder'], paints: ['canvas'], fontSlot: 'ui' }),
   'surface-main': styleTarget('主区域', 'global', { colors: ['globalText', 'globalBorder'], paints: ['mainSurface'], fontSlot: 'ui' }),
-  'conversation-user-message': styleTarget('我的消息', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationUserMessage', 'conversationUserMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles' }),
-  'conversation-codex-message': styleTarget('Codex 回复', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationMessage', 'conversationMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles' }),
+  'conversation-user-message': styleTarget('我的消息', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationUserMessage', 'conversationUserMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles', conversationBubbleRole: 'user', inspectorAnchor: 'visual-conversation-bubbles' }),
+  'conversation-codex-message': styleTarget('Codex 回复', 'conversation', { colors: ['conversationText', 'conversationLink'], paints: ['conversationMessage', 'conversationMessageHover'], fontSlot: 'ui', visibility: 'conversationBubbles', conversationBubbleRole: 'codex', inspectorAnchor: 'visual-conversation-bubbles' }),
   'conversation-tool-activity': styleTarget('工具活动', 'conversation', { colors: ['conversationToolText', 'conversationToolMutedText'], paints: ['conversationToolBackground', 'conversationToolHoverBackground'], visibility: 'toolActivityBubbles' }),
   'primary-button': styleTarget('主要按钮', 'conversation', { colors: ['primaryButtonText'], paints: ['primaryButton', 'primaryButtonHover', 'primaryButtonSelected'], fontSlot: 'ui' }),
   'conversation-background': { label: '对话区域背景', inspector: 'visual', inspectorAnchor: 'visual-conversation-background', editor: { kind: 'conversationBackground' } },

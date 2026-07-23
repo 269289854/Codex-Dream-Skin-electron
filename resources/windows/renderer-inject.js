@@ -1151,6 +1151,55 @@
     ensureConversationOverlay(background, config);
   };
 
+  const conversationBubbleFrameProperties = {
+    user: {
+      attribute: 'data-dream-user-bubble-frame',
+      source: '--dream-user-bubble-frame-source',
+      slice: '--dream-user-bubble-frame-slice',
+      width: '--dream-user-bubble-frame-width',
+      padding: '--dream-user-bubble-content-padding'
+    },
+    codex: {
+      attribute: 'data-dream-codex-bubble-frame',
+      source: '--dream-codex-bubble-frame-source',
+      slice: '--dream-codex-bubble-frame-slice',
+      width: '--dream-codex-bubble-frame-width',
+      padding: '--dream-codex-bubble-content-padding'
+    }
+  };
+  const clearConversationBubbleFrameConfig = () => {
+    const root = document.documentElement;
+    if (!root) return;
+    Object.values(conversationBubbleFrameProperties).forEach((properties) => {
+      root.removeAttribute(properties.attribute);
+      root.style.removeProperty(properties.source);
+      root.style.removeProperty(properties.slice);
+      root.style.removeProperty(properties.width);
+      root.style.removeProperty(properties.padding);
+    });
+  };
+  const applyConversationBubbleFrameConfig = () => {
+    const root = document.documentElement;
+    if (!root) return;
+    Object.entries(conversationBubbleFrameProperties).forEach(([role, properties]) => {
+      const config = themeConfig?.conversationBubbles?.[role];
+      const mode = config?.mode === 'nineSlice' || config?.mode === 'stretch' ? config.mode : 'none';
+      const dataUrl = typeof config?.dataUrl === 'string' && config.dataUrl.startsWith('data:image/') ? config.dataUrl : null;
+      const activeMode = dataUrl ? mode : 'none';
+      root.setAttribute(properties.attribute, activeMode);
+      if (activeMode === 'none') {
+        root.style.removeProperty(properties.source);
+        root.style.removeProperty(properties.slice);
+        root.style.removeProperty(properties.width);
+        root.style.removeProperty(properties.padding);
+        return;
+      }
+      root.style.setProperty(properties.source, `url(${JSON.stringify(dataUrl)})`);
+      root.style.setProperty(properties.slice, `${clamp(Number(config?.slice) || 25, 10, 45)}%`);
+      root.style.setProperty(properties.width, `${clamp(Math.round(Number(config?.frameWidth) || 24), 8, 40)}px`);
+      root.style.setProperty(properties.padding, `${clamp(Math.round(Number(config?.contentPadding) || 20), 12, 40)}px`);
+    });
+  };
   const clearConversationBubbles = () => {
     document.querySelectorAll('.dream-conversation-user-bubble').forEach((node) => node.classList.remove('dream-conversation-user-bubble'));
     document.querySelectorAll('.dream-conversation-codex-bubble').forEach((node) => node.classList.remove('dream-conversation-codex-bubble'));
@@ -1158,8 +1207,10 @@
   const ensureConversationBubbles = () => {
     if (themeConfig?.conversationBubbles?.visible === false) {
       clearConversationBubbles();
+      clearConversationBubbleFrameConfig();
       return;
     }
+    applyConversationBubbleFrameConfig();
     const userBubbles = new Set([...document.querySelectorAll('[data-user-message-bubble]')].filter((node) => node instanceof HTMLElement));
     document.querySelectorAll('.dream-conversation-user-bubble').forEach((node) => {
       if (!userBubbles.has(node)) node.classList.remove('dream-conversation-user-bubble');
@@ -1828,6 +1879,7 @@
     document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
     document.querySelectorAll(".dream-composer-send-button").forEach(clearComposerSendIcon);
     clearConversationBubbles();
+    clearConversationBubbleFrameConfig();
     clearToolActivityBubbles();
     document.querySelectorAll(".dream-conversation-surface").forEach(clearConversationSurface);
     document.querySelectorAll(".dream-conversation-viewport").forEach((node) => {

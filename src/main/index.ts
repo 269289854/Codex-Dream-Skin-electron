@@ -10,6 +10,7 @@ import { CodexService } from './codex-service'
 import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
 import { captureIpcResult } from '../shared/ipc-result'
 import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
+import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
 
 const { autoUpdater } = electronUpdater
 
@@ -89,9 +90,10 @@ function registerIpc(): void {
   })
   ipcMain.handle('assets:select-media', async (_event, themeId: unknown, purpose: unknown, requestedKind: unknown) => {
     if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
-    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'windowBackground' && purpose !== 'composerMelody') throw new Error('媒体用途无效。')
+    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'windowBackground' && purpose !== 'composerMelody' && purpose !== 'conversationUserBubble' && purpose !== 'conversationCodexBubble') throw new Error('媒体用途无效。')
     if (requestedKind !== undefined && requestedKind !== 'image' && requestedKind !== 'gif' && requestedKind !== 'video') throw new Error('媒体类型无效。')
     if (purpose === 'composerMelody' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('输入框装饰只能选择图片或 GIF 文件。')
+    if ((purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble') && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('聊天气泡只能选择图片或 GIF 文件。')
     const kind = requestedKind as MediaSelectionKind | undefined
     const filters = kind === 'image'
       ? [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
@@ -101,7 +103,7 @@ function registerIpc(): void {
           ? [{ name: 'Video', extensions: ['mp4', 'webm'] }]
           : [{ name: 'Images and Video', extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
     const options: OpenDialogOptions = {
-      title: purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : purpose === 'windowBackground' ? '选择整个窗口背景' : kind === 'image' ? '选择输入框图片装饰' : '选择输入框 GIF 装饰',
+      title: purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : purpose === 'windowBackground' ? '选择整个窗口背景' : purpose === 'conversationUserBubble' ? kind === 'image' ? '选择我的消息气泡图片' : '选择我的消息气泡 GIF' : purpose === 'conversationCodexBubble' ? kind === 'image' ? '选择 Codex 回复气泡图片' : '选择 Codex 回复气泡 GIF' : kind === 'image' ? '选择输入框图片装饰' : '选择输入框 GIF 装饰',
       properties: ['openFile'],
       filters
     }
@@ -297,7 +299,8 @@ if (!hasSingleInstanceLock) {
     app.setAppUserModelId('com.codexdreamskin.studio')
     store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), {
       hero: join(resourcesRoot, 'dream-reference.png'),
-      polaroid: join(resourcesRoot, 'dream-polaroid.png')
+      polaroid: join(resourcesRoot, 'dream-polaroid.png'),
+      conversationBubbles: Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [preset.id, join(resourcesRoot, 'conversation-bubbles', preset.fileName)])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>
     })
     await store.initialize()
     protocol.handle('studio-media', async (request) => handleStudioMediaRequest(request))

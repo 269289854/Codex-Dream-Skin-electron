@@ -4,20 +4,30 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import ffmpegPath from 'ffmpeg-static'
+import sharp from 'sharp'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { resolveAppearanceColor } from '../src/shared/appearance'
-import { DEFAULT_THEME_COLORS } from '../src/shared/theme'
+import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
+import { CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
 const execFileAsync = promisify(execFile)
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
 const TEST_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
+const ANIMATED_GIF_FRAME = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==', 'base64')
 
 async function writeBundledSystemAssets(root: string): Promise<{ hero: string; polaroid: string }> {
   const assets = { hero: join(root, 'bundled-hero.png'), polaroid: join(root, 'bundled-polaroid.png') }
   await Promise.all([writeFile(assets.hero, TEST_PNG), writeFile(assets.polaroid, TEST_PNG)])
   return assets
+}
+
+function animatedGif(frameCount: number): Buffer {
+  const frameStart = ANIMATED_GIF_FRAME.indexOf(Buffer.from([0x21, 0xf9]))
+  const header = ANIMATED_GIF_FRAME.subarray(0, frameStart)
+  const frame = ANIMATED_GIF_FRAME.subarray(frameStart, ANIMATED_GIF_FRAME.length - 1)
+  return Buffer.concat([header, ...Array.from({ length: frameCount }, () => frame), Buffer.from([0x3b])])
 }
 
 afterEach(async () => {
@@ -85,7 +95,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 23, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 24, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -145,7 +155,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 23,
+      version: 24,
       videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
@@ -333,6 +343,102 @@ describe('ProfileStore', () => {
     expect((await readdir(assetDirectory)).some((entry) => entry.endsWith('.tmp'))).toBe(false)
   })
 
+  it('exposes every bundled bubble preset to Studio compilation', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-bubble-presets-'))
+    roots.push(root)
+    const bundled = await writeBundledSystemAssets(root)
+    const conversationBubbles = Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
+      preset.id,
+      join(process.cwd(), 'resources', 'windows', 'conversation-bubbles', preset.fileName)
+    ])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>
+    const store = new ProfileStore(root, { ...bundled, conversationBubbles })
+    await store.initialize()
+    const profile = await store.create('气泡预设主题')
+    const compiled = await store.compile(profile.id)
+
+    for (const preset of CONVERSATION_BUBBLE_PRESETS) {
+      expect(compiled.assets[conversationBubblePresetAssetKey(preset.id)]).toMatch(/^data:image\/png;base64,/)
+    }
+  })
+
+  it('imports, compiles, duplicates, and prunes independent custom bubble assets', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-custom-bubbles-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('自定义气泡主题')
+    const svgSource = join(root, 'user-bubble.svg')
+    const gifSource = join(root, 'codex-bubble.gif')
+    await Promise.all([
+      writeFile(svgSource, '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect width="320" height="160" rx="24" fill="#ffffff"/></svg>'),
+      writeFile(gifSource, TEST_GIF)
+    ])
+
+    const user = await store.importMediaAsset(profile.id, svgSource, 'conversationUserBubble', 'image')
+    const codex = await store.importMediaAsset(profile.id, gifSource, 'conversationCodexBubble', 'gif')
+    expect(user.reference).toMatchObject({ kind: 'image', mimeType: 'image/png' })
+    expect(user.relativePath).toMatch(/\.png$/)
+    expect(codex.reference).toMatchObject({ kind: 'image', mimeType: 'image/gif' })
+    profile.conversationBubbles.user.source = { kind: 'custom', reference: user.reference }
+    profile.conversationBubbles.codex = {
+      source: { kind: 'custom', reference: codex.reference },
+      fit: 'stretch',
+      slice: 25,
+      frameWidth: 24,
+      contentPadding: 28
+    }
+    await store.update(profile)
+
+    const compiled = await store.compile(profile.id)
+    const payload = JSON.parse(compiled.rendererPayload) as {
+      assets: Record<string, string>
+      conversationBubbles: { user: { dataUrl: string }; codex: { dataUrl: string } }
+    }
+    expect(payload.assets).not.toHaveProperty(user.relativePath)
+    expect(payload.assets).not.toHaveProperty(codex.relativePath)
+    expect(payload.conversationBubbles.user.dataUrl).toMatch(/^data:image\/png;base64,/)
+    expect(payload.conversationBubbles.codex.dataUrl).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+
+    const duplicate = await store.duplicate(profile, '自定义气泡副本')
+    expect(duplicate.conversationBubbles).toEqual(profile.conversationBubbles)
+    expect((await store.compile(duplicate.id)).assets[user.relativePath]).toMatch(/^data:image\/png;base64,/)
+    expect((await store.compile(duplicate.id)).assets[codex.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+
+    profile.conversationBubbles.user.source = { kind: 'none' }
+    await store.update(profile)
+    await expect(readFile(join(store.themesRoot, profile.id, user.relativePath))).rejects.toThrow()
+    await expect(readFile(join(store.themesRoot, profile.id, codex.relativePath))).resolves.toEqual(TEST_GIF)
+  })
+
+  it('rejects oversized, over-dimensioned, over-frame, video, and cancelled bubble imports without artifacts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-bubble-limits-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('气泡限制主题')
+    const oversized = join(root, 'oversized.png')
+    const overDimension = join(root, 'over-dimension.png')
+    const overFrames = join(root, 'over-frames.gif')
+    const video = join(root, 'bubble.mp4')
+    const valid = join(root, 'valid.png')
+    await Promise.all([
+      writeFile(oversized, Buffer.alloc(10 * 1024 * 1024 + 1)),
+      sharp({ create: { width: 2049, height: 1, channels: 4, background: '#ffffff' } }).png().toFile(overDimension),
+      writeFile(overFrames, animatedGif(181)),
+      writeFile(video, Buffer.from('video')),
+      writeFile(valid, TEST_PNG)
+    ])
+
+    await expect(store.importMediaAsset(profile.id, oversized, 'conversationUserBubble', 'image')).rejects.toThrow('10 MB')
+    await expect(store.importMediaAsset(profile.id, overDimension, 'conversationUserBubble', 'image')).rejects.toThrow('2048px')
+    await expect(store.importMediaAsset(profile.id, overFrames, 'conversationCodexBubble', 'gif')).rejects.toThrow('180')
+    await expect(store.importMediaAsset(profile.id, video, 'conversationCodexBubble', 'video')).rejects.toThrow('图片或 GIF')
+    const controller = new AbortController()
+    controller.abort()
+    await expect(store.importMediaAsset(profile.id, valid, 'conversationUserBubble', 'image', controller.signal)).rejects.toThrow('取消')
+    expect((await readdir(join(store.themesRoot, profile.id, 'assets'))).filter((entry) => entry.startsWith('conversation'))).toHaveLength(0)
+  })
+
   it('inspects and optimizes real MP4 and WebM videos while pruning both variants after save', async () => {
     if (!ffmpegPath) throw new Error('Bundled FFmpeg is unavailable.')
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-video-store-'))
@@ -426,7 +532,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(23)
+    expect(migrated.version).toBe(24)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'

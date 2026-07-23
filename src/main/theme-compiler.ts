@@ -5,11 +5,13 @@ import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
 import { mediaFlipCssTransform } from '../shared/media'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
-import type { MediaReference, ThemeProfile } from '../shared/theme'
+import { CONVERSATION_BUBBLE_PRESETS, type ConversationBubblePresetId, type MediaReference, type ThemeProfile } from '../shared/theme'
+import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey, resolveConversationBubbles } from '../shared/conversation-bubbles'
 
 export async function compileTheme(
   profile: ThemeProfile,
-  readAsset: (asset: string) => Promise<string>
+  readAsset: (asset: string) => Promise<string>,
+  readConversationBubblePreset?: (presetId: ConversationBubblePresetId) => Promise<string>
 ): Promise<CompiledTheme> {
   const assetNames = new Set<string>()
   if (profile.hero.source?.kind === 'image') assetNames.add(profile.hero.source.asset)
@@ -19,11 +21,17 @@ export async function compileTheme(
   if (profile.conversationBackground.source?.kind === 'image') assetNames.add(profile.conversationBackground.source.asset)
   if (profile.windowBackground.source?.kind === 'image') assetNames.add(profile.windowBackground.source.asset)
   if (profile.decorations.composerMelody.source) assetNames.add(profile.decorations.composerMelody.source.asset)
+  for (const reference of conversationBubbleMediaReferences(profile)) assetNames.add(reference.asset)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
   for (const font of profile.typography.importedFonts) assetNames.add(font.asset)
 
   const assets: Record<string, string> = {}
   for (const asset of assetNames) assets[asset] = await readAsset(asset)
+  if (readConversationBubblePreset) {
+    for (const preset of CONVERSATION_BUBBLE_PRESETS) {
+      assets[conversationBubblePresetAssetKey(preset.id)] = await readConversationBubblePreset(preset.id)
+    }
+  }
   const hero = profile.hero.source
     ? profile.hero.source.kind === 'image' ? assets[profile.hero.source.asset] : null
     : profile.hero.sourceImage ? assets[profile.hero.sourceImage] : null
@@ -40,6 +48,8 @@ export async function compileTheme(
   const showPolaroid = profile.polaroid.visible && Boolean(polaroid && polaroidLayout)
   const polaroidStyle = profile.polaroid.style
   const runtimeProfile = createRuntimeProfile(profile)
+  const conversationBubbles = resolveConversationBubbles(profile.conversationBubbles, assets)
+  const conversationBubbleAssets = new Set(conversationBubbleMediaReferences(profile).map((reference) => reference.asset))
   const css = `:root { ${buildThemeVariableDeclarations(profile)} }\n` +
     `html.codex-dream-skin body { position: relative; color: var(--dream-global-text); background: var(--dream-canvas);${hero ? ' background-image: none;' : ''} font-family: var(--dream-font-ui); }\n` +
     (hero ? `html.codex-dream-skin body::before { content: ""; position: absolute; z-index: 0; inset: 0; pointer-events: none; background-image: url("${escapeCssUrl(hero)}"); background-repeat: no-repeat; background-position: ${percent(profile.hero.position.x)} ${percent(profile.hero.position.y)}; background-size: ${Math.round(profile.hero.scale * 100)}% auto; transform: ${mediaFlipCssTransform(profile.hero.mediaTransform)}; transform-origin: center; }\n` : '') +
@@ -51,7 +61,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground, windowBackground, conversationBubbles: { visible: profile.conversationBubbles.visible }, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets: Object.fromEntries(Object.entries(assets).filter(([key]) => !key.startsWith('builtin/conversation-bubbles/') && !conversationBubbleAssets.has(key))), conversationBackground, windowBackground, conversationBubbles, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
     assets
   }
 }
@@ -63,7 +73,8 @@ function createRuntimeProfile(profile: ThemeProfile): ThemeProfile {
     runtimeProfile.polaroid.source,
     runtimeProfile.conversationBackground.source,
     runtimeProfile.windowBackground.source,
-    runtimeProfile.decorations.composerMelody.source
+    runtimeProfile.decorations.composerMelody.source,
+    ...conversationBubbleMediaReferences(runtimeProfile)
   ]
   for (const reference of references) {
     if (reference?.videoVariants) delete reference.videoVariants

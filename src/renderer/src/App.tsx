@@ -15,11 +15,13 @@ import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPO
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { activateVideoVariant, mediaFlipCssTransform } from '../../shared/media'
-import type { CreateThemeInput, IconSlot, MediaReference, ThemeProfile, ThemeSummary, VideoVariants } from '../../shared/theme'
+import type { ConversationBubbleRole, CreateThemeInput, IconSlot, MediaReference, ThemeProfile, ThemeSummary, VideoVariants } from '../../shared/theme'
+import { conversationBubbleMediaReferences, conversationBubbleRolePurpose, resolveConversationBubbleFrame } from '../../shared/conversation-bubbles'
 import { SIDEBAR_NAV_ITEMS } from '../../shared/sidebar-layout'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { ConversationBackgroundControls } from './ConversationBackgroundControls'
+import { ConversationBubbleControls } from './ConversationBubbleControls'
 import { CreateThemeDialog, themeNameError } from './CreateThemeDialog'
 import { FenceEditor } from './FenceEditor'
 import { MediaFlipControls } from './MediaFlipControls'
@@ -78,6 +80,7 @@ export function App(): React.JSX.Element {
   const [previewScale, setPreviewScale] = useState(1)
   const [previewSelection, setPreviewSelection] = useState<PreviewSelection | null>(null)
   const [previewMode, setPreviewMode] = useState<'home' | 'conversation'>('home')
+  const [conversationBubbleRole, setConversationBubbleRole] = useState<ConversationBubbleRole>('user')
   const [previewComponentState, setPreviewComponentState] = useState<AppearanceState>('normal')
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null)
   const [inspectorAnchor, setInspectorAnchor] = useState<string | null>(null)
@@ -102,7 +105,7 @@ export function App(): React.JSX.Element {
       setDraft(profile)
       const nextAssets = { ...compiled.assets }
       if (window.studio.assets.getPreviewUrl) {
-        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
+        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
           if (!source) continue
           try { nextAssets[source.asset] = await window.studio.assets.getPreviewUrl(id, source.asset) } catch { /* missing media is shown as fallback */ }
         }
@@ -361,7 +364,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.themes.getDefault(themeId)
       const restoredAssets: Record<string, string> = {}
-      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
+      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
         if (!source) continue
         restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
       }
@@ -509,7 +512,7 @@ export function App(): React.JSX.Element {
     try {
       const imported = window.studio.assets.selectMedia
         ? await window.studio.assets.selectMedia(draft.id, purpose, requestedKind)
-        : purpose === 'composerMelody' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
+        : purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
@@ -534,6 +537,10 @@ export function App(): React.JSX.Element {
           profile.windowBackground.visible = true
           profile.windowBackground.mode = mode
           profile.windowBackground.source = imported.reference
+        } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble') {
+          const role = purpose === 'conversationUserBubble' ? 'user' : 'codex'
+          profile.conversationBubbles.visible = true
+          profile.conversationBubbles[role].source = { kind: 'custom', reference: imported.reference }
         } else {
           profile.decorations.composerMelody.source = imported.reference
           profile.decorations.composerMelody.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
@@ -626,6 +633,8 @@ export function App(): React.JSX.Element {
   const selectPreviewTarget = (event: React.PointerEvent<HTMLDivElement>): void => {
     const match = findPreviewTarget(event.target, event.currentTarget)
     if (!match) return
+    const editor = PREVIEW_TARGETS[match.id].editor
+    if (editor.kind === 'style' && editor.conversationBubbleRole) setConversationBubbleRole(editor.conversationBubbleRole)
     setPopoverPosition(null)
     setInspectorAnchor(null)
     setPreviewComponentState('normal')
@@ -636,6 +645,8 @@ export function App(): React.JSX.Element {
     if (event.key !== 'Enter' && event.key !== ' ') return
     const match = findPreviewTarget(event.target, event.currentTarget)
     if (!match) return
+    const editor = PREVIEW_TARGETS[match.id].editor
+    if (editor.kind === 'style' && editor.conversationBubbleRole) setConversationBubbleRole(editor.conversationBubbleRole)
     if (event.key === ' ') event.preventDefault()
     setPopoverPosition(null)
     setInspectorAnchor(null)
@@ -981,6 +992,7 @@ export function App(): React.JSX.Element {
               <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="首页标题装饰" anchor="visual-home-heading-decoration" highlighted={inspectorAnchor === 'visual-home-heading-decoration'}><HomeHeadingDecorationControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
+            <Property title="聊天气泡" anchor="visual-conversation-bubbles" highlighted={inspectorAnchor === 'visual-conversation-bubbles'}><ConversationBubbleControls profile={draft} assets={assets} role={conversationBubbleRole} mediaBusy={mediaBusy} onRoleChange={setConversationBubbleRole} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage(conversationBubbleRolePurpose(conversationBubbleRole), kind) }} /></Property>
             <Property title="对话区域背景" anchor="visual-conversation-background" highlighted={inspectorAnchor === 'visual-conversation-background'}><ConversationBackgroundControls profile={draft} backgroundUrl={conversationBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('conversationBackground', kind) }} /></Property>
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
               <PolaroidControls profile={draft} polaroidUrl={polaroidUrl} mediaBusy={mediaBusy} showAdvanced onChange={change} onInteractionEnd={endHistoryGroup} onSelectImage={() => void selectImage('polaroid')} />
@@ -1205,6 +1217,8 @@ function WindowBackgroundPreview({ profile, backgroundUrl }: { profile: ThemePro
 function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
   const background = profile.conversationBackground
   const sourceUrl = background.source ? assets[background.source.asset] : undefined
+  const userFrame = conversationBubblePreviewFrameProps(profile, assets, 'user')
+  const codexFrame = conversationBubblePreviewFrameProps(profile, assets, 'codex')
   const mediaStyle: React.CSSProperties = {
     objectPosition: `${background.focus.x * 100}% ${background.focus.y * 100}%`,
     opacity: background.visible ? background.opacity : 0,
@@ -1218,9 +1232,9 @@ function ConversationPreview({ profile, assets }: { profile: ThemeProfile; asset
       {background.visible && <div className="preview-conversation-background-overlay" style={buildConversationOverlayStyle(background.overlay)} />}
     </div>
     <div className="preview-message-list">
-      <article className={`preview-message user${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-user-message" tabIndex={0}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article>
+      <article className={`preview-message user${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-user-message" tabIndex={0} {...userFrame}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article>
       <section className="preview-assistant-response">
-        <article className={`preview-message assistant${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-codex-message" tabIndex={0}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p></article>
+        <article className={`preview-message assistant${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-codex-message" tabIndex={0} {...codexFrame}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p></article>
         <article className={`preview-tool-activity${profile.toolActivityBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-tool-activity" tabIndex={0}>
           <header><Play size={12} aria-hidden="true" /><strong>已运行命令</strong><span>2.1 秒</span></header>
           <code>npm test -- tests/theme.test.ts</code>
@@ -1230,6 +1244,20 @@ function ConversationPreview({ profile, assets }: { profile: ThemeProfile; asset
       </section>
     </div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div>
   </div></div>
+}
+
+function conversationBubblePreviewFrameProps(profile: ThemeProfile, assets: Record<string, string>, role: ConversationBubbleRole): { 'data-dream-bubble-frame': 'none' | 'nineSlice' | 'stretch'; style?: React.CSSProperties } {
+  const frame = resolveConversationBubbleFrame(profile.conversationBubbles[role], assets)
+  if (frame.mode === 'none' || !frame.dataUrl) return { 'data-dream-bubble-frame': 'none' }
+  return {
+    'data-dream-bubble-frame': frame.mode,
+    style: {
+      '--dream-preview-bubble-frame-source': `url(${JSON.stringify(frame.dataUrl)})`,
+      '--dream-preview-bubble-frame-slice': `${frame.slice}%`,
+      '--dream-preview-bubble-frame-width': `${frame.frameWidth}px`,
+      '--dream-preview-bubble-content-padding': `${frame.contentPadding}px`
+    } as React.CSSProperties
+  }
 }
 
 function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
@@ -1272,7 +1300,6 @@ function AppearanceInspectorGroup({ group, profile, highlighted, onChange, onInt
   const colorTokens = (Object.keys(APPEARANCE_COLOR_TOKENS) as AppearanceColorToken[]).filter((token) => APPEARANCE_COLOR_TOKENS[token].group === group && APPEARANCE_COLOR_TOKENS[token].editable && !sidebarSectionTitleColorTokens.has(token))
   const paintTokens = (Object.keys(APPEARANCE_PAINT_TOKENS) as AppearancePaintToken[]).filter((token) => APPEARANCE_PAINT_TOKENS[token].group === group && APPEARANCE_PAINT_TOKENS[token].editable && !sidebarSectionTitlePaintTokens.has(token))
   return <Property title={appearanceGroupLabels[group]} anchor={`appearance-${group}`} highlighted={highlighted}><div className="appearance-editor">
-    {group === 'conversation' && <label className="toggle-row"><span>显示聊天气泡</span><input type="checkbox" checked={profile.conversationBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.conversationBubbles.visible = visible }) }} /></label>}
     {group === 'conversation' && <label className="toggle-row"><span>显示工具活动气泡</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
     {colorTokens.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
     {paintTokens.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
