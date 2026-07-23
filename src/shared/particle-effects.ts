@@ -1,8 +1,18 @@
 export const PARTICLE_EFFECT_IDS = ['twinkle', 'float', 'rain', 'meteor', 'snow'] as const
 export const PARTICLE_VIEWPORT_TOP = 66
+export const PARTICLE_PERFORMANCE_MODES = ['quality', 'balanced', 'performance'] as const
 
 export type ParticleEffect = typeof PARTICLE_EFFECT_IDS[number]
 export type ParticleEffectIconSlot = 'backgroundSparkle' | 'backgroundFloat' | 'backgroundRain' | 'backgroundMeteor' | 'backgroundSnow'
+export type ParticlePerformanceMode = typeof PARTICLE_PERFORMANCE_MODES[number]
+
+export interface ParticleRenderPolicy {
+  mode: ParticlePerformanceMode
+  animatedIndexes: number[]
+  targetFps: number | null
+  glowLimit: number | null
+  showTrails: boolean
+}
 
 export interface ParticleEffectDefinition {
   label: string
@@ -17,6 +27,18 @@ export const PARTICLE_EFFECTS: Readonly<Record<ParticleEffect, ParticleEffectDef
   rain: { label: '垂直雨落', iconSlot: 'backgroundRain', baseDuration: 2.8, maxDrift: 18 },
   meteor: { label: '斜向流星', iconSlot: 'backgroundMeteor', baseDuration: 8, maxDrift: 36 },
   snow: { label: '摇曳飘雪', iconSlot: 'backgroundSnow', baseDuration: 12, maxDrift: 70 }
+})
+
+const PARTICLE_PERFORMANCE_POLICIES: Readonly<Record<ParticlePerformanceMode, Omit<ParticleRenderPolicy, 'mode' | 'animatedIndexes'>>> = Object.freeze({
+  quality: { targetFps: null, glowLimit: null, showTrails: true },
+  balanced: { targetFps: 30, glowLimit: 6, showTrails: true },
+  performance: { targetFps: 15, glowLimit: 0, showTrails: false }
+})
+
+const PARTICLE_ANIMATION_BUDGETS: Readonly<Record<ParticlePerformanceMode, number>> = Object.freeze({
+  quality: 24,
+  balanced: 8,
+  performance: 4
 })
 
 export interface SparkleParticle {
@@ -99,6 +121,17 @@ export function createSparkleParticles(options: SparkleLayoutOptions): SparklePa
     })
   }
   return particles
+}
+
+export function resolveParticleRenderPolicy(mode: ParticlePerformanceMode, count: number): ParticleRenderPolicy {
+  const safeCount = Math.max(0, Math.min(24, Math.floor(count)))
+  const animatedCount = Math.min(safeCount, PARTICLE_ANIMATION_BUDGETS[mode])
+  const animatedIndexes = animatedCount === safeCount
+    ? Array.from({ length: safeCount }, (_, index) => index)
+    : Array.from({ length: animatedCount }, (_, index) => animatedCount === 1
+        ? 0
+        : Math.round(index * (safeCount - 1) / (animatedCount - 1)))
+  return { mode, animatedIndexes, ...PARTICLE_PERFORMANCE_POLICIES[mode] }
 }
 
 export function createParticleViewportMetrics(width: number, height: number, top = PARTICLE_VIEWPORT_TOP): ParticleViewportMetrics {

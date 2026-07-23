@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Plus, RotateCcw, Shuffle, Trash2 } from 'lucide-react'
 import { resolveAppearanceColor } from '../../shared/appearance'
-import { PARTICLE_EFFECT_IDS, PARTICLE_EFFECTS, particleEffectIconSlot } from '../../shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, PARTICLE_EFFECTS, PARTICLE_PERFORMANCE_MODES, particleEffectIconSlot, type ParticlePerformanceMode } from '../../shared/particle-effects'
 import type { ThemeProfile } from '../../shared/theme'
 import { AppearanceColorControl, Range, SolidColorControl, ThemeIconControl } from './editor-controls'
 
@@ -14,6 +14,11 @@ interface ParticleEffectControlsProps {
 }
 
 const EXTRA_COLOR_DEFAULTS = ['#20bcc3', '#b9a7e8', '#f06ea9'] as const
+const performanceLabels: Readonly<Record<ParticlePerformanceMode, string>> = {
+  quality: '精细',
+  balanced: '平衡',
+  performance: '省电'
+}
 
 export function ParticleEffectControls({ profile, assets, onChange, onInteractionEnd, onImportIcon }: ParticleEffectControlsProps): React.JSX.Element {
   const config = profile.decorations.sparkles
@@ -23,6 +28,7 @@ export function ParticleEffectControls({ profile, assets, onChange, onInteractio
     <label className="toggle-row"><span>显示背景粒子</span><input type="checkbox" checked={config.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.decorations.sparkles.visible = visible }) }} /></label>
     <fieldset className="particle-effect-settings" disabled={!config.visible} aria-label="粒子动效设置">
       <div className="segmented-control particle-effect-modes" aria-label="粒子动效">{PARTICLE_EFFECT_IDS.map((effect) => <button type="button" className={config.effect === effect ? 'active' : ''} aria-pressed={config.effect === effect} key={effect} onClick={() => onChange((next) => { next.decorations.sparkles.effect = effect })}>{PARTICLE_EFFECTS[effect].label}</button>)}</div>
+      <div className="segmented-control particle-performance-modes" aria-label="粒子渲染性能">{PARTICLE_PERFORMANCE_MODES.map((mode) => <button type="button" className={config.performanceMode === mode ? 'active' : ''} aria-pressed={config.performanceMode === mode} key={mode} onClick={() => onChange((next) => { next.decorations.sparkles.performanceMode = mode })}>{performanceLabels[mode]}</button>)}</div>
       <div className="icon-editor"><ThemeIconControl slot={activeSlot} profile={profile} assets={assets} onChange={(name) => onChange((next) => { next.icons[activeSlot] = { kind: 'builtin', name } })} onImport={() => onImportIcon(activeSlot)} /></div>
       <Range label="速度" min={0.5} max={2} step={0.05} value={config.speed} onChange={(speed) => onChange((next) => { next.decorations.sparkles.speed = speed }, 'sparkle-speed')} onChangeEnd={onInteractionEnd} suffix="×" />
       <div className="token-control"><AppearanceColorControl token="sparkle" value={mainColor} onChange={(value) => onChange((next) => { next.appearance.colors.sparkle = value }, 'color-sparkle')} onChangeEnd={onInteractionEnd} />{profile.appearance.colors.sparkle && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors.sparkle })}><RotateCcw size={12} /></button>}</div>

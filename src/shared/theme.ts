@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema, themePaintSchema, type ThemeAppearance } from './appearance'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
-import { PARTICLE_EFFECT_IDS } from './particle-effects'
+import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES } from './particle-effects'
 import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
 import { DEFAULT_SIDEBAR_COPY, DEFAULT_SIDEBAR_NAV_COPY, SIDEBAR_NAV_ITEMS } from './sidebar-layout'
 
@@ -84,10 +84,19 @@ const versionSevenSparklesSchema = z.object(sparkleFields).strict().superRefine(
   if (sparkles.minSize > sparkles.maxSize) context.addIssue({ code: 'custom', path: ['maxSize'], message: 'Sparkle maxSize must be greater than or equal to minSize.' })
 })
 
-const sparklesSchema = z.object({
+const versionTwentySparklesSchema = z.object({
   ...sparkleFields,
   effect: z.enum(PARTICLE_EFFECT_IDS),
   speed: z.number().finite().min(0.5).max(2)
+}).strict().superRefine((sparkles, context) => {
+  if (sparkles.minSize > sparkles.maxSize) context.addIssue({ code: 'custom', path: ['maxSize'], message: 'Sparkle maxSize must be greater than or equal to minSize.' })
+})
+
+const sparklesSchema = z.object({
+  ...sparkleFields,
+  effect: z.enum(PARTICLE_EFFECT_IDS),
+  speed: z.number().finite().min(0.5).max(2),
+  performanceMode: z.enum(PARTICLE_PERFORMANCE_MODES)
 }).strict().superRefine((sparkles, context) => {
   if (sparkles.minSize > sparkles.maxSize) context.addIssue({ code: 'custom', path: ['maxSize'], message: 'Sparkle maxSize must be greater than or equal to minSize.' })
 })
@@ -216,6 +225,16 @@ const homeHeadingDecorationSchema = z.object({
   visible: z.boolean(),
   text: z.string().max(64),
   fontSize: z.number().int().min(10).max(32)
+}).strict()
+
+const versionTwentyDecorationsSchema = z.object({
+  sparkles: versionTwentySparklesSchema,
+  homeHeading: homeHeadingDecorationSchema.default({
+    visible: true,
+    text: DEFAULT_HOME_HEADING_DECORATION,
+    fontSize: 17
+  }),
+  composerMelody: composerMelodySchema
 }).strict()
 
 const decorationsSchema = z.object({
@@ -385,7 +404,7 @@ const versionNineThemeSchema = z.object({
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
-  decorations: decorationsSchema,
+  decorations: versionTwentyDecorationsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
 }).strict()
@@ -400,7 +419,7 @@ const versionTenThemeSchema = z.object({
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
-  decorations: decorationsSchema,
+  decorations: versionTwentyDecorationsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
 }).strict()
@@ -441,7 +460,7 @@ const versionElevenThemeSchema = z.object({
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
-  decorations: decorationsSchema,
+  decorations: versionTwentyDecorationsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
 }).strict().superRefine((profile, context) => {
@@ -465,7 +484,7 @@ const versionTwelveThemeSchema = z.object({
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
-  decorations: decorationsSchema,
+  decorations: versionTwentyDecorationsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
 }).strict().superRefine((profile, context) => {
@@ -486,7 +505,7 @@ const versionThirteenThemeFields = {
   copy: currentThemeCopySchema,
   icons: currentSidebarIconsSchema,
   composerBadge: composerBadgeSchema,
-  decorations: decorationsSchema,
+  decorations: versionTwentyDecorationsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
 }
@@ -565,9 +584,25 @@ const versionNineteenThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionTwentyThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(20),
+  decorations: versionTwentyDecorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(21),
+  decorations: decorationsSchema,
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
   conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
@@ -586,7 +621,7 @@ const versionEightThemeSchema = z.object({
   copy: themeCopySchema,
   icons: currentParticleIconsSchema,
   composerBadge: composerBadgeSchema,
-  decorations: decorationsSchema,
+  decorations: versionTwentyDecorationsSchema,
   appearance: themeAppearanceSchema,
   typography: themeTypographySchema
 }).strict()
@@ -686,7 +721,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 20,
+    version: 21,
     updatedAt: new Date().toISOString(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
@@ -748,11 +783,16 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
-  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version < 20) {
+  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version < 21) {
     const legacy = structuredClone(input) as Record<string, unknown>
-    delete legacy.toolActivityBubbles
-    if (input.version < 19) delete legacy.conversationBubbles
-    if (input.version < 18) delete legacy.windowBackground
+    const decorations = legacy.decorations && typeof legacy.decorations === 'object' ? legacy.decorations as Record<string, unknown> : null
+    const sparkles = decorations?.sparkles && typeof decorations.sparkles === 'object' ? decorations.sparkles as Record<string, unknown> : null
+    if (sparkles) delete sparkles.performanceMode
+    if (input.version < 20) {
+      delete legacy.toolActivityBubbles
+      if (input.version < 19) delete legacy.conversationBubbles
+      if (input.version < 18) delete legacy.windowBackground
+    }
     input = legacy
   }
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 1 && input.version <= 10) {
@@ -767,10 +807,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 20) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 21) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 20) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionTwenty(versionTwentyThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 19) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -872,7 +916,7 @@ function migrateLegacyTheme(
     copy: { ...copy, ...DEFAULT_BRAND_COPY },
     icons: { ...legacy.icons, sidebarMode: { kind: 'builtin', name: 'music' }, composerBadge: { kind: 'builtin', name: 'music' }, ...createDefaultParticleIcons() },
     composerBadge: { visible: true },
-    decorations: createDefaultDecorations(),
+    decorations: createVersionTwentyDefaultDecorations(),
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   }))
@@ -885,7 +929,7 @@ function migrateVersionFour(legacy: z.infer<typeof versionFourThemeSchema>): The
     polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
     icons: { ...legacy.icons, composerBadge: { kind: 'builtin', name: 'music' }, ...createDefaultParticleIcons() },
     composerBadge: { visible: true },
-    decorations: createDefaultDecorations(),
+    decorations: createVersionTwentyDefaultDecorations(),
     appearance: createEmptyAppearance(),
     typography: createDefaultTypography()
   }))
@@ -908,7 +952,7 @@ function migrateVersionSix(legacy: z.infer<typeof versionSixThemeSchema>): Theme
     version: 10,
     polaroid: { ...legacy.polaroid, mode: 'fence', style: createDefaultPolaroidStyle() },
     icons: { ...legacy.icons, ...createDefaultParticleIcons() },
-    decorations: createDefaultDecorations(),
+    decorations: createVersionTwentyDefaultDecorations(),
     typography: {
       ...legacy.typography,
       slots: { ...legacy.typography.slots, composerMelody: { kind: 'inherit' } }
@@ -1073,10 +1117,21 @@ function migrateVersionEighteen(legacy: z.infer<typeof versionEighteenThemeSchem
 }
 
 function migrateVersionNineteen(legacy: z.infer<typeof versionNineteenThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionTwenty(versionTwentyThemeSchema.parse({
     ...legacy,
     version: 20,
     toolActivityBubbles: { visible: legacy.conversationBubbles.visible }
+  }))
+}
+
+function migrateVersionTwenty(legacy: z.infer<typeof versionTwentyThemeSchema>): ThemeProfile {
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 21,
+    decorations: {
+      ...legacy.decorations,
+      sparkles: { ...legacy.decorations.sparkles, performanceMode: 'balanced' }
+    }
   }))
 }
 
@@ -1205,6 +1260,7 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
       visible: true,
       effect: 'twinkle',
       speed: 1,
+      performanceMode: 'balanced',
       count: 6,
       minSize: 14,
       maxSize: 18,
@@ -1232,6 +1288,12 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
       fontSize: 17
     }
   }
+}
+
+function createVersionTwentyDefaultDecorations(): z.infer<typeof versionTwentyDecorationsSchema> {
+  const current = createDefaultDecorations()
+  const { performanceMode: _performanceMode, ...sparkles } = current.sparkles
+  return { ...current, sparkles }
 }
 
 function createDefaultPolaroidStyle(): z.infer<typeof polaroidStyleSchema> {

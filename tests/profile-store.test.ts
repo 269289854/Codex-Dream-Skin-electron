@@ -81,7 +81,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 20, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 21, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -141,7 +141,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 20,
+      version: 21,
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
@@ -156,7 +156,7 @@ describe('ProfileStore', () => {
       },
       icons: { backgroundRain: { kind: 'builtin', name: 'wand-sparkles' } },
       decorations: {
-        sparkles: { visible: true, effect: 'rain', speed: 1, count: 20, minSize: 20, maxSize: 32, opacity: 0.72, glow: 10, seed: 0, extraColors: [] }
+        sparkles: { visible: true, effect: 'rain', speed: 1, performanceMode: 'balanced', count: 20, minSize: 20, maxSize: 32, opacity: 0.72, glow: 10, seed: 0, extraColors: [] }
       }
     })
     await expect(readFile(join(root, 'themes', systemTheme.id, 'assets', 'dream-reference.png'))).resolves.toEqual(TEST_PNG)
@@ -373,7 +373,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(20)
+    expect(migrated.version).toBe(21)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'
@@ -425,6 +425,7 @@ describe('ProfileStore', () => {
     const font = await store.importFontAsset(profile.id, fontSource)
 
     profile.copy.brandTitle = '尚未保存的标题'
+    profile.decorations.sparkles.performanceMode = 'performance'
     profile.colors.accent = '#123456'
     profile.hero.sourceImage = image.relativePath
     profile.polaroid.sourceImage = image.relativePath
@@ -444,6 +445,7 @@ describe('ProfileStore', () => {
     expect(duplicate.colors.accent).toBe('#123456')
     expect(duplicate.resetColors).toEqual(resetColors)
     expect(duplicate.toolActivityBubbles).toEqual({ visible: false })
+    expect(duplicate.decorations.sparkles.performanceMode).toBe('performance')
     expect(duplicate.id).not.toBe(profile.id)
     expect(Date.parse(duplicate.updatedAt)).toBeGreaterThanOrEqual(Date.parse(profile.updatedAt))
     expect((await store.get(profile.id)).copy.brandTitle).not.toBe('尚未保存的标题')

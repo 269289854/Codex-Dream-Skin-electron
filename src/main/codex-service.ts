@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
@@ -6,7 +6,7 @@ import { paintToCss } from '../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../shared/conversation-overlay'
 import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
-import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot } from '../shared/particle-effects'
+import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy } from '../shared/particle-effects'
 import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
@@ -273,43 +273,47 @@ export class CodexService {
       visible: mask.visible,
       style: buildBackgroundOverlayStyle(mask)
     }))
-    const runtimeVersion = `studio-${profile.updatedAt}-${randomUUID()}`
+    const runtimeConfig = {
+      themeId: profile.id,
+      media: {
+        hero: profile.hero.source ? { asset: profile.hero.source.asset, kind: profile.hero.source.kind, mimeType: profile.hero.source.mimeType, playback: profile.hero.playback, transform: profile.hero.mediaTransform } : null,
+        polaroid: profile.polaroid.source ? { asset: profile.polaroid.source.asset, kind: profile.polaroid.source.kind, mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback, transform: profile.polaroid.mediaTransform } : null,
+        conversationBackground: profile.conversationBackground.source
+          ? { ...conversationBackground, overlayStyle: conversationOverlayStyle, kind: profile.conversationBackground.source.kind, mimeType: profile.conversationBackground.source.mimeType, asset: profile.conversationBackground.source.asset, dataUrl: profile.conversationBackground.source.kind === 'image' ? compiled.assets[profile.conversationBackground.source.asset] : null }
+          : { ...conversationBackground, overlayStyle: conversationOverlayStyle, dataUrl: null },
+        windowBackground: windowBackgroundSource
+          ? { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, kind: windowBackgroundSource.kind, mimeType: windowBackgroundSource.mimeType, asset: windowBackgroundSource.asset, dataUrl: windowBackgroundSource.kind === 'image' ? compiled.assets[windowBackgroundSource.asset] : null }
+          : { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, dataUrl: null }
+      },
+      icons,
+      decorations: {
+        ...profile.decorations,
+        composerMelody: {
+          ...composerMelody,
+          dataUrl: composerMelody.source ? compiled.assets[composerMelody.source.asset] ?? null : null
+        }
+      },
+      particleViewportTop: PARTICLE_VIEWPORT_TOP,
+      sparkleIconSlot: particleEffectIconSlot(profile.decorations.sparkles.effect),
+      sparkleParticles: createSparkleParticles(profile.decorations.sparkles),
+      sparklePolicy: resolveParticleRenderPolicy(profile.decorations.sparkles.performanceMode, profile.decorations.sparkles.count),
+      composerBadge: profile.composerBadge,
+      conversationBubbles: { visible: profile.conversationBubbles.visible },
+      toolActivityBubbles: { visible: profile.toolActivityBubbles.visible },
+      builtinGlyphs: BUILTIN_ICON_GLYPHS,
+      actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
+      copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
+      sidebarNavigation: SIDEBAR_NAV_ITEMS,
+      actions: HOME_ACTIONS
+    }
+    const art = hero ?? TRANSPARENT_PNG
+    const serializedConfig = JSON.stringify(runtimeConfig)
+    const runtimeVersion = `studio-${createHash('sha256').update(renderer).update(css).update(art).update(serializedConfig).digest('hex').slice(0, 24)}`
     return renderer
       .replace('__DREAM_VERSION_JSON__', JSON.stringify(runtimeVersion))
       .replace('__DREAM_CSS_JSON__', JSON.stringify(css))
-      .replace('__DREAM_ART_JSON__', JSON.stringify(hero ?? TRANSPARENT_PNG))
-      .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
-        themeId: profile.id,
-        media: {
-          hero: profile.hero.source ? { asset: profile.hero.source.asset, kind: profile.hero.source.kind, mimeType: profile.hero.source.mimeType, playback: profile.hero.playback, transform: profile.hero.mediaTransform } : null,
-          polaroid: profile.polaroid.source ? { asset: profile.polaroid.source.asset, kind: profile.polaroid.source.kind, mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback, transform: profile.polaroid.mediaTransform } : null,
-          conversationBackground: profile.conversationBackground.source
-            ? { ...conversationBackground, overlayStyle: conversationOverlayStyle, kind: profile.conversationBackground.source.kind, mimeType: profile.conversationBackground.source.mimeType, asset: profile.conversationBackground.source.asset, dataUrl: profile.conversationBackground.source.kind === 'image' ? compiled.assets[profile.conversationBackground.source.asset] : null }
-            : { ...conversationBackground, overlayStyle: conversationOverlayStyle, dataUrl: null },
-          windowBackground: windowBackgroundSource
-            ? { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, kind: windowBackgroundSource.kind, mimeType: windowBackgroundSource.mimeType, asset: windowBackgroundSource.asset, dataUrl: windowBackgroundSource.kind === 'image' ? compiled.assets[windowBackgroundSource.asset] : null }
-            : { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, dataUrl: null }
-        },
-        icons,
-        decorations: {
-          ...profile.decorations,
-          composerMelody: {
-            ...composerMelody,
-            dataUrl: composerMelody.source ? compiled.assets[composerMelody.source.asset] ?? null : null
-          }
-        },
-        particleViewportTop: PARTICLE_VIEWPORT_TOP,
-        sparkleIconSlot: particleEffectIconSlot(profile.decorations.sparkles.effect),
-        sparkleParticles: createSparkleParticles(profile.decorations.sparkles),
-        composerBadge: profile.composerBadge,
-        conversationBubbles: { visible: profile.conversationBubbles.visible },
-        toolActivityBubbles: { visible: profile.toolActivityBubbles.visible },
-        builtinGlyphs: BUILTIN_ICON_GLYPHS,
-        actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
-        copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
-        sidebarNavigation: SIDEBAR_NAV_ITEMS,
-        actions: HOME_ACTIONS
-      }))
+      .replace('__DREAM_ART_JSON__', JSON.stringify(art))
+      .replace('__DREAM_CONFIG_JSON__', serializedConfig)
   }
 
   private async writeRuntimePayload(payload: string): Promise<void> {

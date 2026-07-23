@@ -160,51 +160,20 @@ describe('PolaroidPreview video playback', () => {
     expect(video.currentTime).toBe(14)
   })
 
-  it('uses video frame callbacks without treating a repeated frame as progress', async () => {
-    const play = vi.fn(() => Promise.resolve())
-    const pause = vi.fn()
-    const guardCallbacks: Array<() => void> = []
-    const frameCallbacks: VideoFrameRequestCallback[] = []
-    const nativeSetInterval = browserWindow.setInterval.bind(browserWindow)
-    browserWindow.setInterval = ((handler: (...args: unknown[]) => void, timeout?: number, ...args: unknown[]) => {
-      if (timeout === 750 && typeof handler === 'function') {
-        guardCallbacks.push(handler as () => void)
-        return 750
-      }
-      return nativeSetInterval(handler, timeout, ...args)
-    }) as typeof browserWindow.setInterval
-    let now = 0
-    Object.defineProperty(browserWindow.performance, 'now', { configurable: true, value: () => now })
-    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
-    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+  it('does not subscribe to per-frame video callbacks', async () => {
+    const requestFrame = vi.fn(() => 1)
+    const cancelFrame = vi.fn()
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: vi.fn(() => Promise.resolve()) })
     Object.defineProperty(browserWindow.HTMLVideoElement.prototype, 'requestVideoFrameCallback', {
       configurable: true,
-      value: (callback: VideoFrameRequestCallback) => { frameCallbacks.push(callback); return frameCallbacks.length }
+      value: requestFrame
     })
-    Object.defineProperty(browserWindow.HTMLVideoElement.prototype, 'cancelVideoFrameCallback', { configurable: true, value: vi.fn() })
+    Object.defineProperty(browserWindow.HTMLVideoElement.prototype, 'cancelVideoFrameCallback', { configurable: true, value: cancelFrame })
     profile.polaroid.playback.autoplay = true
     await renderVideo('studio-media://theme/assets/frame-guard.mp4')
-
-    const video = container.querySelector<HTMLVideoElement>('video')
-    if (!video) throw new Error('Preview video is missing.')
-    Object.defineProperties(video, {
-      paused: { configurable: true, value: false },
-      ended: { configurable: true, value: false },
-      readyState: { configurable: true, value: 2 },
-      currentTime: { configurable: true, writable: true, value: 5 }
-    })
-    play.mockClear()
-    pause.mockClear()
-    now = 100
-    frameCallbacks[0]?.(now, { mediaTime: 5 } as VideoFrameCallbackMetadata)
-    now = 1600
-    frameCallbacks[1]?.(now, { mediaTime: 5 } as VideoFrameCallbackMetadata)
-    now = 1700
-    guardCallbacks[0]?.()
-    await Promise.resolve()
-
-    expect(pause).toHaveBeenCalledOnce()
-    expect(play).toHaveBeenCalledOnce()
+    expect(requestFrame).not.toHaveBeenCalled()
+    await act(async () => { root.render(<div />); await Promise.resolve() })
+    expect(cancelFrame).not.toHaveBeenCalled()
   })
 
   it('restores the playback position when a preview page unmounts and returns', async () => {

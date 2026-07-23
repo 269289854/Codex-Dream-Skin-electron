@@ -21,7 +21,6 @@ interface GuardState {
   stalledSince: number | null
   recovering: boolean
   nextRecoveryAt: number
-  frameRequest: number | null
 }
 
 const currentDataReadyState = (video: HTMLVideoElement): number => Number(video.HAVE_CURRENT_DATA) || 2
@@ -89,8 +88,7 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
       lastSignalAt: window.performance.now(),
       stalledSince: null,
       recovering: false,
-      nextRecoveryAt: 0,
-      frameRequest: null
+      nextRecoveryAt: 0
     }
     guardRef.current = state
     let retryTimer: number | null = null
@@ -102,21 +100,6 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
       state.lastSignalAt = window.performance.now()
       state.stalledSince = null
       state.recovering = false
-    }
-    const requestFrame = (): void => {
-      if (typeof video.requestVideoFrameCallback !== 'function' || !video.isConnected) return
-      state.frameRequest = video.requestVideoFrameCallback((_now, metadata) => {
-        if (guardRef.current !== state) return
-        const mediaTime = Number(metadata?.mediaTime)
-        const nextTime = Number.isFinite(mediaTime) ? mediaTime : video.currentTime
-        if (Math.abs(nextTime - state.lastTime) >= 0.01) {
-          state.lastTime = nextTime
-          state.lastSignalAt = window.performance.now()
-          state.stalledSince = null
-          state.recovering = false
-        }
-        requestFrame()
-      })
     }
     const schedulePlay = (): void => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
@@ -140,7 +123,6 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
         state.lastSignalAt = window.performance.now()
         state.stalledSince = null
         setPlaybackBlocked(false)
-        requestFrame()
       }).catch(() => {
         state.recovering = false
         state.stalledSince = window.performance.now()
@@ -182,14 +164,12 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
     document.addEventListener('visibilitychange', resumeVisibleVideo)
     window.addEventListener('focus', attemptPlay)
     setPlaybackBlocked(false)
-    requestFrame()
     attemptPlay()
 
     return () => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
       rememberPlaybackPosition()
       window.clearInterval(guardTimer)
-      if (state.frameRequest !== null && typeof video.cancelVideoFrameCallback === 'function') video.cancelVideoFrameCallback(state.frameRequest)
       video.removeEventListener('loadedmetadata', restorePlaybackPosition)
       video.removeEventListener('loadedmetadata', schedulePlay)
       video.removeEventListener('loadeddata', schedulePlay)

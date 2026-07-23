@@ -547,6 +547,7 @@ export class ProfileStore {
         visible: true,
         effect: 'rain',
         speed: 1,
+        performanceMode: 'balanced',
         count: 20,
         minSize: 20,
         maxSize: 32,

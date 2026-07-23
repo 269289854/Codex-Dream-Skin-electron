@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { PARTICLE_EFFECT_IDS, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, type SparkleParticle } from '../src/shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy, type SparkleParticle } from '../src/shared/particle-effects'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import type { ConversationOverlayStyle } from '../src/shared/conversation-overlay'
@@ -150,26 +150,28 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
 }, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: { visible: boolean } = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }): void {
+  const runtimeConfig = {
+    themeId,
+    media,
+    icons,
+    composerBadge,
+    conversationBubbles,
+    toolActivityBubbles,
+    decorations,
+    particleViewportTop: PARTICLE_VIEWPORT_TOP,
+    sparkleIconSlot: particleEffectIconSlot(decorations.sparkles.effect),
+    sparkleParticles,
+    sparklePolicy: resolveParticleRenderPolicy(decorations.sparkles.performanceMode, sparkleParticles.length),
+    builtinGlyphs: BUILTIN_ICON_GLYPHS,
+    actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
+    copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
+    actions: HOME_ACTIONS
+  }
   const payload = template
-    .replace('__DREAM_VERSION_JSON__', JSON.stringify('dom-test'))
+    .replace('__DREAM_VERSION_JSON__', JSON.stringify(JSON.stringify(runtimeConfig)))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
     .replace('__DREAM_ART_JSON__', JSON.stringify('data:image/png;base64,AA=='))
-    .replace('__DREAM_CONFIG_JSON__', JSON.stringify({
-      themeId,
-      media,
-      icons,
-      composerBadge,
-      conversationBubbles,
-      toolActivityBubbles,
-      decorations,
-      particleViewportTop: PARTICLE_VIEWPORT_TOP,
-      sparkleIconSlot: particleEffectIconSlot(decorations.sparkles.effect),
-      sparkleParticles,
-      builtinGlyphs: BUILTIN_ICON_GLYPHS,
-      actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
-      copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
-      actions: HOME_ACTIONS
-    }))
+    .replace('__DREAM_CONFIG_JSON__', JSON.stringify(runtimeConfig))
   window.eval(payload)
 }
 
@@ -689,6 +691,36 @@ describe('renderer home DOM adaptation', () => {
     expect(layer?.style.getPropertyValue('--dream-particle-negative-width')).toBe('-1016px')
   })
 
+  it('keeps every configured particle while applying deterministic performance budgets', () => {
+    for (const mode of PARTICLE_PERFORMANCE_MODES) {
+      for (const count of [1, 8, 20, 24]) {
+        const window = createWindow()
+        window.document.body.innerHTML = homeFixture(`${mode}-${count}`)
+        const decorations = structuredClone(defaultDecorations)
+        decorations.sparkles = { ...decorations.sparkles, performanceMode: mode, count, glow: 10, extraColors: ['#20bcc3'] }
+        const particles = createSparkleParticles(decorations.sparkles)
+        inject(window, undefined, undefined, undefined, undefined, decorations, particles)
+
+        const layer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
+        const nodes = [...(layer?.querySelectorAll(':scope > .dream-particle') ?? [])] as HTMLElement[]
+        const expected = resolveParticleRenderPolicy(mode, count)
+        expect(nodes).toHaveLength(count)
+        expect(layer?.dataset.dreamPerformance).toBe(mode)
+        expect(layer?.dataset.dreamTrails).toBe(expected.showTrails ? 'true' : 'false')
+        expect(nodes.flatMap((node, index) => node.dataset.dreamAnimated === 'true' ? [index] : [])).toEqual(expected.animatedIndexes)
+        expect(nodes.every((node) => node.style.getPropertyValue('--dream-particle-x').endsWith('%'))).toBe(true)
+        expect(nodes.every((node) => node.style.getPropertyValue('--dream-sparkle-size').endsWith('px'))).toBe(true)
+        expect(nodes.every((node) => node.querySelector('.dream-particle-content') !== null)).toBe(true)
+        expect(nodes[0]?.style.getPropertyValue('--dream-sparkle-glow')).toBe(`${mode === 'quality' ? 10 : mode === 'balanced' ? 6 : 0}px`)
+        if (expected.targetFps) {
+          const duration = Number.parseFloat(nodes[expected.animatedIndexes[0] ?? 0]?.style.getPropertyValue('--dream-particle-duration') ?? '0')
+          expect(nodes[expected.animatedIndexes[0] ?? 0]?.style.getPropertyValue('--dream-particle-steps')).toBe(`${Math.max(1, Math.round(duration * expected.targetFps))}`)
+        }
+        stateOf(window).cleanup()
+      }
+    }
+  })
+
   it('selects an independent material and animation state for every particle effect', () => {
     for (const effect of PARTICLE_EFFECT_IDS) {
       const window = createWindow()
@@ -730,12 +762,44 @@ describe('renderer home DOM adaptation', () => {
     const runtimeKeyframes = particleEffectsCss.slice(particleEffectsCss.indexOf('@keyframes'), particleEffectsCss.indexOf('@media'))
     const previewKeyframes = previewParticleEffectsCss.slice(previewParticleEffectsCss.indexOf('@keyframes'), previewParticleEffectsCss.indexOf('@media'))
     expect(previewKeyframes).toBe(runtimeKeyframes)
-    expect(particleEffectsCss).toContain('animation-duration: calc(var(--dream-particle-duration, 4s) * 1.8) !important')
+    expect(particleEffectsCss).toContain('animation-play-state: paused !important')
     expect(particleEffectsCss).not.toContain('animation: none !important')
     expect(previewParticleEffectsCss).toContain('[data-preview-selected="true"]')
     expect(previewParticleEffectsCss).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(previewParticleEffectsCss).toContain('animation-duration: calc(var(--dream-particle-duration, 4s) * 1.8) !important')
+    expect(previewParticleEffectsCss).toContain('animation-play-state: paused !important')
     expect(previewParticleEffectsCss).not.toContain('animation: none !important')
+  })
+
+  it('pauses decorative motion while hidden or unfocused and removes motion listeners during cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Motion-State')
+    let focused = true
+    let hidden = false
+    Object.defineProperty(window.document, 'hasFocus', { configurable: true, value: () => focused })
+    Object.defineProperty(window.document, 'hidden', { configurable: true, get: () => hidden })
+    const clearInterval = vi.spyOn(window, 'clearInterval')
+    inject(window)
+
+    expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
+    focused = false
+    window.dispatchEvent(new window.Event('blur'))
+    expect(window.document.documentElement.getAttribute('data-dream-motion-paused')).toBe('')
+    focused = true
+    window.dispatchEvent(new window.Event('focus'))
+    expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
+    hidden = true
+    window.document.dispatchEvent(new window.Event('visibilitychange'))
+    expect(window.document.documentElement.getAttribute('data-dream-motion-paused')).toBe('')
+
+    const timer = (window as unknown as { __CODEX_DREAM_SKIN_STATE__: { timer: number } }).__CODEX_DREAM_SKIN_STATE__.timer
+    stateOf(window).cleanup()
+    expect(clearInterval).toHaveBeenCalledWith(timer)
+    expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
+    focused = false
+    hidden = false
+    window.dispatchEvent(new window.Event('blur'))
+    window.document.dispatchEvent(new window.Event('visibilitychange'))
+    expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
   })
 
   it('shows composer melody as text and hides it for text or attachments', () => {
@@ -822,7 +886,7 @@ describe('renderer home DOM adaptation', () => {
       }
     }
     expect(homeLayoutCss).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(homeLayoutCss).toContain('animation-duration: calc(var(--dream-composer-effect-duration, 2s) * 1.8) !important;')
+    expect(homeLayoutCss).toContain('animation-play-state: paused !important;')
     expect(homeLayoutCss).not.toContain('.dream-composer-decoration-character { animation: none !important; }')
     expect(homeLayoutCss).toContain('.dream-composer-decoration-wave { padding-block: 4px; }')
     expect(homeLayoutCss).toContain('.dream-composer-decoration-direction-right { animation-direction: reverse; }')
@@ -1165,12 +1229,14 @@ describe('renderer home DOM adaptation', () => {
     }
 
     inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+    const particle = window.document.querySelector('.dream-sparkles > .dream-particle')
     inject(window, undefined, undefined, undefined, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
 
     expect((window as unknown as { __CODEX_DREAM_SKIN_DISABLED__?: boolean }).__CODEX_DREAM_SKIN_DISABLED__).toBe(false)
     expect(window.document.documentElement.classList.contains('codex-dream-skin')).toBe(true)
     expect(window.document.querySelectorAll('.dream-conversation-background')).toHaveLength(1)
     expect(window.document.querySelectorAll('.dream-conversation-background-overlay')).toHaveLength(1)
+    expect(window.document.querySelector('.dream-sparkles > .dream-particle')).toBe(particle)
   })
 
   it('starts a muted looping conversation video and removes it when the page changes', () => {
@@ -1341,7 +1407,7 @@ describe('renderer home DOM adaptation', () => {
     await Promise.resolve()
   })
 
-  it('reuses the same media node and playback position when the document body is replaced', () => {
+  it('reuses the same media node and playback position when the document body is replaced', async () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')
     const play = vi.fn(() => Promise.resolve())
@@ -1368,7 +1434,7 @@ describe('renderer home DOM adaptation', () => {
     const replacement = window.document.createElement('body')
     replacement.innerHTML = homeFixture('Sample-Project')
     window.document.documentElement.replaceChild(replacement, window.document.body)
-    stateOf(window).ensure()
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
 
     expect(window.document.querySelector('#codex-dream-skin-polaroid-video')).toBe(video)
     expect(video.currentTime).toBe(14)
@@ -1396,15 +1462,25 @@ describe('renderer home DOM adaptation', () => {
     if (!(input instanceof window.HTMLInputElement)) throw new Error('Polaroid media input fixture is missing.')
     Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['video'], 'polaroid.mp4', { type: 'video/mp4' })] })
     ;(window as unknown as { __CODEX_DREAM_SKIN_ATTACH_MEDIA__: () => boolean }).__CODEX_DREAM_SKIN_ATTACH_MEDIA__()
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
     play.mockClear()
     load.mockClear()
-    const headingText = window.document.querySelector('[data-feature="game-source"]')?.firstChild
-    if (!headingText) throw new Error('Heading fixture is missing.')
-    headingText.textContent = '正在调用工具'
-    await Promise.resolve()
+    const chrome = window.document.getElementById('codex-dream-skin-chrome') as HTMLElement | null
+    if (!chrome) throw new Error('Runtime chrome fixture is missing.')
+    chrome.style.left = '123px'
+    const editor = window.document.querySelector('.ProseMirror')
+    const melody = window.document.querySelector('.dream-composer-melody')
+    if (!editor || !melody) throw new Error('Composer fixture is missing.')
+    const streamingText = window.document.createTextNode('正在调用工具')
+    editor.appendChild(streamingText)
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
+    expect(melody.classList.contains('dream-composer-melody-hidden')).toBe(true)
+    streamingText.data = ''
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
 
-    expect(play).not.toHaveBeenCalled()
     expect(load).not.toHaveBeenCalled()
+    expect(chrome.style.left).toBe('123px')
+    expect(melody.classList.contains('dream-composer-melody-hidden')).toBe(false)
   })
 
   it('restarts a polaroid video whose playing timeline stalls during DOM streaming', () => {
@@ -1459,6 +1535,7 @@ describe('renderer home DOM adaptation', () => {
 
     expect(pause).toHaveBeenCalledOnce()
     expect(play).toHaveBeenCalledOnce()
+    expect(template).not.toContain('requestVideoFrameCallback')
   })
 
   it('reuses a native heading project button when Codex renders one', () => {

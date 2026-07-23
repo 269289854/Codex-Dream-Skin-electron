@@ -81,7 +81,7 @@ describe('Studio preview editing interaction', () => {
         defaults.polaroid.sourceSize = { width: 1122, height: 1402 }
         defaults.polaroid.placement = { x: 0.8278561014524648, y: 0.7127831468304384, width: 0.15, rotation: -15, hideBelowWidth: 920 }
         defaults.icons.backgroundRain = { kind: 'builtin', name: 'wand-sparkles' }
-        defaults.decorations.sparkles = { visible: true, effect: 'rain', speed: 1, count: 20, minSize: 20, maxSize: 32, opacity: 0.72, glow: 10, seed: 0, extraColors: [] }
+        defaults.decorations.sparkles = { visible: true, effect: 'rain', speed: 1, performanceMode: 'balanced', count: 20, minSize: 20, maxSize: 32, opacity: 0.72, glow: 10, seed: 0, extraColors: [] }
       }
       return defaults
     })
@@ -1435,6 +1435,20 @@ describe('Studio preview editing interaction', () => {
     pointerDown(firstParticle)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('背景粒子快捷配置')
     expect(firstParticle.getAttribute('data-preview-selected')).toBe('true')
+    const quality = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .particle-performance-modes button')].find((button) => button.textContent === '精细')
+    const balanced = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .particle-performance-modes button')].find((button) => button.textContent === '平衡')
+    const performance = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .particle-performance-modes button')].find((button) => button.textContent === '省电')
+    if (!quality || !balanced || !performance) throw new Error('Particle performance controls are missing.')
+    act(() => quality.click())
+    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-performance')).toBe('quality')
+    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(6)
+    act(() => performance.click())
+    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-performance')).toBe('performance')
+    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-trails')).toBe('false')
+    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(4)
+    act(() => balanced.click())
+    expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-performance')).toBe('balanced')
+    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(6)
     const count = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '数量')?.querySelector<HTMLInputElement>('input')
     if (!count) throw new Error('Particle count control is missing.')
     act(() => {
@@ -1442,6 +1456,7 @@ describe('Studio preview editing interaction', () => {
       count.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
     })
     expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(10)
+    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(8)
 
     const undo = container.querySelector<HTMLButtonElement>('button[title="撤销"]')
     if (!undo) throw new Error('Undo command is missing.')
@@ -1540,7 +1555,7 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.decorations).toMatchObject({
-      sparkles: { effect: 'rain', speed: 1.5, seed: 1, extraColors: ['#20bcc3'] },
+      sparkles: { effect: 'rain', speed: 1.5, performanceMode: 'balanced', seed: 1, extraColors: ['#20bcc3'] },
       composerMelody: { text: '<b>自定义旋律 ♪</b>', effect: 'scroll', direction: 'right', fontSize: 22, position: { x: 0.7, y: 0.35 } }
     })
     expect(savedProfiles.at(-1)?.icons).toMatchObject({ backgroundSparkle: { name: 'sparkles' }, backgroundRain: { name: 'star' } })

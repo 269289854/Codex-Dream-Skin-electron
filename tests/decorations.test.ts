@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PARTICLE_EFFECT_IDS, PARTICLE_VIEWPORT_TOP, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../src/shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy } from '../src/shared/particle-effects'
 import { COMPOSER_DECORATION_DIRECTION_IDS, COMPOSER_DECORATION_EFFECT_IDS, createDefaultTheme, parseThemeProfile } from '../src/shared/theme'
 
 const id = '22222222-2222-4222-8222-222222222222'
@@ -66,6 +66,7 @@ describe('theme decorations', () => {
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, sparkles: { ...profile.decorations.sparkles, effect: 'storm' } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, sparkles: { ...profile.decorations.sparkles, speed: 0.49 } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, sparkles: { ...profile.decorations.sparkles, speed: 2.01 } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, sparkles: { ...profile.decorations.sparkles, performanceMode: 'automatic' } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, text: 'x'.repeat(65) } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, position: { x: 0.05, y: 0.35 } } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, effect: 'spin' } } })).toThrow()
@@ -76,13 +77,23 @@ describe('theme decorations', () => {
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, source: { asset: 'assets/not-gif.png', kind: 'image', mimeType: 'image/png' } } } })).toThrow('GIF')
   })
 
+  it('resolves deterministic quality, balanced, and power-saving particle budgets', () => {
+    expect(PARTICLE_PERFORMANCE_MODES).toEqual(['quality', 'balanced', 'performance'])
+    expect(resolveParticleRenderPolicy('quality', 24)).toMatchObject({ animatedIndexes: Array.from({ length: 24 }, (_, index) => index), targetFps: null, glowLimit: null, showTrails: true })
+    expect(resolveParticleRenderPolicy('balanced', 1).animatedIndexes).toEqual([0])
+    expect(resolveParticleRenderPolicy('balanced', 8).animatedIndexes).toEqual(Array.from({ length: 8 }, (_, index) => index))
+    expect(resolveParticleRenderPolicy('balanced', 20)).toMatchObject({ animatedIndexes: [0, 3, 5, 8, 11, 14, 16, 19], targetFps: 30, glowLimit: 6, showTrails: true })
+    expect(resolveParticleRenderPolicy('balanced', 24).animatedIndexes).toEqual([0, 3, 7, 10, 13, 16, 20, 23])
+    expect(resolveParticleRenderPolicy('performance', 20)).toMatchObject({ animatedIndexes: [0, 6, 13, 19], targetFps: 15, glowLimit: 0, showTrails: false })
+  })
+
   it('adds static text defaults to older version fifteen composer decorations', () => {
     const profile = createDefaultTheme(id)
     const legacy = structuredClone(profile) as unknown as { decorations: { composerMelody: Record<string, unknown> } }
     for (const field of ['mode', 'source', 'effect', 'direction', 'speed', 'gifWidth']) delete legacy.decorations.composerMelody[field]
 
     const parsed = parseThemeProfile(legacy)
-    expect(parsed.version).toBe(20)
+    expect(parsed.version).toBe(21)
     expect(parsed.decorations.composerMelody).toMatchObject({ mode: 'text', source: null, effect: 'none', direction: 'left', speed: 1, gifWidth: 96 })
     expect(COMPOSER_DECORATION_EFFECT_IDS).toEqual(['none', 'wave', 'barrage', 'scroll', 'float', 'pulse'])
     expect(COMPOSER_DECORATION_DIRECTION_IDS).toEqual(['left', 'right'])

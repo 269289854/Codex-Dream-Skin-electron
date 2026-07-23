@@ -44,7 +44,7 @@ describe('CodexService operation queue', () => {
     expect(runPowerShellMock).toHaveBeenCalledTimes(2)
   })
 
-  it('changes the renderer version for every rebuilt payload', async () => {
+  it('keeps identical renderer payload versions stable and changes them with content', async () => {
     const root = join(tmpdir(), `codex-dream-skin-payload-${process.pid}-${Date.now()}`)
     const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
     profile.updatedAt = '2026-07-20T00:00:00.000Z'
@@ -91,12 +91,16 @@ describe('CodexService operation queue', () => {
 
     const first = await builder.buildPayload(profile.id)
     const second = await builder.buildPayload(profile.id)
+    profile.decorations.sparkles.performanceMode = 'performance'
+    const third = await builder.buildPayload(profile.id)
     const versionPattern = /const VERSION = "([^"]+)"/
     const firstVersion = first.match(versionPattern)?.[1]
     const secondVersion = second.match(versionPattern)?.[1]
+    const thirdVersion = third.match(versionPattern)?.[1]
 
-    expect(firstVersion).toMatch(/^studio-2026-07-20T00:00:00\.000Z-[0-9a-f-]{36}$/)
-    expect(secondVersion).not.toBe(firstVersion)
+    expect(firstVersion).toMatch(/^studio-[0-9a-f]{24}$/)
+    expect(secondVersion).toBe(firstVersion)
+    expect(thirdVersion).not.toBe(firstVersion)
     expect(first).toContain('"asset":"asset-polaroid"')
     expect(first).toContain('"dataUrl":"data:image/gif;base64,AA=="')
     expect(first).toContain('"overlayStyle":{"background":"linear-gradient(120deg, #123456 0%, #abcdef 100%)"')
@@ -110,6 +114,8 @@ describe('CodexService operation queue', () => {
     expect(first).not.toContain('"windowBackground":{"visible":true,"mode":"image","paint"')
     expect(first).toContain('"conversationBubbles":{"visible":false}')
     expect(first).toContain('"toolActivityBubbles":{"visible":false}')
+    expect(first).toContain('"sparklePolicy":{"mode":"balanced"')
+    expect(third).toContain('"sparklePolicy":{"mode":"performance"')
   })
 
 })

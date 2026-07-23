@@ -4,6 +4,7 @@
   inset: var(--dream-particle-top, 66px) 0 0;
   overflow: hidden;
   pointer-events: none;
+  contain: layout paint style;
 }
 
 .dream-sparkles > .dream-particle {
@@ -19,6 +20,9 @@
   opacity: var(--dream-sparkle-opacity, .72);
   translate: -50% -50%;
   transform-origin: center;
+}
+
+.dream-sparkles > .dream-particle[data-dream-animated="true"] {
   animation-duration: var(--dream-particle-duration, 4s);
   animation-delay: var(--dream-particle-delay, 0s);
   animation-iteration-count: infinite;
@@ -43,35 +47,35 @@
   object-fit: contain;
 }
 
-.dream-sparkles[data-dream-effect="twinkle"] > .dream-particle {
+.dream-sparkles[data-dream-effect="twinkle"] > .dream-particle[data-dream-animated="true"] {
   animation-name: dream-particle-twinkle;
   animation-timing-function: ease-in-out;
 }
 
-.dream-sparkles[data-dream-effect="float"] > .dream-particle {
+.dream-sparkles[data-dream-effect="float"] > .dream-particle[data-dream-animated="true"] {
   top: calc(100% + 48px);
   animation-name: dream-particle-float;
   animation-timing-function: linear;
 }
 
-.dream-sparkles[data-dream-effect="rain"] > .dream-particle,
-.dream-sparkles[data-dream-effect="snow"] > .dream-particle {
+.dream-sparkles[data-dream-effect="rain"] > .dream-particle[data-dream-animated="true"],
+.dream-sparkles[data-dream-effect="snow"] > .dream-particle[data-dream-animated="true"] {
   top: -48px;
   animation-timing-function: linear;
 }
 
-.dream-sparkles[data-dream-effect="rain"] > .dream-particle {
+.dream-sparkles[data-dream-effect="rain"] > .dream-particle[data-dream-animated="true"] {
   animation-name: dream-particle-rain;
 }
 
-.dream-sparkles[data-dream-effect="meteor"] > .dream-particle {
+.dream-sparkles[data-dream-effect="meteor"] > .dream-particle[data-dream-animated="true"] {
   left: calc(100% + 64px);
   top: var(--dream-particle-start-y, 10%);
   animation-name: dream-particle-meteor;
   animation-timing-function: linear;
 }
 
-.dream-sparkles[data-dream-effect="snow"] > .dream-particle {
+.dream-sparkles[data-dream-effect="snow"] > .dream-particle[data-dream-animated="true"] {
   animation-name: dream-particle-snow;
   animation-timing-function: ease-in-out;
 }
@@ -85,7 +89,7 @@
   filter: blur(.35px);
 }
 
-.dream-sparkles[data-dream-effect="rain"] > .dream-particle > .dream-particle-trail {
+.dream-sparkles[data-dream-trails="true"][data-dream-effect="rain"] > .dream-particle[data-dream-animated="true"] > .dream-particle-trail {
   display: block;
   left: 50%;
   bottom: 50%;
@@ -96,7 +100,7 @@
   transform-origin: center bottom;
 }
 
-.dream-sparkles[data-dream-effect="meteor"] > .dream-particle > .dream-particle-trail {
+.dream-sparkles[data-dream-trails="true"][data-dream-effect="meteor"] > .dream-particle[data-dream-animated="true"] > .dream-particle-trail {
   display: block;
   left: 50%;
   top: 50%;
@@ -105,6 +109,18 @@
   background: linear-gradient(90deg, var(--dream-sparkle-color, var(--dream-sparkle)), transparent);
   transform: translateY(-50%) rotate(-18deg);
   transform-origin: left center;
+}
+
+.dream-sparkles:is([data-dream-performance="balanced"], [data-dream-performance="performance"]) > .dream-particle[data-dream-animated="true"] {
+  animation-timing-function: steps(var(--dream-particle-steps, 1), end);
+}
+
+.dream-sparkles[data-dream-performance="balanced"] .dream-particle-trail {
+  filter: none;
+}
+
+html[data-dream-motion-paused="true"] .dream-sparkles > .dream-particle[data-dream-animated="true"] {
+  animation-play-state: paused !important;
 }
 
 @keyframes dream-particle-twinkle {
@@ -142,10 +158,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dream-sparkles > .dream-particle {
-    /* Keep the effect visible while making its movement less insistent. */
-    animation-duration: calc(var(--dream-particle-duration, 4s) * 1.8) !important;
-    animation-timing-function: linear !important;
+  .dream-sparkles > .dream-particle[data-dream-animated="true"] {
+    animation-play-state: paused !important;
   }
 
   .dream-sparkles > .dream-particle > .dream-particle-trail {

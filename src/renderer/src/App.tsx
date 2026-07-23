@@ -9,7 +9,7 @@ import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationP
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
-import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot } from '../../shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy } from '../../shared/particle-effects'
 import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
@@ -981,6 +981,8 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
   const config = profile.decorations.sparkles
   if (!config.visible) return null
   const particles = createSparkleParticles(config)
+  const policy = resolveParticleRenderPolicy(config.performanceMode, particles.length)
+  const animatedIndexes = new Set(policy.animatedIndexes)
   const colors = [resolveAppearanceColor(profile.appearance, profile.colors, 'sparkle'), ...config.extraColors]
   const iconSlot = particleEffectIconSlot(config.effect)
   const viewport = createParticleViewportMetrics(HOME_PREVIEW_VIEWPORT.width - PREVIEW_SIDEBAR_WIDTH, HOME_PREVIEW_VIEWPORT.height)
@@ -997,10 +999,11 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
     '--dream-particle-snow-first-height': `${viewport.snowFirstHeight}px`,
     '--dream-particle-snow-second-height': `${viewport.snowSecondHeight}px`
   } as React.CSSProperties
-  return <div className="preview-sparkles" data-dream-effect={config.effect} aria-label="背景粒子" style={viewportStyle}>
+  return <div className="preview-sparkles" data-dream-effect={config.effect} data-dream-performance={policy.mode} data-dream-trails={policy.showTrails ? 'true' : 'false'} aria-label="背景粒子" style={viewportStyle}>
     {particles.map((particle, index) => <button
       className="preview-sparkle-particle"
       data-preview-target="sparkles"
+      data-dream-animated={animatedIndexes.has(index) ? 'true' : 'false'}
       type="button"
       aria-label={`编辑背景粒子 ${index + 1}`}
       key={index}
@@ -1010,6 +1013,7 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
         '--dream-particle-start-y': `${particle.startY}%`,
         '--dream-particle-duration': `${particle.duration}s`,
         '--dream-particle-delay': `${particle.delay}s`,
+        '--dream-particle-steps': policy.targetFps ? `${Math.max(1, Math.round(particle.duration * policy.targetFps))}` : '1',
         '--dream-particle-drift': `${particle.drift}px`,
         '--dream-particle-drift-reverse': `${-particle.drift}px`,
         '--dream-particle-trail-height': `${Math.max(4, particle.size * 2.8)}px`,
@@ -1019,7 +1023,7 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
         '--dream-sparkle-dim-opacity': particle.opacity * config.opacity * .42,
         '--dream-sparkle-rotation': `${particle.rotation}deg`,
         '--dream-sparkle-color': colors[particle.colorIndex % colors.length],
-        '--dream-sparkle-glow': `${config.glow}px`
+        '--dream-sparkle-glow': `${policy.glowLimit === null ? config.glow : Math.min(config.glow, policy.glowLimit)}px`
       } as React.CSSProperties}
     ><span className="preview-particle-trail" aria-hidden="true" /><span className="preview-sparkle-content"><RenderIcon slot={iconSlot} profile={profile} assets={assets} injected /></span></button>)}
   </div>

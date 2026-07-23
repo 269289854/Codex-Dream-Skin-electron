@@ -35,6 +35,7 @@ describe('theme share packages', () => {
     const draft = structuredClone(original)
     draft.copy.brandTitle = '尚未保存的分享标题'
     draft.colors.accent = '#123456'
+    draft.decorations.sparkles.performanceMode = 'quality'
     draft.hero.sourceImage = image.relativePath
     draft.polaroid.sourceImage = image.relativePath
     draft.hero.mediaTransform = { flipHorizontal: true, flipVertical: false }
@@ -63,6 +64,7 @@ describe('theme share packages', () => {
     expect((await stat(packagePath)).isFile()).toBe(true)
     const archive = unzipSync(await readFile(packagePath))
     expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
+    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 21 })
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
     expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
@@ -75,6 +77,7 @@ describe('theme share packages', () => {
     expect(imported.name).toBe(draft.name)
     expect(imported.copy.brandTitle).toBe('尚未保存的分享标题')
     expect(imported.colors).toEqual(draft.colors)
+    expect(imported.decorations.sparkles.performanceMode).toBe('quality')
     expect(imported.resetColors).toEqual(draft.colors)
     expect(imported.toolActivityBubbles).toEqual({ visible: false })
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: false })
@@ -114,7 +117,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(20)
+    expect(imported.version).toBe(21)
     expect(imported.conversationBubbles).toEqual({ visible: true })
     expect(imported.toolActivityBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)
@@ -139,7 +142,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(20)
+    expect(imported.version).toBe(21)
     expect(imported.conversationBubbles).toEqual({ visible: false })
     expect(imported.toolActivityBubbles).toEqual({ visible: false })
   })
@@ -173,7 +176,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(20)
+    expect(imported.version).toBe(21)
     expect(imported.conversationBubbles).toEqual({ visible: true })
     expect(imported.toolActivityBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)

@@ -4,6 +4,7 @@
   inset: var(--dream-particle-top, 66px) 0 0;
   overflow: hidden;
   pointer-events: none;
+  contain: layout paint style;
 }
 
 .preview-sparkle-particle {
@@ -22,11 +23,14 @@
   opacity: var(--dream-sparkle-opacity, .72);
   translate: -50% -50%;
   transform-origin: center;
+  pointer-events: auto;
+}
+
+.preview-sparkles > .preview-sparkle-particle[data-dream-animated="true"] {
   animation-duration: var(--dream-particle-duration, 4s);
   animation-delay: var(--dream-particle-delay, 0s);
   animation-iteration-count: infinite;
   animation-fill-mode: both;
-  pointer-events: auto;
   will-change: transform, opacity;
 }
 
@@ -51,35 +55,35 @@
   line-height: 1;
 }
 
-.preview-sparkles[data-dream-effect="twinkle"] > .preview-sparkle-particle {
+.preview-sparkles[data-dream-effect="twinkle"] > .preview-sparkle-particle[data-dream-animated="true"] {
   animation-name: dream-particle-twinkle;
   animation-timing-function: ease-in-out;
 }
 
-.preview-sparkles[data-dream-effect="float"] > .preview-sparkle-particle {
+.preview-sparkles[data-dream-effect="float"] > .preview-sparkle-particle[data-dream-animated="true"] {
   top: calc(100% + 48px);
   animation-name: dream-particle-float;
   animation-timing-function: linear;
 }
 
-.preview-sparkles[data-dream-effect="rain"] > .preview-sparkle-particle,
-.preview-sparkles[data-dream-effect="snow"] > .preview-sparkle-particle {
+.preview-sparkles[data-dream-effect="rain"] > .preview-sparkle-particle[data-dream-animated="true"],
+.preview-sparkles[data-dream-effect="snow"] > .preview-sparkle-particle[data-dream-animated="true"] {
   top: -48px;
   animation-timing-function: linear;
 }
 
-.preview-sparkles[data-dream-effect="rain"] > .preview-sparkle-particle {
+.preview-sparkles[data-dream-effect="rain"] > .preview-sparkle-particle[data-dream-animated="true"] {
   animation-name: dream-particle-rain;
 }
 
-.preview-sparkles[data-dream-effect="meteor"] > .preview-sparkle-particle {
+.preview-sparkles[data-dream-effect="meteor"] > .preview-sparkle-particle[data-dream-animated="true"] {
   left: calc(100% + 64px);
   top: var(--dream-particle-start-y, 10%);
   animation-name: dream-particle-meteor;
   animation-timing-function: linear;
 }
 
-.preview-sparkles[data-dream-effect="snow"] > .preview-sparkle-particle {
+.preview-sparkles[data-dream-effect="snow"] > .preview-sparkle-particle[data-dream-animated="true"] {
   animation-name: dream-particle-snow;
   animation-timing-function: ease-in-out;
 }
@@ -93,7 +97,7 @@
   filter: blur(.35px);
 }
 
-.preview-sparkles[data-dream-effect="rain"] > .preview-sparkle-particle > .preview-particle-trail {
+.preview-sparkles[data-dream-trails="true"][data-dream-effect="rain"] > .preview-sparkle-particle[data-dream-animated="true"] > .preview-particle-trail {
   display: block;
   left: 50%;
   bottom: 50%;
@@ -104,7 +108,7 @@
   transform-origin: center bottom;
 }
 
-.preview-sparkles[data-dream-effect="meteor"] > .preview-sparkle-particle > .preview-particle-trail {
+.preview-sparkles[data-dream-trails="true"][data-dream-effect="meteor"] > .preview-sparkle-particle[data-dream-animated="true"] > .preview-particle-trail {
   display: block;
   left: 50%;
   top: 50%;
@@ -113,6 +117,14 @@
   background: linear-gradient(90deg, var(--dream-sparkle-color, var(--dream-sparkle)), transparent);
   transform: translateY(-50%) rotate(-18deg);
   transform-origin: left center;
+}
+
+.preview-sparkles:is([data-dream-performance="balanced"], [data-dream-performance="performance"]) > .preview-sparkle-particle[data-dream-animated="true"] {
+  animation-timing-function: steps(var(--dream-particle-steps, 1), end);
+}
+
+.preview-sparkles[data-dream-performance="balanced"] .preview-particle-trail {
+  filter: none;
 }
 
 .preview-sparkle-particle:hover,
@@ -156,10 +168,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .preview-sparkle-particle {
-    /* Keep the effect visible while making its movement less insistent. */
-    animation-duration: calc(var(--dream-particle-duration, 4s) * 1.8) !important;
-    animation-timing-function: linear !important;
+  .preview-sparkle-particle[data-dream-animated="true"] {
+    animation-play-state: paused !important;
   }
 
   .preview-sparkle-particle > .preview-particle-trail {

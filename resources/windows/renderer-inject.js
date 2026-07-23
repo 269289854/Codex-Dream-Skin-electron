@@ -121,8 +121,17 @@
     }
     const supportedEffects = new Set(["twinkle", "float", "rain", "meteor", "snow"]);
     const effect = supportedEffects.has(config?.effect) ? config.effect : "twinkle";
+    const rawPolicy = themeConfig?.sparklePolicy && typeof themeConfig.sparklePolicy === "object" ? themeConfig.sparklePolicy : {};
+    const supportedPerformanceModes = new Set(["quality", "balanced", "performance"]);
+    const performanceMode = supportedPerformanceModes.has(rawPolicy.mode) ? rawPolicy.mode : "quality";
+    const animatedIndexes = new Set(Array.isArray(rawPolicy.animatedIndexes) ? rawPolicy.animatedIndexes.filter((index) => Number.isInteger(index) && index >= 0 && index < 24) : particles.map((_particle, index) => index));
+    const targetFps = Number.isFinite(rawPolicy.targetFps) && rawPolicy.targetFps > 0 ? rawPolicy.targetFps : null;
+    const glowLimit = Number.isFinite(rawPolicy.glowLimit) && rawPolicy.glowLimit >= 0 ? rawPolicy.glowLimit : null;
+    const showTrails = rawPolicy.showTrails !== false;
     const iconSlot = typeof themeConfig?.sparkleIconSlot === "string" ? themeConfig.sparkleIconSlot : "backgroundSparkle";
     layer.dataset.dreamEffect = effect;
+    layer.dataset.dreamPerformance = performanceMode;
+    layer.dataset.dreamTrails = showTrails ? "true" : "false";
     syncParticleViewport(layer, shellBox);
     const visibleParticles = particles.slice(0, Math.max(0, Math.min(24, Math.floor(config.count ?? particles.length))));
     while (layer.children.length > visibleParticles.length) layer.lastElementChild?.remove();
@@ -157,6 +166,7 @@
       node.style.setProperty("--dream-particle-start-y", `${clamp(Number(particle.startY) || fallbackStartY, 2, 32)}%`);
       node.style.setProperty("--dream-particle-duration", `${Math.max(0.1, Number(particle.duration) || 4)}s`);
       node.style.setProperty("--dream-particle-delay", `${Math.min(0, Number(particle.delay) || 0)}s`);
+      node.style.setProperty("--dream-particle-steps", `${targetFps ? Math.max(1, Math.round((Number(particle.duration) || 4) * targetFps)) : 1}`);
       node.style.setProperty("--dream-particle-drift", `${Number.isFinite(particle.drift) ? particle.drift : 0}px`);
       node.style.setProperty("--dream-particle-drift-reverse", `${Number.isFinite(particle.drift) ? -particle.drift : 0}px`);
       node.style.setProperty("--dream-particle-trail-height", `${Math.max(4, particle.size * 2.8)}px`);
@@ -166,8 +176,10 @@
       node.style.setProperty("--dream-sparkle-dim-opacity", `${particle.opacity * (Number.isFinite(config.opacity) ? config.opacity : 1) * .42}`);
       node.style.setProperty("--dream-sparkle-rotation", `${particle.rotation}deg`);
       node.style.setProperty("--dream-sparkle-color", colorIndex === 0 ? "var(--dream-sparkle)" : colors[colorIndex - 1]);
-      node.style.setProperty("--dream-sparkle-glow", `${Number.isFinite(config.glow) ? config.glow : 0}px`);
+      const configuredGlow = Number.isFinite(config.glow) ? config.glow : 0;
+      node.style.setProperty("--dream-sparkle-glow", `${glowLimit === null ? configuredGlow : Math.min(configuredGlow, glowLimit)}px`);
       node.classList.toggle("dream-sparkle-image", renderSlot(content, iconSlot, "✦"));
+      node.dataset.dreamAnimated = animatedIndexes.has(index) ? "true" : "false";
       node.dataset.dreamIndex = `${index}`;
     });
   };
@@ -443,6 +455,11 @@
   };
 
   const previous = window[STATE_KEY];
+  if (previous?.version === VERSION && typeof previous.ensure === "function") {
+    window.__CODEX_DREAM_SKIN_DISABLED__ = false;
+    previous.ensure();
+    return { installed: true, version: VERSION };
+  }
   if (previous?.cleanup) previous.cleanup();
   if (previous?.observer) previous.observer.disconnect();
   if (previous?.timer) clearInterval(previous.timer);
@@ -507,7 +524,6 @@
     const state = playbackStates.get(video);
     if (!state) return;
     if (state.timer) clearInterval(state.timer);
-    if (state.frameRequest !== null && typeof video.cancelVideoFrameCallback === "function") video.cancelVideoFrameCallback(state.frameRequest);
     for (const [type, handler] of state.handlers || []) video.removeEventListener(type, handler);
     playbackStates.delete(video);
   };
@@ -520,7 +536,6 @@
     }
     if (existing?.configKey === configKey) {
       existing.showPlayButton = showPlayButton;
-      if (existing.frameRequest === null) existing.requestFrame?.();
       return { changed: false, showPlayButton };
     }
     if (existing) clearPlaybackGuard(video);
@@ -535,9 +550,7 @@
       detachedSince: null,
       sourceChanging: false,
       timer: null,
-      frameRequest: null,
       handlers: [],
-      requestFrame: null,
       showPlayButton
     };
     const noteProgress = () => {
@@ -548,21 +561,6 @@
         state.stalledSince = null;
         state.recovering = false;
       }
-    };
-    const requestFrame = () => {
-      if (typeof video.requestVideoFrameCallback !== "function" || !video.isConnected) return;
-      state.frameRequest = video.requestVideoFrameCallback((_now, metadata) => {
-        if (!playbackStates.has(video)) return;
-        const mediaTime = Number(metadata?.mediaTime);
-        const nextTime = Number.isFinite(mediaTime) ? mediaTime : video.currentTime;
-        if (Math.abs(nextTime - state.lastTime) >= 0.01) {
-          state.lastTime = nextTime;
-          state.lastSignalAt = performance.now();
-          state.stalledSince = null;
-          state.recovering = false;
-        }
-        requestFrame();
-      });
     };
     const recover = () => {
       const recoveryNow = performance.now();
@@ -581,7 +579,6 @@
         state.lastTime = video.currentTime;
         state.lastSignalAt = performance.now();
         state.stalledSince = null;
-        requestFrame();
       }).catch(() => {
         state.recovering = false;
         state.stalledSince = performance.now();
@@ -592,12 +589,9 @@
       const timerNow = performance.now();
       if (!video.isConnected) {
         state.detachedSince ??= timerNow;
-        if (state.frameRequest !== null && typeof video.cancelVideoFrameCallback === "function") video.cancelVideoFrameCallback(state.frameRequest);
-        state.frameRequest = null;
         return;
       }
       state.detachedSince = null;
-      if (state.frameRequest === null) requestFrame();
       if (video.paused || video.ended || document.hidden || video.readyState < (Number(video.HAVE_CURRENT_DATA) || 2)) {
         state.stalledSince = null;
         return;
@@ -607,13 +601,11 @@
       state.stalledSince ??= timerNow;
       if (timerNow - state.stalledSince >= 0) recover();
     }, 750);
-    state.requestFrame = requestFrame;
     playbackStates.set(video, state);
     const onWaiting = () => { state.stalledSince ??= performance.now() - 1200; };
     const onStalled = () => { state.stalledSince ??= performance.now() - 1200; };
     state.handlers = [["timeupdate", noteProgress], ["playing", noteProgress], ["progress", noteProgress], ["waiting", onWaiting], ["stalled", onStalled]];
     for (const [type, handler] of state.handlers) video.addEventListener(type, handler);
-    requestFrame();
     return { changed: true, showPlayButton };
   };
   const configureVideo = (video, playback) => {
@@ -1743,6 +1735,7 @@
   const cleanup = () => {
     window.__CODEX_DREAM_SKIN_DISABLED__ = true;
     document.documentElement?.classList.remove("codex-dream-skin");
+    document.documentElement?.removeAttribute("data-dream-motion-paused");
     document.documentElement?.style.removeProperty("--dream-art");
     document.querySelectorAll(".dream-home").forEach((node) => node.classList.remove("dream-home"));
     document.querySelectorAll(".dream-home-shell").forEach((node) => node.classList.remove("dream-home-shell"));
@@ -1795,8 +1788,13 @@
     state?.observer?.disconnect();
     if (state?.resizeHandler) window.removeEventListener("resize", state.resizeHandler);
     if (state?.visibilityHandler) document.removeEventListener("visibilitychange", state.visibilityHandler);
+    if (state?.motionHandler) {
+      window.removeEventListener("focus", state.motionHandler);
+      window.removeEventListener("blur", state.motionHandler);
+    }
     if (state?.timer) clearInterval(state.timer);
     if (state?.scheduler?.timeout) clearTimeout(state.scheduler.timeout);
+    if (state?.scheduler?.contentTimeout) clearTimeout(state.scheduler.contentTimeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
     for (const url of Object.values(mediaUrls)) if (url) URL.revokeObjectURL(url);
     const mediaNodes = new Set([...document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
@@ -1812,8 +1810,12 @@
     return true;
   };
 
-  const scheduler = { timeout: null };
+  const scheduler = { timeout: null, contentTimeout: null };
+  const motionHandler = () => {
+    document.documentElement?.toggleAttribute("data-dream-motion-paused", document.hidden || !document.hasFocus());
+  };
   const visibilityHandler = () => {
+    motionHandler();
     const videos = new Set([...document.querySelectorAll(".dream-hero-video, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
     videos.forEach((node) => {
       if (!(node instanceof HTMLVideoElement)) return;
@@ -1822,6 +1824,9 @@
     });
   };
   document.addEventListener("visibilitychange", visibilityHandler);
+  window.addEventListener("focus", motionHandler);
+  window.addEventListener("blur", motionHandler);
+  motionHandler();
   const scheduleEnsure = () => {
     if (scheduler.timeout) return;
     scheduler.timeout = setTimeout(() => {
@@ -1829,14 +1834,60 @@
       ensure();
     }, 180);
   };
+  const syncDynamicContent = () => {
+    const composer = findVisible(document, ".composer-surface-chrome");
+    ensureComposerBadge(composer);
+    ensureComposerMelody(composer);
+    ensureComposerSendIcon(composer);
+    ensureConversationBubbles();
+    ensureToolActivityBubbles();
+  };
+  const scheduleContentSync = () => {
+    if (scheduler.contentTimeout) return;
+    scheduler.contentTimeout = setTimeout(() => {
+      scheduler.contentTimeout = null;
+      syncDynamicContent();
+    }, 180);
+  };
+  const structuralSelector = [
+    "main.main-surface",
+    "[role='main']",
+    "aside.app-shell-left-panel",
+    "[data-feature='game-source']",
+    ".composer-surface-chrome",
+    ".thread-scroll-container[data-app-action-timeline-scroll]",
+    "[data-home-ambient-suggestions]"
+  ].join(", ");
+  const injectedMutationSelector = [
+    `#${CHROME_ID}`,
+    `#${WINDOW_BACKGROUND_ID}`,
+    `#${CARD_GRID_ID}`,
+    `#${PROJECT_PROXY_ID}`,
+    `#${HEADING_DECORATION_ID}`,
+    ".dream-conversation-background",
+    ".dream-composer-badge",
+    ".dream-composer-melody",
+    ".dream-composer-send-icon"
+  ].join(", ");
+  const containsStructuralNode = (node) => node instanceof Element && (node.matches(structuralSelector) || Boolean(node.querySelector(structuralSelector)));
+  const isInjectedNode = (node) => node instanceof Element && node.matches(injectedMutationSelector);
+  const mutationNeedsFullEnsure = (record) => {
+    const target = record.target instanceof Element ? record.target : record.target.parentElement;
+    if (!target || target.closest(`#${CHROME_ID}, #${WINDOW_BACKGROUND_ID}, .dream-conversation-background`)) return false;
+    if (target.closest("aside.app-shell-left-panel")) return true;
+    return [...record.addedNodes, ...record.removedNodes].some(containsStructuralNode);
+  };
   const observer = new MutationObserver((records) => {
-    const relevant = records.some((record) => {
+    const relevant = records.filter((record) => {
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
-      return !target?.closest(`#${CHROME_ID}`);
+      if (!target || target.closest(injectedMutationSelector)) return false;
+      const changedNodes = [...record.addedNodes, ...record.removedNodes];
+      return changedNodes.length === 0 || changedNodes.some((node) => !isInjectedNode(node));
     });
-    if (relevant) scheduleEnsure();
+    if (relevant.some(mutationNeedsFullEnsure)) scheduleEnsure();
+    else if (relevant.length > 0) scheduleContentSync();
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
   const resizeHandler = scheduleEnsure;
   window.addEventListener("resize", resizeHandler);
   if (document.fonts?.ready) {
@@ -1857,6 +1908,7 @@
     artUrl,
     mediaUrls,
     visibilityHandler,
+    motionHandler,
     version: VERSION,
   };
   ensure();

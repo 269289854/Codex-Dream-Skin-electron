@@ -435,6 +435,16 @@
   animation: dream-composer-pulse var(--dream-composer-effect-duration, 2s) ease-in-out infinite;
 }
 
+html[data-dream-motion-paused="true"] :is(
+  .dream-composer-decoration-character,
+  .dream-composer-decoration-barrage,
+  .dream-composer-decoration-scroll,
+  .dream-composer-decoration-float,
+  .dream-composer-decoration-pulse
+) {
+  animation-play-state: paused !important;
+}
+
 .dream-composer-decoration-gif {
   display: block;
   max-width: 100%;
@@ -468,8 +478,7 @@
 @media (prefers-reduced-motion: reduce) {
   .dream-composer-decoration-text,
   .dream-composer-decoration-character {
-    /* Keep an explicitly selected effect visible while reducing its frequency. */
-    animation-duration: calc(var(--dream-composer-effect-duration, 2s) * 1.8) !important;
+    animation-play-state: paused !important;
   }
 }
 
