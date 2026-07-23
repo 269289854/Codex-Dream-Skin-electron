@@ -36,6 +36,8 @@ const api: StudioApi = {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),
     selectMedia: (themeId, purpose, kind) => ipcRenderer.invoke('assets:select-media', themeId, purpose, kind),
     getPreviewUrl: (themeId, asset) => ipcRenderer.invoke('assets:get-preview-url', themeId, asset),
+    inspectVideo: (themeId, asset) => ipcRenderer.invoke('assets:inspect-video', themeId, asset),
+    optimizeVideo: (themeId, role, asset) => ipcRenderer.invoke('assets:optimize-video', themeId, role, asset),
     selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon'),
     selectFont: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'font')
   },

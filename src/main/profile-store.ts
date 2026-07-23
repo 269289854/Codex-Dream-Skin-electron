@@ -9,11 +9,11 @@ import mediaInfoFactory, { isTrackType } from 'mediainfo.js'
 const nodeRequire = createRequire(import.meta.url)
 const archiver = nodeRequire('archiver') as typeof import('archiver')
 const yauzl = nodeRequire('yauzl') as typeof import('yauzl')
-import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type ThemeProfile, type ThemeSummary } from '../shared/theme'
-import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind } from '../shared/contracts'
+import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoAssetVariant } from '../shared/theme'
+import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
 import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
-import { mediaMimeTypeForPath, mediaReferenceForPath } from '../shared/media'
+import { createVideoVariantReference, mediaMimeTypeForPath, mediaReferenceAssets, mediaReferenceForPath } from '../shared/media'
 import {
   MAX_SHARE_ENTRIES,
   MAX_SHARE_FONT_BYTES,
@@ -21,10 +21,12 @@ import {
   assetKind,
   assertSharePath,
   collectThemeAssets,
+  createShareProfile,
   encodeJson,
   parseThemeShareManifest,
   shareProfileVersionMatches
 } from './theme-share'
+import { assertOptimizedVideoInspection, transcodeVideo } from './video-transcoder'
 
 interface StudioSettings {
   version: 2
@@ -151,10 +153,11 @@ export class ProfileStore {
   }
 
   async exportSharePackage(input: unknown, destinationPath: unknown, signal?: AbortSignal): Promise<void> {
-    const profile = parseThemeProfile(input)
-    await this.get(profile.id)
-    await this.validateProfileMedia(profile)
-    await this.validateProfileAssets(profile)
+    const localProfile = parseThemeProfile(input)
+    await this.get(localProfile.id)
+    await this.validateProfileMedia(localProfile)
+    await this.validateProfileAssets(localProfile)
+    const profile = createShareProfile(localProfile)
     this.throwIfAborted(signal, '主题导出已取消。')
     if (typeof destinationPath !== 'string' || !isAbsolute(destinationPath)) throw new Error('分享包保存路径必须是绝对路径。')
     const sourceAssets = new Map<string, string>()
@@ -238,12 +241,13 @@ export class ProfileStore {
 
   async update(input: unknown): Promise<ThemeProfile> {
     const profile = parseThemeProfile(input)
-    await this.get(profile.id)
+    const previous = await this.get(profile.id)
     await this.validateProfileMedia(profile)
     await this.validateProfileAssets(profile)
     const next = { ...profile, name: this.cleanName(profile.name), updatedAt: new Date().toISOString() }
     for (const asset of this.collectAssets(next)) this.resolveAsset(next.id, asset)
     await this.writeProfile(next)
+    await this.pruneReplacedAssets(previous, next)
     return next
   }
 
@@ -356,6 +360,93 @@ export class ProfileStore {
 
   private collectAssets(profile: ThemeProfile): string[] { return collectThemeAssets(profile) }
 
+  private async importOptimizedVideo(themeId: string, sourcePath: string, purpose: VideoMediaRole, inspection: VideoAssetInspection, signal?: AbortSignal): Promise<ImportedMediaAsset> {
+    const sourceExtension = extname(sourcePath).toLowerCase()
+    const token = randomUUID()
+    const originalAsset = `assets/${purpose}-${token}${sourceExtension}`
+    const optimizedAsset = `assets/${purpose}-${token}-optimized.mp4`
+    const originalPath = this.resolveAsset(themeId, originalAsset)
+    const optimizedPath = this.resolveAsset(themeId, optimizedAsset)
+    const originalTemporary = `${originalPath}.${randomUUID()}.tmp`
+    const optimizedTemporary = `${optimizedPath}.${randomUUID()}.tmp.mp4`
+    await mkdir(dirname(originalPath), { recursive: true })
+    try {
+      await pipeline(createReadStream(sourcePath), createWriteStreamChecked(originalTemporary), { signal })
+      await transcodeVideo({ inputPath: sourcePath, outputPath: optimizedTemporary, inspection, signal })
+      this.throwIfAborted(signal, '视频优化已取消。')
+      const optimizedStat = await stat(optimizedTemporary)
+      const optimizedInspection = await this.inspectVideo(optimizedTemporary, '.mp4', optimizedStat.size)
+      assertOptimizedVideoInspection(inspection, optimizedInspection)
+      await Promise.all([this.syncFile(originalTemporary), this.syncFile(optimizedTemporary)])
+      await rename(originalTemporary, originalPath)
+      await rename(optimizedTemporary, optimizedPath)
+
+      const original = this.videoVariant(originalAsset, mediaMimeTypeForPath(originalAsset) as 'video/mp4' | 'video/webm', inspection)
+      const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
+      const reference = createVideoVariantReference(original, optimized)
+      this.trackPendingMedia(themeId, originalAsset)
+      this.trackPendingMedia(themeId, optimizedAsset)
+      return {
+        reference,
+        relativePath: optimizedAsset,
+        previewUrl: this.mediaPreviewUrl(themeId, optimizedAsset),
+        originalName: basename(sourcePath),
+        width: optimized.width,
+        height: optimized.height
+      }
+    } catch (error) {
+      await Promise.all([
+        rm(originalTemporary, { force: true }).catch(() => undefined),
+        rm(optimizedTemporary, { force: true }).catch(() => undefined),
+        rm(originalPath, { force: true }).catch(() => undefined),
+        rm(optimizedPath, { force: true }).catch(() => undefined)
+      ])
+      if (signal?.aborted) throw new Error('视频优化已取消。')
+      throw error
+    }
+  }
+
+  private videoVariant(asset: string, mimeType: 'video/mp4' | 'video/webm', inspection: VideoAssetInspection): VideoAssetVariant {
+    return {
+      asset,
+      mimeType,
+      width: inspection.width,
+      height: inspection.height,
+      frameRate: inspection.frameRate
+    }
+  }
+
+  private trackPendingMedia(themeId: string, asset: string): void {
+    const pending = this.pendingMediaAssets.get(themeId) ?? new Set<string>()
+    pending.add(asset)
+    this.pendingMediaAssets.set(themeId, pending)
+  }
+
+  private mediaReferences(profile: ThemeProfile): Array<MediaReference | null> {
+    return [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]
+  }
+
+  private mediaReferenceForRole(profile: ThemeProfile, role: VideoMediaRole): MediaReference | null {
+    if (role === 'hero') return profile.hero.source
+    if (role === 'polaroid') return profile.polaroid.source
+    if (role === 'conversationBackground') return profile.conversationBackground.source
+    return profile.windowBackground.source
+  }
+
+  private async syncFile(path: string): Promise<void> {
+    const file = await open(path, 'r+')
+    try { await file.sync() } finally { await file.close() }
+  }
+
+  private async pruneReplacedAssets(previous: ThemeProfile, next: ThemeProfile): Promise<void> {
+    const retained = new Set(this.collectAssets(next))
+    const candidates = new Set([...this.collectAssets(previous), ...(this.pendingMediaAssets.get(next.id) ?? [])])
+    await Promise.all([...candidates]
+      .filter((asset) => !retained.has(asset))
+      .map((asset) => rm(this.resolveAsset(next.id, asset), { force: true }).catch(() => undefined)))
+    this.pendingMediaAssets.delete(next.id)
+  }
+
   private async writeProfile(profile: ThemeProfile): Promise<void> {
     await mkdir(this.assetRoot(profile.id), { recursive: true })
     await this.writeJsonAtomic(join(this.themeRoot(profile.id), 'theme.json'), profile)
@@ -375,14 +466,14 @@ export class ProfileStore {
     throw new Error('Studio settings are invalid.')
   }
 
-  async importMediaAsset(themeId: string, sourcePath: string, purpose: MediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal): Promise<ImportedMediaAsset> {
+  async importMediaAsset(themeId: string, sourcePath: string, purpose: MediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal, optimizeVideo = false): Promise<ImportedMediaAsset> {
     await this.get(themeId)
     if (!isAbsolute(sourcePath)) throw new Error('所选媒体路径必须是绝对路径。')
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('所选媒体必须是文件。')
     const extension = extname(sourcePath).toLowerCase()
     if (extension !== '.svg' && !MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('仅支持 PNG、WebP、JPEG、GIF、SVG、MP4 和 WebM。')
-    if (purpose === 'composerMelody' && extension !== '.gif') throw new Error('输入框装饰只能选择 GIF 文件。')
+    if (purpose === 'composerMelody' && VIDEO_EXTENSIONS.has(extension)) throw new Error('输入框装饰只能选择图片或 GIF 文件。')
     if (expectedKind === 'image' && (extension === '.gif' || VIDEO_EXTENSIONS.has(extension))) throw new Error('图片背景只支持 PNG、WebP、JPEG 或 SVG。')
     if (expectedKind === 'gif' && extension !== '.gif') throw new Error('GIF 背景必须选择 GIF 文件。')
     if (expectedKind === 'video' && !VIDEO_EXTENSIONS.has(extension)) throw new Error('视频背景只支持 MP4 或 WebM。')
@@ -390,8 +481,10 @@ export class ProfileStore {
     if (signal?.aborted) throw new Error('媒体导入已取消。')
 
     let metadata: { width: number; height: number }
+    let videoInspection: VideoAssetInspection | null = null
     if (VIDEO_EXTENSIONS.has(extension)) {
-      metadata = await this.inspectVideo(sourcePath, extension, sourceStat.size)
+      videoInspection = await this.inspectVideo(sourcePath, extension, sourceStat.size)
+      metadata = videoInspection
     } else if (extension === '.svg') {
       const source = await readFile(sourcePath, 'utf8')
       this.assertSafeSvg(source)
@@ -400,6 +493,9 @@ export class ProfileStore {
       metadata = await this.inspectImage(sourcePath, extension)
     }
     await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
+    if (videoInspection && optimizeVideo) {
+      return this.importOptimizedVideo(themeId, sourcePath, purpose as VideoMediaRole, videoInspection, signal)
+    }
 
     const outputExtension = extension === '.svg' ? '.png' : extension
     const relativePath = `assets/${purpose}-${randomUUID()}${outputExtension}`
@@ -426,9 +522,7 @@ export class ProfileStore {
     }
 
     const reference = mediaReferenceForPath(relativePath)
-    const pending = this.pendingMediaAssets.get(themeId) ?? new Set<string>()
-    pending.add(relativePath)
-    this.pendingMediaAssets.set(themeId, pending)
+    this.trackPendingMedia(themeId, relativePath)
     return {
       reference,
       relativePath,
@@ -439,10 +533,81 @@ export class ProfileStore {
     }
   }
 
+  async inspectVideoSource(sourcePath: string): Promise<VideoAssetInspection> {
+    if (!isAbsolute(sourcePath)) throw new Error('所选视频路径必须是绝对路径。')
+    const extension = extname(sourcePath).toLowerCase()
+    if (!VIDEO_EXTENSIONS.has(extension)) throw new Error('视频只支持 MP4 或 WebM。')
+    const sourceStat = await stat(sourcePath)
+    if (!sourceStat.isFile()) throw new Error('所选视频必须是文件。')
+    return this.inspectVideo(sourcePath, extension, sourceStat.size)
+  }
+
+  async inspectReferencedVideo(themeId: unknown, asset: unknown): Promise<VideoAssetInspection> {
+    if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('视频参数无效。')
+    const profile = await this.get(themeId)
+    const reference = this.mediaReferences(profile).find((candidate) =>
+      candidate?.kind === 'video' && mediaReferenceAssets(candidate).some((variant) => variant.asset === asset)
+    )
+    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset)) throw new Error('该视频未被当前主题引用。')
+    const path = this.resolveAsset(themeId, asset)
+    const file = await stat(path)
+    if (!file.isFile()) throw new Error('视频文件不存在。')
+    return this.inspectVideo(path, extname(asset).toLowerCase(), file.size)
+  }
+
+  async optimizeReferencedVideo(themeId: unknown, role: unknown, asset: unknown, signal?: AbortSignal): Promise<ImportedMediaAsset> {
+    if (typeof themeId !== 'string' || !isVideoMediaRole(role) || typeof asset !== 'string') throw new Error('视频优化参数无效。')
+    const profile = await this.get(themeId)
+    const savedReference = this.mediaReferenceForRole(profile, role)
+    const reference = savedReference?.kind === 'video' && savedReference.asset === asset
+      ? savedReference
+      : this.pendingMediaAssets.get(themeId)?.has(asset) ? mediaReferenceForPath(asset) : null
+    if (reference?.kind !== 'video') throw new Error('视频与主题位置不匹配。')
+    if (reference.videoVariants) throw new Error('该视频已经包含优化版本。')
+    const sourcePath = this.resolveAsset(themeId, reference.asset)
+    const sourceStat = await stat(sourcePath)
+    if (!sourceStat.isFile()) throw new Error('视频文件不存在。')
+    if (reference.mimeType !== 'video/mp4' && reference.mimeType !== 'video/webm') throw new Error('视频 MIME 类型无效。')
+    const inspection = await this.inspectVideo(sourcePath, extname(sourcePath).toLowerCase(), sourceStat.size)
+    if (!inspection.highLoad) throw new Error('该视频无需优化。')
+    await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
+
+    const optimizedAsset = `assets/${role}-${randomUUID()}-optimized.mp4`
+    const optimizedPath = this.resolveAsset(themeId, optimizedAsset)
+    const temporary = `${optimizedPath}.${randomUUID()}.tmp.mp4`
+    await mkdir(dirname(optimizedPath), { recursive: true })
+    try {
+      await transcodeVideo({ inputPath: sourcePath, outputPath: temporary, inspection, signal })
+      this.throwIfAborted(signal, '视频优化已取消。')
+      const optimizedStat = await stat(temporary)
+      const optimizedInspection = await this.inspectVideo(temporary, '.mp4', optimizedStat.size)
+      assertOptimizedVideoInspection(inspection, optimizedInspection)
+      await this.syncFile(temporary)
+      await rename(temporary, optimizedPath)
+      const original = this.videoVariant(reference.asset, reference.mimeType, inspection)
+      const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
+      const nextReference = createVideoVariantReference(original, optimized)
+      this.trackPendingMedia(themeId, optimizedAsset)
+      return {
+        reference: nextReference,
+        relativePath: optimizedAsset,
+        previewUrl: this.mediaPreviewUrl(themeId, optimizedAsset),
+        originalName: basename(reference.asset),
+        width: optimized.width,
+        height: optimized.height
+      }
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => undefined)
+      await rm(optimizedPath, { force: true }).catch(() => undefined)
+      if (signal?.aborted) throw new Error('视频优化已取消。')
+      throw error
+    }
+  }
+
   async getMediaPreviewUrl(themeId: unknown, asset: unknown): Promise<string> {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体预览参数无效。')
     const profile = await this.get(themeId)
-    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source].find((media) => media?.asset === asset)
+    const reference = this.mediaReferences(profile).find((media) => media && mediaReferenceAssets(media).some((variant) => variant.asset === asset))
     if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被当前主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
@@ -453,12 +618,13 @@ export class ProfileStore {
   async resolveReferencedMedia(themeId: unknown, asset: unknown): Promise<{ path: string; mimeType: string; size: number }> {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体参数无效。')
     const profile = await this.get(themeId)
-    const reference = [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source].find((media) => media?.asset === asset)
+    const reference = this.mediaReferences(profile).find((media) => media && mediaReferenceAssets(media).some((variant) => variant.asset === asset))
     if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
     if (!file.isFile()) throw new Error('媒体文件不存在。')
-    return { path, mimeType: reference?.mimeType ?? mediaMimeTypeForPath(asset), size: file.size }
+    const variant = reference ? mediaReferenceAssets(reference).find((candidate) => candidate.asset === asset) : null
+    return { path, mimeType: variant?.mimeType ?? mediaMimeTypeForPath(asset), size: file.size }
   }
 
   private async isBundledSystemAsset(themeId: string, asset: string): Promise<boolean> {
@@ -822,19 +988,21 @@ export class ProfileStore {
 
   private async validateProfileMedia(profile: ThemeProfile): Promise<void> {
     this.validateProfileAssetReferences(profile)
-    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
+    for (const reference of this.mediaReferences(profile)) {
       if (!reference) continue
-      const extension = extname(reference.asset).toLowerCase()
-      if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
-      const expected = mediaMimeTypeForPath(reference.asset)
-      if (expected !== reference.mimeType || (reference.kind === 'video') !== VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体类型与文件扩展名不匹配。')
-      const sourcePath = this.resolveAsset(profile.id, reference.asset)
-      const sourceStat = await stat(sourcePath)
-      if (!sourceStat.isFile()) throw new Error(`主题媒体不存在: ${reference.asset}`)
-      if (reference.kind === 'video') await this.inspectVideo(sourcePath, extension, sourceStat.size)
-      else {
-        if (sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
-        await this.inspectImage(sourcePath, extension)
+      for (const variant of mediaReferenceAssets(reference)) {
+        const extension = extname(variant.asset).toLowerCase()
+        if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
+        const expected = mediaMimeTypeForPath(variant.asset)
+        if (expected !== variant.mimeType || (reference.kind === 'video') !== VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体类型与文件扩展名不匹配。')
+        const sourcePath = this.resolveAsset(profile.id, variant.asset)
+        const sourceStat = await stat(sourcePath)
+        if (!sourceStat.isFile()) throw new Error(`主题媒体不存在: ${variant.asset}`)
+        if (reference.kind === 'video') await this.inspectVideo(sourcePath, extension, sourceStat.size)
+        else {
+          if (sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
+          await this.inspectImage(sourcePath, extension)
+        }
       }
     }
   }
@@ -850,12 +1018,14 @@ export class ProfileStore {
   }
 
   private validateProfileAssetReferences(profile: ThemeProfile): void {
-    for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
+    for (const reference of this.mediaReferences(profile)) {
       if (!reference) continue
-      const extension = extname(reference.asset).toLowerCase()
-      if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
-      const expected = mediaMimeTypeForPath(reference.asset)
-      if (expected !== reference.mimeType || (reference.kind === 'video') !== VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体类型与文件扩展名不匹配。')
+      for (const variant of mediaReferenceAssets(reference)) {
+        const extension = extname(variant.asset).toLowerCase()
+        if (!MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体扩展名不受支持。')
+        const expected = mediaMimeTypeForPath(variant.asset)
+        if (expected !== variant.mimeType || (reference.kind === 'video') !== VIDEO_EXTENSIONS.has(extension)) throw new Error('主题媒体类型与文件扩展名不匹配。')
+      }
     }
     for (const icon of Object.values(profile.icons)) {
       if (icon.kind === 'asset' && assetKind(icon.asset) !== 'image') throw new Error('定制图标只能使用图片素材。')
@@ -865,7 +1035,7 @@ export class ProfileStore {
     }
   }
 
-  private async inspectVideo(sourcePath: string, extension: string, size: number): Promise<{ width: number; height: number }> {
+  private async inspectVideo(sourcePath: string, extension: string, size: number): Promise<VideoAssetInspection> {
     const handle = await open(sourcePath, 'r')
     try {
       const header = Buffer.alloc(Math.min(64 * 1024, size))
@@ -877,6 +1047,11 @@ export class ProfileStore {
 
     let width = 0
     let height = 0
+    let frameRate = 0
+    let duration = 0
+    let codec = ''
+    let bitRate: number | null = null
+    let hasAudio = false
     try {
       const info = await mediaInfoFactory({ format: 'object' })
       try {
@@ -888,21 +1063,44 @@ export class ProfileStore {
             return chunk.subarray(0, read.bytesRead)
           } finally { await file.close() }
         })
-        const track = result.media?.track?.find((item) => isTrackType(item, 'Video'))
-        width = typeof track?.Width === 'number' ? track.Width : Number(track?.Width ?? 0)
-        height = typeof track?.Height === 'number' ? track.Height : Number(track?.Height ?? 0)
-        const codec = `${track?.CodecID ?? ''} ${track?.Format ?? ''}`.toLowerCase()
+        const tracks = result.media?.track ?? []
+        const track = tracks.find((item) => isTrackType(item, 'Video'))
+        const general = tracks.find((item) => isTrackType(item, 'General'))
+        width = numericMediaInfoValue(track?.Width)
+        height = numericMediaInfoValue(track?.Height)
+        frameRate = numericMediaInfoValue(track?.FrameRate) || numericMediaInfoValue(track?.FrameRate_Original)
+        duration = numericMediaInfoValue(track?.Duration) || numericMediaInfoValue(general?.Duration)
+        const parsedBitRate = numericMediaInfoValue(track?.BitRate) || numericMediaInfoValue(general?.OverallBitRate)
+        bitRate = parsedBitRate > 0 ? parsedBitRate : null
+        codec = `${track?.Format ?? ''} ${track?.CodecID ?? ''}`.trim()
+        hasAudio = tracks.some((item) => isTrackType(item, 'Audio'))
+        const normalizedCodec = codec.toLowerCase()
         const supported = extension === '.mp4'
-          ? /avc|h264|hevc|h265|mpeg-4/.test(codec)
-          : /vp8|vp9|av1/.test(codec)
+          ? /avc|h264|hevc|h265|mpeg-4/.test(normalizedCodec)
+          : /vp8|vp9|av1/.test(normalizedCodec)
         if (!supported) throw new Error('视频编码不是 Chromium 常见支持格式。')
       } finally { info.close() }
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === '视频编码不是 Chromium 常见支持格式。') throw error
       throw new Error('视频元数据无法读取，文件可能损坏或编码不受支持。')
     }
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error('视频尺寸无效。')
+    if (!Number.isFinite(frameRate) || frameRate <= 0 || frameRate > 240) throw new Error('视频帧率无效。')
     if (Math.max(width, height) > MAX_VIDEO_DIMENSION) throw new Error('视频最长边不能超过 4096px。')
-    return { width: Math.round(width), height: Math.round(height) }
+    const roundedWidth = Math.round(width)
+    const roundedHeight = Math.round(height)
+    const longEdge = Math.max(roundedWidth, roundedHeight)
+    const shortEdge = Math.min(roundedWidth, roundedHeight)
+    return {
+      width: roundedWidth,
+      height: roundedHeight,
+      frameRate,
+      duration: Math.max(0, duration),
+      codec: codec || 'Unknown',
+      bitRate,
+      hasAudio,
+      highLoad: longEdge > 1920 || shortEdge > 1080 || frameRate > 30.5
+    }
   }
 
   private async assertDiskSpace(targetRoot: string, incomingBytes: number): Promise<void> {
@@ -962,6 +1160,15 @@ export class ProfileStore {
       throw new Error('SVG contains unsupported or external content.')
     }
   }
+}
+
+function numericMediaInfoValue(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : 0
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function isVideoMediaRole(value: unknown): value is VideoMediaRole {
+  return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
 }
 
 function requireSeparator(): string {

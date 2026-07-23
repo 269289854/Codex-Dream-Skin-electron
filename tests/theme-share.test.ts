@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { unzipSync, zipSync } from 'fflate'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
-import { decodeShareZip, sha256, validateShareContents } from '../src/main/theme-share'
-import { DEFAULT_THEME_COLORS } from '../src/shared/theme'
+import { collectThemeAssets, createShareProfile, decodeShareZip, sha256, validateShareContents } from '../src/main/theme-share'
+import { createDefaultTheme, DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
@@ -16,6 +16,26 @@ afterEach(async () => {
 })
 
 describe('theme share packages', () => {
+  it('keeps both local video variants but strips the inactive variant from shares', () => {
+    const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
+    profile.hero.source = {
+      asset: 'assets/hero-optimized.mp4',
+      kind: 'video',
+      mimeType: 'video/mp4',
+      videoVariants: {
+        active: 'optimized',
+        original: { asset: 'assets/hero.webm', mimeType: 'video/webm', width: 3840, height: 2160, frameRate: 59.94 },
+        optimized: { asset: 'assets/hero-optimized.mp4', mimeType: 'video/mp4', width: 1920, height: 1080, frameRate: 30 }
+      }
+    }
+
+    expect(collectThemeAssets(profile)).toEqual(expect.arrayContaining(['assets/hero.webm', 'assets/hero-optimized.mp4']))
+    const shared = createShareProfile(profile)
+    expect(shared.hero.source).toEqual({ asset: 'assets/hero-optimized.mp4', kind: 'video', mimeType: 'video/mp4' })
+    expect(collectThemeAssets(shared)).toContain('assets/hero-optimized.mp4')
+    expect(collectThemeAssets(shared)).not.toContain('assets/hero.webm')
+  })
+
   it('exports the current draft once per referenced asset and imports it as a new theme', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-'))
     roots.push(root)
@@ -64,7 +84,7 @@ describe('theme share packages', () => {
     expect((await stat(packagePath)).isFile()).toBe(true)
     const archive = unzipSync(await readFile(packagePath))
     expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
-    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 21 })
+    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 23 })
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
     expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
@@ -106,7 +126,7 @@ describe('theme share packages', () => {
     current.colors.accent = '#2878B8'
     const { mediaTransform: _heroTransform, ...hero } = current.hero
     const { mediaTransform: _polaroidTransform, ...polaroid } = current.polaroid
-    const { resetColors: _resetColors, ...currentWithoutResetColors } = current
+    const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...currentWithoutResetColors } = current
     const legacy = { ...currentWithoutResetColors, version: 11, hero, polaroid }
     const packagePath = join(root, 'v11.cdstheme')
     await store.exportSharePackage(legacy, packagePath)
@@ -117,7 +137,8 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(21)
+    expect(imported.version).toBe(23)
+    expect(imported.videoPlayback).toEqual({ pausePolicy: 'hidden' })
     expect(imported.conversationBubbles).toEqual({ visible: true })
     expect(imported.toolActivityBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)
@@ -136,13 +157,13 @@ describe('theme share packages', () => {
     await store.exportSharePackage(original, packagePath)
     const archive = unzipSync(await readFile(packagePath))
     const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as { profileVersion: number }
-    const { toolActivityBubbles: _toolActivityBubbles, ...legacy } = original
+    const { videoPlayback: _videoPlayback, toolActivityBubbles: _toolActivityBubbles, ...legacy } = original
     manifest.profileVersion = 19
     archive['theme.json'] = Buffer.from(JSON.stringify({ ...legacy, version: 19, conversationBubbles: { visible: false } }))
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(21)
+    expect(imported.version).toBe(23)
     expect(imported.conversationBubbles).toEqual({ visible: false })
     expect(imported.toolActivityBubbles).toEqual({ visible: false })
   })
@@ -158,8 +179,9 @@ describe('theme share packages', () => {
     const archive = unzipSync(await readFile(packagePath))
     const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as { profileVersion: number }
     const generatedColor = '#556677'
+    const { videoPlayback: _videoPlayback, ...versionSixteen } = original
     const legacy = {
-      ...original,
+      ...versionSixteen,
       version: 16,
       appearance: {
         ...original.appearance,
@@ -176,7 +198,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(21)
+    expect(imported.version).toBe(23)
     expect(imported.conversationBubbles).toEqual({ visible: true })
     expect(imported.toolActivityBubbles).toEqual({ visible: true })
     expect(imported.resetColors).toEqual(imported.colors)

@@ -182,14 +182,46 @@ export type MediaKind = z.infer<typeof mediaKindSchema>
 export const mediaMimeTypeSchema = z.enum(['image/png', 'image/webp', 'image/jpeg', 'image/gif', 'video/mp4', 'video/webm'])
 export type MediaMimeType = z.infer<typeof mediaMimeTypeSchema>
 
+export const VIDEO_PAUSE_POLICIES = ['hidden', 'unfocused'] as const
+export const videoPausePolicySchema = z.enum(VIDEO_PAUSE_POLICIES)
+export type VideoPausePolicy = z.infer<typeof videoPausePolicySchema>
+
+const videoMimeTypeSchema = z.enum(['video/mp4', 'video/webm'])
+export const videoAssetVariantSchema = z.object({
+  asset: z.string().min(1).max(260),
+  mimeType: videoMimeTypeSchema,
+  width: z.number().int().positive().max(4096),
+  height: z.number().int().positive().max(4096),
+  frameRate: z.number().finite().positive().max(240)
+}).strict()
+export type VideoAssetVariant = z.infer<typeof videoAssetVariantSchema>
+
+export const videoVariantsSchema = z.object({
+  active: z.enum(['original', 'optimized']),
+  original: videoAssetVariantSchema,
+  optimized: videoAssetVariantSchema
+}).strict().superRefine((variants, context) => {
+  if (variants.original.asset === variants.optimized.asset) {
+    context.addIssue({ code: 'custom', path: ['optimized', 'asset'], message: 'Original and optimized video assets must be different.' })
+  }
+})
+export type VideoVariants = z.infer<typeof videoVariantsSchema>
+
 export const mediaReferenceSchema = z.object({
   asset: z.string().min(1).max(260),
   kind: mediaKindSchema,
-  mimeType: mediaMimeTypeSchema
+  mimeType: mediaMimeTypeSchema,
+  videoVariants: videoVariantsSchema.optional()
 }).strict().superRefine((media, context) => {
   const isVideo = media.mimeType.startsWith('video/')
   if (isVideo !== (media.kind === 'video')) context.addIssue({ code: 'custom', path: ['kind'], message: 'Media kind does not match its MIME type.' })
   if (!isVideo && media.mimeType === 'image/gif' && media.kind !== 'image') context.addIssue({ code: 'custom', path: ['kind'], message: 'GIF media must be an image.' })
+  if (!isVideo && media.videoVariants) context.addIssue({ code: 'custom', path: ['videoVariants'], message: 'Only video media may define video variants.' })
+  if (media.videoVariants) {
+    const active = media.videoVariants[media.videoVariants.active]
+    if (media.asset !== active.asset) context.addIssue({ code: 'custom', path: ['asset'], message: 'Active video asset does not match the selected video variant.' })
+    if (media.mimeType !== active.mimeType) context.addIssue({ code: 'custom', path: ['mimeType'], message: 'Active video MIME type does not match the selected video variant.' })
+  }
 })
 
 export const COMPOSER_DECORATION_EFFECT_IDS = ['none', 'wave', 'barrage', 'scroll', 'float', 'pulse'] as const
@@ -197,7 +229,7 @@ export type ComposerDecorationEffect = typeof COMPOSER_DECORATION_EFFECT_IDS[num
 export const COMPOSER_DECORATION_DIRECTION_IDS = ['left', 'right'] as const
 export type ComposerDecorationDirection = typeof COMPOSER_DECORATION_DIRECTION_IDS[number]
 
-const composerMelodySchema = z.object({
+const versionTwentyTwoComposerMelodySchema = z.object({
   visible: z.boolean(),
   mode: z.enum(['text', 'gif']).default('text'),
   text: z.string().max(64),
@@ -221,6 +253,33 @@ const composerMelodySchema = z.object({
   }
 })
 
+const composerMelodySchema = z.object({
+  visible: z.boolean(),
+  mode: z.enum(['text', 'image', 'gif']).default('text'),
+  text: z.string().max(64),
+  source: mediaReferenceSchema.nullable().default(null),
+  effect: z.enum(COMPOSER_DECORATION_EFFECT_IDS).default('none'),
+  direction: z.enum(COMPOSER_DECORATION_DIRECTION_IDS).default('left'),
+  speed: z.number().finite().min(0.5).max(2).default(1),
+  fontSize: z.number().int().min(10).max(32),
+  mediaWidth: z.number().int().min(32).max(240).default(96),
+  position: z.object({
+    x: z.number().finite().min(0.1).max(0.9),
+    y: z.number().finite().min(0.1).max(0.65)
+  }).strict(),
+  hideWhenTyping: z.boolean()
+}).strict().superRefine((decoration, context) => {
+  if (decoration.source?.kind === 'video') {
+    context.addIssue({ code: 'custom', path: ['source'], message: '输入框装饰只能使用图片或 GIF 素材。' })
+  }
+  if (decoration.mode === 'image' && (!decoration.source || decoration.source.mimeType === 'image/gif')) {
+    context.addIssue({ code: 'custom', path: ['source'], message: '图片装饰必须引用静态图片素材。' })
+  }
+  if (decoration.mode === 'gif' && (!decoration.source || decoration.source.mimeType !== 'image/gif')) {
+    context.addIssue({ code: 'custom', path: ['source'], message: 'GIF 装饰必须引用 GIF 素材。' })
+  }
+})
+
 const homeHeadingDecorationSchema = z.object({
   visible: z.boolean(),
   text: z.string().max(64),
@@ -234,7 +293,17 @@ const versionTwentyDecorationsSchema = z.object({
     text: DEFAULT_HOME_HEADING_DECORATION,
     fontSize: 17
   }),
-  composerMelody: composerMelodySchema
+  composerMelody: versionTwentyTwoComposerMelodySchema
+}).strict()
+
+const versionTwentyTwoDecorationsSchema = z.object({
+  sparkles: sparklesSchema,
+  homeHeading: homeHeadingDecorationSchema.default({
+    visible: true,
+    text: DEFAULT_HOME_HEADING_DECORATION,
+    fontSize: 17
+  }),
+  composerMelody: versionTwentyTwoComposerMelodySchema
 }).strict()
 
 const decorationsSchema = z.object({
@@ -249,7 +318,7 @@ const decorationsSchema = z.object({
 
 const versionSevenDecorationsSchema = z.object({
   sparkles: versionSevenSparklesSchema,
-  composerMelody: composerMelodySchema
+  composerMelody: versionTwentyTwoComposerMelodySchema
 }).strict()
 
 const videoPlaybackSchema = z.object({
@@ -257,6 +326,10 @@ const videoPlaybackSchema = z.object({
   loop: z.boolean(),
   sound: z.boolean(),
   volume: normalized
+}).strict()
+
+const globalVideoPlaybackSchema = z.object({
+  pausePolicy: videoPausePolicySchema
 }).strict()
 
 const mediaTransformSchema = z.object({
@@ -599,9 +672,41 @@ const versionTwentyThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionTwentyOneThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(21),
+  decorations: versionTwentyTwoDecorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+const versionTwentyTwoThemeSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(22),
+  videoPlayback: globalVideoPlaybackSchema,
+  decorations: versionTwentyTwoDecorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(23),
+  videoPlayback: globalVideoPlaybackSchema,
   decorations: decorationsSchema,
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
@@ -721,8 +826,9 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 21,
+    version: 23,
     updatedAt: new Date().toISOString(),
+    videoPlayback: { pausePolicy: 'hidden' },
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
       source: null,
@@ -783,6 +889,16 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
+  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 1 && input.version <= 22) {
+    const legacy = structuredClone(input) as Record<string, unknown>
+    const decorations = legacy.decorations && typeof legacy.decorations === 'object' ? legacy.decorations as Record<string, unknown> : null
+    const composerMelody = decorations?.composerMelody && typeof decorations.composerMelody === 'object' ? decorations.composerMelody as Record<string, unknown> : null
+    if (composerMelody && 'mediaWidth' in composerMelody && !('gifWidth' in composerMelody)) {
+      composerMelody.gifWidth = composerMelody.mediaWidth
+      delete composerMelody.mediaWidth
+    }
+    input = legacy
+  }
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version < 21) {
     const legacy = structuredClone(input) as Record<string, unknown>
     const decorations = legacy.decorations && typeof legacy.decorations === 'object' ? legacy.decorations as Record<string, unknown> : null
@@ -807,10 +923,18 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 21) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 23) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 22) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionTwentyTwo(versionTwentyTwoThemeSchema.parse(candidate))
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 21) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionTwentyOne(versionTwentyOneThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 20) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -1125,12 +1249,32 @@ function migrateVersionNineteen(legacy: z.infer<typeof versionNineteenThemeSchem
 }
 
 function migrateVersionTwenty(legacy: z.infer<typeof versionTwentyThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionTwentyOne(versionTwentyOneThemeSchema.parse({
     ...legacy,
     version: 21,
     decorations: {
       ...legacy.decorations,
       sparkles: { ...legacy.decorations.sparkles, performanceMode: 'balanced' }
+    }
+  }))
+}
+
+function migrateVersionTwentyOne(legacy: z.infer<typeof versionTwentyOneThemeSchema>): ThemeProfile {
+  return migrateVersionTwentyTwo(versionTwentyTwoThemeSchema.parse({
+    ...legacy,
+    version: 22,
+    videoPlayback: { pausePolicy: 'hidden' }
+  }))
+}
+
+function migrateVersionTwentyTwo(legacy: z.infer<typeof versionTwentyTwoThemeSchema>): ThemeProfile {
+  const { gifWidth, ...composerMelody } = legacy.decorations.composerMelody
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 23,
+    decorations: {
+      ...legacy.decorations,
+      composerMelody: { ...composerMelody, mediaWidth: gifWidth }
     }
   }))
 }
@@ -1278,7 +1422,7 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
       direction: 'left',
       speed: 1,
       fontSize: 16,
-      gifWidth: 96,
+      mediaWidth: 96,
       position: { x: 0.5, y: 0.35 },
       hideWhenTyping: true
     },
@@ -1293,7 +1437,8 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
 function createVersionTwentyDefaultDecorations(): z.infer<typeof versionTwentyDecorationsSchema> {
   const current = createDefaultDecorations()
   const { performanceMode: _performanceMode, ...sparkles } = current.sparkles
-  return { ...current, sparkles }
+  const { mediaWidth, ...composerMelody } = current.composerMelody
+  return { ...current, sparkles, composerMelody: { ...composerMelody, mode: composerMelody.mode === 'image' ? 'text' : composerMelody.mode, gifWidth: mediaWidth } }
 }
 
 function createDefaultPolaroidStyle(): z.infer<typeof polaroidStyleSchema> {

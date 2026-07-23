@@ -445,7 +445,7 @@ html[data-dream-motion-paused="true"] :is(
   animation-play-state: paused !important;
 }
 
-.dream-composer-decoration-gif {
+.dream-composer-decoration-media {
   display: block;
   max-width: 100%;
   max-height: 72px;

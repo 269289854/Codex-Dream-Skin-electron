@@ -5,7 +5,7 @@ import {
   GitBranch, Home, Image, Laptop, LogOut, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
-import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus } from '../../shared/contracts'
+import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
@@ -14,8 +14,8 @@ import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
-import { mediaFlipCssTransform } from '../../shared/media'
-import type { CreateThemeInput, IconSlot, ThemeProfile, ThemeSummary } from '../../shared/theme'
+import { activateVideoVariant, mediaFlipCssTransform } from '../../shared/media'
+import type { CreateThemeInput, IconSlot, MediaReference, ThemeProfile, ThemeSummary, VideoVariants } from '../../shared/theme'
 import { SIDEBAR_NAV_ITEMS } from '../../shared/sidebar-layout'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
@@ -29,6 +29,8 @@ import { ParticleEffectControls } from './ParticleEffectControls'
 import { PreviewVideo } from './PreviewVideo'
 import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
+import { VideoPlaybackPanel } from './VideoPlaybackPanel'
+import { VideoThumbnail } from './VideoThumbnail'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
 import {
   ICON_PREVIEW_TARGETS,
@@ -63,6 +65,8 @@ export function App(): React.JSX.Element {
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
   const [mediaBusy, setMediaBusy] = useState(false)
+  const [optimizingVideoRole, setOptimizingVideoRole] = useState<VideoMediaRole | null>(null)
+  const [videoInspections, setVideoInspections] = useState<Record<string, VideoAssetInspection | null>>({})
   const [operationProgress, setOperationProgress] = useState<OperationProgress | null>(null)
   const [shareDropActive, setShareDropActive] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
@@ -151,6 +155,20 @@ export function App(): React.JSX.Element {
     if (!subscribe) return
     return subscribe((progress) => setOperationProgress(progress.phase === 'completed' || progress.phase === 'failed' || progress.phase === 'cancelled' ? null : progress))
   }, [])
+
+  useEffect(() => {
+    if (!draft) return
+    let active = true
+    const videoAssets = [...new Set(videoReferences(draft).filter((source): source is MediaReference => source?.kind === 'video').map((source) => source.asset))]
+    for (const asset of videoAssets) {
+      void window.studio.assets.inspectVideo(draft.id, asset).then((inspection) => {
+        if (active) setVideoInspections((current) => ({ ...current, [asset]: inspection }))
+      }).catch(() => {
+        if (active) setVideoInspections((current) => ({ ...current, [asset]: null }))
+      })
+    }
+    return () => { active = false }
+  }, [draft?.id, draft?.hero.source?.asset, draft?.polaroid.source?.asset, draft?.conversationBackground.source?.asset, draft?.windowBackground.source?.asset])
 
   useEffect(() => {
     if (!notice) return
@@ -518,13 +536,51 @@ export function App(): React.JSX.Element {
           profile.windowBackground.source = imported.reference
         } else {
           profile.decorations.composerMelody.source = imported.reference
-          profile.decorations.composerMelody.mode = 'gif'
+          profile.decorations.composerMelody.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
         }
       })
     } catch (reason) { setError(messageOf(reason)) }
     finally {
       mediaBusyRef.current = false
       setMediaBusy(false)
+    }
+  }
+
+  const optimizeVideo = async (role: VideoMediaRole): Promise<void> => {
+    if (!draft || mediaBusyRef.current) return
+    const source = videoReferenceForRole(draft, role)
+    if (source?.kind !== 'video' || source.videoVariants) return
+    mediaBusyRef.current = true
+    setMediaBusy(true)
+    setOptimizingVideoRole(role)
+    setError(null)
+    try {
+      const optimized = await window.studio.assets.optimizeVideo(draft.id, role, source.asset)
+      setAssets((current) => ({ ...current, [optimized.relativePath]: optimized.previewUrl }))
+      change((profile) => setVideoReferenceForRole(profile, role, optimized.reference, { width: optimized.width, height: optimized.height }))
+      setNotice(`${videoRoleLabel(role)}已生成优化版，可随时切回原片。`)
+    } catch (reason) {
+      setError(messageOf(reason))
+    } finally {
+      mediaBusyRef.current = false
+      setMediaBusy(false)
+      setOptimizingVideoRole(null)
+    }
+  }
+
+  const activateVideoVariantForRole = async (role: VideoMediaRole, active: VideoVariants['active']): Promise<void> => {
+    if (!draft) return
+    const source = videoReferenceForRole(draft, role)
+    if (source?.kind !== 'video' || !source.videoVariants || source.videoVariants.active === active) return
+    const selected = source.videoVariants[active]
+    try {
+      if (!assets[selected.asset]) {
+        const previewUrl = await window.studio.assets.getPreviewUrl(draft.id, selected.asset)
+        setAssets((current) => ({ ...current, [selected.asset]: previewUrl }))
+      }
+      change((profile) => setVideoReferenceForRole(profile, role, activateVideoVariant(source, active), { width: selected.width, height: selected.height }))
+    } catch (reason) {
+      setError(messageOf(reason))
     }
   }
 
@@ -840,7 +896,7 @@ export function App(): React.JSX.Element {
                       {heroImage
                         ? <div className="preview-hero-art-frame" style={heroImage.style}>
                           {heroImage.kind === 'video'
-                            ? <PreviewVideo role="hero" mediaKey={heroImage.mediaKey} className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} playback={heroImage.playback} controls={!heroImage.playback.autoplay} />
+                            ? <PreviewVideo role="hero" mediaKey={heroImage.mediaKey} className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} playback={heroImage.playback} pausePolicy={draft.videoPlayback.pausePolicy} controls={!heroImage.playback.autoplay} />
                             : <img className="preview-hero-art" src={heroImage.src} style={heroImage.mediaStyle} alt="" draggable={false} />}
                         </div>
                         : <div className="preview-hero-fallback" aria-hidden="true" />}
@@ -868,7 +924,7 @@ export function App(): React.JSX.Element {
                       <PreviewComposer profile={draft} assets={assets} />
                     </div>
                   </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKey={draft.polaroid.source?.asset ?? polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKey={draft.polaroid.source?.asset ?? polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} pausePolicy={draft.videoPlayback.pausePolicy} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
@@ -898,6 +954,7 @@ export function App(): React.JSX.Element {
         <aside className="inspector" ref={inspectorRef}>
           <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
+            <Property title="视频播放" anchor="visual-video-playback" highlighted={inspectorAnchor === 'visual-video-playback'}><VideoPlaybackPanel profile={draft} inspections={videoInspections} optimizingRole={optimizingVideoRole} onChange={change} onOptimize={(role) => { void optimizeVideo(role) }} onActivateVariant={(role, variant) => { void activateVideoVariantForRole(role, variant) }} /></Property>
             <Property title="整个窗口背景" anchor="visual-window-background" highlighted={inspectorAnchor === 'visual-window-background'}><WindowBackgroundControls profile={draft} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('windowBackground', kind) }} /></Property>
             <Property title="侧栏固定文案" anchor="visual-sidebar-copy" highlighted={inspectorAnchor === 'visual-sidebar-copy'}>
               <label className="copy-field">模式标题<input value={draft.copy.sidebarModeTitle} maxLength={80} aria-invalid={!draft.copy.sidebarModeTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarModeTitle = value }) }} /></label>
@@ -916,7 +973,7 @@ export function App(): React.JSX.Element {
               {homeCopyValidationError && <p className="field-error">{homeCopyValidationError}</p>}
             </Property>
             <Property title="主视觉" anchor="visual-hero" highlighted={inspectorAnchor === 'visual-hero'}>
-              <button className="asset-picker" disabled={mediaBusy} onClick={() => void selectImage('hero')}>{heroUrl ? (draft.hero.source?.kind === 'video' ? <video src={heroUrl} muted playsInline style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />选择主视觉媒体</span></button>
+              <button className="asset-picker" disabled={mediaBusy} onClick={() => void selectImage('hero')}>{heroUrl ? (draft.hero.source?.kind === 'video' ? <VideoThumbnail src={heroUrl} style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />选择主视觉媒体</span></button>
               {draft.hero.source?.kind === 'video' && <div className="media-playback-controls"><label className="toggle-row"><span>自动播放</span><input type="checkbox" checked={draft.hero.playback.autoplay} onChange={(event) => { const autoplay = event.currentTarget.checked; change((profile) => { profile.hero.playback.autoplay = autoplay }) }} /></label><label className="toggle-row"><span>循环播放</span><input type="checkbox" checked={draft.hero.playback.loop} onChange={(event) => { const loop = event.currentTarget.checked; change((profile) => { profile.hero.playback.loop = loop }) }} /></label><label className="toggle-row"><span>声音</span><input type="checkbox" checked={draft.hero.playback.sound} onChange={(event) => { const sound = event.currentTarget.checked; change((profile) => { profile.hero.playback.sound = sound; if (sound) profile.polaroid.playback.sound = false }) }} /></label><Range label="音量" min={0} max={1} step={.01} value={draft.hero.playback.volume} disabled={!draft.hero.playback.sound} onChange={(value) => change((profile) => { profile.hero.playback.volume = value }, 'hero-volume')} /></div>}
               {draft.hero.source && heroUrl && <MediaFlipControls value={draft.hero.mediaTransform} onChange={(field, value) => change((profile) => { profile.hero.mediaTransform[field] = value })} />}
               <Range label="缩放" min={.5} max={3} step={.01} value={draft.hero.scale} onChange={(value) => change((profile) => { profile.hero.scale = value })} />
@@ -930,7 +987,7 @@ export function App(): React.JSX.Element {
               {polaroidUrl && draft.polaroid.mode === 'fence' && <FenceEditor imageUrl={polaroidUrl} fence={draft.polaroid.fence as Fence} onChange={(fence) => change((profile) => { profile.polaroid.fence = fence })} />}
             </Property>
             <Property title="背景粒子" anchor="visual-sparkles" highlighted={inspectorAnchor === 'visual-sparkles'}><ParticleEffectControls profile={draft} assets={assets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} /></Property>
-            <Property title="输入框装饰" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={assets} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} onSelectGif={() => { void selectImage('composerMelody', 'gif') }} /></Property>
+            <Property title="输入框装饰" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={assets} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} onSelectMedia={(kind) => { void selectImage('composerMelody', kind) }} /></Property>
             <Property title="字体" anchor="typography" highlighted={inspectorAnchor === 'typography'}>
               <div className="font-editor">{(Object.keys(draft.typography.slots) as TypographySlot[]).map((slot) => <FontControl key={slot} slot={slot} profile={draft} onChange={(selection) => change((profile) => assignFontSlot(profile, slot, selection))} onImport={() => void importFont(slot)} />)}</div>
               {draft.typography.importedFonts.length > 0 && <div className="font-library">{draft.typography.importedFonts.map((font) => <div key={font.id}><span><strong>{font.family}</strong><small>{font.originalName}</small></span><button className="mini-icon-button" type="button" title="移除字体" onClick={() => removeImportedFont(font.id)}><Trash2 size={13} /></button></div>)}</div>}
@@ -971,10 +1028,38 @@ export function App(): React.JSX.Element {
 
 const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
 const PREVIEW_SIDEBAR_WIDTH = 270
+const BACKGROUND_VIDEO_PLAYBACK: ThemeProfile['hero']['playback'] = { autoplay: true, loop: true, sound: false, volume: 0 }
 const particleIconSlots: IconSlot[] = PARTICLE_EFFECT_IDS.map(particleEffectIconSlot)
 const standardIconSlots = (Object.keys(iconLabels) as IconSlot[]).filter((slot) => !particleIconSlots.includes(slot))
 const appearanceGroupLabels: Record<AppearanceGroup, string> = {
   global: '全局与画布', conversation: '会话与按钮', sidebar: '侧边栏', brand: '品牌栏', home: '首页', cards: '操作卡片', projects: '项目栏', composer: '输入框', decoration: '装饰'
+}
+
+function videoReferences(profile: ThemeProfile): Array<MediaReference | null> {
+  return [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source]
+}
+
+function videoReferenceForRole(profile: ThemeProfile, role: VideoMediaRole): MediaReference | null {
+  if (role === 'hero') return profile.hero.source
+  if (role === 'polaroid') return profile.polaroid.source
+  if (role === 'conversationBackground') return profile.conversationBackground.source
+  return profile.windowBackground.source
+}
+
+function setVideoReferenceForRole(profile: ThemeProfile, role: VideoMediaRole, reference: MediaReference, sourceSize?: { width: number; height: number }): void {
+  if (role === 'hero') profile.hero.source = reference
+  else if (role === 'polaroid') {
+    profile.polaroid.source = reference
+    if (sourceSize) profile.polaroid.sourceSize = sourceSize
+  } else if (role === 'conversationBackground') profile.conversationBackground.source = reference
+  else profile.windowBackground.source = reference
+}
+
+function videoRoleLabel(role: VideoMediaRole): string {
+  if (role === 'hero') return '主视觉'
+  if (role === 'polaroid') return '拍立得'
+  if (role === 'conversationBackground') return '对话背景'
+  return '窗口背景'
 }
 
 const previewParticleCyclePositions = new WeakMap<HTMLElement, ParticleCyclePosition>()
@@ -1071,7 +1156,7 @@ function PreviewComposerDecoration({ profile, assets }: { profile: ThemeProfile;
     fontSize: `${config.fontSize}px`,
     '--dream-composer-effect-duration': `${baseDuration / config.speed}s`
   } as React.CSSProperties
-  const gifUrl = config.source ? assets[config.source.asset] : undefined
+  const mediaUrl = config.source ? assets[config.source.asset] : undefined
 
   return <span
     className={`dream-composer-melody dream-composer-decoration preview-composer-melody${trackEffect ? ' dream-composer-decoration-track' : ''}`}
@@ -1084,8 +1169,8 @@ function PreviewComposerDecoration({ profile, assets }: { profile: ThemeProfile;
     aria-label="编辑输入框装饰"
     style={style}
   >
-    {config.mode === 'gif'
-      ? gifUrl && <img className="dream-composer-decoration-gif" src={gifUrl} alt="" draggable={false} style={{ width: `${config.gifWidth}px` }} />
+    {config.mode !== 'text'
+      ? mediaUrl && <img className={`dream-composer-decoration-media dream-composer-decoration-${config.mode}`} src={mediaUrl} alt="" draggable={false} style={{ width: `${config.mediaWidth}px` }} />
       : <ComposerDecorationText text={config.text} effect={config.effect} direction={config.direction} speed={config.speed} />}
   </span>
 }
@@ -1110,7 +1195,7 @@ function WindowBackgroundPreview({ profile, backgroundUrl }: { profile: ThemePro
   }
   return <div className="preview-window-background">
     {visible && background.mode === 'color' && <div className="preview-window-background-base preview-window-background-color" aria-hidden="true" style={{ ...baseStyle, background: paintToCss(background.paint) }} />}
-    {visible && backgroundUrl && background.mode === 'video' && <video className="preview-window-background-base preview-window-background-media" src={backgroundUrl} muted autoPlay loop playsInline aria-hidden="true" style={baseStyle} />}
+    {visible && backgroundUrl && background.mode === 'video' && <PreviewVideo role="windowBackground" mediaKey={background.source?.asset ?? backgroundUrl} className="preview-window-background-base preview-window-background-media" src={backgroundUrl} playback={BACKGROUND_VIDEO_PLAYBACK} pausePolicy={profile.videoPlayback.pausePolicy} controls={false} ariaHidden style={baseStyle} />}
     {visible && backgroundUrl && background.mode !== 'color' && background.mode !== 'video' && <img className="preview-window-background-base preview-window-background-media" src={backgroundUrl} alt="" draggable={false} aria-hidden="true" style={baseStyle} />}
     {visible && background.masks.map((mask, index) => mask.visible && <div className="preview-window-background-mask" aria-hidden="true" key={mask.id} style={{ ...buildBackgroundOverlayStyle(mask), zIndex: background.masks.length - index }} />)}
     <button className="preview-window-background-edit" type="button" title="编辑整个窗口背景" aria-label="编辑整个窗口背景" data-preview-target="window-background"><Palette size={14} /></button>
@@ -1128,7 +1213,7 @@ function ConversationPreview({ profile, assets }: { profile: ThemeProfile; asset
   return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>完善主题编辑器</strong><span>{PREVIEW_PROJECT_NAME} · Miku</span></div></header><div className="preview-conversation-surface" data-preview-target="conversation-background" tabIndex={0} role="button" aria-label="编辑对话区域背景">
     <div className="preview-conversation-background" aria-hidden="true">
       {background.visible && background.mode === 'color' && <div className="preview-conversation-background-color" style={{ background: background.color, opacity: background.opacity }} />}
-      {background.visible && sourceUrl && background.mode === 'video' && <video className="preview-conversation-background-media" src={sourceUrl} muted autoPlay loop playsInline style={mediaStyle} />}
+      {background.visible && sourceUrl && background.mode === 'video' && <PreviewVideo role="conversationBackground" mediaKey={background.source?.asset ?? sourceUrl} className="preview-conversation-background-media" src={sourceUrl} playback={BACKGROUND_VIDEO_PLAYBACK} pausePolicy={profile.videoPlayback.pausePolicy} controls={false} ariaHidden style={mediaStyle} />}
       {background.visible && sourceUrl && background.mode !== 'color' && background.mode !== 'video' && <img className="preview-conversation-background-media" src={sourceUrl} alt="" draggable={false} style={mediaStyle} />}
       {background.visible && <div className="preview-conversation-background-overlay" style={buildConversationOverlayStyle(background.overlay)} />}
     </div>

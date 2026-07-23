@@ -38,6 +38,8 @@ describe('Studio preview editing interaction', () => {
   let selectedFontAsset: ImportedFontAsset | null
   let selectIcon: ReturnType<typeof vi.fn>
   let selectMedia: ReturnType<typeof vi.fn>
+  let inspectVideo: ReturnType<typeof vi.fn>
+  let optimizeVideo: ReturnType<typeof vi.fn>
   let getDefaultTheme: ReturnType<typeof vi.fn>
   let duplicateTheme: ReturnType<typeof vi.fn>
   let activateTheme: ReturnType<typeof vi.fn>
@@ -71,6 +73,12 @@ describe('Studio preview editing interaction', () => {
     selectedFontAsset = null
     selectIcon = vi.fn(async () => null)
     selectMedia = vi.fn(async () => null)
+    inspectVideo = vi.fn(async () => {
+      throw new Error('No video inspection configured.')
+    })
+    optimizeVideo = vi.fn(async () => {
+      throw new Error('No video optimization configured.')
+    })
     getDefaultTheme = vi.fn(async (id: string) => {
       const selected = themeProfiles.find((item) => item.id === id)
       if (!selected) throw new Error('Theme not found.')
@@ -150,6 +158,8 @@ describe('Studio preview editing interaction', () => {
     assets: {
       selectImage: async () => null,
       selectMedia,
+      inspectVideo,
+      optimizeVideo,
       getPreviewUrl: async (_themeId, asset) => `data:image/png;base64,${asset}`,
       selectIcon,
       selectFont: async () => selectedFontAsset
@@ -1055,6 +1065,67 @@ describe('Studio preview editing interaction', () => {
     expect(video?.muted).toBe(true)
     expect(video?.loop).toBe(true)
     expect(video?.autoplay).toBe(true)
+    const thumbnail = container.querySelector<HTMLVideoElement>('[role="dialog"] .asset-picker video')
+    expect(thumbnail?.autoplay).toBe(false)
+    expect(thumbnail?.loop).toBe(false)
+  })
+
+  it('configures pause policy, inspects high-load video, optimizes it, and switches variants', async () => {
+    const inspection = { width: 3840, height: 2160, frameRate: 59.94, duration: 12.5, codec: 'avc', bitRate: 18_000_000, hasAudio: true, highLoad: true }
+    inspectVideo.mockImplementation(async (_themeId: string, asset: string) => asset.includes('optimized')
+      ? { ...inspection, width: 1920, height: 1080, frameRate: 30, bitRate: 5_000_000, highLoad: false }
+      : inspection)
+    const originalReference = { asset: 'assets/hero-original.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
+    const optimizedReference = {
+      asset: 'assets/hero-optimized.mp4',
+      kind: 'video' as const,
+      mimeType: 'video/mp4' as const,
+      videoVariants: {
+        active: 'optimized' as const,
+        original: { asset: originalReference.asset, mimeType: 'video/mp4' as const, width: 3840, height: 2160, frameRate: 59.94 },
+        optimized: { asset: 'assets/hero-optimized.mp4', mimeType: 'video/mp4' as const, width: 1920, height: 1080, frameRate: 30 }
+      }
+    }
+    selectMedia.mockResolvedValueOnce({ reference: originalReference, relativePath: originalReference.asset, previewUrl: 'studio-media://preview/hero-original.mp4', originalName: 'hero-original.mp4', width: 3840, height: 2160 })
+    optimizeVideo.mockResolvedValueOnce({ reference: optimizedReference, relativePath: optimizedReference.asset, previewUrl: 'studio-media://preview/hero-optimized.mp4', originalName: 'hero-original.mp4', width: 1920, height: 1080 })
+
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(inspectVideo).toHaveBeenCalledWith(profile.id, originalReference.asset)
+    expect(container.querySelector('.video-load-badge')?.textContent).toContain('高负载')
+    expect(container.querySelector('.video-role-row p')?.textContent).toContain('3840×2160')
+
+    const unfocused = [...container.querySelectorAll<HTMLButtonElement>('.video-pause-policies button')].find((button) => button.textContent === '失焦即暂停')
+    const optimize = [...container.querySelectorAll<HTMLButtonElement>('.optimize-video-command')].find((button) => button.textContent?.includes('优化视频'))
+    if (!unfocused || !optimize) throw new Error('Video playback controls are missing.')
+    act(() => unfocused.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    await act(async () => {
+      optimize.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(optimizeVideo).toHaveBeenCalledWith(profile.id, 'hero', originalReference.asset)
+    expect(container.querySelector('.video-variant-switch button.active')?.textContent).toBe('优化版')
+
+    const original = [...container.querySelectorAll<HTMLButtonElement>('.video-variant-switch button')].find((button) => button.textContent === '原片')
+    if (!original) throw new Error('Original video variant control is missing.')
+    await act(async () => {
+      original.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('.video-variant-switch button.active')?.textContent).toBe('原片')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.videoPlayback.pausePolicy).toBe('unfocused')
+    expect(savedProfiles.at(-1)?.hero.source?.videoVariants).toMatchObject({ active: 'original' })
   })
 
   it('edits a gradient window background and manages eight ordered mask layers', async () => {
@@ -1108,7 +1179,7 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.windowBackground).toMatchObject({ visible: true, mode: 'color', paint: { kind: 'linear', angle: 135 }, masks: expect.arrayContaining([expect.objectContaining({ shape: 'ellipse' })]) })
   })
 
-  it('selects a composer GIF once and keeps it synchronized across preview modes', async () => {
+  it('selects composer images and GIFs once and keeps them synchronized across preview modes', async () => {
     const melody = container.querySelector<HTMLElement>('[data-preview-target="composer-melody"]')
     if (!melody) throw new Error('Composer decoration target is missing.')
     pointerDown(melody)
@@ -1117,13 +1188,31 @@ describe('Studio preview editing interaction', () => {
       if (!button) throw new Error(`${label} composer mode is missing.`)
       return button
     }
+    expect([...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .composer-decoration-modes button')].map((button) => button.textContent)).toEqual(['文字', '图片', 'GIF'])
+    expect([...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .melody-presets button')].map((button) => button.textContent)).toEqual(['旋律', '简洁', '星愿'])
+
+    await act(async () => {
+      modeButton('图片').click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'composerMelody', 'image')
+    expect(container.querySelector('[data-preview-target="composer-melody"]')?.getAttribute('data-dream-composer-mode')).toBe('text')
+
+    selectMedia.mockResolvedValueOnce({ reference: { asset: 'assets/composer.png', kind: 'image', mimeType: 'image/png' }, relativePath: 'assets/composer.png', previewUrl: 'data:image/png;base64,AA==', originalName: 'composer.png', width: 320, height: 120 })
+    await act(async () => {
+      modeButton('图片').click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const staticImage = container.querySelector<HTMLImageElement>('[data-preview-target="composer-melody"] .dream-composer-decoration-image')
+    expect(staticImage?.src).toContain('data:image/png;base64,AA==')
+    expect(container.querySelector('[data-preview-target="composer-melody"]')?.getAttribute('data-dream-composer-effect')).toBe('none')
 
     await act(async () => {
       modeButton('GIF').click()
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
     })
     expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'composerMelody', 'gif')
-    expect(container.querySelector('[data-preview-target="composer-melody"]')?.getAttribute('data-dream-composer-mode')).toBe('text')
+    expect(container.querySelector('[data-preview-target="composer-melody"]')?.getAttribute('data-dream-composer-mode')).toBe('image')
 
     selectMedia.mockResolvedValueOnce({ reference: { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' }, relativePath: 'assets/composer.gif', previewUrl: 'data:image/gif;base64,AA==', originalName: 'composer.gif', width: 320, height: 120 })
     await act(async () => {
@@ -1149,7 +1238,7 @@ describe('Studio preview editing interaction', () => {
       save.click()
       await Promise.resolve()
     })
-    expect(savedProfiles.at(-1)?.decorations.composerMelody).toMatchObject({ mode: 'gif', gifWidth: 144, source: { asset: 'assets/composer.gif', mimeType: 'image/gif' } })
+    expect(savedProfiles.at(-1)?.decorations.composerMelody).toMatchObject({ mode: 'gif', mediaWidth: 144, source: { asset: 'assets/composer.gif', mimeType: 'image/gif' } })
   })
 
   it('opens custom icon import from both quick editing and the full icon inspector', async () => {

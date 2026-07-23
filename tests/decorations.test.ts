@@ -72,9 +72,20 @@ describe('theme decorations', () => {
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, effect: 'spin' } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, direction: 'up' } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, speed: 2.01 } } })).toThrow()
-    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, gifWidth: 241 } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, mediaWidth: 241 } } })).toThrow()
     expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, mode: 'gif', source: null } } })).toThrow('GIF')
-    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, source: { asset: 'assets/not-gif.png', kind: 'image', mimeType: 'image/png' } } } })).toThrow('GIF')
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, mode: 'gif', source: { asset: 'assets/not-gif.png', kind: 'image', mimeType: 'image/png' } } } })).toThrow('GIF')
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, mode: 'image', source: { asset: 'assets/animated.gif', kind: 'image', mimeType: 'image/gif' } } } })).toThrow('静态图片')
+    expect(() => parseThemeProfile({ ...profile, decorations: { ...profile.decorations, composerMelody: { ...profile.decorations.composerMelody, source: { asset: 'assets/video.mp4', kind: 'video', mimeType: 'video/mp4' } } } })).toThrow('图片或 GIF')
+
+    const image = structuredClone(profile)
+    image.decorations.composerMelody.mode = 'image'
+    image.decorations.composerMelody.source = { asset: 'assets/decoration.png', kind: 'image', mimeType: 'image/png' }
+    expect(parseThemeProfile(image).decorations.composerMelody).toMatchObject({ mode: 'image', mediaWidth: 96 })
+    const gif = structuredClone(profile)
+    gif.decorations.composerMelody.mode = 'gif'
+    gif.decorations.composerMelody.source = { asset: 'assets/decoration.gif', kind: 'image', mimeType: 'image/gif' }
+    expect(parseThemeProfile(gif).decorations.composerMelody).toMatchObject({ mode: 'gif', mediaWidth: 96 })
   })
 
   it('resolves deterministic quality, balanced, and power-saving particle budgets', () => {
@@ -105,14 +116,27 @@ describe('theme decorations', () => {
     expect(createParticleCyclePosition('twinkle', {}, () => 2)).toEqual({ x: 95, y: 91 })
   })
 
-  it('adds static text defaults to older version fifteen composer decorations', () => {
+  it('migrates version twenty-two composer media width without changing its GIF', () => {
     const profile = createDefaultTheme(id)
-    const legacy = structuredClone(profile) as unknown as { decorations: { composerMelody: Record<string, unknown> } }
-    for (const field of ['mode', 'source', 'effect', 'direction', 'speed', 'gifWidth']) delete legacy.decorations.composerMelody[field]
+    const { mediaWidth: _mediaWidth, ...composerMelody } = profile.decorations.composerMelody
+    const legacy = {
+      ...profile,
+      version: 22,
+      decorations: {
+        ...profile.decorations,
+        composerMelody: {
+          ...composerMelody,
+          mode: 'gif',
+          source: { asset: 'assets/legacy.gif', kind: 'image', mimeType: 'image/gif' },
+          gifWidth: 144
+        }
+      }
+    }
 
     const parsed = parseThemeProfile(legacy)
-    expect(parsed.version).toBe(21)
-    expect(parsed.decorations.composerMelody).toMatchObject({ mode: 'text', source: null, effect: 'none', direction: 'left', speed: 1, gifWidth: 96 })
+    expect(parsed.version).toBe(23)
+    expect(parsed.decorations.composerMelody).toMatchObject({ mode: 'gif', source: { asset: 'assets/legacy.gif', mimeType: 'image/gif' }, effect: 'none', direction: 'left', speed: 1, mediaWidth: 144 })
+    expect('gifWidth' in parsed.decorations.composerMelody).toBe(false)
     expect(COMPOSER_DECORATION_EFFECT_IDS).toEqual(['none', 'wave', 'barrage', 'scroll', 'float', 'pulse'])
     expect(COMPOSER_DECORATION_DIRECTION_IDS).toEqual(['left', 'right'])
   })

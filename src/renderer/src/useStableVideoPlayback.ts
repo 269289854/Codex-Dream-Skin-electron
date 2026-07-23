@@ -1,12 +1,14 @@
 import * as React from 'react'
-import type { ThemeProfile } from '../../shared/theme'
+import type { VideoMediaRole } from '../../shared/contracts'
+import type { ThemeProfile, VideoPausePolicy } from '../../shared/theme'
 
 type VideoPlayback = ThemeProfile['hero']['playback']
 
 interface StableVideoOptions {
-  role: 'hero' | 'polaroid'
+  role: VideoMediaRole
   mediaKey: string
   playback: VideoPlayback
+  pausePolicy: VideoPausePolicy
 }
 
 interface StableVideoControls {
@@ -27,13 +29,20 @@ const currentDataReadyState = (video: HTMLVideoElement): number => Number(video.
 const metadataReadyState = (video: HTMLVideoElement): number => Number(video.HAVE_METADATA) || 1
 const previewPlaybackPositions = new Map<string, number>()
 
-export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElement | null>, { role, mediaKey, playback }: StableVideoOptions): StableVideoControls {
+export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElement | null>, { role, mediaKey, playback, pausePolicy }: StableVideoOptions): StableVideoControls {
   const [playbackBlocked, setPlaybackBlocked] = React.useState(false)
   const guardRef = React.useRef<GuardState | null>(null)
+  const windowFocusedRef = React.useRef(typeof document.hasFocus === 'function' ? document.hasFocus() : true)
+  const policyPausedRef = React.useRef(false)
+
+  const shouldPauseForPolicy = React.useCallback(
+    (): boolean => document.hidden || (pausePolicy === 'unfocused' && !windowFocusedRef.current),
+    [pausePolicy]
+  )
 
   const attemptPlay = React.useCallback((): void => {
     const video = videoRef.current
-    if (!video || !playback.autoplay || !video.isConnected || document.hidden) return
+    if (!video || !playback.autoplay || !video.isConnected || shouldPauseForPolicy()) return
     video.muted = !playback.sound
     video.volume = playback.volume
     try {
@@ -41,13 +50,13 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
     } catch {
       setPlaybackBlocked(true)
     }
-  }, [playback.autoplay, playback.sound, playback.volume, videoRef])
+  }, [playback.autoplay, playback.sound, playback.volume, shouldPauseForPolicy, videoRef])
 
   const resumeIfPaused = React.useCallback((): void => {
     const video = videoRef.current
-    if (!video || !playback.autoplay || !video.paused || video.ended || document.hidden) return
+    if (!video || !playback.autoplay || !video.paused || video.ended || shouldPauseForPolicy()) return
     attemptPlay()
-  }, [attemptPlay, playback.autoplay, videoRef])
+  }, [attemptPlay, playback.autoplay, shouldPauseForPolicy, videoRef])
 
   React.useEffect(() => {
     const video = videoRef.current
@@ -75,6 +84,7 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
     restorePlaybackPosition()
 
     if (!playback.autoplay) {
+      policyPausedRef.current = false
       setPlaybackBlocked(false)
       video.addEventListener('loadedmetadata', restorePlaybackPosition)
       return () => {
@@ -102,12 +112,13 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
       state.recovering = false
     }
     const schedulePlay = (): void => {
+      if (shouldPauseForPolicy()) return
       if (retryTimer !== null) window.clearTimeout(retryTimer)
       retryTimer = window.setTimeout(attemptPlay, 0)
     }
     const recover = (): void => {
       const now = window.performance.now()
-      if (state.recovering || now < state.nextRecoveryAt || !video.isConnected || video.paused || video.ended || document.hidden) return
+      if (state.recovering || now < state.nextRecoveryAt || !video.isConnected || video.paused || video.ended || shouldPauseForPolicy() || policyPausedRef.current) return
       const resumeTime = video.currentTime
       state.recovering = true
       state.nextRecoveryAt = now + 1800
@@ -130,18 +141,27 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
       })
     }
     const recoverPausedVideo = (): void => {
-      if (!video.ended && !document.hidden && !state.recovering) schedulePlay()
+      if (!video.ended && !shouldPauseForPolicy() && !policyPausedRef.current && !state.recovering) schedulePlay()
     }
-    const resumeVisibleVideo = (): void => {
-      if (!document.hidden) schedulePlay()
-      else video.pause()
+    const syncPlaybackPolicy = (): void => {
+      if (shouldPauseForPolicy()) {
+        policyPausedRef.current = true
+        if (!video.paused) video.pause()
+        state.stalledSince = null
+        return
+      }
+      if (!policyPausedRef.current) return
+      policyPausedRef.current = false
+      schedulePlay()
     }
+    const onFocus = (): void => { windowFocusedRef.current = true; syncPlaybackPolicy() }
+    const onBlur = (): void => { windowFocusedRef.current = false; syncPlaybackPolicy() }
     const onWaiting = (): void => { state.stalledSince ??= window.performance.now() - 1200 }
     const onStalled = (): void => { state.stalledSince ??= window.performance.now() - 1200 }
     const guardTimer = window.setInterval(() => {
       const now = window.performance.now()
       if (!video.isConnected) return
-      if (video.paused || video.ended || document.hidden || video.readyState < currentDataReadyState(video)) {
+      if (video.paused || video.ended || shouldPauseForPolicy() || policyPausedRef.current || video.readyState < currentDataReadyState(video)) {
         state.stalledSince = null
         return
       }
@@ -161,10 +181,12 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
     video.addEventListener('progress', noteProgress)
     video.addEventListener('waiting', onWaiting)
     video.addEventListener('stalled', onStalled)
-    document.addEventListener('visibilitychange', resumeVisibleVideo)
-    window.addEventListener('focus', attemptPlay)
+    document.addEventListener('visibilitychange', syncPlaybackPolicy)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
     setPlaybackBlocked(false)
-    attemptPlay()
+    syncPlaybackPolicy()
+    if (!shouldPauseForPolicy()) attemptPlay()
 
     return () => {
       if (retryTimer !== null) window.clearTimeout(retryTimer)
@@ -180,11 +202,12 @@ export function useStableVideoPlayback(videoRef: React.RefObject<HTMLVideoElemen
       video.removeEventListener('progress', noteProgress)
       video.removeEventListener('waiting', onWaiting)
       video.removeEventListener('stalled', onStalled)
-      document.removeEventListener('visibilitychange', resumeVisibleVideo)
-      window.removeEventListener('focus', attemptPlay)
+      document.removeEventListener('visibilitychange', syncPlaybackPolicy)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('blur', onBlur)
       if (guardRef.current === state) guardRef.current = null
     }
-  }, [attemptPlay, mediaKey, playback.autoplay, playback.loop, playback.sound, playback.volume, role, videoRef])
+  }, [attemptPlay, mediaKey, playback.autoplay, playback.loop, playback.sound, playback.volume, role, shouldPauseForPolicy, videoRef])
 
   return { playbackBlocked, resumeIfPaused, attemptPlay }
 }

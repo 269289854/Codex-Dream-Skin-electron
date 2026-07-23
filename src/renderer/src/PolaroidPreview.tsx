@@ -3,7 +3,7 @@ import { Play } from 'lucide-react'
 import type { Fence } from '../../shared/geometry'
 import { mediaFlipCssTransform } from '../../shared/media'
 import { getPolaroidLayout, polaroidShadowFilter } from '../../shared/polaroid'
-import type { PolaroidMode, ThemeProfile } from '../../shared/theme'
+import type { PolaroidMode, ThemeProfile, VideoPausePolicy } from '../../shared/theme'
 import { useStableVideoPlayback } from './useStableVideoPlayback'
 
 interface PolaroidPreviewProps {
@@ -11,6 +11,7 @@ interface PolaroidPreviewProps {
   mediaKey: string
   mediaKind: 'image' | 'video'
   playback: ThemeProfile['polaroid']['playback']
+  pausePolicy: VideoPausePolicy
   mediaTransform: ThemeProfile['polaroid']['mediaTransform']
   mode: PolaroidMode
   fence: Fence
@@ -22,13 +23,14 @@ interface PolaroidPreviewProps {
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
 }
 
-export function PolaroidPreview({ mediaUrl, mediaKey, mediaKind, playback, mediaTransform, mode, fence, sourceSize, placement, style, pin, quickEditorOpen, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
+export function PolaroidPreview({ mediaUrl, mediaKey, mediaKind, playback, pausePolicy, mediaTransform, mode, fence, sourceSize, placement, style, pin, quickEditorOpen, onPointerDown }: PolaroidPreviewProps): React.JSX.Element | null {
   const videoRef = React.useRef<HTMLVideoElement>(null)
   const layout = sourceSize ? getPolaroidLayout(mode, sourceSize, fence) : null
   const { playbackBlocked, resumeIfPaused, attemptPlay } = useStableVideoPlayback(videoRef, {
     role: 'polaroid',
     mediaKey: mediaKind === 'video' ? mediaKey : '',
-    playback
+    playback,
+    pausePolicy
   })
 
   React.useEffect(() => {

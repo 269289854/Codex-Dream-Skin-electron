@@ -9,7 +9,7 @@ import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
 import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
 import { captureIpcResult } from '../shared/ipc-result'
-import type { AssetPurpose, MediaSelectionKind } from '../shared/contracts'
+import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
 
 const { autoUpdater } = electronUpdater
 
@@ -91,7 +91,7 @@ function registerIpc(): void {
     if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
     if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'windowBackground' && purpose !== 'composerMelody') throw new Error('媒体用途无效。')
     if (requestedKind !== undefined && requestedKind !== 'image' && requestedKind !== 'gif' && requestedKind !== 'video') throw new Error('媒体类型无效。')
-    if (purpose === 'composerMelody' && requestedKind !== 'gif') throw new Error('输入框装饰只能选择 GIF 文件。')
+    if (purpose === 'composerMelody' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('输入框装饰只能选择图片或 GIF 文件。')
     const kind = requestedKind as MediaSelectionKind | undefined
     const filters = kind === 'image'
       ? [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
@@ -101,18 +101,39 @@ function registerIpc(): void {
           ? [{ name: 'Video', extensions: ['mp4', 'webm'] }]
           : [{ name: 'Images and Video', extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
     const options: OpenDialogOptions = {
-      title: purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : purpose === 'windowBackground' ? '选择整个窗口背景' : '选择输入框 GIF 装饰',
+      title: purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : purpose === 'windowBackground' ? '选择整个窗口背景' : kind === 'image' ? '选择输入框图片装饰' : '选择输入框 GIF 装饰',
       properties: ['openFile'],
       filters
     }
     const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return null
+    const sourcePath = result.filePaths[0]
+    let optimizeVideo = false
+    if (extname(sourcePath).toLowerCase() === '.mp4' || extname(sourcePath).toLowerCase() === '.webm') {
+      const inspection = await store.inspectVideoSource(sourcePath)
+      if (inspection.highLoad) {
+        const messageOptions = {
+          type: 'question' as const,
+          title: '优化视频主题性能',
+          message: '该视频的解码负载较高，是否生成适合主题播放的优化版本？',
+          detail: videoOptimizationDetail(inspection),
+          buttons: ['优化后导入', '保留原视频', '取消'],
+          defaultId: 0,
+          cancelId: 2,
+          noLink: true
+        }
+        const decision = mainWindow ? await dialog.showMessageBox(mainWindow, messageOptions) : await dialog.showMessageBox(messageOptions)
+        if (decision.response === 2) return null
+        optimizeVideo = decision.response === 0
+      }
+    }
     const id = randomUUID()
     const controller = new AbortController()
     operationControllers.set(id, controller)
     emitProgress({ id, kind: 'media-import', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导入媒体' })
     try {
-      const imported = await store.importMediaAsset(themeId, result.filePaths[0], purpose, kind, controller.signal)
+      if (optimizeVideo) emitProgress({ id, kind: 'media-import', phase: 'optimizing', processedBytes: 0, totalBytes: null, message: '正在生成 1080p / 30 FPS 优化视频' })
+      const imported = await store.importMediaAsset(themeId, sourcePath, purpose, kind, controller.signal, optimizeVideo)
       emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '媒体导入完成' })
       return imported
     } catch (error) {
@@ -123,6 +144,24 @@ function registerIpc(): void {
     }
   })
   ipcMain.handle('assets:get-preview-url', (_event, themeId: unknown, asset: unknown) => store.getMediaPreviewUrl(themeId, asset))
+  ipcMain.handle('assets:inspect-video', (_event, themeId: unknown, asset: unknown) => store.inspectReferencedVideo(themeId, asset))
+  ipcMain.handle('assets:optimize-video', async (_event, themeId: unknown, role: unknown, asset: unknown) => {
+    if (!isVideoMediaRole(role)) throw new Error('视频位置无效。')
+    const id = randomUUID()
+    const controller = new AbortController()
+    operationControllers.set(id, controller)
+    emitProgress({ id, kind: 'media-import', phase: 'optimizing', processedBytes: 0, totalBytes: null, message: '正在优化当前视频' })
+    try {
+      const optimized = await store.optimizeReferencedVideo(themeId, role, asset, controller.signal)
+      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '视频优化完成' })
+      return optimized
+    } catch (error) {
+      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? error.message : '视频优化失败' })
+      throw error
+    } finally {
+      operationControllers.delete(id)
+    }
+  })
   ipcMain.handle('operations:cancel', (_event, id: unknown) => {
     if (typeof id === 'string') operationControllers.get(id)?.abort()
   })
@@ -284,8 +323,18 @@ if (!hasSingleInstanceLock) {
   })
 }
 
-function emitProgress(progress: { id: string; kind: 'media-import' | 'theme-copy' | 'share-export' | 'share-import'; phase: 'started' | 'copying' | 'validating' | 'writing' | 'completed' | 'failed' | 'cancelled'; processedBytes: number; totalBytes: number | null; message: string }): void {
+function emitProgress(progress: OperationProgress): void {
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('operations:progress', progress)
+}
+
+function videoOptimizationDetail(inspection: VideoAssetInspection): string {
+  const landscape = inspection.width >= inspection.height
+  const target = landscape ? '1920×1080' : '1080×1920'
+  return `当前视频：${inspection.width}×${inspection.height}，${inspection.frameRate.toFixed(2)} FPS。\n优化版本：不超过 ${target}，最高 30 FPS。原片会保留，可随时切回。`
+}
+
+function isVideoMediaRole(value: unknown): value is VideoMediaRole {
+  return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
 }
 
 async function handleStudioMediaRequest(request: Request): Promise<Response> {

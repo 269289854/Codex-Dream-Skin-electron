@@ -4,6 +4,7 @@ import type { MediaSelectionKind } from '../../shared/contracts'
 import { createDefaultWindowBackgroundMask, type ThemeProfile, type WindowBackgroundMask } from '../../shared/theme'
 import { PaintControl, Range } from './editor-controls'
 import { MediaFlipControls } from './MediaFlipControls'
+import { VideoThumbnail } from './VideoThumbnail'
 
 interface WindowBackgroundControlsProps {
   profile: ThemeProfile
@@ -72,7 +73,7 @@ export function WindowBackgroundControls({ profile, backgroundUrl, mediaBusy = f
     {background.mode === 'color' && <PaintControl label="背景颜色" value={background.paint} onChange={(paint, continuous) => onChange((next) => { next.windowBackground.paint = paint }, continuous ? 'window-background-paint' : undefined)} onChangeEnd={onInteractionEnd} />}
     {mediaMode && <>
       <button className="asset-picker window-background-asset-picker" type="button" disabled={mediaBusy} onClick={() => onSelectMedia(background.mode as MediaSelectionKind)}>
-        {backgroundUrl && background.mode === 'video' ? <video src={backgroundUrl} muted autoPlay loop playsInline /> : backgroundUrl ? <img src={backgroundUrl} alt="整个窗口背景预览" /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
+        {backgroundUrl && background.mode === 'video' ? <VideoThumbnail src={backgroundUrl} /> : backgroundUrl ? <img src={backgroundUrl} alt="整个窗口背景预览" /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
         <span><Upload size={13} />{backgroundUrl ? '更换背景素材' : '选择背景素材'}</span>
       </button>
       {background.source && <button className="secondary-command window-background-remove" type="button" onClick={() => onChange((next) => { next.windowBackground.mode = 'color'; next.windowBackground.source = null })}><Trash2 size={14} />移除背景素材</button>}

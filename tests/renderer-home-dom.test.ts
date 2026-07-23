@@ -149,9 +149,10 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: { visible: boolean } = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: { visible: boolean } = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }): void {
   const runtimeConfig = {
     themeId,
+    videoPlayback,
     media,
     icons,
     composerBadge,
@@ -853,6 +854,113 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
   })
 
+  it('applies hidden and unfocused video pause policies without resuming manually paused media', async () => {
+    const media = {
+      hero: {
+        asset: 'assets/hero.mp4',
+        kind: 'video' as const,
+        mimeType: 'video/mp4',
+        playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
+        transform: { flipHorizontal: false, flipVertical: false }
+      },
+      polaroid: null
+    }
+
+    const hiddenWindow = createWindow()
+    hiddenWindow.document.body.innerHTML = homeFixture('Hidden-Policy')
+    let hidden = false
+    Object.defineProperty(hiddenWindow.document, 'hasFocus', { configurable: true, value: () => true })
+    Object.defineProperty(hiddenWindow.document, 'hidden', { configurable: true, get: () => hidden })
+    const hiddenPlay = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: false })
+      return Promise.resolve()
+    })
+    const hiddenPause = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: true })
+    })
+    Object.defineProperty(hiddenWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: hiddenPlay })
+    Object.defineProperty(hiddenWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: hiddenPause })
+    Object.defineProperty(hiddenWindow.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    inject(hiddenWindow, undefined, undefined, undefined, undefined, undefined, undefined, media, undefined, undefined, { pausePolicy: 'hidden' })
+    const hiddenVideo = hiddenWindow.document.querySelector('.dream-hero-video')
+    if (!(hiddenVideo instanceof hiddenWindow.HTMLVideoElement)) throw new Error('Hidden policy video fixture is missing.')
+    Object.defineProperty(hiddenVideo, 'paused', { configurable: true, writable: true, value: false })
+    hiddenPlay.mockClear()
+    hiddenPause.mockClear()
+
+    hiddenWindow.dispatchEvent(new hiddenWindow.Event('blur'))
+    expect(hiddenPause).not.toHaveBeenCalled()
+    hidden = true
+    hiddenWindow.document.dispatchEvent(new hiddenWindow.Event('visibilitychange'))
+    expect(hiddenPause).toHaveBeenCalledOnce()
+    hidden = false
+    hiddenWindow.document.dispatchEvent(new hiddenWindow.Event('visibilitychange'))
+    await Promise.resolve()
+    expect(hiddenPlay).toHaveBeenCalledOnce()
+
+    hiddenPlay.mockClear()
+    hiddenPause.mockClear()
+    stateOf(hiddenWindow).cleanup()
+    hidden = true
+    hiddenWindow.document.dispatchEvent(new hiddenWindow.Event('visibilitychange'))
+    expect(hiddenPlay).not.toHaveBeenCalled()
+    expect(hiddenPause).toHaveBeenCalledOnce()
+
+    const initiallyHiddenWindow = createWindow()
+    initiallyHiddenWindow.document.body.innerHTML = homeFixture('Initially-Hidden-Policy')
+    let initiallyHidden = true
+    Object.defineProperty(initiallyHiddenWindow.document, 'hasFocus', { configurable: true, value: () => true })
+    Object.defineProperty(initiallyHiddenWindow.document, 'hidden', { configurable: true, get: () => initiallyHidden })
+    const initiallyHiddenPlay = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: false })
+      return Promise.resolve()
+    })
+    Object.defineProperty(initiallyHiddenWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: initiallyHiddenPlay })
+    Object.defineProperty(initiallyHiddenWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: vi.fn() })
+    Object.defineProperty(initiallyHiddenWindow.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    inject(initiallyHiddenWindow, undefined, undefined, undefined, undefined, undefined, undefined, media, undefined, undefined, { pausePolicy: 'hidden' })
+    expect(initiallyHiddenPlay).not.toHaveBeenCalled()
+    initiallyHidden = false
+    initiallyHiddenWindow.document.dispatchEvent(new initiallyHiddenWindow.Event('visibilitychange'))
+    await Promise.resolve()
+    expect(initiallyHiddenPlay).toHaveBeenCalledOnce()
+    stateOf(initiallyHiddenWindow).cleanup()
+
+    const unfocusedWindow = createWindow()
+    unfocusedWindow.document.body.innerHTML = homeFixture('Unfocused-Policy')
+    Object.defineProperty(unfocusedWindow.document, 'hasFocus', { configurable: true, value: () => true })
+    Object.defineProperty(unfocusedWindow.document, 'hidden', { configurable: true, value: false })
+    const unfocusedPlay = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: false })
+      return Promise.resolve()
+    })
+    const unfocusedPause = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: true })
+    })
+    Object.defineProperty(unfocusedWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: unfocusedPlay })
+    Object.defineProperty(unfocusedWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: unfocusedPause })
+    Object.defineProperty(unfocusedWindow.HTMLMediaElement.prototype, 'load', { configurable: true, value: vi.fn() })
+    inject(unfocusedWindow, undefined, undefined, undefined, undefined, undefined, undefined, media, undefined, undefined, { pausePolicy: 'unfocused' })
+    const unfocusedVideo = unfocusedWindow.document.querySelector('.dream-hero-video')
+    if (!(unfocusedVideo instanceof unfocusedWindow.HTMLVideoElement)) throw new Error('Unfocused policy video fixture is missing.')
+
+    Object.defineProperty(unfocusedVideo, 'paused', { configurable: true, writable: true, value: true })
+    unfocusedPlay.mockClear()
+    unfocusedPause.mockClear()
+    unfocusedWindow.dispatchEvent(new unfocusedWindow.Event('blur'))
+    unfocusedWindow.dispatchEvent(new unfocusedWindow.Event('focus'))
+    await Promise.resolve()
+    expect(unfocusedPause).not.toHaveBeenCalled()
+    expect(unfocusedPlay).not.toHaveBeenCalled()
+
+    Object.defineProperty(unfocusedVideo, 'paused', { configurable: true, writable: true, value: false })
+    unfocusedWindow.dispatchEvent(new unfocusedWindow.Event('blur'))
+    expect(unfocusedPause).toHaveBeenCalledOnce()
+    unfocusedWindow.dispatchEvent(new unfocusedWindow.Event('focus'))
+    await Promise.resolve()
+    expect(unfocusedPlay).toHaveBeenCalledOnce()
+  })
+
   it('shows composer melody as text and hides it for text or attachments', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')
@@ -975,7 +1083,7 @@ describe('renderer home DOM adaptation', () => {
       mode: 'gif',
       source: { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' },
       effect: 'wave',
-      gifWidth: 144,
+      mediaWidth: 144,
       dataUrl: 'data:image/gif;base64,AA=='
     }
     inject(window, undefined, undefined, undefined, undefined, decorations)
@@ -987,6 +1095,22 @@ describe('renderer home DOM adaptation', () => {
     expect(image?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
     expect(image?.style.width).toBe('144px')
     expect(gifDecoration?.querySelector('[class*="dream-composer-decoration-wave"]')).toBeNull()
+
+    decorations.composerMelody = {
+      ...decorations.composerMelody,
+      mode: 'image',
+      source: { asset: 'assets/composer.png', kind: 'image', mimeType: 'image/png' },
+      mediaWidth: 120,
+      dataUrl: 'data:image/png;base64,AA=='
+    }
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+    const imageDecoration = window.document.querySelector('.dream-composer-melody') as HTMLElement | null
+    const staticImage = imageDecoration?.querySelector('.dream-composer-decoration-image') as HTMLImageElement | null
+    expect(imageDecoration?.dataset.dreamComposerMode).toBe('image')
+    expect(imageDecoration?.dataset.dreamComposerEffect).toBe('none')
+    expect(staticImage?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+    expect(staticImage?.style.width).toBe('120px')
+    expect(window.document.querySelectorAll('.dream-composer-decoration-media')).toHaveLength(1)
 
     decorations.composerMelody = { ...decorations.composerMelody, mode: 'text', effect: 'float' }
     inject(window, undefined, undefined, undefined, undefined, decorations)

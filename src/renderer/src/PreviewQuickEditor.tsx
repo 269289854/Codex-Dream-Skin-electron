@@ -18,6 +18,7 @@ import { MediaFlipControls } from './MediaFlipControls'
 import { ParticleEffectControls } from './ParticleEffectControls'
 import { PolaroidControls } from './PolaroidControls'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
+import { VideoThumbnail } from './VideoThumbnail'
 import type { PopoverPosition, PreviewCopyField, PreviewTargetDefinition, TypographySlot } from './preview-editing'
 
 const copyFieldConfig: Record<PreviewCopyField, { label: string; maxLength: number; rows?: number }> = {
@@ -84,7 +85,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
         : <input value={profile.copy[copyField]} maxLength={copyConfig.maxLength} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />}</label>}
       {copyField === 'brandTitle' && copyInvalid && <p className="field-error">品牌主标题不能为空。</p>}
 
-      {editor.kind === 'hero' && <><button className="quick-asset-command" type="button" onClick={() => onSelectImage('hero')}>{heroUrl ? (profile.hero.source?.kind === 'video' ? <video src={heroUrl} muted playsInline style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />{heroUrl ? '更换图片' : '选择图片'}</span></button>{profile.hero.source && heroUrl && <MediaFlipControls value={profile.hero.mediaTransform} onChange={(field, value) => onChange((next) => { next.hero.mediaTransform[field] = value })} />}<Range label="缩放" min={.5} max={3} step={.01} value={profile.hero.scale} onChange={(value) => onChange((next) => { next.hero.scale = value }, 'hero-scale')} onChangeEnd={onInteractionEnd} /></>}
+      {editor.kind === 'hero' && <><button className="quick-asset-command" type="button" onClick={() => onSelectImage('hero')}>{heroUrl ? (profile.hero.source?.kind === 'video' ? <VideoThumbnail src={heroUrl} style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />{heroUrl ? '更换图片' : '选择图片'}</span></button>{profile.hero.source && heroUrl && <MediaFlipControls value={profile.hero.mediaTransform} onChange={(field, value) => onChange((next) => { next.hero.mediaTransform[field] = value })} />}<Range label="缩放" min={.5} max={3} step={.01} value={profile.hero.scale} onChange={(value) => onChange((next) => { next.hero.scale = value }, 'hero-scale')} onChangeEnd={onInteractionEnd} /></>}
       {editor.kind === 'polaroid' && <PolaroidControls profile={profile} polaroidUrl={polaroidUrl} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectImage={() => onSelectImage('polaroid')} />}
       {editor.kind === 'conversationBackground' && <ConversationBackgroundControls profile={profile} backgroundUrl={conversationBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('conversationBackground', kind)} />}
       {editor.kind === 'windowBackground' && <WindowBackgroundControls compact profile={profile} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('windowBackground', kind)} />}
@@ -95,7 +96,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {editor.kind === 'style' && !decoration && editor.iconSlot && <div className="icon-editor quick-icon-editor"><ThemeIconControl slot={editor.iconSlot} profile={profile} assets={assets} onChange={(name) => onChange((next) => { next.icons[editor.iconSlot!] = { kind: 'builtin', name } })} onImport={() => onImportIcon(editor.iconSlot!)} /></div>}
       {decoration === 'sparkles' && <ParticleEffectControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} />}
       {decoration === 'homeHeading' && <HomeHeadingDecorationControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
-      {decoration === 'composerMelody' && <ComposerMelodyControls profile={profile} assets={assets} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} onSelectGif={() => onSelectImage('composerMelody', 'gif')} />}
+      {decoration === 'composerMelody' && <ComposerMelodyControls profile={profile} assets={assets} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} onSelectMedia={(kind) => onSelectImage('composerMelody', kind)} />}
     </div>
     <footer className="preview-edit-popover-footer">
       <button type="button" onClick={() => onMore()}><PanelRightOpen size={15} />更多设置</button>

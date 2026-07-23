@@ -357,10 +357,27 @@ describe('preview quick editor', () => {
     expect(profile.decorations.composerMelody.direction).toBe('right')
   })
 
-  it('selects, sizes, preserves, and removes a composer GIF', () => {
+  it('keeps free text without a custom preset and selects composer images or GIFs by type', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     const onSelectImage = vi.fn()
     renderEditor(PREVIEW_TARGETS['composer-melody'], profile, vi.fn(), (mutator) => mutator(profile), undefined, undefined, onSelectImage)
+    expect([...container.querySelectorAll('.melody-presets button')].map((button) => button.textContent)).toEqual(['旋律', '简洁', '星愿'])
+    const text = container.querySelector<HTMLTextAreaElement>('[data-decoration-controls="composer-melody"] textarea')
+    if (!text) throw new Error('Composer text field is missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLTextAreaElement.prototype, 'value')?.set?.call(text, '自由输入')
+      text.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+    })
+    expect(profile.decorations.composerMelody.text).toBe('自由输入')
+    renderEditor(PREVIEW_TARGETS['composer-melody'], profile, vi.fn(), (mutator) => mutator(profile), undefined, undefined, onSelectImage)
+    expect(container.querySelector('.melody-presets button.active')).toBeNull()
+
+    const imageMode = [...container.querySelectorAll('button')].find((button) => button.textContent === '图片')
+    if (!imageMode) throw new Error('Image mode button is missing.')
+    act(() => imageMode.click())
+    expect(onSelectImage).toHaveBeenCalledWith('composerMelody', 'image')
+    expect(profile.decorations.composerMelody.mode).toBe('text')
+
     const gifMode = [...container.querySelectorAll('button')].find((button) => button.textContent === 'GIF')
     if (!gifMode) throw new Error('GIF mode button is missing.')
     act(() => gifMode.click())
@@ -381,7 +398,7 @@ describe('preview quick editor', () => {
       Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(width, '144')
       width.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
     })
-    expect(profile.decorations.composerMelody.gifWidth).toBe(144)
+    expect(profile.decorations.composerMelody.mediaWidth).toBe(144)
     act(() => remove.click())
     expect(profile.decorations.composerMelody).toMatchObject({ mode: 'text', source: null })
   })

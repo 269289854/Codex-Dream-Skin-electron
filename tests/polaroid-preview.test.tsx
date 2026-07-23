@@ -58,6 +58,7 @@ describe('PolaroidPreview video playback', () => {
         mediaKey={mediaUrl}
         mediaKind="video"
         playback={profile.polaroid.playback}
+        pausePolicy={profile.videoPlayback.pausePolicy}
         mediaTransform={profile.polaroid.mediaTransform}
         mode={profile.polaroid.mode}
         fence={profile.polaroid.fence}
@@ -174,6 +175,77 @@ describe('PolaroidPreview video playback', () => {
     expect(requestFrame).not.toHaveBeenCalled()
     await act(async () => { root.render(<div />); await Promise.resolve() })
     expect(cancelFrame).not.toHaveBeenCalled()
+  })
+
+  it('keeps playing on blur with the hidden policy and resumes only after visibility returns', async () => {
+    let hidden = false
+    Object.defineProperty(browserWindow.document, 'hasFocus', { configurable: true, value: () => true })
+    Object.defineProperty(browserWindow.document, 'hidden', { configurable: true, get: () => hidden })
+    const play = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: false })
+      return Promise.resolve()
+    })
+    const pause = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: true })
+    })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+    profile.videoPlayback.pausePolicy = 'hidden'
+    await renderVideo('studio-media://theme/assets/hidden-policy.mp4')
+
+    const video = container.querySelector<HTMLVideoElement>('video')
+    if (!video) throw new Error('Preview video is missing.')
+    Object.defineProperties(video, {
+      paused: { configurable: true, writable: true, value: false },
+      currentTime: { configurable: true, writable: true, value: 18 }
+    })
+    play.mockClear()
+    pause.mockClear()
+    browserWindow.dispatchEvent(new browserWindow.Event('blur'))
+    expect(pause).not.toHaveBeenCalled()
+
+    hidden = true
+    browserWindow.document.dispatchEvent(new browserWindow.Event('visibilitychange'))
+    expect(pause).toHaveBeenCalledOnce()
+    expect(video.currentTime).toBe(18)
+    hidden = false
+    browserWindow.document.dispatchEvent(new browserWindow.Event('visibilitychange'))
+    await act(async () => { await new Promise((resolve) => browserWindow.setTimeout(resolve, 0)) })
+    expect(play).toHaveBeenCalledOnce()
+  })
+
+  it('pauses on blur with the unfocused policy and removes policy listeners on unmount', async () => {
+    Object.defineProperty(browserWindow.document, 'hasFocus', { configurable: true, value: () => true })
+    const play = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: false })
+      return Promise.resolve()
+    })
+    const pause = vi.fn(function (this: HTMLMediaElement) {
+      Object.defineProperty(this, 'paused', { configurable: true, writable: true, value: true })
+    })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'play', { configurable: true, value: play })
+    Object.defineProperty(browserWindow.HTMLMediaElement.prototype, 'pause', { configurable: true, value: pause })
+    profile.videoPlayback.pausePolicy = 'unfocused'
+    await renderVideo('studio-media://theme/assets/unfocused-policy.mp4')
+    const video = container.querySelector<HTMLVideoElement>('video')
+    if (!video) throw new Error('Preview video is missing.')
+    Object.defineProperty(video, 'paused', { configurable: true, writable: true, value: false })
+    play.mockClear()
+    pause.mockClear()
+
+    browserWindow.dispatchEvent(new browserWindow.Event('blur'))
+    expect(pause).toHaveBeenCalledOnce()
+    browserWindow.dispatchEvent(new browserWindow.Event('focus'))
+    await act(async () => { await new Promise((resolve) => browserWindow.setTimeout(resolve, 0)) })
+    expect(play).toHaveBeenCalledOnce()
+
+    play.mockClear()
+    pause.mockClear()
+    await act(async () => { root.render(<div />); await Promise.resolve() })
+    browserWindow.dispatchEvent(new browserWindow.Event('blur'))
+    browserWindow.dispatchEvent(new browserWindow.Event('focus'))
+    expect(play).not.toHaveBeenCalled()
+    expect(pause).not.toHaveBeenCalled()
   })
 
   it('restores the playback position when a preview page unmounts and returns', async () => {

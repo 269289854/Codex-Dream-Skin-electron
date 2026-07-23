@@ -3,6 +3,7 @@ import { Image, Trash2, Upload, Video } from 'lucide-react'
 import type { MediaSelectionKind } from '../../shared/contracts'
 import type { ThemeProfile } from '../../shared/theme'
 import { PaintControl, Range, SolidColorControl } from './editor-controls'
+import { VideoThumbnail } from './VideoThumbnail'
 
 interface ConversationBackgroundControlsProps {
   profile: ThemeProfile
@@ -51,7 +52,7 @@ export function ConversationBackgroundControls({ profile, backgroundUrl, mediaBu
     {background.mode === 'color' && <SolidColorControl label="背景颜色" value={background.color} onChange={(value) => onChange((next) => { next.conversationBackground.color = value }, 'conversation-background-color')} onChangeEnd={onInteractionEnd} />}
     {mediaMode && <>
       <button className="asset-picker conversation-background-asset-picker" type="button" disabled={mediaBusy} onClick={() => onSelectMedia(background.mode as MediaSelectionKind)}>
-        {backgroundUrl && background.mode === 'video' ? <video src={backgroundUrl} muted autoPlay loop playsInline /> : backgroundUrl ? <img src={backgroundUrl} alt="对话区域背景预览" /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
+        {backgroundUrl && background.mode === 'video' ? <VideoThumbnail src={backgroundUrl} /> : backgroundUrl ? <img src={backgroundUrl} alt="对话区域背景预览" /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
         <span><Upload size={13} />{backgroundUrl ? '更换背景素材' : '选择背景素材'}</span>
       </button>
       {background.source && <button className="secondary-command conversation-background-remove" type="button" onClick={() => onChange((next) => { next.conversationBackground.mode = 'color'; next.conversationBackground.source = null })}><Trash2 size={14} />移除背景素材</button>}

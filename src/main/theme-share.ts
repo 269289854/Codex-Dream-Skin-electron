@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto'
 import { extname } from 'node:path'
 import { Unzip, UnzipInflate } from 'fflate'
 import { z } from 'zod'
-import { parseThemeProfile, type ThemeProfile } from '../shared/theme'
-import { mediaMimeTypeForPath } from '../shared/media'
+import { parseThemeProfile, type MediaReference, type ThemeProfile } from '../shared/theme'
+import { mediaMimeTypeForPath, mediaReferenceAssets } from '../shared/media'
 import type { ImportedFontFormat } from '../shared/typography'
 
 export const THEME_SHARE_FORMAT = 'codex-dream-skin-theme' as const
@@ -29,7 +29,7 @@ const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(21),
+  profileVersion: z.number().int().min(0).max(23),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -37,19 +37,32 @@ export type ThemeShareAsset = z.infer<typeof assetManifestSchema>
 export type ThemeShareManifest = z.infer<typeof manifestSchema>
 
 export function collectThemeAssets(profile: ThemeProfile): string[] {
-  const assets: Array<string | null> = [profile.hero.source?.asset ?? profile.hero.sourceImage ?? null, profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null, profile.conversationBackground.source?.asset ?? null, profile.windowBackground.source?.asset ?? null, profile.decorations.composerMelody.source?.asset ?? null]
+  const assets: Array<string | null> = [profile.hero.sourceImage ?? null, profile.polaroid.sourceImage ?? null]
+  for (const reference of themeMediaReferences(profile)) {
+    if (reference) assets.push(...mediaReferenceAssets(reference).map((variant) => variant.asset))
+  }
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assets.push(icon.asset)
   for (const font of profile.typography.importedFonts) assets.push(font.asset)
   return [...new Set(assets.filter((value): value is string => Boolean(value)))]
 }
 
+export function createShareProfile(profile: ThemeProfile): ThemeProfile {
+  const shared = structuredClone(profile)
+  for (const reference of themeMediaReferences(shared)) {
+    if (reference?.videoVariants) delete reference.videoVariants
+  }
+  return parseThemeProfile(shared)
+}
+
 export function validateThemeAssetReferences(profile: ThemeProfile): void {
-  for (const reference of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]) {
+  for (const reference of themeMediaReferences(profile)) {
     if (!reference) continue
-    const extension = extname(reference.asset).toLowerCase()
-    const expectedKind = extension === '.mp4' || extension === '.webm' ? 'video' : extension === '.png' || extension === '.webp' || extension === '.jpg' || extension === '.jpeg' || extension === '.gif' ? 'image' : null
-    const expectedMime = mediaMimeTypeForPath(reference.asset)
-    if (!expectedKind || reference.kind !== expectedKind || reference.mimeType !== expectedMime) throw new Error('主题媒体类型与文件扩展名不匹配。')
+    for (const variant of mediaReferenceAssets(reference)) {
+      const extension = extname(variant.asset).toLowerCase()
+      const expectedKind = extension === '.mp4' || extension === '.webm' ? 'video' : extension === '.png' || extension === '.webp' || extension === '.jpg' || extension === '.jpeg' || extension === '.gif' ? 'image' : null
+      const expectedMime = mediaMimeTypeForPath(variant.asset)
+      if (!expectedKind || reference.kind !== expectedKind || variant.mimeType !== expectedMime) throw new Error('主题媒体类型与文件扩展名不匹配。')
+    }
   }
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset' && assetKind(icon.asset) !== 'image') throw new Error('定制图标只能使用图片素材。')
   for (const font of profile.typography.importedFonts) if (assetKind(font.asset) !== 'font') throw new Error('导入字体素材类型无效。')
@@ -87,7 +100,11 @@ export function shareProfileVersionMatches(manifest: ThemeShareManifest, seriali
   if (!serializedProfile || typeof serializedProfile !== 'object' || !('version' in serializedProfile)) return false
   const serializedVersion = serializedProfile.version
   if (typeof serializedVersion !== 'number' || manifest.profileVersion !== serializedVersion) return false
-  return serializedVersion === parsedVersion || (parsedVersion === 21 && serializedVersion >= 0 && serializedVersion <= 20)
+  return serializedVersion === parsedVersion || (parsedVersion === 23 && serializedVersion >= 0 && serializedVersion <= 22)
+}
+
+function themeMediaReferences(profile: ThemeProfile): Array<MediaReference | null> {
+  return [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source]
 }
 
 export function assertSharePath(path: string): void {

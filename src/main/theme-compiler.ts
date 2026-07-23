@@ -5,7 +5,7 @@ import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
 import { mediaFlipCssTransform } from '../shared/media'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
-import type { ThemeProfile } from '../shared/theme'
+import type { MediaReference, ThemeProfile } from '../shared/theme'
 
 export async function compileTheme(
   profile: ThemeProfile,
@@ -39,6 +39,7 @@ export async function compileTheme(
   const polaroidLayout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, profile.polaroid.fence as Fence) : null
   const showPolaroid = profile.polaroid.visible && Boolean(polaroid && polaroidLayout)
   const polaroidStyle = profile.polaroid.style
+  const runtimeProfile = createRuntimeProfile(profile)
   const css = `:root { ${buildThemeVariableDeclarations(profile)} }\n` +
     `html.codex-dream-skin body { position: relative; color: var(--dream-global-text); background: var(--dream-canvas);${hero ? ' background-image: none;' : ''} font-family: var(--dream-font-ui); }\n` +
     (hero ? `html.codex-dream-skin body::before { content: ""; position: absolute; z-index: 0; inset: 0; pointer-events: none; background-image: url("${escapeCssUrl(hero)}"); background-repeat: no-repeat; background-position: ${percent(profile.hero.position.x)} ${percent(profile.hero.position.y)}; background-size: ${Math.round(profile.hero.scale * 100)}% auto; transform: ${mediaFlipCssTransform(profile.hero.mediaTransform)}; transform-origin: center; }\n` : '') +
@@ -50,9 +51,24 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: profile.version, profile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground, windowBackground, conversationBubbles: { visible: profile.conversationBubbles.visible }, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets, conversationBackground, windowBackground, conversationBubbles: { visible: profile.conversationBubbles.visible }, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
     assets
   }
+}
+
+function createRuntimeProfile(profile: ThemeProfile): ThemeProfile {
+  const runtimeProfile = structuredClone(profile)
+  const references: Array<MediaReference | null> = [
+    runtimeProfile.hero.source,
+    runtimeProfile.polaroid.source,
+    runtimeProfile.conversationBackground.source,
+    runtimeProfile.windowBackground.source,
+    runtimeProfile.decorations.composerMelody.source
+  ]
+  for (const reference of references) {
+    if (reference?.videoVariants) delete reference.videoVariants
+  }
+  return runtimeProfile
 }
 
 function percent(value: number): string { return `${(value * 100).toFixed(3).replace(/\.0+$|(?<=\.[0-9]*?)0+$/g, '')}%` }

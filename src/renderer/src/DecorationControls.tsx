@@ -12,7 +12,7 @@ interface DecorationControlsProps {
   onImportIcon: (slot: keyof ThemeProfile['icons']) => void
   onImportFont: (slot: keyof ThemeProfile['typography']['slots']) => void
   mediaBusy?: boolean
-  onSelectGif?: () => void
+  onSelectMedia?: (mode: 'image' | 'gif') => void
 }
 
 const MELODY_PRESETS = [
@@ -30,21 +30,28 @@ const EFFECT_LABELS: Record<ComposerDecorationEffect, string> = {
   pulse: '呼吸闪烁'
 }
 
-export function ComposerMelodyControls({ profile, assets, onChange, onInteractionEnd, onImportFont, mediaBusy = false, onSelectGif }: DecorationControlsProps): React.JSX.Element {
+export function ComposerMelodyControls({ profile, assets, onChange, onInteractionEnd, onImportFont, mediaBusy = false, onSelectMedia }: DecorationControlsProps): React.JSX.Element {
   const config = profile.decorations.composerMelody
-  const activePreset = MELODY_PRESETS.find((preset) => preset.text === config.text)?.id ?? 'custom'
+  const activePreset = MELODY_PRESETS.find((preset) => preset.text === config.text)?.id
   const melodyColor = resolveAppearanceColor(profile.appearance, profile.colors, 'wave')
-  const gifUrl = config.source ? assets[config.source.asset] : undefined
+  const mediaUrl = config.source ? assets[config.source.asset] : undefined
+  const sourceMode = config.source?.mimeType === 'image/gif' ? 'gif' : config.source?.kind === 'image' ? 'image' : null
   const trackEffect = config.mode === 'text' && (config.effect === 'barrage' || config.effect === 'scroll')
-  const selectGif = (): void => {
-    if (config.source) onChange((next) => { next.decorations.composerMelody.mode = 'gif' })
-    else onSelectGif?.()
+  const selectMedia = (mode: 'image' | 'gif'): void => {
+    if (sourceMode === mode) onChange((next) => { next.decorations.composerMelody.mode = mode })
+    else onSelectMedia?.(mode)
   }
+  const activeMediaMode = config.mode === 'image' ? 'image' : 'gif'
+  const mediaLabel = activeMediaMode === 'image' ? '图片' : 'GIF'
+  const mediaWidthLabel = activeMediaMode === 'image' ? '图片宽度' : 'GIF 宽度'
+  const selectMediaLabel = activeMediaMode === 'image' ? '选择图片' : '选择 GIF'
+  const replaceMediaLabel = activeMediaMode === 'image' ? '更换图片' : '更换 GIF'
+  const removeMediaLabel = activeMediaMode === 'image' ? '移除图片' : '移除 GIF'
   return <div className="decoration-controls" data-decoration-controls="composer-melody">
     <label className="toggle-row"><span>显示输入框装饰</span><input type="checkbox" checked={config.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.decorations.composerMelody.visible = visible }) }} /></label>
-    <div className="segmented-control composer-decoration-modes" aria-label="输入框装饰内容"><button className={config.mode === 'text' ? 'active' : ''} type="button" onClick={() => onChange((next) => { next.decorations.composerMelody.mode = 'text' })}>文字</button><button className={config.mode === 'gif' ? 'active' : ''} type="button" disabled={mediaBusy} onClick={selectGif}>GIF</button></div>
+    <div className="segmented-control composer-decoration-modes" aria-label="输入框装饰内容"><button className={config.mode === 'text' ? 'active' : ''} type="button" onClick={() => onChange((next) => { next.decorations.composerMelody.mode = 'text' })}>文字</button><button className={config.mode === 'image' ? 'active' : ''} type="button" disabled={mediaBusy} onClick={() => selectMedia('image')}>图片</button><button className={config.mode === 'gif' ? 'active' : ''} type="button" disabled={mediaBusy} onClick={() => selectMedia('gif')}>GIF</button></div>
     {config.mode === 'text' ? <>
-      <div className="segmented-control melody-presets" aria-label="文字预设">{MELODY_PRESETS.map((preset) => <button className={activePreset === preset.id ? 'active' : ''} type="button" key={preset.id} onClick={() => onChange((next) => { next.decorations.composerMelody.text = preset.text })}>{preset.label}</button>)}<button className={activePreset === 'custom' ? 'active' : ''} type="button">自定义</button></div>
+      <div className="segmented-control melody-presets" aria-label="文字预设">{MELODY_PRESETS.map((preset) => <button className={activePreset === preset.id ? 'active' : ''} type="button" key={preset.id} onClick={() => onChange((next) => { next.decorations.composerMelody.text = preset.text })}>{preset.label}</button>)}</div>
       <label className="quick-copy-field">装饰文字<textarea value={config.text} maxLength={64} rows={2} onInput={(event) => { const text = event.currentTarget.value; onChange((next) => { next.decorations.composerMelody.text = text }, 'composer-melody-text') }} onBlur={onInteractionEnd} /></label>
       <label className="quick-copy-field">文字动效<select value={config.effect} onChange={(event) => { const effect = event.currentTarget.value as ComposerDecorationEffect; onChange((next) => { next.decorations.composerMelody.effect = effect }) }}>{COMPOSER_DECORATION_EFFECT_IDS.map((effect) => <option value={effect} key={effect}>{EFFECT_LABELS[effect]}</option>)}</select></label>
       {config.effect !== 'none' && <Range label="动效速度" min={.5} max={2} step={.1} suffix="x" value={config.speed} onChange={(speed) => onChange((next) => { next.decorations.composerMelody.speed = speed }, 'composer-melody-speed')} onChangeEnd={onInteractionEnd} />}
@@ -53,9 +60,9 @@ export function ComposerMelodyControls({ profile, assets, onChange, onInteractio
       <FontControl slot="composerMelody" profile={profile} onChange={(selection) => onChange((next) => { next.typography.slots.composerMelody = selection })} onImport={() => onImportFont('composerMelody')} />
       <Range label="字号" min={10} max={32} step={1} suffix="px" value={config.fontSize} onChange={(fontSize) => onChange((next) => { next.decorations.composerMelody.fontSize = fontSize }, 'composer-melody-font-size')} onChangeEnd={onInteractionEnd} />
     </> : <>
-      <button className="asset-picker composer-decoration-asset-picker" type="button" disabled={mediaBusy} onClick={() => onSelectGif?.()}>{gifUrl ? <img src={gifUrl} alt="输入框 GIF 装饰" /> : <Image size={20} />}<span><Upload size={13} />{gifUrl ? '更换 GIF' : '选择 GIF'}</span></button>
-      <Range label="GIF 宽度" min={32} max={240} step={1} suffix="px" value={config.gifWidth} onChange={(gifWidth) => onChange((next) => { next.decorations.composerMelody.gifWidth = gifWidth }, 'composer-melody-gif-width')} onChangeEnd={onInteractionEnd} />
-      {config.source && <button className="secondary-command composer-decoration-remove" type="button" onClick={() => onChange((next) => { next.decorations.composerMelody.source = null; next.decorations.composerMelody.mode = 'text' })}><Trash2 size={14} />移除 GIF</button>}
+      <button className="asset-picker composer-decoration-asset-picker" type="button" disabled={mediaBusy} onClick={() => onSelectMedia?.(activeMediaMode)}>{mediaUrl ? <img src={mediaUrl} alt={`输入框${mediaLabel}装饰`} /> : <Image size={20} />}<span><Upload size={13} />{mediaUrl ? replaceMediaLabel : selectMediaLabel}</span></button>
+      <Range label={mediaWidthLabel} min={32} max={240} step={1} suffix="px" value={config.mediaWidth} onChange={(mediaWidth) => onChange((next) => { next.decorations.composerMelody.mediaWidth = mediaWidth }, 'composer-melody-media-width')} onChangeEnd={onInteractionEnd} />
+      {config.source && <button className="secondary-command composer-decoration-remove" type="button" onClick={() => onChange((next) => { next.decorations.composerMelody.source = null; next.decorations.composerMelody.mode = 'text' })}><Trash2 size={14} />{removeMediaLabel}</button>}
     </>}
     {!trackEffect && <Range label="水平位置" min={.1} max={.9} step={.01} value={config.position.x} onChange={(x) => onChange((next) => { next.decorations.composerMelody.position.x = x }, 'composer-melody-x')} onChangeEnd={onInteractionEnd} />}
     <Range label="垂直位置" min={.1} max={.65} step={.01} value={config.position.y} onChange={(y) => onChange((next) => { next.decorations.composerMelody.position.y = y }, 'composer-melody-y')} onChangeEnd={onInteractionEnd} />

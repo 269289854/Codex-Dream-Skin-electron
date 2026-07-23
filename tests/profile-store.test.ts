@@ -1,12 +1,16 @@
+import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, readdir, rm, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
+import ffmpegPath from 'ffmpeg-static'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { resolveAppearanceColor } from '../src/shared/appearance'
 import { DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
+const execFileAsync = promisify(execFile)
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
 const TEST_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 
@@ -68,7 +72,7 @@ describe('ProfileStore', () => {
     await store.initialize()
     const colors = { ...DEFAULT_THEME_COLORS, accent: '#B94F7B', pink: '#E478A4' }
     const created = await store.create({ name: '旧版主题', colors })
-    const { resetColors: _resetColors, ...legacy } = created
+    const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...legacy } = created
     const { overlay, ...legacyConversationBackground } = created.conversationBackground
     await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({
       ...legacy,
@@ -81,7 +85,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 21, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 23, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -141,7 +145,8 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 21,
+      version: 23,
+      videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
         playback: { autoplay: true, loop: true, sound: false, volume: 0.7 },
@@ -328,6 +333,53 @@ describe('ProfileStore', () => {
     expect((await readdir(assetDirectory)).some((entry) => entry.endsWith('.tmp'))).toBe(false)
   })
 
+  it('inspects and optimizes real MP4 and WebM videos while pruning both variants after save', async () => {
+    if (!ffmpegPath) throw new Error('Bundled FFmpeg is unavailable.')
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-video-store-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('视频主题')
+    const mp4Source = join(root, 'source-60fps.mp4')
+    const webmSource = join(root, 'source-29.97fps.webm')
+    await execFileAsync(ffmpegPath, [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=60',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
+      '-t', '0.5', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', mp4Source
+    ])
+    await execFileAsync(ffmpegPath, [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30000/1001',
+      '-t', '0.5', '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', webmSource
+    ])
+
+    const mp4Inspection = await store.inspectVideoSource(mp4Source)
+    expect(mp4Inspection).toMatchObject({ width: 640, height: 360, hasAudio: true, highLoad: true })
+    expect(mp4Inspection.frameRate).toBeGreaterThan(59)
+    const webmInspection = await store.inspectVideoSource(webmSource)
+    expect(webmInspection).toMatchObject({ width: 320, height: 180, hasAudio: false, highLoad: false })
+    expect(webmInspection.frameRate).toBeCloseTo(29.97, 1)
+
+    const imported = await store.importMediaAsset(profile.id, mp4Source, 'hero', 'video', undefined, true)
+    expect(imported.reference.videoVariants?.active).toBe('optimized')
+    const originalAsset = imported.reference.videoVariants?.original.asset
+    const optimizedAsset = imported.reference.videoVariants?.optimized.asset
+    if (!originalAsset || !optimizedAsset) throw new Error('Optimized video variants are missing.')
+    const optimizedInspection = await store.inspectReferencedVideo(profile.id, optimizedAsset)
+    expect(optimizedInspection).toMatchObject({ width: 640, height: 360, hasAudio: true, highLoad: false })
+    expect(optimizedInspection.frameRate).toBeLessThanOrEqual(30.5)
+
+    profile.hero.source = imported.reference
+    const saved = await store.update(profile)
+    await expect(readFile(join(store.themesRoot, profile.id, originalAsset))).resolves.toBeInstanceOf(Buffer)
+    await expect(readFile(join(store.themesRoot, profile.id, optimizedAsset))).resolves.toBeInstanceOf(Buffer)
+    saved.hero.source = null
+    await store.update(saved)
+    await expect(readFile(join(store.themesRoot, profile.id, originalAsset))).rejects.toThrow()
+    await expect(readFile(join(store.themesRoot, profile.id, optimizedAsset))).rejects.toThrow()
+  })
+
   it('persists, compiles, previews, and duplicates a window GIF background', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-window-background-'))
     roots.push(root)
@@ -358,8 +410,9 @@ describe('ProfileStore', () => {
     await store.initialize()
     const created = await store.create({ name: '版本十六主题', colors: { ...DEFAULT_THEME_COLORS, ink: '#214537' } })
     const generatedColor = '#556677'
+    const { videoPlayback: _videoPlayback, ...versionSixteen } = created
     await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({
-      ...created,
+      ...versionSixteen,
       version: 16,
       appearance: {
         ...created.appearance,
@@ -373,7 +426,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(21)
+    expect(migrated.version).toBe(23)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'
@@ -384,7 +437,7 @@ describe('ProfileStore', () => {
     expect(resolveAppearanceColor(reloaded.appearance, reloaded.colors, 'sidebarTasksTitleHoverText')).toBe('#abcdef')
   })
 
-  it('imports, validates, compiles, and duplicates a composer GIF reference', async () => {
+  it('imports, validates, compiles, and duplicates composer image and GIF references', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-composer-gif-'))
     roots.push(root)
     const store = new ProfileStore(root)
@@ -392,8 +445,19 @@ describe('ProfileStore', () => {
     const profile = await store.create('GIF 装饰主题')
     const gifSource = join(root, 'composer.gif')
     const fakeGif = join(root, 'fake.gif')
-    const pngSource = join(root, 'not-gif.png')
-    await Promise.all([writeFile(gifSource, TEST_GIF), writeFile(fakeGif, TEST_PNG), writeFile(pngSource, TEST_PNG)])
+    const pngSource = join(root, 'composer.png')
+    const videoSource = join(root, 'composer.mp4')
+    await Promise.all([writeFile(gifSource, TEST_GIF), writeFile(fakeGif, TEST_PNG), writeFile(pngSource, TEST_PNG), writeFile(videoSource, Buffer.from('video'))])
+
+    const importedImage = await store.importMediaAsset(profile.id, pngSource, 'composerMelody', 'image')
+    expect(importedImage.reference).toEqual({ asset: importedImage.relativePath, kind: 'image', mimeType: 'image/png' })
+    profile.decorations.composerMelody.source = importedImage.reference
+    profile.decorations.composerMelody.mode = 'image'
+    await store.update(profile)
+    expect((await store.compile(profile.id)).assets[importedImage.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+    const imageDuplicate = await store.duplicate(profile, '图片装饰副本')
+    expect(imageDuplicate.decorations.composerMelody.source).toEqual(importedImage.reference)
+    expect((await store.compile(imageDuplicate.id)).assets[importedImage.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
 
     const imported = await store.importMediaAsset(profile.id, gifSource, 'composerMelody', 'gif')
     expect(imported.reference).toEqual({ asset: imported.relativePath, kind: 'image', mimeType: 'image/gif' })
@@ -407,6 +471,8 @@ describe('ProfileStore', () => {
     expect(duplicate.decorations.composerMelody.source).toEqual(imported.reference)
     expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
     await expect(store.importMediaAsset(profile.id, pngSource, 'composerMelody', 'gif')).rejects.toThrow('GIF')
+    await expect(store.importMediaAsset(profile.id, gifSource, 'composerMelody', 'image')).rejects.toThrow('图片')
+    await expect(store.importMediaAsset(profile.id, videoSource, 'composerMelody', 'video')).rejects.toThrow('图片或 GIF')
     await expect(store.importMediaAsset(profile.id, fakeGif, 'composerMelody', 'gif')).rejects.toThrow('内容与扩展名不匹配')
   })
 

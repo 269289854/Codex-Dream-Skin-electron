@@ -274,7 +274,7 @@
       melody.setAttribute("aria-hidden", "true");
       composer.appendChild(melody);
     }
-    const mode = config?.mode === "gif" ? "gif" : "text";
+    const mode = config?.mode === "image" || config?.mode === "gif" ? config.mode : "text";
     const supportedEffects = new Set(["none", "wave", "barrage", "scroll", "float", "pulse"]);
     const effect = mode === "text" && supportedEffects.has(config?.effect) ? config.effect : "none";
     const direction = config?.direction === "right" ? "right" : "left";
@@ -282,17 +282,23 @@
     const baseDuration = { none: 0, wave: 1.4, barrage: 7, scroll: 6, float: 2.6, pulse: 2 }[effect];
     const trackEffect = effect === "barrage" || effect === "scroll";
     const text = typeof config.text === "string" ? config.text : "♫ · · · ♡ · · · ♪";
-    const gifWidth = clamp(Number(config.gifWidth) || 96, 32, 240);
-    const dataUrl = mode === "gif" && typeof config.dataUrl === "string" && /^data:image\/gif;base64,/i.test(config.dataUrl) ? config.dataUrl : null;
-    if (mode === "gif" && !dataUrl) {
+    const mediaWidth = clamp(Number(config.mediaWidth) || 96, 32, 240);
+    const dataUrl = typeof config.dataUrl !== "string"
+      ? null
+      : mode === "gif" && /^data:image\/gif;base64,/i.test(config.dataUrl)
+        ? config.dataUrl
+        : mode === "image" && /^data:image\/(?:png|webp|jpeg);base64,/i.test(config.dataUrl)
+          ? config.dataUrl
+          : null;
+    if (mode !== "text" && !dataUrl) {
       melody.remove();
       return;
     }
-    const renderKey = JSON.stringify({ mode, effect, direction, speed, text: mode === "text" ? text : null, gifWidth: mode === "gif" ? gifWidth : null });
+    const renderKey = JSON.stringify({ mode, effect, direction, speed, text: mode === "text" ? text : null, mediaWidth: mode === "text" ? null : mediaWidth });
     const contentMatches = (() => {
       if (melody.dataset.dreamComposerRenderKey !== renderKey) return false;
-      if (mode === "gif") {
-        const image = melody.querySelector(":scope > .dream-composer-decoration-gif");
+      if (mode !== "text") {
+        const image = melody.querySelector(`:scope > .dream-composer-decoration-${mode}`);
         return melody.children.length === 1 && image instanceof HTMLImageElement && image.getAttribute("src") === dataUrl;
       }
       if (effect === "wave") {
@@ -325,13 +331,13 @@
 
     if (!contentMatches) {
       melody.replaceChildren();
-      if (mode === "gif") {
+      if (mode !== "text") {
         const image = document.createElement("img");
-        image.className = "dream-composer-decoration-gif";
+        image.className = `dream-composer-decoration-media dream-composer-decoration-${mode}`;
         image.alt = "";
         image.draggable = false;
         image.src = dataUrl;
-        image.style.width = `${gifWidth}px`;
+        image.style.width = `${mediaWidth}px`;
         melody.appendChild(image);
       } else {
         if (effect === "wave") {
@@ -542,7 +548,10 @@
   const mediaInputs = {};
   const retainedMediaNodes = {};
   const playbackStates = new WeakMap();
+  const policyPausedVideos = new WeakSet();
   const mediaConfig = themeConfig?.media || {};
+  const videoPausePolicy = themeConfig?.videoPlayback?.pausePolicy === "unfocused" ? "unfocused" : "hidden";
+  const shouldPauseVideoPlayback = () => document.hidden || (videoPausePolicy === "unfocused" && !windowFocused);
   const mediaTransform = (transform) => `scaleX(${transform?.flipHorizontal ? -1 : 1}) scaleY(${transform?.flipVertical ? -1 : 1})`;
   const mediaVideoId = (role) => `codex-dream-skin-${role}-video`;
   const mediaKey = (role) => String(mediaConfig?.[role]?.asset || `${themeConfig?.themeId || "theme"}:${role}`);
@@ -626,7 +635,7 @@
     };
     const recover = () => {
       const recoveryNow = performance.now();
-      if (state.recovering || recoveryNow < state.nextRecoveryAt || !video.isConnected || video.paused || video.ended || document.hidden) return;
+      if (state.recovering || recoveryNow < state.nextRecoveryAt || !video.isConnected || video.paused || video.ended || shouldPauseVideoPlayback() || policyPausedVideos.has(video)) return;
       const resumeTime = video.currentTime;
       state.recovering = true;
       state.nextRecoveryAt = recoveryNow + 1800;
@@ -654,7 +663,7 @@
         return;
       }
       state.detachedSince = null;
-      if (video.paused || video.ended || document.hidden || video.readyState < (Number(video.HAVE_CURRENT_DATA) || 2)) {
+      if (video.paused || video.ended || shouldPauseVideoPlayback() || policyPausedVideos.has(video) || video.readyState < (Number(video.HAVE_CURRENT_DATA) || 2)) {
         state.stalledSince = null;
         return;
       }
@@ -692,25 +701,27 @@
       }
     };
     const resumeAutoplay = () => {
-      if (!video.isConnected || document.hidden || video.dataset.dreamAutoplay !== "true") return;
+      if (!video.isConnected || shouldPauseVideoPlayback() || policyPausedVideos.has(video) || video.dataset.dreamAutoplay !== "true") return;
       void video.play().catch(showPlayButton);
     };
     video.onplay = () => video.parentElement?.querySelector(".dream-media-play")?.remove();
     video.onpause = () => {
       const state = playbackStates.get(video);
       if (video.ended && !video.loop) showPlayButton();
-      else if (!state?.recovering && !state?.sourceChanging && playback?.autoplay && !document.hidden) setTimeout(resumeAutoplay, 0);
+      else if (!state?.recovering && !state?.sourceChanging && playback?.autoplay && !shouldPauseVideoPlayback() && !policyPausedVideos.has(video)) setTimeout(resumeAutoplay, 0);
     };
-    video.onloadeddata = () => { if (playback?.autoplay && !document.hidden) void video.play().catch(showPlayButton); };
-    video.oncanplay = () => { if (playback?.autoplay && !document.hidden) void video.play().catch(showPlayButton); };
+    video.onloadeddata = () => { if (playback?.autoplay && !shouldPauseVideoPlayback()) void video.play().catch(showPlayButton); };
+    video.oncanplay = () => { if (playback?.autoplay && !shouldPauseVideoPlayback()) void video.play().catch(showPlayButton); };
     video.dataset.dreamAutoplay = playback?.autoplay ? "true" : "false";
+    if (playback?.autoplay && shouldPauseVideoPlayback()) policyPausedVideos.add(video);
+    else if (!playback?.autoplay) policyPausedVideos.delete(video);
     const guard = installPlaybackGuard(video, playback, showPlayButton);
     if (!playback?.autoplay) showPlayButton();
     return { changed: guard.changed, showPlayButton };
   };
   const resumePolaroidVideo = (polaroid) => {
     const video = polaroid?.querySelector?.(".dream-polaroid-video");
-    if (!(video instanceof HTMLVideoElement) || video.dataset.dreamAutoplay !== "true" || document.hidden || !video.paused) return;
+    if (!(video instanceof HTMLVideoElement) || video.dataset.dreamAutoplay !== "true" || shouldPauseVideoPlayback() || !video.paused) return;
     void video.play().catch(() => undefined);
   };
   const keepHeroMediaOutOfLayoutAnchor = (hero, media) => {
@@ -830,7 +841,7 @@
       const sourceChanged = setVideoSource(video, "windowBackground");
       const playback = { autoplay: true, loop: true, sound: false, volume: 0 };
       const configured = configureVideo(video, playback);
-      if ((configured.changed || sourceChanged || video.paused) && !document.hidden) video.play().catch(() => undefined);
+      if ((configured.changed || sourceChanged || video.paused) && !shouldPauseVideoPlayback()) video.play().catch(() => undefined);
       base = video;
     } else {
       background.querySelector(":scope > .dream-window-background-color")?.remove();
@@ -913,7 +924,7 @@
       const sourceChanged = setVideoSource(video, "hero");
       video.style.transform = mediaTransform(mediaConfig.hero.transform);
       const configured = configureVideo(video, mediaConfig.hero.playback);
-      if ((configured.changed || sourceChanged || video.paused) && mediaConfig.hero.playback?.autoplay && !document.hidden) video.play().catch(configured.showPlayButton);
+      if ((configured.changed || sourceChanged || video.paused) && mediaConfig.hero.playback?.autoplay && !shouldPauseVideoPlayback()) video.play().catch(configured.showPlayButton);
       return;
     }
     if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
@@ -955,7 +966,7 @@
     const sourceChanged = setVideoSource(video, "polaroid");
     video.style.transform = mediaTransform(mediaConfig.polaroid.transform);
     const configured = configureVideo(video, mediaConfig.polaroid.playback);
-    if ((configured.changed || sourceChanged || video.paused) && mediaConfig.polaroid.playback?.autoplay && !document.hidden) video.play().catch(configured.showPlayButton);
+    if ((configured.changed || sourceChanged || video.paused) && mediaConfig.polaroid.playback?.autoplay && !shouldPauseVideoPlayback()) video.play().catch(configured.showPlayButton);
   };
 
   const isVisible = (node) => {
@@ -1109,7 +1120,7 @@
       const sourceChanged = setVideoSource(video, 'conversationBackground');
       const playback = { autoplay: true, loop: true, sound: false, volume: 0 };
       const configured = configureVideo(video, playback);
-      if ((configured.changed || sourceChanged || video.paused) && !document.hidden) video.play().catch(() => undefined);
+      if ((configured.changed || sourceChanged || video.paused) && !shouldPauseVideoPlayback()) video.play().catch(() => undefined);
       media = video;
     } else {
       const video = background.querySelector(':scope > .dream-conversation-background-video');
@@ -1875,20 +1886,32 @@
 
   const scheduler = { timeout: null, contentTimeout: null };
   let windowFocused = document.hasFocus();
+  const syncVideoPlaybackPolicy = () => {
+    const paused = shouldPauseVideoPlayback();
+    const videos = new Set([...document.querySelectorAll(".dream-hero-video, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
+    videos.forEach((node) => {
+      if (!(node instanceof HTMLVideoElement)) return;
+      if (paused) {
+        if (!node.paused) {
+          policyPausedVideos.add(node);
+          node.pause();
+        }
+        return;
+      }
+      if (!policyPausedVideos.has(node)) return;
+      policyPausedVideos.delete(node);
+      if (node.dataset.dreamAutoplay === "true") void node.play().catch(() => undefined);
+    });
+  };
   const motionHandler = (event) => {
     if (event?.type === "focus") windowFocused = true;
     else if (event?.type === "blur") windowFocused = false;
     if (document.hidden || !windowFocused) document.documentElement?.setAttribute("data-dream-motion-paused", "true");
     else document.documentElement?.removeAttribute("data-dream-motion-paused");
+    syncVideoPlaybackPolicy();
   };
   const visibilityHandler = () => {
     motionHandler();
-    const videos = new Set([...document.querySelectorAll(".dream-hero-video, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
-    videos.forEach((node) => {
-      if (!(node instanceof HTMLVideoElement)) return;
-      if (document.hidden) node.pause();
-      else if (node.dataset.dreamAutoplay === "true") void node.play().catch(() => undefined);
-    });
   };
   document.addEventListener("visibilitychange", visibilityHandler);
   window.addEventListener("focus", motionHandler);

@@ -34,6 +34,17 @@ export interface ImportedMediaAsset {
   height: number
 }
 
+export interface VideoAssetInspection {
+  width: number
+  height: number
+  frameRate: number
+  duration: number
+  codec: string
+  bitRate: number | null
+  hasAudio: boolean
+  highLoad: boolean
+}
+
 export interface ImportedFontAsset {
   id: string
   relativePath: string
@@ -53,13 +64,14 @@ export interface CompiledTheme {
 export interface OperationProgress {
   id: string
   kind: 'media-import' | 'theme-copy' | 'share-export' | 'share-import'
-  phase: 'started' | 'copying' | 'validating' | 'writing' | 'completed' | 'failed' | 'cancelled'
+  phase: 'started' | 'copying' | 'validating' | 'optimizing' | 'writing' | 'completed' | 'failed' | 'cancelled'
   processedBytes: number
   totalBytes: number | null
   message: string
 }
 
 export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'composerMelody'
+export type VideoMediaRole = Exclude<MediaAssetPurpose, 'composerMelody'>
 export type AssetPurpose = MediaAssetPurpose | 'icon' | 'font'
 export type MediaSelectionKind = 'image' | 'gif' | 'video'
 
@@ -110,6 +122,8 @@ export interface StudioApi {
     selectImage: (themeId: string, purpose: Exclude<MediaAssetPurpose, 'composerMelody'>) => Promise<ImportedAsset | null>
     selectMedia: (themeId: string, purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => Promise<ImportedMediaAsset | null>
     getPreviewUrl: (themeId: string, asset: string) => Promise<string>
+    inspectVideo: (themeId: string, asset: string) => Promise<VideoAssetInspection>
+    optimizeVideo: (themeId: string, role: VideoMediaRole, asset: string) => Promise<ImportedMediaAsset>
     selectIcon: (themeId: string) => Promise<ImportedAsset | null>
     selectFont: (themeId: string) => Promise<ImportedFontAsset | null>
   }
