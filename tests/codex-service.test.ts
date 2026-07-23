@@ -115,6 +115,7 @@ describe('CodexService operation queue', () => {
     expect(first).toContain('"conversationBubbles":{"visible":false}')
     expect(first).toContain('"toolActivityBubbles":{"visible":false}')
     expect(first).toContain('"sparklePolicy":{"mode":"balanced"')
+    expect(first).toContain('"sparkleCyclePositionPolicy":{"x":{"min":5,"max":95,"minDelta":12},"y":{"min":5,"max":91,"minDelta":12}}')
     expect(third).toContain('"sparklePolicy":{"mode":"performance"')
   })
 

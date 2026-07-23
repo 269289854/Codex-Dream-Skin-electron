@@ -17,6 +17,61 @@
     if (!(node instanceof HTMLElement) || node.style.getPropertyValue(property) === value) return;
     node.style.setProperty(property, value);
   };
+  const cyclePositionPolicy = themeConfig?.sparkleCyclePositionPolicy && typeof themeConfig.sparkleCyclePositionPolicy === "object"
+    ? themeConfig.sparkleCyclePositionPolicy
+    : {};
+  const cyclePositionVariables = {
+    x: "--dream-particle-x",
+    y: "--dream-particle-y",
+    startY: "--dream-particle-start-y",
+  };
+  const particleCyclePositions = new WeakMap();
+  const nextCyclePosition = (range, current) => {
+    const minimum = Number(range?.min);
+    const maximum = Number(range?.max);
+    const minimumDelta = Number(range?.minDelta);
+    if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || maximum < minimum || !Number.isFinite(minimumDelta) || minimumDelta < 0) return null;
+    let next = minimum + (maximum - minimum) * Math.random();
+    if (!Number.isFinite(current) || Math.abs(next - current) >= minimumDelta) return next;
+    const lower = current - minimumDelta;
+    const upper = current + minimumDelta;
+    if (next < current && lower >= minimum) next = lower;
+    else if (next >= current && upper <= maximum) next = upper;
+    else if (lower >= minimum) next = lower;
+    else next = Math.min(maximum, upper);
+    return next;
+  };
+  const randomizeParticleCyclePosition = (node) => {
+    const current = particleCyclePositions.get(node) || Object.fromEntries(Object.entries(cyclePositionVariables).map(([axis, variable]) => [
+      axis,
+      Number.parseFloat(node.style.getPropertyValue(variable)),
+    ]));
+    const nextPosition = {};
+    for (const [axis, variable] of Object.entries(cyclePositionVariables)) {
+      const range = cyclePositionPolicy[axis];
+      if (!range) continue;
+      const next = nextCyclePosition(range, current[axis]);
+      if (next !== null) {
+        nextPosition[axis] = next;
+        setInlineStyle(node, variable, `${next}%`);
+      }
+    }
+    particleCyclePositions.set(node, nextPosition);
+  };
+  let sparkleIterationLayer = null;
+  const sparkleIterationHandler = (event) => {
+    const node = event.target;
+    if (!(node instanceof HTMLElement) || node.parentElement !== sparkleIterationLayer || !node.classList.contains("dream-particle")) return;
+    if (node.dataset.dreamAnimated !== "true" || event.animationName !== `dream-particle-${sparkleIterationLayer?.dataset.dreamEffect || ""}`) return;
+    if (document.documentElement?.hasAttribute("data-dream-motion-paused") || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+    randomizeParticleCyclePosition(node);
+  };
+  const bindSparkleIterationLayer = (layer) => {
+    if (sparkleIterationLayer === layer) return;
+    sparkleIterationLayer?.removeEventListener("animationiteration", sparkleIterationHandler);
+    sparkleIterationLayer = layer instanceof HTMLElement ? layer : null;
+    sparkleIterationLayer?.addEventListener("animationiteration", sparkleIterationHandler);
+  };
 
   const builtinGlyphs = themeConfig?.builtinGlyphs || {};
   const renderSlot = (node, slot, fallback, useActionFallback = false) => {
@@ -109,6 +164,7 @@
     const config = themeConfig?.decorations?.sparkles;
     const particles = Array.isArray(themeConfig?.sparkleParticles) ? themeConfig.sparkleParticles : [];
     if (!chrome || config?.visible === false || particles.length === 0) {
+      bindSparkleIterationLayer(null);
       document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
       return;
     }
@@ -132,6 +188,7 @@
     layer.dataset.dreamEffect = effect;
     layer.dataset.dreamPerformance = performanceMode;
     layer.dataset.dreamTrails = showTrails ? "true" : "false";
+    bindSparkleIterationLayer(layer);
     syncParticleViewport(layer, shellBox);
     const visibleParticles = particles.slice(0, Math.max(0, Math.min(24, Math.floor(config.count ?? particles.length))));
     while (layer.children.length > visibleParticles.length) layer.lastElementChild?.remove();
@@ -143,6 +200,8 @@
         layer.appendChild(node);
       }
       node.classList.add("dream-particle");
+      const particleIndex = `${index}`;
+      const initializePosition = node.dataset.dreamPositionInitialized !== "true" || node.dataset.dreamIndex !== particleIndex;
       let content = node.querySelector(":scope > .dream-particle-content");
       if (!(content instanceof HTMLElement)) {
         node.textContent = "";
@@ -160,10 +219,13 @@
         node.appendChild(content);
       }
       const colorIndex = colors.length > 0 ? particle.colorIndex % (colors.length + 1) : 0;
-      node.style.setProperty("--dream-particle-x", `${particle.x}%`);
-      node.style.setProperty("--dream-particle-y", `${particle.y}%`);
       const fallbackStartY = 2 + clamp(Number(particle.phase) || 0, 0, 1) * 30;
-      node.style.setProperty("--dream-particle-start-y", `${clamp(Number(particle.startY) || fallbackStartY, 2, 32)}%`);
+      if (initializePosition) {
+        node.style.setProperty("--dream-particle-x", `${particle.x}%`);
+        node.style.setProperty("--dream-particle-y", `${particle.y}%`);
+        node.style.setProperty("--dream-particle-start-y", `${clamp(Number(particle.startY) || fallbackStartY, 2, 32)}%`);
+        node.dataset.dreamPositionInitialized = "true";
+      }
       node.style.setProperty("--dream-particle-duration", `${Math.max(0.1, Number(particle.duration) || 4)}s`);
       node.style.setProperty("--dream-particle-delay", `${Math.min(0, Number(particle.delay) || 0)}s`);
       node.style.setProperty("--dream-particle-steps", `${targetFps ? Math.max(1, Math.round((Number(particle.duration) || 4) * targetFps)) : 1}`);
@@ -180,7 +242,7 @@
       node.style.setProperty("--dream-sparkle-glow", `${glowLimit === null ? configuredGlow : Math.min(configuredGlow, glowLimit)}px`);
       node.classList.toggle("dream-sparkle-image", renderSlot(content, iconSlot, "✦"));
       node.dataset.dreamAnimated = animatedIndexes.has(index) ? "true" : "false";
-      node.dataset.dreamIndex = `${index}`;
+      node.dataset.dreamIndex = particleIndex;
     });
   };
 
@@ -1762,6 +1824,7 @@
       node.querySelectorAll(":scope > .dream-conversation-background").forEach(clearConversationBackgroundNode);
     });
     clearWindowBackground();
+    bindSparkleIterationLayer(null);
     document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
     document.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
@@ -1811,8 +1874,12 @@
   };
 
   const scheduler = { timeout: null, contentTimeout: null };
-  const motionHandler = () => {
-    document.documentElement?.toggleAttribute("data-dream-motion-paused", document.hidden || !document.hasFocus());
+  let windowFocused = document.hasFocus();
+  const motionHandler = (event) => {
+    if (event?.type === "focus") windowFocused = true;
+    else if (event?.type === "blur") windowFocused = false;
+    if (document.hidden || !windowFocused) document.documentElement?.setAttribute("data-dream-motion-paused", "true");
+    else document.documentElement?.removeAttribute("data-dream-motion-paused");
   };
   const visibilityHandler = () => {
     motionHandler();

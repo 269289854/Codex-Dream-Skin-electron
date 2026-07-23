@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Plus, RotateCcw, Shuffle, Trash2 } from 'lucide-react'
+import { Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { resolveAppearanceColor } from '../../shared/appearance'
 import { PARTICLE_EFFECT_IDS, PARTICLE_EFFECTS, PARTICLE_PERFORMANCE_MODES, particleEffectIconSlot, type ParticlePerformanceMode } from '../../shared/particle-effects'
 import type { ThemeProfile } from '../../shared/theme'
@@ -41,7 +41,6 @@ export function ParticleEffectControls({ profile, assets, onChange, onInteractio
       <Range label="最大尺寸" min={8} max={32} step={1} suffix="px" value={config.maxSize} onChange={(maxSize) => onChange((next) => { next.decorations.sparkles.maxSize = maxSize; if (next.decorations.sparkles.minSize > maxSize) next.decorations.sparkles.minSize = maxSize }, 'sparkle-max-size')} onChangeEnd={onInteractionEnd} />
       <Range label="透明度" min={0} max={1} step={.01} value={config.opacity} onChange={(opacity) => onChange((next) => { next.decorations.sparkles.opacity = opacity }, 'sparkle-opacity')} onChangeEnd={onInteractionEnd} />
       <Range label="光晕" min={0} max={24} step={1} suffix="px" value={config.glow} onChange={(glow) => onChange((next) => { next.decorations.sparkles.glow = glow }, 'sparkle-glow')} onChangeEnd={onInteractionEnd} />
-      <button className="secondary-command" type="button" onClick={() => onChange((next) => { next.decorations.sparkles.seed = next.decorations.sparkles.seed >= 4294967295 ? 0 : next.decorations.sparkles.seed + 1 })}><Shuffle size={14} />重新排列</button>
     </fieldset>
   </div>
 }

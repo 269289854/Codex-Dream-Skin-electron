@@ -9,7 +9,7 @@ import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationP
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
-import { PARTICLE_EFFECT_IDS, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy } from '../../shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, createParticleCyclePosition, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy, type ParticleCyclePosition } from '../../shared/particle-effects'
 import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
@@ -977,6 +977,8 @@ const appearanceGroupLabels: Record<AppearanceGroup, string> = {
   global: '全局与画布', conversation: '会话与按钮', sidebar: '侧边栏', brand: '品牌栏', home: '首页', cards: '操作卡片', projects: '项目栏', composer: '输入框', decoration: '装饰'
 }
 
+const previewParticleCyclePositions = new WeakMap<HTMLElement, ParticleCyclePosition>()
+
 function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element | null {
   const config = profile.decorations.sparkles
   if (!config.visible) return null
@@ -999,7 +1001,22 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
     '--dream-particle-snow-first-height': `${viewport.snowFirstHeight}px`,
     '--dream-particle-snow-second-height': `${viewport.snowSecondHeight}px`
   } as React.CSSProperties
-  return <div className="preview-sparkles" data-dream-effect={config.effect} data-dream-performance={policy.mode} data-dream-trails={policy.showTrails ? 'true' : 'false'} aria-label="背景粒子" style={viewportStyle}>
+  const randomizePosition = (event: React.AnimationEvent<HTMLDivElement>): void => {
+    const node = event.target
+    if (!(node instanceof HTMLElement) || node.parentElement !== event.currentTarget || !node.classList.contains('preview-sparkle-particle')) return
+    if (node.dataset.dreamAnimated !== 'true' || event.animationName !== `dream-particle-${config.effect}`) return
+    const current = previewParticleCyclePositions.get(node) ?? {
+      x: Number.parseFloat(node.style.getPropertyValue('--dream-particle-x')),
+      y: Number.parseFloat(node.style.getPropertyValue('--dream-particle-y')),
+      startY: Number.parseFloat(node.style.getPropertyValue('--dream-particle-start-y'))
+    }
+    const next = createParticleCyclePosition(config.effect, current)
+    previewParticleCyclePositions.set(node, next)
+    if (next.x !== undefined) node.style.setProperty('--dream-particle-x', `${next.x}%`)
+    if (next.y !== undefined) node.style.setProperty('--dream-particle-y', `${next.y}%`)
+    if (next.startY !== undefined) node.style.setProperty('--dream-particle-start-y', `${next.startY}%`)
+  }
+  return <div className="preview-sparkles" data-dream-effect={config.effect} data-dream-performance={policy.mode} data-dream-trails={policy.showTrails ? 'true' : 'false'} aria-label="背景粒子" style={viewportStyle} onAnimationIteration={randomizePosition}>
     {particles.map((particle, index) => <button
       className="preview-sparkle-particle"
       data-preview-target="sparkles"
@@ -1007,6 +1024,15 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
       type="button"
       aria-label={`编辑背景粒子 ${index + 1}`}
       key={index}
+      ref={(node) => {
+        if (!node || node.dataset.dreamCycleEffect === config.effect) return
+        previewParticleCyclePositions.delete(node)
+        node.style.removeProperty('translate')
+        node.style.setProperty('--dream-particle-x', `${particle.x}%`)
+        node.style.setProperty('--dream-particle-y', `${particle.y}%`)
+        node.style.setProperty('--dream-particle-start-y', `${particle.startY}%`)
+        node.dataset.dreamCycleEffect = config.effect
+      }}
       style={{
         '--dream-particle-x': `${particle.x}%`,
         '--dream-particle-y': `${particle.y}%`,

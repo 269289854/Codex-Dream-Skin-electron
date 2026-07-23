@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy } from '../src/shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createParticleCyclePosition, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy } from '../src/shared/particle-effects'
 import { COMPOSER_DECORATION_DIRECTION_IDS, COMPOSER_DECORATION_EFFECT_IDS, createDefaultTheme, parseThemeProfile } from '../src/shared/theme'
 
 const id = '22222222-2222-4222-8222-222222222222'
@@ -85,6 +85,24 @@ describe('theme decorations', () => {
     expect(resolveParticleRenderPolicy('balanced', 20)).toMatchObject({ animatedIndexes: [0, 3, 5, 8, 11, 14, 16, 19], targetFps: 30, glowLimit: 6, showTrails: true })
     expect(resolveParticleRenderPolicy('balanced', 24).animatedIndexes).toEqual([0, 3, 7, 10, 13, 16, 20, 23])
     expect(resolveParticleRenderPolicy('performance', 20)).toMatchObject({ animatedIndexes: [0, 6, 13, 19], targetFps: 15, glowLimit: 0, showTrails: false })
+  })
+
+  it('resolves bounded per-cycle positions and keeps them visibly separated', () => {
+    expect(resolveParticleCyclePositionPolicy('twinkle')).toEqual({
+      x: { min: 5, max: 95, minDelta: 12 },
+      y: { min: 5, max: 91, minDelta: 12 }
+    })
+    expect(resolveParticleCyclePositionPolicy('float')).toEqual({ x: { min: 5, max: 95, minDelta: 12 } })
+    expect(resolveParticleCyclePositionPolicy('rain')).toEqual({ x: { min: 5, max: 95, minDelta: 12 } })
+    expect(resolveParticleCyclePositionPolicy('snow')).toEqual({ x: { min: 5, max: 95, minDelta: 12 } })
+    expect(resolveParticleCyclePositionPolicy('meteor')).toEqual({ startY: { min: 2, max: 32, minDelta: 5 } })
+
+    expect(createParticleCyclePosition('twinkle', { x: 5, y: 5 }, () => 0)).toEqual({ x: 17, y: 17 })
+    expect(createParticleCyclePosition('float', { x: 50 }, () => 0.5)).toEqual({ x: 62 })
+    expect(createParticleCyclePosition('rain', { x: 50 }, () => 0.5)).toEqual({ x: 62 })
+    expect(createParticleCyclePosition('snow', { x: 50 }, () => 0.5)).toEqual({ x: 62 })
+    expect(createParticleCyclePosition('meteor', { startY: 17 }, () => 0.5)).toEqual({ startY: 22 })
+    expect(createParticleCyclePosition('twinkle', {}, () => 2)).toEqual({ x: 95, y: 91 })
   })
 
   it('adds static text defaults to older version fifteen composer decorations', () => {

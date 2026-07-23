@@ -1446,6 +1446,21 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-performance')).toBe('performance')
     expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-trails')).toBe('false')
     expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(4)
+    const performanceParticles = [...container.querySelectorAll<HTMLElement>('[data-preview-target="sparkles"]')]
+    const animatedParticle = performanceParticles[0]
+    const staticParticle = performanceParticles[1]
+    if (!animatedParticle || !staticParticle) throw new Error('Particle performance fixture is incomplete.')
+    const staticX = staticParticle.style.getPropertyValue('--dream-particle-x')
+    const randomTwinkle = vi.spyOn(Math, 'random').mockReturnValue(.5)
+    const animatedIteration = new browserWindow.Event('animationiteration', { bubbles: true })
+    Object.defineProperty(animatedIteration, 'animationName', { configurable: true, value: 'dream-particle-twinkle' })
+    act(() => animatedParticle.dispatchEvent(animatedIteration as unknown as Event))
+    expect(animatedParticle.style.getPropertyValue('--dream-particle-x')).toBe('50%')
+    const staticIteration = new browserWindow.Event('animationiteration', { bubbles: true })
+    Object.defineProperty(staticIteration, 'animationName', { configurable: true, value: 'dream-particle-twinkle' })
+    act(() => staticParticle.dispatchEvent(staticIteration as unknown as Event))
+    expect(staticParticle.style.getPropertyValue('--dream-particle-x')).toBe(staticX)
+    randomTwinkle.mockRestore()
     act(() => balanced.click())
     expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-performance')).toBe('balanced')
     expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(6)
@@ -1465,7 +1480,6 @@ describe('Studio preview editing interaction', () => {
 
     const particleBeforeShuffle = container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')
     if (!particleBeforeShuffle) throw new Error('Particle disappeared after undo.')
-    const originalX = particleBeforeShuffle.style.getPropertyValue('--dream-particle-x')
     pointerDown(particleBeforeShuffle)
     const rainMode = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent === '垂直雨落')
     if (!rainMode) throw new Error('Rain particle mode is missing.')
@@ -1473,9 +1487,9 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-effect')).toBe('rain')
     const rainIcon = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="backgroundRain"] .icon-picker-trigger')
     const speed = [...container.querySelectorAll('[role="dialog"] .range-row')].find((row) => row.querySelector('span')?.textContent === '速度')?.querySelector<HTMLInputElement>('input')
-    const shuffle = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('重新排列'))
     const addColor = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('添加颜色'))
-    if (!rainIcon || !speed || !shuffle || !addColor) throw new Error('Particle arrangement controls are missing.')
+    if (!rainIcon || !speed || !addColor) throw new Error('Particle controls are missing.')
+    expect([...container.querySelectorAll('[role="dialog"] button')].some((button) => button.textContent?.includes('重新排列'))).toBe(false)
     act(() => rainIcon.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     const rainStar = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="backgroundRain"] [data-icon-name="star"]')
     if (!rainStar) throw new Error('Rain star icon option is missing.')
@@ -1483,10 +1497,17 @@ describe('Studio preview editing interaction', () => {
       rainStar.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       setInputValue(speed, '1.5')
       speed.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
-      shuffle.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       addColor.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
     })
-    expect(container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')?.style.getPropertyValue('--dream-particle-x')).not.toBe(originalX)
+    const rainParticle = container.querySelector<HTMLElement>('[data-preview-target="sparkles"][data-dream-animated="true"]')
+    if (!rainParticle) throw new Error('Animated rain particle is missing.')
+    const rainOriginalX = rainParticle.style.getPropertyValue('--dream-particle-x')
+    const randomRain = vi.spyOn(Math, 'random').mockReturnValue(.5)
+    const rainIteration = new browserWindow.Event('animationiteration', { bubbles: true })
+    Object.defineProperty(rainIteration, 'animationName', { configurable: true, value: 'dream-particle-rain' })
+    act(() => rainParticle.dispatchEvent(rainIteration as unknown as Event))
+    randomRain.mockRestore()
+    expect(container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')?.style.getPropertyValue('--dream-particle-x')).not.toBe(rainOriginalX)
     expect(container.querySelectorAll<HTMLElement>('[data-preview-target="sparkles"]')[1]?.style.getPropertyValue('--dream-sparkle-color')).toBe('#20bcc3')
     expect(container.querySelector('[data-preview-target="sparkles"] .builtin-icon-glyph')?.textContent).toBe('★')
 
@@ -1555,7 +1576,7 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.decorations).toMatchObject({
-      sparkles: { effect: 'rain', speed: 1.5, performanceMode: 'balanced', seed: 1, extraColors: ['#20bcc3'] },
+      sparkles: { effect: 'rain', speed: 1.5, performanceMode: 'balanced', seed: 0, extraColors: ['#20bcc3'] },
       composerMelody: { text: '<b>自定义旋律 ♪</b>', effect: 'scroll', direction: 'right', fontSize: 22, position: { x: 0.7, y: 0.35 } }
     })
     expect(savedProfiles.at(-1)?.icons).toMatchObject({ backgroundSparkle: { name: 'sparkles' }, backgroundRain: { name: 'star' } })

@@ -6,7 +6,7 @@ import { paintToCss } from '../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../shared/conversation-overlay'
 import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
-import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy } from '../shared/particle-effects'
+import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy } from '../shared/particle-effects'
 import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
@@ -297,6 +297,7 @@ export class CodexService {
       sparkleIconSlot: particleEffectIconSlot(profile.decorations.sparkles.effect),
       sparkleParticles: createSparkleParticles(profile.decorations.sparkles),
       sparklePolicy: resolveParticleRenderPolicy(profile.decorations.sparkles.performanceMode, profile.decorations.sparkles.count),
+      sparkleCyclePositionPolicy: resolveParticleCyclePositionPolicy(profile.decorations.sparkles.effect),
       composerBadge: profile.composerBadge,
       conversationBubbles: { visible: profile.conversationBubbles.visible },
       toolActivityBubbles: { visible: profile.toolActivityBubbles.visible },

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy, type SparkleParticle } from '../src/shared/particle-effects'
+import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy, type SparkleParticle } from '../src/shared/particle-effects'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import type { ConversationOverlayStyle } from '../src/shared/conversation-overlay'
@@ -162,6 +162,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
     sparkleIconSlot: particleEffectIconSlot(decorations.sparkles.effect),
     sparkleParticles,
     sparklePolicy: resolveParticleRenderPolicy(decorations.sparkles.performanceMode, sparkleParticles.length),
+    sparkleCyclePositionPolicy: resolveParticleCyclePositionPolicy(decorations.sparkles.effect),
     builtinGlyphs: BUILTIN_ICON_GLYPHS,
     actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
     copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
@@ -179,6 +180,12 @@ function stateOf(window: Window): { ensure: () => void; cleanup: () => void } {
   const state = (window as unknown as Record<string, { ensure: () => void; cleanup: () => void } | undefined>).__CODEX_DREAM_SKIN_STATE__
   if (!state) throw new Error('Renderer injection state was not installed.')
   return state
+}
+
+function dispatchAnimationIteration(window: Window, node: Element, animationName: string): void {
+  const event = new window.Event('animationiteration', { bubbles: true })
+  Object.defineProperty(event, 'animationName', { configurable: true, value: animationName })
+  node.dispatchEvent(event as unknown as Event)
 }
 
 describe('renderer home DOM adaptation', () => {
@@ -770,6 +777,51 @@ describe('renderer home DOM adaptation', () => {
     expect(previewParticleEffectsCss).not.toContain('animation: none !important')
   })
 
+  it('randomizes only animated particles per cycle and preserves positions across ensure and cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Particle-Cycles')
+    Object.defineProperty(window.document, 'hasFocus', { configurable: true, value: () => true })
+    const decorations = structuredClone(defaultDecorations)
+    decorations.sparkles = { ...decorations.sparkles, effect: 'rain', performanceMode: 'performance', count: 6 }
+    inject(window, undefined, undefined, undefined, undefined, decorations)
+
+    const layer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
+    const nodes = [...(layer?.querySelectorAll(':scope > .dream-particle') ?? [])] as HTMLElement[]
+    const animated = nodes[0]
+    const staticParticle = nodes[1]
+    if (!layer || !animated || !staticParticle) throw new Error('Particle cycle fixture is incomplete.')
+    expect(animated.dataset.dreamAnimated).toBe('true')
+    expect(staticParticle.dataset.dreamAnimated).toBe('false')
+    const staticX = staticParticle.style.getPropertyValue('--dream-particle-x')
+    const random = vi.spyOn(window.Math, 'random').mockReturnValue(.5)
+
+    dispatchAnimationIteration(window, animated, 'dream-particle-rain')
+    expect(animated.style.getPropertyValue('--dream-particle-x')).toBe('50%')
+    expect(random).toHaveBeenCalledTimes(1)
+    stateOf(window).ensure()
+    expect(animated.style.getPropertyValue('--dream-particle-x')).toBe('50%')
+
+    random.mockClear()
+    dispatchAnimationIteration(window, animated, 'dream-particle-rain')
+    expect(animated.style.getPropertyValue('--dream-particle-x')).toBe('62%')
+    expect(random).toHaveBeenCalledTimes(1)
+    dispatchAnimationIteration(window, staticParticle, 'dream-particle-rain')
+    expect(staticParticle.style.getPropertyValue('--dream-particle-x')).toBe(staticX)
+    expect(random).toHaveBeenCalledTimes(1)
+
+    window.document.documentElement.setAttribute('data-dream-motion-paused', '')
+    dispatchAnimationIteration(window, animated, 'dream-particle-rain')
+    expect(random).toHaveBeenCalledTimes(1)
+    window.document.documentElement.removeAttribute('data-dream-motion-paused')
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: true }) })
+    dispatchAnimationIteration(window, animated, 'dream-particle-rain')
+    expect(random).toHaveBeenCalledTimes(1)
+
+    stateOf(window).cleanup()
+    dispatchAnimationIteration(window, animated, 'dream-particle-rain')
+    expect(random).toHaveBeenCalledTimes(1)
+  })
+
   it('pauses decorative motion while hidden or unfocused and removes motion listeners during cleanup', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Motion-State')
@@ -781,15 +833,14 @@ describe('renderer home DOM adaptation', () => {
     inject(window)
 
     expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
-    focused = false
     window.dispatchEvent(new window.Event('blur'))
-    expect(window.document.documentElement.getAttribute('data-dream-motion-paused')).toBe('')
+    expect(window.document.documentElement.getAttribute('data-dream-motion-paused')).toBe('true')
     focused = true
     window.dispatchEvent(new window.Event('focus'))
     expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
     hidden = true
     window.document.dispatchEvent(new window.Event('visibilitychange'))
-    expect(window.document.documentElement.getAttribute('data-dream-motion-paused')).toBe('')
+    expect(window.document.documentElement.getAttribute('data-dream-motion-paused')).toBe('true')
 
     const timer = (window as unknown as { __CODEX_DREAM_SKIN_STATE__: { timer: number } }).__CODEX_DREAM_SKIN_STATE__.timer
     stateOf(window).cleanup()

@@ -14,6 +14,24 @@ export interface ParticleRenderPolicy {
   showTrails: boolean
 }
 
+export interface ParticlePositionRange {
+  min: number
+  max: number
+  minDelta: number
+}
+
+export interface ParticleCyclePositionPolicy {
+  x?: ParticlePositionRange
+  y?: ParticlePositionRange
+  startY?: ParticlePositionRange
+}
+
+export interface ParticleCyclePosition {
+  x?: number
+  y?: number
+  startY?: number
+}
+
 export interface ParticleEffectDefinition {
   label: string
   iconSlot: ParticleEffectIconSlot
@@ -39,6 +57,14 @@ const PARTICLE_ANIMATION_BUDGETS: Readonly<Record<ParticlePerformanceMode, numbe
   quality: 24,
   balanced: 8,
   performance: 4
+})
+
+const PARTICLE_CYCLE_POSITION_POLICIES: Readonly<Record<ParticleEffect, ParticleCyclePositionPolicy>> = Object.freeze({
+  twinkle: { x: { min: 5, max: 95, minDelta: 12 }, y: { min: 5, max: 91, minDelta: 12 } },
+  float: { x: { min: 5, max: 95, minDelta: 12 } },
+  rain: { x: { min: 5, max: 95, minDelta: 12 } },
+  meteor: { startY: { min: 2, max: 32, minDelta: 5 } },
+  snow: { x: { min: 5, max: 95, minDelta: 12 } }
 })
 
 export interface SparkleParticle {
@@ -134,6 +160,25 @@ export function resolveParticleRenderPolicy(mode: ParticlePerformanceMode, count
   return { mode, animatedIndexes, ...PARTICLE_PERFORMANCE_POLICIES[mode] }
 }
 
+export function resolveParticleCyclePositionPolicy(effect: ParticleEffect): ParticleCyclePositionPolicy {
+  return PARTICLE_CYCLE_POSITION_POLICIES[effect]
+}
+
+export function createParticleCyclePosition(
+  effect: ParticleEffect,
+  current: ParticleCyclePosition = {},
+  random: () => number = Math.random
+): ParticleCyclePosition {
+  const policy = resolveParticleCyclePositionPolicy(effect)
+  const next: ParticleCyclePosition = {}
+  for (const axis of ['x', 'y', 'startY'] as const) {
+    const range = policy[axis]
+    if (!range) continue
+    next[axis] = createSeparatedPosition(range, current[axis], random)
+  }
+  return next
+}
+
 export function createParticleViewportMetrics(width: number, height: number, top = PARTICLE_VIEWPORT_TOP): ParticleViewportMetrics {
   const safeTop = Math.max(0, top)
   const safeWidth = Math.max(0, width)
@@ -153,6 +198,20 @@ export function createParticleViewportMetrics(width: number, height: number, top
 
 export function particleEffectIconSlot(effect: ParticleEffect): ParticleEffectIconSlot {
   return PARTICLE_EFFECTS[effect].iconSlot
+}
+
+function createSeparatedPosition(range: ParticlePositionRange, current: number | undefined, random: () => number): number {
+  const randomValue = Math.min(1, Math.max(0, Number(random()) || 0))
+  let next = range.min + (range.max - range.min) * randomValue
+  if (typeof current !== 'number' || !Number.isFinite(current) || Math.abs(next - current) >= range.minDelta) return next
+
+  const lower = current - range.minDelta
+  const upper = current + range.minDelta
+  if (next < current && lower >= range.min) next = lower
+  else if (next >= current && upper <= range.max) next = upper
+  else if (lower >= range.min) next = lower
+  else next = Math.min(range.max, upper)
+  return next
 }
 
 function seededRandom(seed: number): () => number {

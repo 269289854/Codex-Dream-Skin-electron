@@ -124,7 +124,8 @@ html[data-dream-motion-paused="true"] .dream-sparkles > .dream-particle[data-dre
 }
 
 @keyframes dream-particle-twinkle {
-  0%, 100% { opacity: var(--dream-sparkle-dim-opacity, .3); transform: scale(.78) rotate(-4deg); }
+  0%, 100% { opacity: 0; transform: scale(.78) rotate(-4deg); }
+  10%, 90% { opacity: var(--dream-sparkle-dim-opacity, .3); }
   50% { opacity: var(--dream-sparkle-opacity, .72); transform: scale(1.12) rotate(4deg); }
 }
 
