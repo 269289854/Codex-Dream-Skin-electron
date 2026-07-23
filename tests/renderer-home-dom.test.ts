@@ -9,6 +9,7 @@ import type { ConversationOverlayStyle } from '../src/shared/conversation-overla
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
 
 let template = ''
+let dreamSkinCss = ''
 let particleEffectsCss = ''
 let previewParticleEffectsCss = ''
 let homeLayoutCss = ''
@@ -18,8 +19,9 @@ const defaultProfile = createDefaultTheme(themeId)
 const defaultDecorations = defaultProfile.decorations
 
 beforeAll(async () => {
-  ;[template, particleEffectsCss, previewParticleEffectsCss, homeLayoutCss] = await Promise.all([
+  ;[template, dreamSkinCss, particleEffectsCss, previewParticleEffectsCss, homeLayoutCss] = await Promise.all([
     readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8'),
+    readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8'),
     readFile(join(process.cwd(), 'resources', 'windows', 'dream-particle-effects.css'), 'utf8'),
     readFile(join(process.cwd(), 'src', 'renderer', 'src', 'particle-effects.css'), 'utf8'),
     readFile(join(process.cwd(), 'resources', 'windows', 'dream-home-layout.css'), 'utf8')
@@ -1234,6 +1236,47 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-conversation-surface')).toBeNull()
     expect(window.document.querySelector('.dream-conversation-viewport')).toBeNull()
     expect(window.document.querySelector('.dream-conversation-background')).toBeNull()
+  })
+
+  it('removes the native thread footer fade without changing the themed composer', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <main class="main-surface">
+        <div class="conversation-viewport">
+          <div class="thread-scroll-container" data-app-action-timeline-scroll>
+            <article data-message-author-role="assistant">Reply</article>
+            <div data-thread-scroll-footer="true">
+              <div class="native-footer-fade"><div class="native-footer-fade-surface" style="background-image: linear-gradient(to top, #f7ffff 0%, transparent 100%)"></div></div>
+              <div data-pip-obstacle="thread-footer"><div class="composer-surface-chrome" style="background-image: linear-gradient(145deg, #f7fbff, #e8f4f9)"><div class="ProseMirror" contenteditable="true"></div></div></div>
+            </div>
+          </div>
+        </div>
+      </main>`
+    const background: RuntimeConversationBackgroundConfig = {
+      visible: true,
+      mode: 'color',
+      color: '#123456',
+      source: null,
+      opacity: 1,
+      overlayStyle: fullOverlayStyle,
+      focus: { x: .5, y: .5 },
+      scale: 1
+    }
+    inject(window, undefined, undefined, `${dreamSkinCss}\n${homeLayoutCss}`, undefined, undefined, undefined, { hero: null, polaroid: null, conversationBackground: background })
+
+    const fade = window.document.querySelector('.native-footer-fade-surface') as HTMLElement | null
+    const composer = window.document.querySelector('.composer-surface-chrome') as HTMLElement | null
+    const backgroundImageOf = (node: HTMLElement): string =>
+      window.getComputedStyle(node as unknown as Parameters<typeof window.getComputedStyle>[0]).backgroundImage
+    expect(backgroundImageOf(fade as HTMLElement)).toBe('none')
+    expect(composer?.classList.contains('dream-composer')).toBe(true)
+    expect(composer?.style.backgroundImage).toContain('linear-gradient')
+    stateOf(window).ensure()
+    expect(backgroundImageOf(fade as HTMLElement)).toBe('none')
+
+    stateOf(window).cleanup()
+    expect(backgroundImageOf(fade as HTMLElement)).toContain('linear-gradient')
+    expect(composer?.classList.contains('dream-composer')).toBe(false)
   })
 
   it('keeps one fixed window background, composites masks in foreground order, and cleans every state', () => {

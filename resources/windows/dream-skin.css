@@ -344,6 +344,11 @@ html.codex-dream-skin .dream-conversation-surface {
   background: transparent !important;
 }
 
+/* Codex paints a solid footer fade for its native canvas; it must not cover themed conversation media. */
+html.codex-dream-skin .dream-conversation-surface [data-thread-scroll-footer="true"] > :first-child > :only-child {
+  background-image: none !important;
+}
+
 html.codex-dream-skin .dream-conversation-viewport > .dream-conversation-background {
   position: absolute !important;
   z-index: 0 !important;
