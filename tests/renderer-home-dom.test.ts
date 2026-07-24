@@ -252,14 +252,18 @@ describe('renderer home DOM adaptation', () => {
         mode: 'nineSlice',
         dataUrl: 'data:image/png;base64,VVNFUg==',
         slice: 25,
+        sliceInsets: [35, 25, 40, 25],
         frameWidth: 24,
+        borderWidths: [33.6, 48, 38.4, 48],
         contentPadding: 20
       },
       codex: {
         mode: 'stretch',
         dataUrl: 'data:image/gif;base64,Q09ERVg=',
         slice: 31,
+        sliceInsets: [31, 31, 31, 31],
         frameWidth: 18,
+        borderWidths: [18, 36, 18, 36],
         contentPadding: 28
       }
     }
@@ -268,8 +272,10 @@ describe('renderer home DOM adaptation', () => {
     const root = window.document.documentElement
     expect(root.getAttribute('data-dream-user-bubble-frame')).toBe('nineSlice')
     expect(root.getAttribute('data-dream-codex-bubble-frame')).toBe('stretch')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-slice')).toBe('25%')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-slice')).toBe('35% 25% 40% 25%')
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-width')).toBe('24px')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('33.6px 48px 38.4px 48px')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('72px')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('28px')
     expect([user.childNodes.length, codex.childNodes.length]).toEqual(childCounts)
 
@@ -287,9 +293,34 @@ describe('renderer home DOM adaptation', () => {
     expect(root.hasAttribute('data-dream-user-bubble-frame')).toBe(false)
     expect(root.hasAttribute('data-dream-codex-bubble-frame')).toBe(false)
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-source')).toBe('')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('')
     expect(user.classList.contains('dream-conversation-user-bubble')).toBe(false)
     expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+  })
+
+  it('falls back to symmetric frame geometry for legacy or invalid runtime values', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = '<main class="main-surface"><div data-user-message-bubble><span>用户消息</span></div></main>'
+    const frames = {
+      visible: true,
+      user: {
+        mode: 'nineSlice',
+        dataUrl: 'data:image/png;base64,VVNFUg==',
+        slice: 31,
+        sliceInsets: [70, 25, 40, 25],
+        frameWidth: 18,
+        borderWidths: [18, 'invalid', 18, 36],
+        contentPadding: 20
+      }
+    } as unknown as RuntimeConversationBubblesConfig
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, frames)
+    const root = window.document.documentElement
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-slice')).toBe('31% 31% 31% 31%')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('18px 36px 18px 36px')
+    expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('36px')
   })
 
   it('marks only outermost tool activities and clears disabled, rebuilt, and cleaned nodes', () => {

@@ -14,6 +14,16 @@ import {
 
 const themeId = '11111111-1111-4111-8111-111111111111'
 const presetRoot = join(process.cwd(), 'resources', 'windows', 'conversation-bubbles')
+const expectedPresetSlices = {
+  'daisy-heart': [65, 25, 28, 25],
+  'calico-cat': [58, 25, 27, 25],
+  'cloud-sprout': [35, 25, 30, 25],
+  'sakura-ribbon': [56, 25, 37, 25],
+  'moon-stars': [35, 25, 40, 25],
+  'strawberry-leaf': [40, 25, 38, 25],
+  'ocean-shell': [46, 25, 48, 25],
+  'rainbow-candy': [60, 25, 35, 25]
+} as const
 
 describe('conversation bubble frames', () => {
   it('ships eight unique 768x384 transparent PNG presets below 200 KB', async () => {
@@ -35,6 +45,34 @@ describe('conversation bubble frames', () => {
         alphaAt(info.width - 1, info.height - 1),
         alphaAt(Math.floor(info.width / 2), Math.floor(info.height / 2))
       ]).toEqual([0, 0, 0, 0, 0])
+    }
+  })
+
+  it('keeps every preset decoration inside an undistorted asymmetric corner region', () => {
+    for (const preset of CONVERSATION_BUBBLE_PRESETS) {
+      const profile = createDefaultTheme(themeId)
+      profile.conversationBubbles.user = {
+        source: { kind: 'preset', presetId: preset.id },
+        fit: 'nineSlice',
+        slice: 25,
+        frameWidth: 24,
+        contentPadding: 20
+      }
+      const frame = resolveConversationBubbles(profile.conversationBubbles, {
+        [conversationBubblePresetAssetKey(preset.id)]: `data:image/png;base64,${preset.id}`
+      }).user
+      const sliceInsets = expectedPresetSlices[preset.id]
+      const expectedWidths = [
+        Math.round(384 * sliceInsets[0] / 100 * 25) / 100,
+        Math.round(768 * sliceInsets[1] / 100 * 25) / 100,
+        Math.round(384 * sliceInsets[2] / 100 * 25) / 100,
+        Math.round(768 * sliceInsets[3] / 100 * 25) / 100
+      ]
+
+      expect(frame.sliceInsets).toEqual(sliceInsets)
+      expect(frame.borderWidths).toEqual(expectedWidths)
+      expect(frame.sliceInsets[0] + frame.sliceInsets[2]).toBeLessThan(100)
+      expect(frame.sliceInsets[1] + frame.sliceInsets[3]).toBeLessThan(100)
     }
   })
 
@@ -68,14 +106,18 @@ describe('conversation bubble frames', () => {
         mode: 'nineSlice',
         dataUrl: 'data:image/png;base64,USER',
         slice: 25,
+        sliceInsets: [35, 25, 40, 25],
         frameWidth: 24,
+        borderWidths: [33.6, 48, 38.4, 48],
         contentPadding: 20
       },
       codex: {
         mode: 'stretch',
         dataUrl: 'data:image/gif;base64,CODEX',
         slice: 31,
+        sliceInsets: [31, 31, 31, 31],
         frameWidth: 18,
+        borderWidths: [18, 36, 18, 36],
         contentPadding: 28
       }
     })
@@ -121,20 +163,29 @@ describe('conversation bubble frames', () => {
     expect(payload.conversationBubbles.codex.dataUrl).toBe('data:image/gif;base64,assets/codex-bubble.gif')
   })
 
-  it('keeps Studio and runtime CSS on the same nine-slice and stretch primitives', async () => {
+  it('keeps Studio and runtime CSS on the same undistorted frame and inner-fill primitives', async () => {
     const [runtimeCss, studioCss] = await Promise.all([
       readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8'),
       readFile(join(process.cwd(), 'src', 'renderer', 'src', 'styles.css'), 'utf8')
     ])
 
     for (const declaration of [
+      'background: transparent !important',
+      '::after',
       'border-image-slice:',
       'border-image-width:',
+      'frame-border-widths',
+      'frame-min-block-size',
       'border-image-repeat: stretch',
       'background-size: 100% 100%'
     ]) {
       expect(runtimeCss).toContain(declaration)
       expect(studioCss).toContain(declaration)
     }
+    expect(runtimeCss).toContain('padding-inline: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-frame-width) * 2)) !important')
+    expect(runtimeCss).toContain('padding-inline: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-frame-width) * 2)) !important')
+    expect(studioCss).toContain('padding-inline: max(var(--dream-preview-bubble-content-padding), calc(var(--dream-preview-bubble-frame-width) * 2)) !important')
+    expect(runtimeCss).not.toContain('border-image-repeat: round')
+    expect(studioCss).not.toContain('border-image-repeat: round')
   })
 })

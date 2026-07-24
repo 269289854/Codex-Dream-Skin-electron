@@ -614,8 +614,8 @@ describe('theme schema and compiler', () => {
     expect(JSON.parse(compiled.rendererPayload).version).toBe(24)
     expect(JSON.parse(compiled.rendererPayload).conversationBubbles).toEqual({
       visible: true,
-      user: { mode: 'none', dataUrl: null, slice: 25, frameWidth: 24, contentPadding: 20 },
-      codex: { mode: 'none', dataUrl: null, slice: 25, frameWidth: 24, contentPadding: 20 }
+      user: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 },
+      codex: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 }
     })
     expect(JSON.parse(compiled.rendererPayload).toolActivityBubbles).toEqual({ visible: true })
     expect(compiled.rendererPayload).toContain('\\u003cb>')

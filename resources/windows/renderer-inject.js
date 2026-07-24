@@ -1157,6 +1157,8 @@
       source: '--dream-user-bubble-frame-source',
       slice: '--dream-user-bubble-frame-slice',
       width: '--dream-user-bubble-frame-width',
+      borderWidths: '--dream-user-bubble-frame-border-widths',
+      minBlockSize: '--dream-user-bubble-frame-min-block-size',
       padding: '--dream-user-bubble-content-padding'
     },
     codex: {
@@ -1164,8 +1166,16 @@
       source: '--dream-codex-bubble-frame-source',
       slice: '--dream-codex-bubble-frame-slice',
       width: '--dream-codex-bubble-frame-width',
+      borderWidths: '--dream-codex-bubble-frame-border-widths',
+      minBlockSize: '--dream-codex-bubble-frame-min-block-size',
       padding: '--dream-codex-bubble-content-padding'
     }
+  };
+  const normalizeConversationBubbleQuad = (value, fallback, min, max) => {
+    if (!Array.isArray(value) || value.length !== 4) return fallback;
+    const normalized = value.map((entry) => Number(entry));
+    if (normalized.some((entry) => !Number.isFinite(entry) || entry < min || entry > max)) return fallback;
+    return normalized;
   };
   const clearConversationBubbleFrameConfig = () => {
     const root = document.documentElement;
@@ -1175,6 +1185,8 @@
       root.style.removeProperty(properties.source);
       root.style.removeProperty(properties.slice);
       root.style.removeProperty(properties.width);
+      root.style.removeProperty(properties.borderWidths);
+      root.style.removeProperty(properties.minBlockSize);
       root.style.removeProperty(properties.padding);
     });
   };
@@ -1191,12 +1203,25 @@
         root.style.removeProperty(properties.source);
         root.style.removeProperty(properties.slice);
         root.style.removeProperty(properties.width);
+        root.style.removeProperty(properties.borderWidths);
+        root.style.removeProperty(properties.minBlockSize);
         root.style.removeProperty(properties.padding);
         return;
       }
+      const slice = clamp(Number(config?.slice) || 25, 10, 45);
+      const frameWidth = clamp(Math.round(Number(config?.frameWidth) || 24), 8, 40);
+      const fallbackSlices = [slice, slice, slice, slice];
+      const candidateSlices = normalizeConversationBubbleQuad(config?.sliceInsets, fallbackSlices, 1, 90);
+      const sliceInsets = candidateSlices[0] + candidateSlices[2] < 100 && candidateSlices[1] + candidateSlices[3] < 100
+        ? candidateSlices
+        : fallbackSlices;
+      const fallbackBorderWidths = [frameWidth, frameWidth * 2, frameWidth, frameWidth * 2];
+      const borderWidths = normalizeConversationBubbleQuad(config?.borderWidths, fallbackBorderWidths, 8, 80);
       root.style.setProperty(properties.source, `url(${JSON.stringify(dataUrl)})`);
-      root.style.setProperty(properties.slice, `${clamp(Number(config?.slice) || 25, 10, 45)}%`);
-      root.style.setProperty(properties.width, `${clamp(Math.round(Number(config?.frameWidth) || 24), 8, 40)}px`);
+      root.style.setProperty(properties.slice, sliceInsets.map((value) => `${value}%`).join(' '));
+      root.style.setProperty(properties.width, `${frameWidth}px`);
+      root.style.setProperty(properties.borderWidths, borderWidths.map((value) => `${value}px`).join(' '));
+      root.style.setProperty(properties.minBlockSize, `${Math.ceil(borderWidths[0] + borderWidths[2])}px`);
       root.style.setProperty(properties.padding, `${clamp(Math.round(Number(config?.contentPadding) || 20), 12, 40)}px`);
     });
   };
