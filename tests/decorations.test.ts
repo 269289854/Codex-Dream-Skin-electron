@@ -88,14 +88,14 @@ describe('theme decorations', () => {
     expect(parseThemeProfile(gif).decorations.composerMelody).toMatchObject({ mode: 'gif', mediaWidth: 96 })
   })
 
-  it('resolves deterministic quality, balanced, and power-saving particle budgets', () => {
+  it('keeps every visible particle animated while applying rendering quality limits', () => {
     expect(PARTICLE_PERFORMANCE_MODES).toEqual(['quality', 'balanced', 'performance'])
     expect(resolveParticleRenderPolicy('quality', 24)).toMatchObject({ animatedIndexes: Array.from({ length: 24 }, (_, index) => index), targetFps: null, glowLimit: null, showTrails: true })
     expect(resolveParticleRenderPolicy('balanced', 1).animatedIndexes).toEqual([0])
     expect(resolveParticleRenderPolicy('balanced', 8).animatedIndexes).toEqual(Array.from({ length: 8 }, (_, index) => index))
-    expect(resolveParticleRenderPolicy('balanced', 20)).toMatchObject({ animatedIndexes: [0, 3, 5, 8, 11, 14, 16, 19], targetFps: 30, glowLimit: 6, showTrails: true })
-    expect(resolveParticleRenderPolicy('balanced', 24).animatedIndexes).toEqual([0, 3, 7, 10, 13, 16, 20, 23])
-    expect(resolveParticleRenderPolicy('performance', 20)).toMatchObject({ animatedIndexes: [0, 6, 13, 19], targetFps: 15, glowLimit: 0, showTrails: false })
+    expect(resolveParticleRenderPolicy('balanced', 20)).toMatchObject({ animatedIndexes: Array.from({ length: 20 }, (_, index) => index), targetFps: 30, glowLimit: 6, showTrails: true })
+    expect(resolveParticleRenderPolicy('balanced', 24).animatedIndexes).toEqual(Array.from({ length: 24 }, (_, index) => index))
+    expect(resolveParticleRenderPolicy('performance', 20)).toMatchObject({ animatedIndexes: Array.from({ length: 20 }, (_, index) => index), targetFps: 15, glowLimit: 0, showTrails: false })
   })
 
   it('resolves bounded per-cycle positions and keeps them visibly separated', () => {

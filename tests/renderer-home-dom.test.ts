@@ -798,7 +798,7 @@ describe('renderer home DOM adaptation', () => {
     expect(layer?.style.getPropertyValue('--dream-particle-negative-width')).toBe('-1016px')
   })
 
-  it('keeps every configured particle while applying deterministic performance budgets', () => {
+  it('keeps every configured particle animated while applying deterministic performance limits', () => {
     for (const mode of PARTICLE_PERFORMANCE_MODES) {
       for (const count of [1, 8, 20, 24]) {
         const window = createWindow()
@@ -812,6 +812,7 @@ describe('renderer home DOM adaptation', () => {
         const nodes = [...(layer?.querySelectorAll(':scope > .dream-particle') ?? [])] as HTMLElement[]
         const expected = resolveParticleRenderPolicy(mode, count)
         expect(nodes).toHaveLength(count)
+        expect(expected.animatedIndexes).toEqual(Array.from({ length: count }, (_, index) => index))
         expect(layer?.dataset.dreamPerformance).toBe(mode)
         expect(layer?.dataset.dreamTrails).toBe(expected.showTrails ? 'true' : 'false')
         expect(nodes.flatMap((node, index) => node.dataset.dreamAnimated === 'true' ? [index] : [])).toEqual(expected.animatedIndexes)
@@ -877,7 +878,7 @@ describe('renderer home DOM adaptation', () => {
     expect(previewParticleEffectsCss).not.toContain('animation: none !important')
   })
 
-  it('randomizes only animated particles per cycle and preserves positions across ensure and cleanup', () => {
+  it('randomizes animated particles per cycle and preserves positions across ensure and cleanup', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Particle-Cycles')
     Object.defineProperty(window.document, 'hasFocus', { configurable: true, value: () => true })
@@ -888,11 +889,11 @@ describe('renderer home DOM adaptation', () => {
     const layer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
     const nodes = [...(layer?.querySelectorAll(':scope > .dream-particle') ?? [])] as HTMLElement[]
     const animated = nodes[0]
-    const staticParticle = nodes[1]
-    if (!layer || !animated || !staticParticle) throw new Error('Particle cycle fixture is incomplete.')
+    const secondAnimated = nodes[1]
+    if (!layer || !animated || !secondAnimated) throw new Error('Particle cycle fixture is incomplete.')
     expect(animated.dataset.dreamAnimated).toBe('true')
-    expect(staticParticle.dataset.dreamAnimated).toBe('false')
-    const staticX = staticParticle.style.getPropertyValue('--dream-particle-x')
+    expect(nodes.every((node) => node.dataset.dreamAnimated === 'true')).toBe(true)
+    const secondX = secondAnimated.style.getPropertyValue('--dream-particle-x')
     const random = vi.spyOn(window.Math, 'random').mockReturnValue(.5)
 
     dispatchAnimationIteration(window, animated, 'dream-particle-rain')
@@ -905,8 +906,8 @@ describe('renderer home DOM adaptation', () => {
     dispatchAnimationIteration(window, animated, 'dream-particle-rain')
     expect(animated.style.getPropertyValue('--dream-particle-x')).toBe('62%')
     expect(random).toHaveBeenCalledTimes(1)
-    dispatchAnimationIteration(window, staticParticle, 'dream-particle-rain')
-    expect(staticParticle.style.getPropertyValue('--dream-particle-x')).toBe(staticX)
+    dispatchAnimationIteration(window, secondAnimated, 'dream-particle-twinkle')
+    expect(secondAnimated.style.getPropertyValue('--dream-particle-x')).toBe(secondX)
     expect(random).toHaveBeenCalledTimes(1)
 
     window.document.documentElement.setAttribute('data-dream-motion-paused', '')

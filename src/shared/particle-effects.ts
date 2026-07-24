@@ -53,12 +53,6 @@ const PARTICLE_PERFORMANCE_POLICIES: Readonly<Record<ParticlePerformanceMode, Om
   performance: { targetFps: 15, glowLimit: 0, showTrails: false }
 })
 
-const PARTICLE_ANIMATION_BUDGETS: Readonly<Record<ParticlePerformanceMode, number>> = Object.freeze({
-  quality: 24,
-  balanced: 8,
-  performance: 4
-})
-
 const PARTICLE_CYCLE_POSITION_POLICIES: Readonly<Record<ParticleEffect, ParticleCyclePositionPolicy>> = Object.freeze({
   twinkle: { x: { min: 5, max: 95, minDelta: 12 }, y: { min: 5, max: 91, minDelta: 12 } },
   float: { x: { min: 5, max: 95, minDelta: 12 } },
@@ -151,12 +145,7 @@ export function createSparkleParticles(options: SparkleLayoutOptions): SparklePa
 
 export function resolveParticleRenderPolicy(mode: ParticlePerformanceMode, count: number): ParticleRenderPolicy {
   const safeCount = Math.max(0, Math.min(24, Math.floor(count)))
-  const animatedCount = Math.min(safeCount, PARTICLE_ANIMATION_BUDGETS[mode])
-  const animatedIndexes = animatedCount === safeCount
-    ? Array.from({ length: safeCount }, (_, index) => index)
-    : Array.from({ length: animatedCount }, (_, index) => animatedCount === 1
-        ? 0
-        : Math.round(index * (safeCount - 1) / (animatedCount - 1)))
+  const animatedIndexes = Array.from({ length: safeCount }, (_, index) => index)
   return { mode, animatedIndexes, ...PARTICLE_PERFORMANCE_POLICIES[mode] }
 }
 
