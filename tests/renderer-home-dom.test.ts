@@ -97,6 +97,51 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
     </main>`
 }
 
+function layeredHomeFixture(projectName: string, voiceLabel = 'Try ChatGPT Voice'): string {
+  return `
+    <main class="main-surface">
+      <div role="main">
+        <div class="new-home-viewport">
+          <section class="new-home-content">
+            <div class="new-home-flow">
+              <div class="new-hero-row">
+                <div class="new-hero-host">
+                  <div class="new-heading-shell"><div class="heading-region flex-col">
+                    <button type="button" data-testid="home-icon">home icon</button>
+                    <div data-feature="game-source"><span class="group/title">我们该构建什么？</span></div>
+                  </div></div>
+                  <div data-home-ambient-suggestions="true">native suggestions</div>
+                </div>
+              </div>
+              <aside class="voice-promo">
+                <div class="voice-promo-shell">
+                  <div class="voice-promo-content"><span>${voiceLabel}</span><button type="button">Start Voice</button></div>
+                </div>
+              </aside>
+              <div class="new-composer-row">
+                <div class="project-bar"><div class="horizontal-scroll-fade-mask">
+                  <button type="button" data-composer-navigation-target="workspace-project">${projectName}</button>
+                </div></div>
+                <div class="composer-surface-chrome">
+                  <div class="ProseMirror" contenteditable="true"></div>
+                  <button type="button" aria-label="发送" class="size-token-button-composer rounded-full bg-token-foreground"><svg viewBox="0 0 20 20" width="20" height="20"><path d="M10 16V4"></path></svg></button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>`
+}
+
+function setElementRect<T extends object>(element: T | null, width: number, height: number): asserts element is T {
+  if (!element) throw new Error('Expected fixture element was not found.')
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({ x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) })
+  })
+}
+
 type RuntimeMediaConfig = {
   asset?: string
   kind: 'image' | 'video'
@@ -660,6 +705,48 @@ describe('renderer home DOM adaptation', () => {
     expect(proxy.textContent).toBe('Renamed-Project')
     expect(window.document.querySelectorAll('#codex-dream-skin-project-proxy')).toHaveLength(1)
     expect(window.document.querySelectorAll('#codex-dream-skin-actions')).toHaveLength(1)
+  })
+
+  it('marks the layered home flow and hides the Voice promo idempotently', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = layeredHomeFixture('Codex-Dream-Skin-electron')
+    const promo = window.document.querySelector('.voice-promo')
+    const promoContent = window.document.querySelector('.voice-promo-content')
+    setElementRect(promo, 720, 80)
+    setElementRect(promoContent, 720, 80)
+    promoContent.classList.add('dream-home-voice-promo')
+
+    inject(window, undefined, undefined, homeLayoutCss)
+
+    expect(window.document.querySelector('.new-home-flow')?.classList.contains('dream-home-flow')).toBe(true)
+    expect(window.document.querySelector('.new-hero-row')?.classList.contains('dream-layout-root')).toBe(true)
+    expect(promo?.classList.contains('dream-home-voice-promo')).toBe(true)
+    expect(promoContent.classList.contains('dream-home-voice-promo')).toBe(false)
+    expect(window.getComputedStyle(promo).display).toBe('none')
+
+    stateOf(window).ensure()
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('.dream-home-flow')).toHaveLength(1)
+    expect(window.document.querySelectorAll('.dream-home-voice-promo')).toHaveLength(1)
+    expect(promo?.classList.contains('dream-home-voice-promo')).toBe(true)
+  })
+
+  it('hides a Voice promo inserted after the initial home synchronization', async () => {
+    const window = createWindow()
+    window.document.body.innerHTML = layeredHomeFixture('Codex-Dream-Skin-electron', '')
+    window.document.querySelector('.voice-promo')?.remove()
+    inject(window, undefined, undefined, homeLayoutCss)
+
+    const promo = window.document.createElement('aside')
+    promo.className = 'voice-promo'
+    promo.innerHTML = '<span>试用 ChatGPT 语音</span><button type="button">开始语音</button>'
+    setElementRect(promo, 720, 80)
+    window.document.querySelector('.new-home-flow')?.appendChild(promo)
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
+
+    expect(promo.classList.contains('dream-home-voice-promo')).toBe(true)
+    expect(window.getComputedStyle(promo).display).toBe('none')
+    expect(window.document.querySelectorAll('.dream-home-voice-promo')).toHaveLength(1)
   })
 
   it('renders one configurable composer badge and removes it during cleanup', () => {
@@ -1938,17 +2025,24 @@ describe('renderer home DOM adaptation', () => {
 
   it('cleans the custom layout when the page stops matching the home contract', () => {
     const window = createWindow()
-    window.document.body.innerHTML = homeFixture('Codex-Dream-Skin-electron')
-    inject(window)
+    window.document.body.innerHTML = layeredHomeFixture('Codex-Dream-Skin-electron')
+    const flow = window.document.querySelector('.new-home-flow')
+    const promo = window.document.querySelector('.voice-promo')
+    const composer = window.document.querySelector('.composer-surface-chrome')
+    setElementRect(promo, 720, 80)
+    inject(window, undefined, undefined, homeLayoutCss)
 
-    window.document.querySelector('.composer-surface-chrome')?.remove()
+    window.document.querySelector('[data-feature="game-source"]')?.removeAttribute('data-feature')
     stateOf(window).ensure()
 
     expect(window.document.querySelector('.dream-home')).toBeNull()
+    expect(flow?.classList.contains('dream-home-flow')).toBe(false)
+    expect(promo?.classList.contains('dream-home-voice-promo')).toBe(false)
     expect(window.document.querySelector('.dream-layout-root')).toBeNull()
     expect(window.document.querySelector('.dream-native-suggestions')).toBeNull()
     expect(window.document.getElementById('codex-dream-skin-project-proxy')).toBeNull()
     expect(window.document.getElementById('codex-dream-skin-actions')).toBeNull()
+    expect(composer?.classList.contains('dream-composer')).toBe(true)
   })
 
   it('leaves non-home and incomplete DOM structures untouched', () => {
@@ -1962,6 +2056,8 @@ describe('renderer home DOM adaptation', () => {
     inject(window)
 
     expect(window.document.querySelector('.dream-home')).toBeNull()
+    expect(window.document.querySelector('.dream-home-flow')).toBeNull()
+    expect(window.document.querySelector('.dream-home-voice-promo')).toBeNull()
     expect(window.document.querySelector('.dream-heading')).toBeNull()
     expect(window.document.getElementById('codex-dream-skin-actions')).toBeNull()
   })
@@ -2008,6 +2104,8 @@ describe('renderer home DOM adaptation', () => {
 
     expect(window.document.documentElement.classList.contains('codex-dream-skin')).toBe(false)
     expect(window.document.querySelector('.dream-home')).toBeNull()
+    expect(window.document.querySelector('.dream-home-flow')).toBeNull()
+    expect(window.document.querySelector('.dream-home-voice-promo')).toBeNull()
     expect(window.document.querySelector('.dream-heading')).toBeNull()
     expect(window.document.querySelector('.dream-native-suggestions')).toBeNull()
     expect(window.document.getElementById('codex-dream-skin-project-proxy')).toBeNull()

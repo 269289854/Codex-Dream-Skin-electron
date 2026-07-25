@@ -1417,6 +1417,16 @@
     return candidate !== heading && candidate instanceof HTMLElement && isVisible(candidate) ? candidate : null;
   };
 
+  const findHomeFlow = ({ home, composerSurface }, hero) => {
+    const flow = hero?.parentElement;
+    return flow instanceof HTMLElement &&
+      home.contains(flow) &&
+      flow.contains(hero) &&
+      flow.contains(composerSurface)
+      ? flow
+      : null;
+  };
+
   const populateComposer = (prompt) => {
     const home = document.querySelector(".dream-home") || document;
     const composer = findComposer(home) || findComposer(document);
@@ -1502,6 +1512,39 @@
         if (box.width >= Math.min(520, homeBox.width * 0.55) && box.height >= 48 && box.height <= 150) {
           return candidate;
         }
+        candidate = candidate.parentElement;
+      }
+    }
+    return null;
+  };
+
+  const findVoicePromo = (home) => {
+    const marked = home.querySelector(".dream-home-voice-promo");
+    if (marked instanceof HTMLElement) {
+      const aside = marked.closest("aside");
+      return aside instanceof HTMLElement && home.contains(aside) ? aside : marked;
+    }
+    const labels = new Set([
+      "try chatgpt voice",
+      "start voice",
+      "试用 chatgpt 语音",
+      "体验 chatgpt 语音",
+      "开始语音",
+      "启动语音",
+      "試用 chatgpt 語音",
+      "開始語音"
+    ]);
+    const homeBox = home.getBoundingClientRect();
+    const minimumWidth = Math.min(420, homeBox.width * 0.45);
+    const matches = [...home.querySelectorAll("button, [role=button], h1, h2, h3, p, span, div")]
+      .filter((node) => labels.has(node.textContent?.replace(/\s+/g, " ").trim().toLowerCase()));
+    for (const match of matches) {
+      const aside = match.closest("aside");
+      if (aside instanceof HTMLElement && home.contains(aside)) return aside;
+      let candidate = match;
+      for (let depth = 0; candidate && candidate !== home && depth < 7; depth += 1) {
+        const box = candidate.getBoundingClientRect();
+        if (box.width >= minimumWidth && box.height >= 48 && box.height <= 180) return candidate;
         candidate = candidate.parentElement;
       }
     }
@@ -1742,6 +1785,8 @@
     });
     document.querySelectorAll(".dream-heading").forEach(clearHeading);
     markCurrentNode("[role=main].dream-home", null, "dream-home");
+    markCurrentNode(".dream-home-flow", null, "dream-home-flow");
+    markCurrentNode(".dream-home-voice-promo", null, "dream-home-voice-promo");
     markCurrentNode(".dream-hero", null, "dream-hero");
     markCurrentNode(".dream-layout-root", null, "dream-layout-root");
     markCurrentNode(".dream-project-bar", null, "dream-project-bar");
@@ -1776,17 +1821,21 @@
     const context = findHomeContext();
     const heading = context ? ensureHeading(context) : null;
     const hero = context && heading ? findHero(context) : null;
-    const home = hero ? context.home : null;
+    const flow = context && hero ? findHomeFlow(context, hero) : null;
+    const home = flow ? context.home : null;
     markCurrentNode("[role=main].dream-home", home, "dream-home");
     shellMain?.classList.toggle("dream-home-shell", Boolean(home));
 
-    if (home && context && hero) {
+    if (home && context && hero && flow) {
+      markCurrentNode(".dream-home-flow", flow, "dream-home-flow");
       markCurrentNode(".dream-hero", hero, "dream-hero");
       markCurrentNode(".dream-layout-root", hero, "dream-layout-root");
       const actionGrid = ensureActionGrid(hero);
       fitHeadingDensity(heading, hero, actionGrid);
       const quickBanner = findQuickModeBanner(home);
       markCurrentNode(".dream-quick-mode-banner", quickBanner, "dream-quick-mode-banner");
+      const voicePromo = findVoicePromo(home);
+      markCurrentNode(".dream-home-voice-promo", voicePromo, "dream-home-voice-promo");
 
       const projectBar = context.projectButton?.closest(".horizontal-scroll-fade-mask")?.parentElement ||
         context.projectButton?.parentElement || null;
@@ -1888,6 +1937,8 @@
     document.documentElement?.style.removeProperty("--dream-art");
     document.querySelectorAll(".dream-home").forEach((node) => node.classList.remove("dream-home"));
     document.querySelectorAll(".dream-home-shell").forEach((node) => node.classList.remove("dream-home-shell"));
+    document.querySelectorAll(".dream-home-flow").forEach((node) => node.classList.remove("dream-home-flow"));
+    document.querySelectorAll(".dream-home-voice-promo").forEach((node) => node.classList.remove("dream-home-voice-promo"));
     document.querySelectorAll(".dream-hero").forEach((node) => node.classList.remove("dream-hero"));
     document.querySelectorAll(".dream-layout-root").forEach((node) => node.classList.remove("dream-layout-root"));
     document.querySelectorAll(".dream-heading").forEach(clearHeading);
@@ -2006,6 +2057,9 @@
     ensureComposerBadge(composer);
     ensureComposerMelody(composer);
     ensureComposerSendIcon(composer);
+    const home = document.querySelector("[role=main].dream-home");
+    const voicePromo = home instanceof HTMLElement ? findVoicePromo(home) : null;
+    markCurrentNode(".dream-home-voice-promo", voicePromo, "dream-home-voice-promo");
     ensureConversationBubbles();
     ensureToolActivityBubbles();
   };
