@@ -4,6 +4,8 @@ import { WebSocketServer } from 'ws'
 import { describe, expect, it } from 'vitest'
 import { CdpWatcher, isSafeCdpWebSocketUrl, isThemeCdpTargetUrl, MAX_THEME_PAYLOAD_BYTES } from '../src/main/cdp-watcher'
 
+const runtimeVersion = `studio-${'a'.repeat(24)}`
+
 describe('CDP endpoint validation', () => {
   it('only accepts the expected loopback endpoint and identity', () => {
     expect(isSafeCdpWebSocketUrl('ws://127.0.0.1:9335/devtools/page/page-123', 9335, 'page', 'page-123')).toBe(true)
@@ -16,8 +18,9 @@ describe('CDP endpoint validation', () => {
 
   it('allows multi-font runtime payloads while retaining the size guard', () => {
     const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
-    watcher.setPayload('x'.repeat(20_000_001))
-    expect(() => watcher.setPayload('x'.repeat(MAX_THEME_PAYLOAD_BYTES + 1))).toThrow('Theme payload is invalid.')
+    watcher.setPayload('x'.repeat(20_000_001), runtimeVersion)
+    expect(() => watcher.setPayload('x'.repeat(MAX_THEME_PAYLOAD_BYTES + 1), runtimeVersion)).toThrow('Theme payload is invalid.')
+    expect(() => watcher.setPayload('true', 'invalid')).toThrow('Theme payload is invalid.')
   })
 })
 
@@ -84,7 +87,7 @@ describe('CDP media binding', () => {
       await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
       port = (server.address() as AddressInfo).port
       const watcher = new CdpWatcher(port, browserId, () => undefined, () => undefined)
-      watcher.setPayload('true')
+      watcher.setPayload('true', runtimeVersion)
       watcher.setMediaBindings([
         { role: 'hero', path: 'C:\\theme\\hero.mp4', mimeType: 'video/mp4' },
         { role: 'polaroid', path: 'C:\\theme\\polaroid.webm', mimeType: 'video/webm' },
@@ -95,6 +98,77 @@ describe('CDP media binding', () => {
       expect(boundFiles.map((binding) => binding.files[0])).toEqual(['C:\\theme\\hero.mp4', 'C:\\theme\\polaroid.webm', 'C:\\theme\\window.mp4'])
       expect(boundFiles[0]!.nodeId - 1).toBe(boundFiles[1]!.nodeId - 2)
       expect(boundFiles[0]!.nodeId - 1).toBe(boundFiles[2]!.nodeId - 3)
+    } finally {
+      for (const client of webSockets.clients) client.terminate()
+      await new Promise<void>((resolve) => webSockets.close(() => resolve()))
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+})
+
+describe('CDP runtime version recovery', () => {
+  it('reinjects when either runtime state or the installed style is stale', async () => {
+    let port = 0
+    const browserId = 'browser-1'
+    const targetId = 'page-1'
+    let stateVersion: string | null = 'studio-old'
+    let styleVersion: string | null = 'studio-old'
+    let injections = 0
+    const verificationExpressions: string[] = []
+    const errors: Error[] = []
+    const server = createServer((request, response) => {
+      response.setHeader('content-type', 'application/json')
+      if (request.url === '/json/version') {
+        response.end(JSON.stringify({ webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/browser/${browserId}` }))
+      } else if (request.url === '/json/list') {
+        response.end(JSON.stringify([{ id: targetId, type: 'page', url: 'app://-/index.html', webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/page/${targetId}` }]))
+      } else {
+        response.statusCode = 404
+        response.end('{}')
+      }
+    })
+    const webSockets = new WebSocketServer({ server })
+    webSockets.on('connection', (socket) => {
+      socket.on('message', (data) => {
+        const command = JSON.parse(data.toString()) as { id: number; method: string; params: Record<string, unknown> }
+        const expression = String(command.params.expression ?? '')
+        let value = true
+        if (command.method === 'Runtime.evaluate' && expression === 'payload-script') {
+          injections += 1
+          stateVersion = runtimeVersion
+          styleVersion = runtimeVersion
+        } else if (command.method === 'Runtime.evaluate' && expression.includes('__CODEX_DREAM_SKIN_STATE__')) {
+          verificationExpressions.push(expression)
+          value = stateVersion === runtimeVersion && styleVersion === runtimeVersion
+        }
+        socket.send(JSON.stringify({ id: command.id, result: { result: { value } } }))
+      })
+    })
+
+    try {
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+      port = (server.address() as AddressInfo).port
+      const watcher = new CdpWatcher(port, browserId, () => undefined, (error) => errors.push(error))
+      watcher.setPayload('payload-script', runtimeVersion)
+      const tick = (watcher as unknown as { tick(): Promise<void> }).tick.bind(watcher)
+
+      await tick()
+      expect(injections).toBe(1)
+      await tick()
+      expect(injections).toBe(1)
+
+      stateVersion = null
+      await tick()
+      expect(injections).toBe(2)
+
+      styleVersion = 'studio-old'
+      await tick()
+      expect(injections).toBe(3)
+      expect(errors).toEqual([])
+      expect(verificationExpressions.every((expression) =>
+        expression.includes(`state?.version === "${runtimeVersion}"`) &&
+        expression.includes(`style?.dataset?.dreamVersion === "${runtimeVersion}"`)
+      )).toBe(true)
     } finally {
       for (const client of webSockets.clients) client.terminate()
       await new Promise<void>((resolve) => webSockets.close(() => resolve()))

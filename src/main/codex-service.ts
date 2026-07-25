@@ -20,6 +20,7 @@ import type { ProfileStore } from './profile-store'
 import { buildRuntimeFontCss } from './theme-fonts'
 
 interface StartResult { port: number; browserId: string; version: string }
+interface RuntimePayload { script: string; version: string }
 const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
 
 export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<string, string>): string {
@@ -55,6 +56,7 @@ export class CodexService {
   constructor(
     private readonly store: ProfileStore,
     private readonly resourcesRoot: string,
+    private readonly studioVersion: string,
     private readonly onStatus: (status: RuntimeStatus) => void
   ) {}
 
@@ -98,7 +100,7 @@ export class CodexService {
       this.activeThemeId = session.themeId
       this.patch('injecting', '正在恢复上次主题会话')
       const payload = await this.buildPayload(session.themeId)
-      await this.writeRuntimePayload(payload)
+      await this.writeRuntimePayload(payload.script)
       await this.replaceWatcher(session.browserId, payload)
       this.patch('active', '已恢复上次主题会话')
     } catch (reason) {
@@ -123,18 +125,21 @@ export class CodexService {
   }
 
   async installTheme(themeId: string): Promise<RuntimeStatus> {
-    return this.enqueueOperation(() => this.installThemeInternal(themeId))
+    return this.enqueueOperation(async () => {
+      await this.installThemeInternal(themeId)
+      return this.getStatus()
+    })
   }
 
-  private async installThemeInternal(themeId: string): Promise<RuntimeStatus> {
+  private async installThemeInternal(themeId: string): Promise<RuntimePayload> {
     this.patch('installing', '正在生成并安装主题配置')
     try {
       const payload = await this.buildPayload(themeId)
-      await this.writeRuntimePayload(payload)
+      await this.writeRuntimePayload(payload.script)
       await this.bridge('ApplyConfig', ['-ThemePath', join(this.store.themesRoot, themeId, 'theme.json')])
       this.status.backupAvailable = true
       this.patch('ready', '主题配置已安装')
-      return this.getStatus()
+      return payload
     } catch (reason) { throw this.fail(reason) }
   }
 
@@ -144,7 +149,7 @@ export class CodexService {
 
   private async startInternal(themeId: string, restartExisting: boolean): Promise<RuntimeStatus> {
     try {
-      await this.installThemeInternal(themeId)
+      const payload = await this.installThemeInternal(themeId)
       this.patch('starting', '正在启动 Codex 本地主题会话')
       const args = ['-Port', String(this.status.port)]
       if (restartExisting) args.push('-RestartExisting')
@@ -152,7 +157,7 @@ export class CodexService {
       this.status.port = result.port
       this.status.codexVersion = result.version
       this.activeThemeId = themeId
-      const snapshot = await this.replaceWatcher(result.browserId, await this.readRuntimePayload())
+      const snapshot = await this.replaceWatcher(result.browserId, payload)
       await this.writeSession(themeId, result.browserId)
       this.patch('active', `主题已注入 ${snapshot.targetCount} 个 Codex 页面`)
       return this.getStatus()
@@ -168,8 +173,8 @@ export class CodexService {
     try {
       this.patch('injecting', '正在重新编译并注入主题')
       const payload = await this.buildPayload(themeId)
-      await this.writeRuntimePayload(payload)
-      this.watcher.setPayload(payload)
+      await this.writeRuntimePayload(payload.script)
+      this.watcher.setPayload(payload.script, payload.version)
       this.watcher.setMediaBindings(await this.store.getRuntimeMediaBindings(themeId))
       const snapshot = await this.watcher.inject()
       this.patch('active', `主题已重新注入 ${snapshot.targetCount} 个页面`)
@@ -185,7 +190,13 @@ export class CodexService {
     if (!this.watcher) throw this.fail(new Error('当前没有活动的 Codex 主题会话。'))
     try {
       const snapshot = await this.watcher.verify()
-      this.patch(snapshot.connected ? 'active' : 'error', snapshot.connected ? `验证通过，共 ${snapshot.targetCount} 个页面` : '主题验证失败')
+      if (snapshot.connected) {
+        this.patch('active', `验证通过，共 ${snapshot.targetCount} 个页面`)
+        return this.getStatus()
+      }
+      this.patch('injecting', '检测到旧版或不完整主题，正在自动修复')
+      const repaired = await this.watcher.inject()
+      this.patch('active', `主题已自动修复，共 ${repaired.targetCount} 个页面`)
       return this.getStatus()
     } catch (reason) { throw this.fail(reason) }
   }
@@ -220,7 +231,7 @@ export class CodexService {
     } catch (reason) { throw this.fail(reason) }
   }
 
-  private async replaceWatcher(browserId: string, payload: string): Promise<CdpSnapshot> {
+  private async replaceWatcher(browserId: string, payload: RuntimePayload): Promise<CdpSnapshot> {
     if (this.watcher) await this.watcher.stop(true)
     this.patch('injecting', '已连接 Codex，正在注入主题')
     this.watcher = new CdpWatcher(this.status.port, browserId,
@@ -236,12 +247,12 @@ export class CodexService {
         void this.recoverActiveSession()
       }
     )
-    this.watcher.setPayload(payload)
+    this.watcher.setPayload(payload.script, payload.version)
     if (this.activeThemeId) this.watcher.setMediaBindings(await this.store.getRuntimeMediaBindings(this.activeThemeId))
     return await this.watcher.start()
   }
 
-  private async buildPayload(themeId: string): Promise<string> {
+  private async buildPayload(themeId: string): Promise<RuntimePayload> {
     const [profile, compiled, baseCss, homeLayoutCss, particleEffectsCss, renderer] = await Promise.all([
       this.store.get(themeId), this.store.compile(themeId),
       readFile(join(this.resourcesRoot, 'dream-skin.css'), 'utf8'),
@@ -311,12 +322,13 @@ export class CodexService {
     }
     const art = hero ?? TRANSPARENT_PNG
     const serializedConfig = JSON.stringify(runtimeConfig)
-    const runtimeVersion = `studio-${createHash('sha256').update(renderer).update(css).update(art).update(serializedConfig).digest('hex').slice(0, 24)}`
-    return renderer
+    const runtimeVersion = `studio-${createHash('sha256').update(this.studioVersion).update('\0').update(renderer).update(css).update(art).update(serializedConfig).digest('hex').slice(0, 24)}`
+    const script = renderer
       .replace('__DREAM_VERSION_JSON__', JSON.stringify(runtimeVersion))
       .replace('__DREAM_CSS_JSON__', JSON.stringify(css))
       .replace('__DREAM_ART_JSON__', JSON.stringify(art))
       .replace('__DREAM_CONFIG_JSON__', serializedConfig)
+    return { script, version: runtimeVersion }
   }
 
   private async writeRuntimePayload(payload: string): Promise<void> {
@@ -337,8 +349,6 @@ export class CodexService {
       throw error
     }
   }
-  private readRuntimePayload(): Promise<string> { return readFile(join(this.store.root, 'runtime', 'payload.js'), 'utf8') }
-
   private async recoverActiveSession(): Promise<void> {
     if (this.recovering || !this.activeThemeId) return
     this.recovering = true
@@ -353,7 +363,7 @@ export class CodexService {
       this.patch('starting', '正在恢复 Codex 主题会话')
       const result = await this.bridge<StartResult>('Start', ['-Port', String(this.status.port), '-RestartExisting'], 65_000)
       const payload = await this.buildPayload(themeId)
-      await this.writeRuntimePayload(payload)
+      await this.writeRuntimePayload(payload.script)
       await this.replaceWatcher(result.browserId, payload)
       await this.writeSession(themeId, result.browserId)
       this.patch('active', 'Codex 主题会话已自动恢复')

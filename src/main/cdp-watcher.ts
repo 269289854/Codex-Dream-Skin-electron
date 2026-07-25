@@ -11,6 +11,7 @@ export interface CdpMediaBinding { role: 'hero' | 'polaroid' | 'conversationBack
 type CdpCommand = (method: string, params: Record<string, unknown>) => Promise<unknown>
 
 const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin", "dream-window-background-active"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); document.getElementById("codex-dream-skin-window-background")?.remove(); return true; })()'
+const RUNTIME_VERSION_PATTERN = /^studio-[0-9a-f]{24}$/
 
 export function isThemeCdpTargetUrl(value: string): boolean {
   try {
@@ -39,6 +40,7 @@ export interface CdpSnapshot {
 export class CdpWatcher {
   private timer: NodeJS.Timeout | null = null
   private payload = ''
+  private expectedVersion = ''
   private mediaBindings: CdpMediaBinding[] = []
   private busy = false
 
@@ -52,9 +54,12 @@ export class CdpWatcher {
     if (!/^[A-Za-z0-9._-]{1,200}$/.test(browserId)) throw new Error('CDP browser identity is invalid.')
   }
 
-  setPayload(payload: string): void {
-    if (!payload || Buffer.byteLength(payload, 'utf8') > MAX_THEME_PAYLOAD_BYTES) throw new Error('Theme payload is invalid.')
+  setPayload(payload: string, expectedVersion: string): void {
+    if (!payload || Buffer.byteLength(payload, 'utf8') > MAX_THEME_PAYLOAD_BYTES || !RUNTIME_VERSION_PATTERN.test(expectedVersion)) {
+      throw new Error('Theme payload is invalid.')
+    }
     this.payload = payload
+    this.expectedVersion = expectedVersion
   }
 
   setMediaBindings(bindings: CdpMediaBinding[]): void {
@@ -62,7 +67,7 @@ export class CdpWatcher {
   }
 
   async start(): Promise<CdpSnapshot> {
-    if (!this.payload) throw new Error('Theme payload is not ready.')
+    if (!this.payload || !this.expectedVersion) throw new Error('Theme payload is not ready.')
     await this.cleanupExcludedTargets()
     const snapshot = await this.inject()
     if (!this.timer) this.timer = setInterval(() => void this.tick(), 2500)
@@ -82,8 +87,9 @@ export class CdpWatcher {
 
   async verify(): Promise<CdpSnapshot> {
     const targets = await this.targets()
+    const expectedVersion = JSON.stringify(this.expectedVersion)
     const results = await Promise.all(targets.map((target) => this.evaluate(target,
-      'Boolean(document.documentElement.classList.contains("codex-dream-skin") && document.getElementById("codex-dream-skin-style"))'
+      `(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; const style = document.getElementById("codex-dream-skin-style"); return Boolean(document.documentElement.classList.contains("codex-dream-skin") && state?.version === ${expectedVersion} && style?.dataset?.dreamVersion === ${expectedVersion}); })()`
     )))
     const connected = targets.length > 0 && results.every(Boolean)
     const snapshot = { connected, targetCount: targets.length }

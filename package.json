@@ -1,6 +1,6 @@
 {
   "name": "codex-dream-skin-studio",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Windows visual theme editor for Codex desktop",
   "main": "dist-electron/main/index.js",
   "author": "Codex Dream Skin contributors",
@@ -93,6 +93,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
+      "include": "build/installer.nsh",
       "installerIcon": "resources/windows/codex-dream-skin.ico",
       "uninstallerIcon": "resources/windows/codex-dream-skin.ico",
       "installerHeaderIcon": "resources/windows/codex-dream-skin.ico"

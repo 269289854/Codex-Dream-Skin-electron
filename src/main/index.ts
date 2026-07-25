@@ -8,6 +8,7 @@ import electronUpdater from 'electron-updater'
 import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
 import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
+import { createStudioInstanceData, resolveStudioInstanceAction } from './app-lifecycle'
 import { captureIpcResult } from '../shared/ipc-result'
 import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
 import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
@@ -22,8 +23,10 @@ let tray: Tray | null = null
 let trayIcon: NativeImage | null = null
 let appIconPath = ''
 let quitting = false
+let updatedVersionRelaunching = false
 const operationControllers = new Map<string, AbortController>()
-const hasSingleInstanceLock = app.requestSingleInstanceLock()
+const appVersion = app.getVersion()
+const hasSingleInstanceLock = app.requestSingleInstanceLock(createStudioInstanceData(appVersion))
 protocol.registerSchemesAsPrivileged([{ scheme: 'studio-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 function showWindow(): void {
@@ -33,6 +36,17 @@ function showWindow(): void {
 
 function quitStudio(): void {
   quitting = true
+  app.quit()
+}
+
+function relaunchForUpdatedVersion(): void {
+  if (updatedVersionRelaunching) return
+  updatedVersionRelaunching = true
+  quitting = true
+  appUpdateService?.stop()
+  tray?.destroy()
+  tray = null
+  app.relaunch({ execPath: process.execPath })
   app.quit()
 }
 
@@ -285,7 +299,11 @@ function createWindow(): void {
 if (!hasSingleInstanceLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => showWindow())
+  app.on('second-instance', (_event, _argv, _workingDirectory, additionalData) => {
+    const action = resolveStudioInstanceAction(appVersion, app.isPackaged, additionalData, updatedVersionRelaunching)
+    if (action === 'relaunch') relaunchForUpdatedVersion()
+    else if (action === 'show') showWindow()
+  })
 
   app.whenReady().then(async () => {
     if (process.platform !== 'win32') throw new Error('Codex Dream Skin Studio only supports Windows.')
@@ -304,7 +322,7 @@ if (!hasSingleInstanceLock) {
     })
     await store.initialize()
     protocol.handle('studio-media', async (request) => handleStudioMediaRequest(request))
-    codexService = new CodexService(store, resourcesRoot, (status) => {
+    codexService = new CodexService(store, resourcesRoot, appVersion, (status) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
       try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
     })
