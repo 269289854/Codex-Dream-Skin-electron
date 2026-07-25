@@ -50,7 +50,7 @@ describe('renderer injection template', () => {
     expect(layoutCss).toContain('.dream-home .dream-home-voice-promo')
     expect(layoutCss).toMatch(/main\.main-surface\.dream-home-shell \.app-shell-main-content-top-fade\s*\{[^}]*display:\s*none !important/)
     expect(layoutCss).toMatch(/\.dream-home-flow\s*\{[^}]*align-items:\s*stretch !important/)
-    expect(layoutCss).toMatch(/\.dream-home-flow\s*\{[^}]*padding:\s*0 0 20px !important/)
+    expect(layoutCss).toMatch(/\.dream-home-flow\s*\{[^}]*padding:\s*15px 0 20px !important/)
     expect(layoutCss).toMatch(/\.dream-home-flow > \.dream-layout-root\s*\{[^}]*align-self:\s*center !important/)
     expect(layoutCss).toContain('flex: 0 0 390px !important')
     expect(layoutCss).toContain('@media (min-width: 901px) and (max-height: 760px)')

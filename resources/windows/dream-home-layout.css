@@ -33,7 +33,7 @@
   align-items: stretch !important;
   justify-content: flex-start !important;
   gap: 16px !important;
-  padding: 0 0 20px !important;
+  padding: 15px 0 20px !important;
   box-sizing: border-box;
 }
 
