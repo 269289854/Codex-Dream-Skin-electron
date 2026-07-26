@@ -96,6 +96,29 @@ describe('preview quick editor', () => {
     expect(container.querySelector('[data-paint-token="sidebarProjectRowSelected"]')).toBeNull()
   })
 
+  it('switches account menu rows between independent normal, hover, and selected controls', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    renderEditor(PREVIEW_TARGETS['account-menu-usage'], profile)
+
+    expect([...container.querySelectorAll('[role="dialog"] .state-tabs button')].map((button) => button.textContent?.trim())).toEqual(['普通', '悬停', '选中'])
+    expect(container.querySelector('[data-color-token="accountMenuUsageText"]')).not.toBeNull()
+    expect(container.querySelector('[data-paint-token="accountMenuUsageBackground"]')).not.toBeNull()
+    expect(container.querySelector('[data-font-slot="accountMenuUsage"]')).not.toBeNull()
+    expect(container.querySelector('[data-icon-slot="accountMenuUsage"]')).not.toBeNull()
+
+    const hover = [...container.querySelectorAll<HTMLButtonElement>('.state-tabs button')].find((button) => button.textContent === '悬停')
+    if (!hover) throw new Error('Account menu hover state is missing.')
+    act(() => hover.click())
+    expect(container.querySelector('[data-color-token="accountMenuUsageHoverText"]')).not.toBeNull()
+    expect(container.querySelector('[data-paint-token="accountMenuUsageHoverBackground"]')).not.toBeNull()
+
+    const selected = [...container.querySelectorAll<HTMLButtonElement>('.state-tabs button')].find((button) => button.textContent === '选中')
+    if (!selected) throw new Error('Account menu selected state is missing.')
+    act(() => selected.click())
+    expect(container.querySelector('[data-color-token="accountMenuUsageSelectedText"]')).not.toBeNull()
+    expect(container.querySelector('[data-paint-token="accountMenuUsageSelectedBackground"]')).not.toBeNull()
+  })
+
   it('edits user and Codex bubble paints independently and toggles bubble visibility', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     renderEditor(PREVIEW_TARGETS['conversation-user-message'], profile)

@@ -20,6 +20,10 @@ describe('renderer injection template', () => {
     expect(template).toContain('themeConfig?.sidebarNavigation')
     expect(template).toContain('data-dream-sidebar-nav')
     expect(template).toContain('restoreSidebarNav')
+    expect(template).toContain('themeConfig?.accountMenu')
+    expect(template).toContain('ensureAccountMenu()')
+    expect(template).toContain('clearAccountMenu()')
+    expect(template).toContain('data-dream-account-menu-item')
     expect(template).toContain('[data-local-conversation-item-target-ids]')
     expect(template).toContain('ensureToolActivityBubbles()')
     expect(template).toContain('clearToolActivityBubbles()')
@@ -72,6 +76,25 @@ describe('renderer injection template', () => {
     expect(css).not.toContain('.dream-home .dream-hero')
     expect(css).not.toContain('.dream-action-grid')
     expect(css).not.toContain('.dream-home .dream-composer')
+  })
+
+  it('maps native menu highlighting to hover colors instead of selected colors', async () => {
+    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const baseRule = css.match(/\.dream-account-menu \[data-dream-account-menu-item\]\s*\{[^}]+\}/)?.[0]
+    const hoverRule = css.match(/\[data-dream-account-menu-item\]:is\(:hover, \[data-highlighted\]\)\s*\{[^}]+\}/)?.[0]
+    const selectedRule = css.match(/\[data-dream-account-menu-item\]:is\(\[aria-selected="true"\], \[data-state="checked"\], \[data-state="open"\], :focus-visible\)\s*,?[\s\S]*?\{[^}]+\}/)?.[0]
+    expect(baseRule).not.toContain('--dream-account-row-hover-text:')
+    expect(baseRule).not.toContain('--dream-account-row-hover-background:')
+    expect(hoverRule).toContain('var(--dream-account-row-hover-text, var(--dream-global-text))')
+    expect(hoverRule).toContain('var(--dream-account-row-hover-background, transparent)')
+    expect(selectedRule).toContain('var(--dream-account-row-selected-text, var(--dream-global-text))')
+    expect(selectedRule).not.toContain('[data-highlighted]')
+  })
+
+  it('keeps an open sidebar menu trigger fixed while its popover is anchored', async () => {
+    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const triggerRule = css.match(/aside\.app-shell-left-panel button\[aria-haspopup="menu"\]\[aria-expanded="true"\]\s*\{[^}]+\}/)?.[0]
+    expect(triggerRule).toContain('transform: none !important')
   })
 
   it('reports the watcher injection count after startup', async () => {

@@ -80,6 +80,13 @@ export const PREVIEW_TARGETS = {
   'sidebar-footer': styleTarget('侧边栏页脚', 'sidebar', { colors: ['sidebarFooterText'], paints: ['sidebarFooter'], fontSlot: 'ui' }),
   'sidebar-avatar': styleTarget('头像', 'sidebar', { colors: ['sidebarAvatarText'], paints: ['sidebarAvatar'], fontSlot: 'ui' }),
   'icon-sidebar-mode': styleTarget('侧边栏模式图标', 'sidebar', { colors: ['sidebarModeIcon'], paints: ['sidebarModeBadge'], iconSlot: 'sidebarMode' }),
+  'account-menu-surface': styleTarget('账号菜单', 'account', { colors: ['accountMenuBorder'], paints: ['accountMenuSurface'] }),
+  'account-menu-account': styleTarget('账号信息', 'account', { colors: ['accountMenuAccountText', 'accountMenuAccountHoverText', 'accountMenuAccountSelectedText'], paints: ['accountMenuAccountBackground', 'accountMenuAccountHoverBackground', 'accountMenuAccountSelectedBackground'], iconSlot: 'accountMenuAccount', fontSlot: 'accountMenuAccount' }),
+  'account-menu-team': styleTarget('团队', 'account', { colors: ['accountMenuTeamText', 'accountMenuTeamHoverText', 'accountMenuTeamSelectedText'], paints: ['accountMenuTeamBackground', 'accountMenuTeamHoverBackground', 'accountMenuTeamSelectedBackground'], iconSlot: 'accountMenuTeam', fontSlot: 'accountMenuTeam' }),
+  'account-menu-usage': styleTarget('剩余用量', 'account', { colors: ['accountMenuUsageText', 'accountMenuUsageHoverText', 'accountMenuUsageSelectedText'], paints: ['accountMenuUsageBackground', 'accountMenuUsageHoverBackground', 'accountMenuUsageSelectedBackground'], iconSlot: 'accountMenuUsage', fontSlot: 'accountMenuUsage' }),
+  'account-menu-hide-pet': styleTarget('隐藏宠物', 'account', { colors: ['accountMenuHidePetText', 'accountMenuHidePetHoverText', 'accountMenuHidePetSelectedText'], paints: ['accountMenuHidePetBackground', 'accountMenuHidePetHoverBackground', 'accountMenuHidePetSelectedBackground'], iconSlot: 'accountMenuHidePet', fontSlot: 'accountMenuHidePet' }),
+  'account-menu-settings': styleTarget('设置', 'account', { colors: ['accountMenuSettingsText', 'accountMenuSettingsHoverText', 'accountMenuSettingsSelectedText'], paints: ['accountMenuSettingsBackground', 'accountMenuSettingsHoverBackground', 'accountMenuSettingsSelectedBackground'], iconSlot: 'accountMenuSettings', fontSlot: 'accountMenuSettings' }),
+  'account-menu-logout': styleTarget('退出登录', 'account', { colors: ['accountMenuLogoutText', 'accountMenuLogoutHoverText', 'accountMenuLogoutSelectedText'], paints: ['accountMenuLogoutBackground', 'accountMenuLogoutHoverBackground', 'accountMenuLogoutSelectedBackground'], iconSlot: 'accountMenuLogout', fontSlot: 'accountMenuLogout' }),
 
   'palette-brand': styleTarget('品牌栏', 'brand', { colors: ['brandBorder'], paints: ['brandSurface'] }),
   'copy-brand-title': styleTarget('品牌主标题', 'brand', { colors: ['brandTitle'], copyField: 'brandTitle', fontSlot: 'brandTitle' }),
@@ -140,7 +147,13 @@ export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
   sidebarNavPullRequests: 'sidebar-nav-pull-requests',
   sidebarNavSites: 'sidebar-nav-sites',
   sidebarNavScheduled: 'sidebar-nav-scheduled',
-  sidebarNavPlugins: 'sidebar-nav-plugins'
+  sidebarNavPlugins: 'sidebar-nav-plugins',
+  accountMenuAccount: 'account-menu-account',
+  accountMenuTeam: 'account-menu-team',
+  accountMenuUsage: 'account-menu-usage',
+  accountMenuHidePet: 'account-menu-hide-pet',
+  accountMenuSettings: 'account-menu-settings',
+  accountMenuLogout: 'account-menu-logout'
 }
 
 export function isPreviewTargetId(value: string | undefined): value is PreviewTargetId {

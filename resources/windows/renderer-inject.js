@@ -10,6 +10,8 @@
   const projectAnchorRestorers = new WeakMap();
   const sidebarNavRestorers = new WeakMap();
   const sidebarCopyRestorers = new Map();
+  const accountMenuRestorers = new WeakMap();
+  const accountMenuRows = new Set();
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
@@ -385,6 +387,17 @@
     { id: "plugins", copyField: "sidebarNavPlugins", iconSlot: "sidebarNavPlugins", previewTarget: "sidebar-nav-plugins", aliases: ["插件", "Plugins"] }
   ];
   const sidebarNavigation = Array.isArray(themeConfig?.sidebarNavigation) && themeConfig.sidebarNavigation.length > 0 ? themeConfig.sidebarNavigation : SIDEBAR_NAV_FALLBACKS;
+  const ACCOUNT_MENU_FALLBACKS = [
+    { id: "account", iconSlot: "accountMenuAccount", aliases: [] },
+    { id: "team", iconSlot: "accountMenuTeam", aliases: [] },
+    { id: "usage", iconSlot: "accountMenuUsage", aliases: ["剩余用量", "Usage left"] },
+    { id: "hidePet", iconSlot: "accountMenuHidePet", aliases: ["隐藏宠物", "Hide pet"] },
+    { id: "settings", iconSlot: "accountMenuSettings", aliases: ["设置", "Settings"] },
+    { id: "logout", iconSlot: "accountMenuLogout", aliases: ["退出登录", "Log out"] }
+  ];
+  const accountMenu = Array.isArray(themeConfig?.accountMenu) && themeConfig.accountMenu.length === ACCOUNT_MENU_FALLBACKS.length
+    ? themeConfig.accountMenu
+    : ACCOUNT_MENU_FALLBACKS;
   const normalizedNodeLabel = (node) => `${node.textContent || ""} ${node.getAttribute?.("aria-label") || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
   const hasSidebarNavText = (node) => {
     const label = `${node.textContent || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
@@ -982,6 +995,91 @@
 
   const findVisible = (root, selector) =>
     [...root.querySelectorAll(selector)].find(isVisible) || null;
+
+  const accountMenuItem = (id) => accountMenu.find((item) => item?.id === id) || ACCOUNT_MENU_FALLBACKS.find((item) => item.id === id);
+  const accountMenuLabelMatches = (row, id) => {
+    const item = accountMenuItem(id);
+    const label = normalizedNodeLabel(row);
+    return (item?.aliases || []).some((alias) => label.includes(String(alias).toLowerCase()));
+  };
+  const findAccountMenuContract = () => {
+    const menus = [...document.querySelectorAll('[role="menu"][data-state="open"], [role="menu"]')].filter(isVisible);
+    for (const root of menus) {
+      const rows = [...root.querySelectorAll('[role="menuitem"]')].filter((row) => row.closest('[role="menu"]') === root && isVisible(row));
+      const usageIndex = rows.findIndex((row, index) => index >= 2 && accountMenuLabelMatches(row, "usage"));
+      const hidePetIndex = rows.findIndex((row, index) => index >= 2 && accountMenuLabelMatches(row, "hidePet"));
+      const settingsIndex = rows.findIndex((row, index) => index >= 2 && accountMenuLabelMatches(row, "settings"));
+      const logoutIndex = rows.findIndex((row, index) => index >= 2 && accountMenuLabelMatches(row, "logout"));
+      if (usageIndex !== 2 || hidePetIndex <= usageIndex || settingsIndex <= hidePetIndex || logoutIndex <= settingsIndex) continue;
+      return {
+        root,
+        rows: new Map([
+          ["account", rows[usageIndex - 2]],
+          ["team", rows[usageIndex - 1]],
+          ["usage", rows[usageIndex]],
+          ["hidePet", rows[hidePetIndex]],
+          ["settings", rows[settingsIndex]],
+          ["logout", rows[logoutIndex]]
+        ])
+      };
+    }
+    return null;
+  };
+  const accountMenuRowContent = (row) =>
+    [...row.children].find((child) => child instanceof HTMLElement && child.querySelector("svg, img")) || row;
+  const accountMenuLeadingIcon = (content) =>
+    [...content.children].find((child) => child.matches?.("svg, img") || child.querySelector?.("svg, img")) || null;
+  const restoreAccountMenuRow = (row) => {
+    const record = accountMenuRestorers.get(row);
+    record?.nativeIcon?.classList.remove("dream-account-menu-native-icon");
+    record?.injectedIcon?.remove();
+    if (record?.className) row.classList.remove(record.className);
+    row.removeAttribute("data-dream-account-menu-item");
+    accountMenuRestorers.delete(row);
+    accountMenuRows.delete(row);
+  };
+  const clearAccountMenu = () => {
+    for (const row of [...accountMenuRows]) restoreAccountMenuRow(row);
+    document.querySelectorAll(".dream-account-menu").forEach((node) => node.classList.remove("dream-account-menu"));
+  };
+  const ensureAccountMenu = () => {
+    const contract = findAccountMenuContract();
+    const activeRows = new Set();
+    document.querySelectorAll(".dream-account-menu").forEach((node) => {
+      if (node !== contract?.root) node.classList.remove("dream-account-menu");
+    });
+    if (contract) {
+      if (!contract.root.classList.contains("dream-account-menu")) contract.root.classList.add("dream-account-menu");
+      for (const item of accountMenu) {
+        const row = contract.rows.get(item?.id);
+        if (!(row instanceof HTMLElement) || typeof item?.iconSlot !== "string") continue;
+        activeRows.add(row);
+        let record = accountMenuRestorers.get(row);
+        if (record && (!record.injectedIcon?.isConnected || !row.contains(record.injectedIcon))) {
+          restoreAccountMenuRow(row);
+          record = null;
+        }
+        if (!record) {
+          const content = accountMenuRowContent(row);
+          const nativeIcon = accountMenuLeadingIcon(content);
+          const injectedIcon = document.createElement("span");
+          injectedIcon.className = "dream-account-menu-icon";
+          injectedIcon.setAttribute("aria-hidden", "true");
+          content.insertBefore(injectedIcon, content.firstChild);
+          nativeIcon?.classList.add("dream-account-menu-native-icon");
+          record = { nativeIcon, injectedIcon, className: `dream-account-menu-${item.id}` };
+          accountMenuRestorers.set(row, record);
+          accountMenuRows.add(row);
+        }
+        if (row.dataset.dreamAccountMenuItem !== item.id) row.dataset.dreamAccountMenuItem = item.id;
+        if (!row.classList.contains(record.className)) row.classList.add(record.className);
+        renderSlot(record.injectedIcon, item.iconSlot, "✦");
+      }
+    }
+    for (const row of [...accountMenuRows]) {
+      if (!activeRows.has(row)) restoreAccountMenuRow(row);
+    }
+  };
 
   const conversationBackgroundConfig = () => themeConfig?.media?.conversationBackground || null;
   const findConversationSurface = () => {
@@ -1816,6 +1914,7 @@
 
     ensureSidebarModeIcon();
     ensureSidebarSurfaces();
+    ensureAccountMenu();
 
     const shellMain = document.querySelector("main.main-surface") || document.querySelector("main");
     const context = findHomeContext();
@@ -1970,6 +2069,7 @@
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
     document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => { if (node instanceof HTMLElement) restoreSidebarNav(node); node.removeAttribute("data-dream-sidebar-nav"); });
+    clearAccountMenu();
     for (const [labelNode, record] of sidebarCopyRestorers) {
       if (labelNode.isConnected) labelNode.textContent = record.text;
       if (record.button?.isConnected) {
@@ -2057,6 +2157,7 @@
     ensureComposerBadge(composer);
     ensureComposerMelody(composer);
     ensureComposerSendIcon(composer);
+    ensureAccountMenu();
     const home = document.querySelector("[role=main].dream-home");
     const voicePromo = home instanceof HTMLElement ? findVoicePromo(home) : null;
     markCurrentNode(".dream-home-voice-promo", voicePromo, "dream-home-voice-promo");
@@ -2088,7 +2189,8 @@
     ".dream-conversation-background",
     ".dream-composer-badge",
     ".dream-composer-melody",
-    ".dream-composer-send-icon"
+    ".dream-composer-send-icon",
+    ".dream-account-menu-icon"
   ].join(", ");
   const containsStructuralNode = (node) => node instanceof Element && (node.matches(structuralSelector) || Boolean(node.querySelector(structuralSelector)));
   const isInjectedNode = (node) => node instanceof Element && node.matches(injectedMutationSelector);

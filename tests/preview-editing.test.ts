@@ -22,7 +22,7 @@ const rect = (left: number, top: number, width: number, height: number): RectLik
 
 describe('preview editing registry', () => {
   it('maps every theme icon slot to a preview target and inspector anchor', () => {
-    const slots: IconSlot[] = ['sidebarMode', 'sidebarNavNewTask', 'sidebarNavPullRequests', 'sidebarNavSites', 'sidebarNavScheduled', 'sidebarNavPlugins', 'branding', 'cardPrimary', 'cardSecondary', 'composer', 'composerBadge', 'backgroundSparkle', 'backgroundFloat', 'backgroundRain', 'backgroundMeteor', 'backgroundSnow', 'project', 'decoration', 'polaroidPin']
+    const slots: IconSlot[] = ['sidebarMode', 'sidebarNavNewTask', 'sidebarNavPullRequests', 'sidebarNavSites', 'sidebarNavScheduled', 'sidebarNavPlugins', 'accountMenuAccount', 'accountMenuTeam', 'accountMenuUsage', 'accountMenuHidePet', 'accountMenuSettings', 'accountMenuLogout', 'branding', 'cardPrimary', 'cardSecondary', 'composer', 'composerBadge', 'backgroundSparkle', 'backgroundFloat', 'backgroundRain', 'backgroundMeteor', 'backgroundSnow', 'project', 'decoration', 'polaroidPin']
     const directlyMapped = Object.values(PREVIEW_TARGETS)
       .filter((target) => target.editor.kind === 'style' && target.editor.iconSlot)
       .map((target) => target.editor.kind === 'style' ? target.editor.iconSlot : null)
@@ -95,6 +95,29 @@ describe('preview editing registry', () => {
     expect(PREVIEW_TARGETS['copy-brand-signature']).toMatchObject({
       inspectorAnchor: 'appearance-brand',
       editor: { kind: 'style', copyField: 'brandSignature', fontSlot: 'brandSignature' }
+    })
+  })
+
+  it('maps every account menu row to independent icon, font, and three-state appearance controls', () => {
+    expect(PREVIEW_TARGETS['account-menu-surface'].editor).toMatchObject({
+      kind: 'style',
+      colors: ['accountMenuBorder'],
+      paints: ['accountMenuSurface']
+    })
+    expect(PREVIEW_TARGETS['account-menu-usage']).toMatchObject({
+      inspectorAnchor: 'appearance-account',
+      editor: {
+        kind: 'style',
+        iconSlot: 'accountMenuUsage',
+        fontSlot: 'accountMenuUsage',
+        colors: ['accountMenuUsageText', 'accountMenuUsageHoverText', 'accountMenuUsageSelectedText'],
+        paints: ['accountMenuUsageBackground', 'accountMenuUsageHoverBackground', 'accountMenuUsageSelectedBackground']
+      }
+    })
+    expect(PREVIEW_TARGETS['account-menu-logout'].editor).toMatchObject({
+      kind: 'style',
+      iconSlot: 'accountMenuLogout',
+      fontSlot: 'accountMenuLogout'
     })
   })
 

@@ -96,6 +96,10 @@ html.codex-dream-skin aside.app-shell-left-panel :is(a, button):hover {
   transform: translateX(1px);
 }
 
+html.codex-dream-skin aside.app-shell-left-panel button[aria-haspopup="menu"][aria-expanded="true"] {
+  transform: none !important;
+}
+
 html.codex-dream-skin aside.app-shell-left-panel :is(a, button)[aria-current="page"],
 html.codex-dream-skin aside.app-shell-left-panel [class~="bg-token-list-hover-background"] {
   background: var(--dream-sidebar-nav-item-selected) !important;
@@ -308,6 +312,111 @@ html.codex-dream-skin .dream-sidebar-mode-icon .dream-custom-icon {
 
 html.codex-dream-skin .dream-sidebar-mode-button svg {
   color: var(--dream-sidebar-arrow) !important;
+}
+
+html.codex-dream-skin .dream-account-menu {
+  border: 1px solid var(--dream-account-menu-border) !important;
+  background: var(--dream-account-menu-surface) !important;
+  color: var(--dream-global-text) !important;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--dream-account-menu-border) 28%, transparent) !important;
+}
+
+html.codex-dream-skin .dream-account-menu [data-dream-account-menu-item] {
+  color: var(--dream-account-row-text, var(--dream-global-text)) !important;
+  background: var(--dream-account-row-background, transparent) !important;
+  font-family: var(--dream-account-row-font, var(--dream-font-ui)) !important;
+}
+
+html.codex-dream-skin .dream-account-menu [data-dream-account-menu-item]:is(:hover, [data-highlighted]) {
+  color: var(--dream-account-row-hover-text, var(--dream-global-text)) !important;
+  background: var(--dream-account-row-hover-background, transparent) !important;
+}
+
+html.codex-dream-skin .dream-account-menu [data-dream-account-menu-item]:is([aria-selected="true"], [data-state="checked"], [data-state="open"], :focus-visible),
+html.codex-dream-skin .dream-account-menu [data-dream-account-menu-item]:is([aria-selected="true"], [data-state="checked"], [data-state="open"], :focus-visible):hover {
+  color: var(--dream-account-row-selected-text, var(--dream-global-text)) !important;
+  background: var(--dream-account-row-selected-background, transparent) !important;
+}
+
+html.codex-dream-skin .dream-account-menu-native-icon {
+  display: none !important;
+}
+
+html.codex-dream-skin .dream-account-menu-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  flex: 0 0 18px;
+  place-items: center;
+  color: currentColor;
+  font-size: 17px;
+  line-height: 1;
+}
+
+html.codex-dream-skin .dream-account-menu-icon .dream-custom-icon {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+}
+
+html.codex-dream-skin .dream-account-menu-account {
+  --dream-account-row-text: var(--dream-account-menu-account-text);
+  --dream-account-row-hover-text: var(--dream-account-menu-account-hover-text);
+  --dream-account-row-selected-text: var(--dream-account-menu-account-selected-text);
+  --dream-account-row-background: var(--dream-account-menu-account-background);
+  --dream-account-row-hover-background: var(--dream-account-menu-account-hover-background);
+  --dream-account-row-selected-background: var(--dream-account-menu-account-selected-background);
+  --dream-account-row-font: var(--dream-font-account-menu-account);
+}
+
+html.codex-dream-skin .dream-account-menu-team {
+  --dream-account-row-text: var(--dream-account-menu-team-text);
+  --dream-account-row-hover-text: var(--dream-account-menu-team-hover-text);
+  --dream-account-row-selected-text: var(--dream-account-menu-team-selected-text);
+  --dream-account-row-background: var(--dream-account-menu-team-background);
+  --dream-account-row-hover-background: var(--dream-account-menu-team-hover-background);
+  --dream-account-row-selected-background: var(--dream-account-menu-team-selected-background);
+  --dream-account-row-font: var(--dream-font-account-menu-team);
+}
+
+html.codex-dream-skin .dream-account-menu-usage {
+  --dream-account-row-text: var(--dream-account-menu-usage-text);
+  --dream-account-row-hover-text: var(--dream-account-menu-usage-hover-text);
+  --dream-account-row-selected-text: var(--dream-account-menu-usage-selected-text);
+  --dream-account-row-background: var(--dream-account-menu-usage-background);
+  --dream-account-row-hover-background: var(--dream-account-menu-usage-hover-background);
+  --dream-account-row-selected-background: var(--dream-account-menu-usage-selected-background);
+  --dream-account-row-font: var(--dream-font-account-menu-usage);
+}
+
+html.codex-dream-skin .dream-account-menu-hidePet {
+  --dream-account-row-text: var(--dream-account-menu-hide-pet-text);
+  --dream-account-row-hover-text: var(--dream-account-menu-hide-pet-hover-text);
+  --dream-account-row-selected-text: var(--dream-account-menu-hide-pet-selected-text);
+  --dream-account-row-background: var(--dream-account-menu-hide-pet-background);
+  --dream-account-row-hover-background: var(--dream-account-menu-hide-pet-hover-background);
+  --dream-account-row-selected-background: var(--dream-account-menu-hide-pet-selected-background);
+  --dream-account-row-font: var(--dream-font-account-menu-hide-pet);
+}
+
+html.codex-dream-skin .dream-account-menu-settings {
+  --dream-account-row-text: var(--dream-account-menu-settings-text);
+  --dream-account-row-hover-text: var(--dream-account-menu-settings-hover-text);
+  --dream-account-row-selected-text: var(--dream-account-menu-settings-selected-text);
+  --dream-account-row-background: var(--dream-account-menu-settings-background);
+  --dream-account-row-hover-background: var(--dream-account-menu-settings-hover-background);
+  --dream-account-row-selected-background: var(--dream-account-menu-settings-selected-background);
+  --dream-account-row-font: var(--dream-font-account-menu-settings);
+}
+
+html.codex-dream-skin .dream-account-menu-logout {
+  --dream-account-row-text: var(--dream-account-menu-logout-text);
+  --dream-account-row-hover-text: var(--dream-account-menu-logout-hover-text);
+  --dream-account-row-selected-text: var(--dream-account-menu-logout-selected-text);
+  --dream-account-row-background: var(--dream-account-menu-logout-background);
+  --dream-account-row-hover-background: var(--dream-account-menu-logout-hover-background);
+  --dream-account-row-selected-background: var(--dream-account-menu-logout-selected-background);
+  --dream-account-row-font: var(--dream-font-account-menu-logout);
 }
 
 html.codex-dream-skin main.main-surface {

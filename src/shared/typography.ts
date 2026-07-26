@@ -42,6 +42,12 @@ export interface ThemeTypography {
     sidebarNavSites: FontSelection
     sidebarNavScheduled: FontSelection
     sidebarNavPlugins: FontSelection
+    accountMenuAccount: FontSelection
+    accountMenuTeam: FontSelection
+    accountMenuUsage: FontSelection
+    accountMenuHidePet: FontSelection
+    accountMenuSettings: FontSelection
+    accountMenuLogout: FontSelection
   }
   importedFonts: ImportedFontRecord[]
 }
@@ -85,7 +91,13 @@ const currentTypographySlotsSchema = typographySlotsV7Schema.extend({
   sidebarNavPullRequests: fontSelectionSchema.default({ kind: 'inherit' }),
   sidebarNavSites: fontSelectionSchema.default({ kind: 'inherit' }),
   sidebarNavScheduled: fontSelectionSchema.default({ kind: 'inherit' }),
-  sidebarNavPlugins: fontSelectionSchema.default({ kind: 'inherit' })
+  sidebarNavPlugins: fontSelectionSchema.default({ kind: 'inherit' }),
+  accountMenuAccount: fontSelectionSchema.default({ kind: 'inherit' }),
+  accountMenuTeam: fontSelectionSchema.default({ kind: 'inherit' }),
+  accountMenuUsage: fontSelectionSchema.default({ kind: 'inherit' }),
+  accountMenuHidePet: fontSelectionSchema.default({ kind: 'inherit' }),
+  accountMenuSettings: fontSelectionSchema.default({ kind: 'inherit' }),
+  accountMenuLogout: fontSelectionSchema.default({ kind: 'inherit' })
 }).strict()
 
 function validateTypography<T extends { slots: Record<string, FontSelection>; importedFonts: ImportedFontRecord[] }>(schema: z.ZodType<T>): z.ZodType<T> {
@@ -131,7 +143,13 @@ export function createDefaultTypography(): ThemeTypography {
       sidebarNavPullRequests: { kind: 'inherit' },
       sidebarNavSites: { kind: 'inherit' },
       sidebarNavScheduled: { kind: 'inherit' },
-      sidebarNavPlugins: { kind: 'inherit' }
+      sidebarNavPlugins: { kind: 'inherit' },
+      accountMenuAccount: { kind: 'inherit' },
+      accountMenuTeam: { kind: 'inherit' },
+      accountMenuUsage: { kind: 'inherit' },
+      accountMenuHidePet: { kind: 'inherit' },
+      accountMenuSettings: { kind: 'inherit' },
+      accountMenuLogout: { kind: 'inherit' }
     },
     importedFonts: []
   }

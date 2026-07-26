@@ -1,5 +1,6 @@
 import type { CompiledTheme } from '../shared/contracts'
 import type { Fence } from '../shared/geometry'
+import { ACCOUNT_MENU_ITEMS } from '../shared/account-menu'
 import { HOME_ACTIONS } from '../shared/home-layout'
 import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
 import { mediaFlipCssTransform } from '../shared/media'
@@ -61,7 +62,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, home: { actions: HOME_ACTIONS }, assets: Object.fromEntries(Object.entries(assets).filter(([key]) => !key.startsWith('builtin/conversation-bubbles/') && !conversationBubbleAssets.has(key))), conversationBackground, windowBackground, conversationBubbles, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, accountMenu: ACCOUNT_MENU_ITEMS, home: { actions: HOME_ACTIONS }, assets: Object.fromEntries(Object.entries(assets).filter(([key]) => !key.startsWith('builtin/conversation-bubbles/') && !conversationBubbleAssets.has(key))), conversationBackground, windowBackground, conversationBubbles, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
     assets
   }
 }

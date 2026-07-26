@@ -39,7 +39,13 @@ export function buildThemeStyleVariables(profile: ThemeProfile): ThemeStyleVaria
     '--dream-font-sidebar-nav-pull-requests': resolveFontFamily(profile, profile.typography.slots.sidebarNavPullRequests),
     '--dream-font-sidebar-nav-sites': resolveFontFamily(profile, profile.typography.slots.sidebarNavSites),
     '--dream-font-sidebar-nav-scheduled': resolveFontFamily(profile, profile.typography.slots.sidebarNavScheduled),
-    '--dream-font-sidebar-nav-plugins': resolveFontFamily(profile, profile.typography.slots.sidebarNavPlugins)
+    '--dream-font-sidebar-nav-plugins': resolveFontFamily(profile, profile.typography.slots.sidebarNavPlugins),
+    '--dream-font-account-menu-account': resolveFontFamily(profile, profile.typography.slots.accountMenuAccount),
+    '--dream-font-account-menu-team': resolveFontFamily(profile, profile.typography.slots.accountMenuTeam),
+    '--dream-font-account-menu-usage': resolveFontFamily(profile, profile.typography.slots.accountMenuUsage),
+    '--dream-font-account-menu-hide-pet': resolveFontFamily(profile, profile.typography.slots.accountMenuHidePet),
+    '--dream-font-account-menu-settings': resolveFontFamily(profile, profile.typography.slots.accountMenuSettings),
+    '--dream-font-account-menu-logout': resolveFontFamily(profile, profile.typography.slots.accountMenuLogout)
   }
 
   for (const [token, definition] of Object.entries(APPEARANCE_COLOR_TOKENS)) {

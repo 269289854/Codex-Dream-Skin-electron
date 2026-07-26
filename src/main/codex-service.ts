@@ -8,6 +8,7 @@ import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy } from '../shared/particle-effects'
 import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
+import { ACCOUNT_MENU_ITEMS } from '../shared/account-menu'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
 import { resolveConversationBubbles } from '../shared/conversation-bubbles'
@@ -318,6 +319,7 @@ export class CodexService {
       actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
       copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
       sidebarNavigation: SIDEBAR_NAV_ITEMS,
+      accountMenu: ACCOUNT_MENU_ITEMS,
       actions: HOME_ACTIONS
     }
     const art = hero ?? TRANSPARENT_PNG

@@ -4,6 +4,7 @@ import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy, type SparkleParticle } from '../src/shared/particle-effects'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
+import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import type { ConversationOverlayStyle } from '../src/shared/conversation-overlay'
 import type { RuntimeConversationBubbleFrame } from '../src/shared/conversation-bubbles'
@@ -221,6 +222,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
     builtinGlyphs: BUILTIN_ICON_GLYPHS,
     actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
     copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
+    accountMenu: ACCOUNT_MENU_ITEMS,
     actions: HOME_ACTIONS
   }
   const payload = template
@@ -244,6 +246,73 @@ function dispatchAnimationIteration(window: Window, node: Element, animationName
 }
 
 describe('renderer home DOM adaptation', () => {
+  it('styles the account portal without copying identity text and restores native icons on removal and cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <div id="account-portal">
+        <div role="menu" data-state="open">
+          <div role="menuitem"><div class="menu-row"><span class="native-icon"><img src="data:image/png;base64,AA==" alt=""></span><span>示例账号</span></div></div>
+          <div role="menuitem"><div class="menu-row"><span class="native-icon"><svg></svg></span><span>示例团队</span><svg class="trailing-link"></svg></div></div>
+          <div role="menuitem"><div class="menu-row"><span class="native-icon"><svg></svg></span><span>剩余用量</span><svg class="trailing-chevron"></svg></div></div>
+          <div role="menuitem"><div class="menu-row"><span class="native-icon"><svg></svg></span><span>隐藏宠物</span></div></div>
+          <div role="menuitem"><div class="menu-row"><span class="native-icon"><svg></svg></span><span>设置</span><kbd>Ctrl ,</kbd></div></div>
+          <div role="menuitem"><div class="menu-row"><span class="native-icon"><svg></svg></span><span>退出登录</span></div></div>
+        </div>
+      </div>`
+    const icons: Record<string, { name?: string; dataUrl?: string }> = Object.fromEntries(ACCOUNT_MENU_ITEMS.map((item) => [item.iconSlot, { name: item.iconName }]))
+    icons.accountMenuAccount = { dataUrl: 'data:image/png;base64,AQ==' }
+    inject(window, icons)
+
+    const menu = window.document.querySelector('[role="menu"]')
+    const rows = [...window.document.querySelectorAll('[role="menuitem"]')] as unknown as HTMLElement[]
+    expect(menu?.classList.contains('dream-account-menu')).toBe(true)
+    expect(rows.map((row) => row.dataset.dreamAccountMenuItem)).toEqual(ACCOUNT_MENU_ITEMS.map((item) => item.id))
+    expect(rows[0]?.textContent).toContain('示例账号')
+    expect(rows[1]?.textContent).toContain('示例团队')
+    expect(rows[0]?.querySelectorAll('.dream-account-menu-icon')).toHaveLength(1)
+    expect(rows[0]?.querySelector('.dream-account-menu-icon img')?.getAttribute('src')).toBe('data:image/png;base64,AQ==')
+    expect(rows[0]?.querySelector('.native-icon')?.classList.contains('dream-account-menu-native-icon')).toBe(true)
+    expect(rows[1]?.querySelector('.trailing-link')?.classList.contains('dream-account-menu-native-icon')).toBe(false)
+    expect(rows[2]?.querySelector('.trailing-chevron')?.classList.contains('dream-account-menu-native-icon')).toBe(false)
+
+    const menuClassAdd = vi.spyOn(menu!.classList, 'add')
+    const menuClassRemove = vi.spyOn(menu!.classList, 'remove')
+    const rowClassAdds = rows.map((row) => vi.spyOn(row.classList, 'add'))
+    stateOf(window).ensure()
+    expect(menuClassAdd).not.toHaveBeenCalledWith('dream-account-menu')
+    expect(menuClassRemove).not.toHaveBeenCalledWith('dream-account-menu')
+    ACCOUNT_MENU_ITEMS.forEach((item, index) => {
+      expect(rowClassAdds[index]).not.toHaveBeenCalledWith(`dream-account-menu-${item.id}`)
+    })
+    expect(rows[0]?.querySelectorAll('.dream-account-menu-icon')).toHaveLength(1)
+
+    menu?.remove()
+    stateOf(window).ensure()
+    expect(rows[0]?.querySelector('.dream-account-menu-icon')).toBeNull()
+    expect(rows[0]?.querySelector('.native-icon')?.classList.contains('dream-account-menu-native-icon')).toBe(false)
+    expect(rows[0]?.hasAttribute('data-dream-account-menu-item')).toBe(false)
+
+    window.document.querySelector('#account-portal')?.append(menu!)
+    stateOf(window).ensure()
+    expect(rows[0]?.querySelectorAll('.dream-account-menu-icon')).toHaveLength(1)
+    stateOf(window).cleanup()
+    expect(menu?.classList.contains('dream-account-menu')).toBe(false)
+    expect(rows[0]?.querySelector('.dream-account-menu-icon')).toBeNull()
+    expect(rows[0]?.querySelector('.native-icon')?.classList.contains('dream-account-menu-native-icon')).toBe(false)
+  })
+
+  it('ignores unrelated menus without fixed account actions', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <div role="menu" data-state="open">
+        <div role="menuitem"><span><svg></svg></span><span>复制</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>删除</span></div>
+      </div>`
+    inject(window)
+    expect(window.document.querySelector('.dream-account-menu')).toBeNull()
+    expect(window.document.querySelector('.dream-account-menu-icon')).toBeNull()
+  })
+
   it('wraps only user and Codex prose, follows streaming additions, and clears bubble classes', () => {
     const window = createWindow()
     window.document.body.innerHTML = `

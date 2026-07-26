@@ -86,6 +86,19 @@ describe('appearance model', () => {
     expect(definitions.every((token) => token.targets.length > 0)).toBe(true)
   })
 
+  it('registers independent normal, hover, and selected account menu tokens', () => {
+    for (const item of ['Account', 'Team', 'Usage', 'HidePet', 'Settings', 'Logout'] as const) {
+      expect(APPEARANCE_COLOR_TOKENS).toHaveProperty(`accountMenu${item}Text`)
+      expect(APPEARANCE_COLOR_TOKENS).toHaveProperty(`accountMenu${item}HoverText`)
+      expect(APPEARANCE_COLOR_TOKENS).toHaveProperty(`accountMenu${item}SelectedText`)
+      expect(APPEARANCE_PAINT_TOKENS).toHaveProperty(`accountMenu${item}Background`)
+      expect(APPEARANCE_PAINT_TOKENS).toHaveProperty(`accountMenu${item}HoverBackground`)
+      expect(APPEARANCE_PAINT_TOKENS).toHaveProperty(`accountMenu${item}SelectedBackground`)
+    }
+    expect(resolveAppearancePaint(createEmptyAppearance(), legacyColors, 'accountMenuUsageBackground')).toEqual({ kind: 'solid', color: 'transparent' })
+    expect(paintToCss(resolveAppearancePaint(createEmptyAppearance(), legacyColors, 'accountMenuUsageHoverBackground'))).toMatch(/^linear-gradient\(90deg, /)
+  })
+
   it('restores the original cyan, pink, and lavender gradients when no paint is overridden', () => {
     const appearance = createEmptyAppearance()
     expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'canvas'))).toMatch(/^linear-gradient\(135deg, /)

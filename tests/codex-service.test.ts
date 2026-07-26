@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultTheme } from '../src/shared/theme'
+import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
 
 const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
@@ -120,6 +121,9 @@ describe('CodexService operation queue', () => {
     expect(first.script).toContain('"conversationBubbles":{"visible":false,"user":{"mode":"none","dataUrl":null,"slice":25,"sliceInsets":[25,25,25,25],"frameWidth":24,"borderWidths":[24,48,24,48],"contentPadding":20}')
     expect(first.script).toContain('"codex":{"mode":"none","dataUrl":null,"slice":25,"sliceInsets":[25,25,25,25],"frameWidth":24,"borderWidths":[24,48,24,48],"contentPadding":20}')
     expect(first.script).toContain('"toolActivityBubbles":{"visible":false}')
+    expect(first.script).toContain(`"accountMenu":${JSON.stringify(ACCOUNT_MENU_ITEMS)}`)
+    expect(first.script).toContain('"accountMenuUsage":{"name":"clock"}')
+    expect(first.script).toContain('--dream-font-account-menu-usage')
     expect(first.script).toContain('"sparklePolicy":{"mode":"balanced"')
     expect(first.script).toContain('"sparkleCyclePositionPolicy":{"x":{"min":5,"max":95,"minDelta":12},"y":{"min":5,"max":91,"minDelta":12}}')
     expect(third.script).toContain('"sparklePolicy":{"mode":"performance"')

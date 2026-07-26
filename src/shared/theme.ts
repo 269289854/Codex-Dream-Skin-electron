@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema, themePaintSchema, type ThemeAppearance } from './appearance'
+import { ACCOUNT_MENU_ITEMS } from './account-menu'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
 import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES } from './particle-effects'
 import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
@@ -65,6 +66,15 @@ const currentSidebarIconsSchema = currentParticleIconsSchema.extend({
   sidebarNavSites: iconSourceSchema,
   sidebarNavScheduled: iconSourceSchema,
   sidebarNavPlugins: iconSourceSchema
+}).strict()
+
+const currentAccountMenuIconsSchema = currentSidebarIconsSchema.extend({
+  accountMenuAccount: iconSourceSchema.default({ kind: 'builtin', name: 'user' }),
+  accountMenuTeam: iconSourceSchema.default({ kind: 'builtin', name: 'users' }),
+  accountMenuUsage: iconSourceSchema.default({ kind: 'builtin', name: 'clock' }),
+  accountMenuHidePet: iconSourceSchema.default({ kind: 'builtin', name: 'eye' }),
+  accountMenuSettings: iconSourceSchema.default({ kind: 'builtin', name: 'settings' }),
+  accountMenuLogout: iconSourceSchema.default({ kind: 'builtin', name: 'arrow-right' })
 }).strict()
 
 const composerBadgeSchema = z.object({ visible: z.boolean() }).strict()
@@ -627,7 +637,7 @@ const versionThirteenThemeFields = {
   conversationBackground: versionFourteenConversationBackgroundSchema.default(createDefaultVersionFourteenConversationBackground()),
   colors: themeColorsSchema,
   copy: currentThemeCopySchema,
-  icons: currentSidebarIconsSchema,
+  icons: currentAccountMenuIconsSchema,
   composerBadge: composerBadgeSchema,
   decorations: versionTwentyDecorationsSchema,
   appearance: themeAppearanceSchema,
@@ -946,7 +956,13 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
       sidebarNavPullRequests: { kind: 'builtin', name: 'git-pull-request' },
       sidebarNavSites: { kind: 'builtin', name: 'grid-2x2' },
       sidebarNavScheduled: { kind: 'builtin', name: 'clock-3' },
-      sidebarNavPlugins: { kind: 'builtin', name: 'at-sign' }
+      sidebarNavPlugins: { kind: 'builtin', name: 'at-sign' },
+      accountMenuAccount: { kind: 'builtin', name: 'user' },
+      accountMenuTeam: { kind: 'builtin', name: 'users' },
+      accountMenuUsage: { kind: 'builtin', name: 'clock' },
+      accountMenuHidePet: { kind: 'builtin', name: 'eye' },
+      accountMenuSettings: { kind: 'builtin', name: 'settings' },
+      accountMenuLogout: { kind: 'builtin', name: 'arrow-right' }
     },
     composerBadge: { visible: true },
     decorations: createDefaultDecorations(),
@@ -1408,9 +1424,11 @@ function stripSidebarFields(candidate: Record<string, unknown>): Record<string, 
   if (copy) for (const field of [...Object.keys(DEFAULT_SIDEBAR_COPY), ...Object.keys(DEFAULT_SIDEBAR_NAV_COPY)]) delete copy[field]
   const icons = candidate.icons && typeof candidate.icons === 'object' ? candidate.icons as Record<string, unknown> : null
   if (icons) for (const item of SIDEBAR_NAV_ITEMS) delete icons[item.iconSlot]
+  if (icons) for (const item of ACCOUNT_MENU_ITEMS) delete icons[item.iconSlot]
   const typography = candidate.typography && typeof candidate.typography === 'object' ? candidate.typography as Record<string, unknown> : null
   const slots = typography?.slots && typeof typography.slots === 'object' ? typography.slots as Record<string, unknown> : null
   if (slots) for (const item of SIDEBAR_NAV_ITEMS) delete slots[item.fontSlot]
+  if (slots) for (const item of ACCOUNT_MENU_ITEMS) delete slots[item.fontSlot]
   return candidate
 }
 

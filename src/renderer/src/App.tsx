@@ -1,11 +1,12 @@
 import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download,
+  Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download, ExternalLink,
   GitBranch, Home, Image, Laptop, LogOut, MessageSquare, Mic, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
+import { ACCOUNT_MENU_ITEMS } from '../../shared/account-menu'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
@@ -29,7 +30,7 @@ import { PolaroidControls } from './PolaroidControls'
 import { PolaroidPreview } from './PolaroidPreview'
 import { ParticleEffectControls } from './ParticleEffectControls'
 import { PreviewVideo } from './PreviewVideo'
-import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
+import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_ACCOUNT_MENU_LABELS, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import { VideoPlaybackPanel } from './VideoPlaybackPanel'
 import { VideoThumbnail } from './VideoThumbnail'
@@ -1038,13 +1039,13 @@ export function App(): React.JSX.Element {
   )
 }
 
-const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
+const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'account', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
 const PREVIEW_SIDEBAR_WIDTH = 270
 const BACKGROUND_VIDEO_PLAYBACK: ThemeProfile['hero']['playback'] = { autoplay: true, loop: true, sound: false, volume: 0 }
 const particleIconSlots: IconSlot[] = PARTICLE_EFFECT_IDS.map(particleEffectIconSlot)
 const standardIconSlots = (Object.keys(iconLabels) as IconSlot[]).filter((slot) => !particleIconSlots.includes(slot))
 const appearanceGroupLabels: Record<AppearanceGroup, string> = {
-  global: '全局与画布', conversation: '会话与按钮', sidebar: '侧边栏', brand: '品牌栏', home: '首页', cards: '操作卡片', projects: '项目栏', composer: '输入框', decoration: '装饰'
+  global: '全局与画布', conversation: '会话与按钮', sidebar: '侧边栏', account: '账号菜单', brand: '品牌栏', home: '首页', cards: '操作卡片', projects: '项目栏', composer: '输入框', decoration: '装饰'
 }
 
 function videoReferences(profile: ThemeProfile): Array<MediaReference | null> {
@@ -1289,6 +1290,15 @@ function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; asset
         </div>
         <button className="codex-section-heading codex-task-heading" data-preview-target="sidebar-task-title" type="button" aria-expanded="false"><span>{profile.copy.sidebarTasksTitle}</span><ChevronRight size={14} aria-hidden="true" /></button>
       </section>
+      <div className="codex-account-menu-preview" data-preview-target="account-menu-surface" role="menu" aria-label="账号菜单样式预览">
+        {ACCOUNT_MENU_ITEMS.map((item) => <button className={`codex-account-menu-row codex-account-menu-${item.id}`} data-preview-target={item.previewTarget} type="button" role="menuitem" key={item.id} aria-label={`编辑${item.label}样式`}>
+          <span className="codex-account-menu-icon"><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /></span>
+          <span className="codex-account-menu-label">{PREVIEW_ACCOUNT_MENU_LABELS[item.id]}</span>
+          {item.id === 'team' && <ExternalLink className="codex-account-menu-trailing" size={13} aria-hidden="true" />}
+          {item.id === 'usage' && <ChevronRight className="codex-account-menu-trailing" size={14} aria-hidden="true" />}
+          {item.id === 'settings' && <kbd>Ctrl ,</kbd>}
+        </button>)}
+      </div>
       <footer className="codex-sidebar-footer" data-preview-target="sidebar-footer"><span className="codex-team-avatar" data-preview-target="sidebar-avatar" tabIndex={0} role="button">{PREVIEW_SIDEBAR_TEAM.avatar}</span><span>{PREVIEW_SIDEBAR_TEAM.label}</span><CircleHelp size={18} /></footer>
     </aside>
   )

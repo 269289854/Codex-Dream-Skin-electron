@@ -1440,6 +1440,65 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.appearance.colors).toMatchObject({ sidebarNavNewTaskText: '#123456', sidebarNavNewTaskSelectedText: '#654321' })
   })
 
+  it('edits an account menu row independently and applies the configured hover state', async () => {
+    const usage = container.querySelector<HTMLElement>('[data-preview-target="account-menu-usage"]')
+    const team = container.querySelector<HTMLElement>('[data-preview-target="account-menu-team"]')
+    const canvas = container.querySelector<HTMLElement>('.codex-preview')
+    if (!usage || !team || !canvas) throw new Error('Account menu preview is missing.')
+    expect(container.querySelector('[data-preview-target="account-menu-account"]')?.textContent).toContain('演示账号')
+    expect(team.textContent).toContain('演示团队')
+
+    pointerDown(usage)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('剩余用量快捷配置')
+
+    const font = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="accountMenuUsage"] select')
+    if (!font) throw new Error('Account menu font control is missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLSelectElement.prototype, 'value')?.set?.call(font, 'builtin:jetbrains-mono')
+      font.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+    })
+
+    const iconTrigger = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="accountMenuUsage"] .icon-picker-trigger')
+    if (!iconTrigger) throw new Error('Account menu icon control is missing.')
+    act(() => iconTrigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const starOption = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-name="star"]')
+    if (!starOption) throw new Error('Built-in star icon option is missing.')
+    act(() => starOption.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+
+    const hoverTab = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .state-tabs button')].find((button) => button.textContent === '悬停')
+    if (!hoverTab) throw new Error('Account menu hover state is missing.')
+    act(() => hoverTab.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const hoverText = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="accountMenuUsageHoverText"] .color-text-input')
+    const hoverPaint = container.querySelector<HTMLElement>('[role="dialog"] [data-paint-token="accountMenuUsageHoverBackground"]')
+    if (!hoverText || !hoverPaint) throw new Error('Account menu hover controls are missing.')
+    act(() => setInputValue(hoverText, '#123456'))
+    const solid = [...hoverPaint.querySelectorAll<HTMLButtonElement>('.segmented-control button')].find((button) => button.textContent === '纯色')
+    if (!solid) throw new Error('Account menu solid paint command is missing.')
+    act(() => solid.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const hoverBackground = hoverPaint.querySelector<HTMLInputElement>('.color-text-input')
+    if (!hoverBackground) throw new Error('Account menu hover background input is missing.')
+    act(() => setInputValue(hoverBackground, '#abcdef'))
+
+    expect(usage.getAttribute('data-preview-state')).toBe('hover')
+    expect(usage.textContent).toContain('★')
+    expect(team.textContent).toContain('演示团队')
+    expect(canvas.style.getPropertyValue('--dream-font-account-menu-usage')).toContain('Dream JetBrains Mono')
+    expect(canvas.style.getPropertyValue('--dream-account-menu-usage-hover-text')).toBe('#123456')
+    expect(canvas.style.getPropertyValue('--dream-account-menu-usage-hover-background')).toBe('#abcdef')
+    expect(canvas.style.getPropertyValue('--dream-account-menu-team-hover-text')).not.toBe('#123456')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.icons.accountMenuUsage).toEqual({ kind: 'builtin', name: 'star' })
+    expect(savedProfiles.at(-1)?.typography.slots.accountMenuUsage).toEqual({ kind: 'builtin', id: 'jetbrains-mono' })
+    expect(savedProfiles.at(-1)?.appearance.colors.accountMenuUsageHoverText).toBe('#123456')
+    expect(savedProfiles.at(-1)?.appearance.paints.accountMenuUsageHoverBackground).toEqual({ kind: 'solid', color: '#abcdef' })
+  })
+
   it('edits project and task section titles with independent copy, fonts, and two-state appearance', async () => {
     const projectTitle = container.querySelector('[data-preview-target="sidebar-project-title"]')
     const taskTitle = container.querySelector('[data-preview-target="sidebar-task-title"]')

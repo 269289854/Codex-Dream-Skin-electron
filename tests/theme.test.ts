@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTIONS, PROJECT_PLACEHOLDER, splitHeadingTemplate } from '../src/shared/home-layout'
+import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, THEME_COLOR_PRESETS, VIDEO_PAUSE_POLICIES } from '../src/shared/theme'
 import { compileTheme } from '../src/main/theme-compiler'
 import { buildDynamicThemeCss } from '../src/main/codex-service'
@@ -38,6 +39,20 @@ describe('theme schema and compiler', () => {
     expect(first.resetColors).not.toBe(first.colors)
     expect(second.typography.slots.sidebarProjectsTitle).toEqual({ kind: 'inherit' })
     expect(second.appearance.colors.sidebarProjectsTitleText).toBeUndefined()
+    expect(second.icons).toMatchObject(Object.fromEntries(ACCOUNT_MENU_ITEMS.map((item) => [item.iconSlot, { kind: 'builtin', name: item.iconName }])))
+    expect(second.typography.slots).toMatchObject(Object.fromEntries(ACCOUNT_MENU_ITEMS.map((item) => [item.fontSlot, { kind: 'inherit' }])))
+
+    const withoutAccountMenuDefaults = structuredClone(second) as unknown as {
+      icons: Record<string, unknown>
+      typography: { slots: Record<string, unknown> }
+    }
+    for (const item of ACCOUNT_MENU_ITEMS) {
+      delete withoutAccountMenuDefaults.icons[item.iconSlot]
+      delete withoutAccountMenuDefaults.typography.slots[item.fontSlot]
+    }
+    const reparsed = parseThemeProfile(withoutAccountMenuDefaults)
+    expect(reparsed.icons.accountMenuUsage).toEqual({ kind: 'builtin', name: 'clock' })
+    expect(reparsed.typography.slots.accountMenuUsage).toEqual({ kind: 'inherit' })
 
     const customColors = { ...DEFAULT_THEME_COLORS, accent: '#2878B8' }
     const custom = createDefaultTheme('33333333-3333-4333-8333-333333333333', '自定义', customColors)
@@ -611,13 +626,15 @@ describe('theme schema and compiler', () => {
     expect(compiled.css).toContain('background-image: url("data:image/png;base64,PHNjcmlwdD4=")')
     expect(compiled.rendererPayload).not.toContain('<')
     expect(compiled.rendererPayload).toContain('headingTemplate')
-    expect(JSON.parse(compiled.rendererPayload).version).toBe(24)
-    expect(JSON.parse(compiled.rendererPayload).conversationBubbles).toEqual({
+    const rendererPayload = JSON.parse(compiled.rendererPayload)
+    expect(rendererPayload.version).toBe(24)
+    expect(rendererPayload.accountMenu).toEqual(ACCOUNT_MENU_ITEMS)
+    expect(rendererPayload.conversationBubbles).toEqual({
       visible: true,
       user: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 },
       codex: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 }
     })
-    expect(JSON.parse(compiled.rendererPayload).toolActivityBubbles).toEqual({ visible: true })
+    expect(rendererPayload.toolActivityBubbles).toEqual({ visible: true })
     expect(compiled.rendererPayload).toContain('\\u003cb>')
     expect(compiled.rendererPayload).toContain(JSON.stringify(HOME_ACTIONS[0].label).slice(1, -1))
     expect(await compileTheme(profile, async () => 'data:image/png;base64,PHNjcmlwdD4=')).toEqual(compiled)

@@ -54,6 +54,12 @@ describe('runtime appearance compilation', () => {
     expect(variables['--dream-font-sidebar-nav-sites']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-sidebar-nav-scheduled']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-sidebar-nav-plugins']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-account-menu-account']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-account-menu-team']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-account-menu-usage']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-account-menu-hide-pet']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-account-menu-settings']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-account-menu-logout']).toBe('var(--dream-font-ui)')
     for (const definition of Object.values(APPEARANCE_COLOR_TOKENS)) expect(variables[definition.cssVariable]).toBeTruthy()
     for (const definition of Object.values(APPEARANCE_PAINT_TOKENS)) expect(variables[definition.cssVariable]).toBeTruthy()
     expect(buildThemeVariableDeclarations(profile)).not.toContain('undefined')
@@ -73,6 +79,10 @@ describe('runtime appearance compilation', () => {
     expect(css).toContain('font-family: var(--dream-font-sidebar-tasks-title)')
     expect(css).toContain('font-family: var(--dream-font-sidebar-nav-new-task)')
     expect(css).toContain('font-family: var(--dream-font-sidebar-nav-plugins)')
+    expect(css).toContain('--dream-account-row-font: var(--dream-font-account-menu-account)')
+    expect(css).toContain('--dream-account-row-font: var(--dream-font-account-menu-logout)')
+    expect(css).toContain('[data-dream-account-menu-item]:is(:hover, [data-highlighted])')
+    expect(css).not.toMatch(/:is\(\[data-highlighted\],[^}]+selected/)
     expect(css).toMatch(/\.dream-project-proxy\s*\{[^}]*font-family:\s*inherit;/)
     expect(css).toContain('.dream-conversation-user-bubble')
     expect(css).toContain('.dream-conversation-codex-bubble')
@@ -97,6 +107,20 @@ describe('runtime appearance compilation', () => {
 
     profile.typography.slots.homeSubtitle = { kind: 'inherit' }
     expect(buildThemeStyleVariables(profile)['--dream-font-home-subtitle']).toBe('var(--dream-font-ui)')
+  })
+
+  it('resolves independent account menu fonts and state variables', () => {
+    const profile = createDefaultTheme(id)
+    profile.typography.importedFonts.push({ id: 'font-menu', family: 'Menu Font', asset: 'assets/menu.woff2', originalName: 'menu.woff2', format: 'woff2' })
+    profile.typography.slots.accountMenuUsage = { kind: 'imported', id: 'font-menu' }
+    profile.appearance.colors.accountMenuUsageHoverText = '#123456'
+    profile.appearance.paints.accountMenuUsageHoverBackground = { kind: 'solid', color: '#abcdef' }
+
+    const variables = buildThemeStyleVariables(profile)
+    expect(variables['--dream-font-account-menu-usage']).toBe('"Dream Imported font-menu", sans-serif')
+    expect(variables['--dream-font-account-menu-team']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-account-menu-usage-hover-text']).toBe('#123456')
+    expect(variables['--dream-account-menu-usage-hover-background']).toBe('#abcdef')
   })
 
   it('resolves independent sidebar section title fonts and two-state appearance', () => {

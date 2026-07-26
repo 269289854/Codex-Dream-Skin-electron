@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { BUILTIN_ICON_GLYPHS, resolveBuiltinIconGlyph } from '../src/shared/icon-glyphs'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
 import { createDefaultTheme } from '../src/shared/theme'
-import { buildPreviewHeroImageProps, PREVIEW_HERO_FALLBACK, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from '../src/renderer/src/preview-home'
+import { buildPreviewHeroImageProps, PREVIEW_ACCOUNT_MENU_LABELS, PREVIEW_HERO_FALLBACK, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from '../src/renderer/src/preview-home'
 
 describe('Studio home preview', () => {
   it('binds the complete hero data URL directly to the hero style', () => {
@@ -114,6 +114,14 @@ describe('Studio home preview', () => {
     expect(PREVIEW_SIDEBAR_PROJECTS[0]?.tasks).toEqual(['调整预览侧边栏'])
     expect(PREVIEW_SIDEBAR_PROJECTS[0]?.emptyLabel).toBeUndefined()
     expect(PREVIEW_SIDEBAR_TEAM).toEqual({ avatar: 'DT', label: 'Demo Team' })
+    expect(PREVIEW_ACCOUNT_MENU_LABELS).toEqual({
+      account: '演示账号',
+      team: '演示团队',
+      usage: '剩余用量',
+      hidePet: '隐藏宠物',
+      settings: '设置',
+      logout: '退出登录'
+    })
   })
 
   it('anchors the lower preview to the bottom without duplicating shared theme visuals', async () => {

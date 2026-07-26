@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import type { AccountMenuItemId } from '../../shared/account-menu'
 import { mediaFlipCssTransform } from '../../shared/media'
 import type { ThemeProfile } from '../../shared/theme'
 
@@ -23,6 +24,15 @@ export const PREVIEW_SIDEBAR_PROJECTS: readonly PreviewSidebarProject[] = [
 ]
 
 export const PREVIEW_SIDEBAR_TEAM = { avatar: 'DT', label: 'Demo Team' } as const
+
+export const PREVIEW_ACCOUNT_MENU_LABELS = {
+  account: '演示账号',
+  team: '演示团队',
+  usage: '剩余用量',
+  hidePet: '隐藏宠物',
+  settings: '设置',
+  logout: '退出登录'
+} as const satisfies Record<AccountMenuItemId, string>
 
 export const PREVIEW_HERO_FALLBACK = 'linear-gradient(135deg, #d9fbfc, #fff4fb 52%, #e7ddff)'
 

@@ -29,7 +29,7 @@ export interface LegacyThemeColors {
   danger: string
 }
 
-export type AppearanceGroup = 'global' | 'conversation' | 'sidebar' | 'brand' | 'home' | 'cards' | 'projects' | 'composer' | 'decoration'
+export type AppearanceGroup = 'global' | 'conversation' | 'sidebar' | 'account' | 'brand' | 'home' | 'cards' | 'projects' | 'composer' | 'decoration'
 export type AppearanceState = 'normal' | 'hover' | 'selected'
 export type LegacyColorKey = keyof LegacyThemeColors
 
@@ -102,6 +102,25 @@ export const APPEARANCE_COLOR_TOKENS = {
   sidebarTaskSelectedText: colorToken('任务行选中文字', 'sidebar', '--dream-sidebar-task-selected-text', 'accent', ['sidebar-task'], 'selected'),
   sidebarFooterText: colorToken('侧边栏页脚文字', 'sidebar', '--dream-sidebar-footer-text', 'ink', ['sidebar-footer']),
   sidebarAvatarText: colorToken('头像文字', 'sidebar', '--dream-sidebar-avatar-text', 'surface', ['sidebar-avatar']),
+  accountMenuBorder: colorToken('账号菜单边框', 'account', '--dream-account-menu-border', 'border', ['account-menu-surface']),
+  accountMenuAccountText: colorToken('账号信息普通文字', 'account', '--dream-account-menu-account-text', 'ink', ['account-menu-account']),
+  accountMenuAccountHoverText: colorToken('账号信息悬停文字', 'account', '--dream-account-menu-account-hover-text', 'accent', ['account-menu-account'], 'hover'),
+  accountMenuAccountSelectedText: colorToken('账号信息选中文字', 'account', '--dream-account-menu-account-selected-text', 'accent', ['account-menu-account'], 'selected'),
+  accountMenuTeamText: colorToken('团队普通文字', 'account', '--dream-account-menu-team-text', 'ink', ['account-menu-team']),
+  accountMenuTeamHoverText: colorToken('团队悬停文字', 'account', '--dream-account-menu-team-hover-text', 'accent', ['account-menu-team'], 'hover'),
+  accountMenuTeamSelectedText: colorToken('团队选中文字', 'account', '--dream-account-menu-team-selected-text', 'accent', ['account-menu-team'], 'selected'),
+  accountMenuUsageText: colorToken('剩余用量普通文字', 'account', '--dream-account-menu-usage-text', 'ink', ['account-menu-usage']),
+  accountMenuUsageHoverText: colorToken('剩余用量悬停文字', 'account', '--dream-account-menu-usage-hover-text', 'accent', ['account-menu-usage'], 'hover'),
+  accountMenuUsageSelectedText: colorToken('剩余用量选中文字', 'account', '--dream-account-menu-usage-selected-text', 'accent', ['account-menu-usage'], 'selected'),
+  accountMenuHidePetText: colorToken('隐藏宠物普通文字', 'account', '--dream-account-menu-hide-pet-text', 'ink', ['account-menu-hide-pet']),
+  accountMenuHidePetHoverText: colorToken('隐藏宠物悬停文字', 'account', '--dream-account-menu-hide-pet-hover-text', 'accent', ['account-menu-hide-pet'], 'hover'),
+  accountMenuHidePetSelectedText: colorToken('隐藏宠物选中文字', 'account', '--dream-account-menu-hide-pet-selected-text', 'accent', ['account-menu-hide-pet'], 'selected'),
+  accountMenuSettingsText: colorToken('设置普通文字', 'account', '--dream-account-menu-settings-text', 'ink', ['account-menu-settings']),
+  accountMenuSettingsHoverText: colorToken('设置悬停文字', 'account', '--dream-account-menu-settings-hover-text', 'accent', ['account-menu-settings'], 'hover'),
+  accountMenuSettingsSelectedText: colorToken('设置选中文字', 'account', '--dream-account-menu-settings-selected-text', 'accent', ['account-menu-settings'], 'selected'),
+  accountMenuLogoutText: colorToken('退出登录普通文字', 'account', '--dream-account-menu-logout-text', 'ink', ['account-menu-logout']),
+  accountMenuLogoutHoverText: colorToken('退出登录悬停文字', 'account', '--dream-account-menu-logout-hover-text', 'accent', ['account-menu-logout'], 'hover'),
+  accountMenuLogoutSelectedText: colorToken('退出登录选中文字', 'account', '--dream-account-menu-logout-selected-text', 'danger', ['account-menu-logout'], 'selected'),
   brandBorder: colorToken('品牌栏边框', 'brand', '--dream-brand-border', 'border', ['brand']),
   brandIcon: colorToken('品牌图标', 'brand', '--dream-brand-icon', 'pink', ['icon-branding']),
   brandTitle: colorToken('品牌标题', 'brand', '--dream-brand-title', 'ink', ['copy-brand-title']),
@@ -213,6 +232,25 @@ export const APPEARANCE_PAINT_TOKENS = {
   sidebarTaskRowSelected: paintToken('任务行选中', 'sidebar', '--dream-sidebar-task-row-selected', 'pink', ['sidebar-task'], 'selected'),
   sidebarFooter: paintToken('侧边栏页脚', 'sidebar', '--dream-sidebar-footer', 'surface', ['sidebar-footer']),
   sidebarAvatar: paintToken('头像', 'sidebar', '--dream-sidebar-avatar', 'accent', ['sidebar-avatar']),
+  accountMenuSurface: paintToken('账号菜单背景', 'account', '--dream-account-menu-surface', 'surface', ['account-menu-surface']),
+  accountMenuAccountBackground: paintToken('账号信息普通背景', 'account', '--dream-account-menu-account-background', 'surface', ['account-menu-account']),
+  accountMenuAccountHoverBackground: paintToken('账号信息悬停背景', 'account', '--dream-account-menu-account-hover-background', 'lavender', ['account-menu-account'], 'hover'),
+  accountMenuAccountSelectedBackground: paintToken('账号信息选中背景', 'account', '--dream-account-menu-account-selected-background', 'pink', ['account-menu-account'], 'selected'),
+  accountMenuTeamBackground: paintToken('团队普通背景', 'account', '--dream-account-menu-team-background', 'surface', ['account-menu-team']),
+  accountMenuTeamHoverBackground: paintToken('团队悬停背景', 'account', '--dream-account-menu-team-hover-background', 'lavender', ['account-menu-team'], 'hover'),
+  accountMenuTeamSelectedBackground: paintToken('团队选中背景', 'account', '--dream-account-menu-team-selected-background', 'pink', ['account-menu-team'], 'selected'),
+  accountMenuUsageBackground: paintToken('剩余用量普通背景', 'account', '--dream-account-menu-usage-background', 'surface', ['account-menu-usage']),
+  accountMenuUsageHoverBackground: paintToken('剩余用量悬停背景', 'account', '--dream-account-menu-usage-hover-background', 'lavender', ['account-menu-usage'], 'hover'),
+  accountMenuUsageSelectedBackground: paintToken('剩余用量选中背景', 'account', '--dream-account-menu-usage-selected-background', 'pink', ['account-menu-usage'], 'selected'),
+  accountMenuHidePetBackground: paintToken('隐藏宠物普通背景', 'account', '--dream-account-menu-hide-pet-background', 'surface', ['account-menu-hide-pet']),
+  accountMenuHidePetHoverBackground: paintToken('隐藏宠物悬停背景', 'account', '--dream-account-menu-hide-pet-hover-background', 'lavender', ['account-menu-hide-pet'], 'hover'),
+  accountMenuHidePetSelectedBackground: paintToken('隐藏宠物选中背景', 'account', '--dream-account-menu-hide-pet-selected-background', 'pink', ['account-menu-hide-pet'], 'selected'),
+  accountMenuSettingsBackground: paintToken('设置普通背景', 'account', '--dream-account-menu-settings-background', 'surface', ['account-menu-settings']),
+  accountMenuSettingsHoverBackground: paintToken('设置悬停背景', 'account', '--dream-account-menu-settings-hover-background', 'lavender', ['account-menu-settings'], 'hover'),
+  accountMenuSettingsSelectedBackground: paintToken('设置选中背景', 'account', '--dream-account-menu-settings-selected-background', 'pink', ['account-menu-settings'], 'selected'),
+  accountMenuLogoutBackground: paintToken('退出登录普通背景', 'account', '--dream-account-menu-logout-background', 'surface', ['account-menu-logout']),
+  accountMenuLogoutHoverBackground: paintToken('退出登录悬停背景', 'account', '--dream-account-menu-logout-hover-background', 'lavender', ['account-menu-logout'], 'hover'),
+  accountMenuLogoutSelectedBackground: paintToken('退出登录选中背景', 'account', '--dream-account-menu-logout-selected-background', 'pink', ['account-menu-logout'], 'selected'),
   brandSurface: paintToken('品牌栏背景', 'brand', '--dream-brand-surface', 'surface', ['brand']),
   homeHeadingBackdrop: paintToken('首页标题背景', 'home', '--dream-home-heading-backdrop', 'surface', ['copy-heading']),
   projectSelector: paintToken('项目选择器', 'home', '--dream-project-selector', 'surface', ['project-selector']),
@@ -307,6 +345,12 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
     case 'sidebarTaskRow':
     case 'sidebarFooter':
     case 'composerToolButton':
+    case 'accountMenuAccountBackground':
+    case 'accountMenuTeamBackground':
+    case 'accountMenuUsageBackground':
+    case 'accountMenuHidePetBackground':
+    case 'accountMenuSettingsBackground':
+    case 'accountMenuLogoutBackground':
       return { kind: 'solid', color: 'transparent' }
     case 'sidebarSearchButtonHover':
     case 'sidebarNavItemHover':
@@ -315,14 +359,28 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
     case 'sidebarProjectRowHover':
     case 'sidebarTaskRowHover':
     case 'composerToolButtonHover':
+    case 'accountMenuAccountHoverBackground':
+    case 'accountMenuTeamHoverBackground':
+    case 'accountMenuUsageHoverBackground':
+    case 'accountMenuHidePetHoverBackground':
+    case 'accountMenuSettingsHoverBackground':
+    case 'accountMenuLogoutHoverBackground':
       return linear(90, [[tint(colors.accent, 0.24), 0], [tint(colors.pink, 0.18), 1]])
     case 'sidebarNavItemSelected':
     case 'sidebarProjectRowSelected':
     case 'sidebarTaskRowSelected':
     case 'composerToolButtonSelected':
+    case 'accountMenuAccountSelectedBackground':
+    case 'accountMenuTeamSelectedBackground':
+    case 'accountMenuUsageSelectedBackground':
+    case 'accountMenuHidePetSelectedBackground':
+    case 'accountMenuSettingsSelectedBackground':
+    case 'accountMenuLogoutSelectedBackground':
       return linear(90, [[tint(colors.accent, 0.27), 0], [tint(colors.pink, 0.2), 1]])
     case 'sidebarAvatar':
       return linear(145, [[tint(colors.lavender, 0.13), 0], [tint(colors.pink, 0.1), 1]])
+    case 'accountMenuSurface':
+      return linear(145, [[colors.surface, 0], [tint(colors.lavender, 0.08), 0.58], [tint(colors.pink, 0.07), 1]])
     case 'brandSurface':
       return linear(90, [[colors.surface, 0], [tint(colors.accent, 0.12), 0.5], [tint(colors.pink, 0.14), 1]])
     case 'homeHeadingBackdrop':

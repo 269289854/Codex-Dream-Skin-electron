@@ -22,7 +22,13 @@ describe('typography model', () => {
         sidebarNavPullRequests: { kind: 'inherit' },
         sidebarNavSites: { kind: 'inherit' },
         sidebarNavScheduled: { kind: 'inherit' },
-        sidebarNavPlugins: { kind: 'inherit' }
+        sidebarNavPlugins: { kind: 'inherit' },
+        accountMenuAccount: { kind: 'inherit' },
+        accountMenuTeam: { kind: 'inherit' },
+        accountMenuUsage: { kind: 'inherit' },
+        accountMenuHidePet: { kind: 'inherit' },
+        accountMenuSettings: { kind: 'inherit' },
+        accountMenuLogout: { kind: 'inherit' }
       },
       importedFonts: []
     })
@@ -33,6 +39,7 @@ describe('typography model', () => {
     typography.importedFonts.push({ id: 'font-123', family: 'My Font', asset: 'assets/font-123.woff2', originalName: 'my-font.woff2', format: 'woff2' })
     typography.slots.homeHeading = { kind: 'imported', id: 'font-123' }
     typography.slots.homeSubtitle = { kind: 'builtin', id: 'noto-serif-sc' }
+    typography.slots.accountMenuUsage = { kind: 'imported', id: 'font-123' }
     expect(themeTypographySchema.parse(typography)).toEqual(typography)
     expect(() => themeTypographySchema.parse({ ...typography, slots: { ...typography.slots, homeHeading: { kind: 'imported', id: 'missing' } } })).toThrow()
     expect(() => themeTypographySchema.parse({ ...typography, slots: { ...typography.slots, ui: { kind: 'inherit' } } })).toThrow()
