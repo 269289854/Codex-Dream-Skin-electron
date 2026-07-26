@@ -90,10 +90,12 @@ describe('Studio home preview', () => {
     const modeIconRule = css.match(/\.codex-mode-icon\s*\{[^}]+\}/)?.[0]
     const brandGlyphRule = css.match(/\.preview-brand-icon \.builtin-icon-glyph\s*\{[^}]+\}/)?.[0]
 
-    expect(source).toContain('<CodexSidebarPreview profile={draft} assets={assets} />')
+    expect(source).toContain('<CodexSidebarPreview profile={draft} assets={assets} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />')
     expect(source).not.toContain('className="codex-rail"')
     expect(source).toContain('className="codex-project-scroll"')
     expect(source).toContain('className="codex-sidebar-footer"')
+    expect(source).toContain('className="codex-account-menu-background-media"')
+    expect(source).toContain('buildAccountMenuBackgroundStyle(profile.accountMenuBackground)')
     expect(source).toContain('slot="branding" profile={draft} assets={assets} injected')
     expect(source).toContain('slot="sidebarMode" profile={profile} assets={assets} injected')
     expect(previewRule).toContain('grid-template-columns: 270px minmax(0,1fr)')

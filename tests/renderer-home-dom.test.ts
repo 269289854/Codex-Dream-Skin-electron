@@ -176,6 +176,12 @@ type RuntimeWindowBackgroundConfig = {
   masks: Array<{ id: string; visible: boolean; style: ConversationOverlayStyle }>
 }
 
+type RuntimeAccountMenuBackgroundConfig = {
+  mode: 'color' | 'image' | 'gif'
+  dataUrl?: string | null
+  style: { opacity: string; objectPosition: string; transform: string; transformOrigin: string }
+}
+
 type RuntimeDecorations = Omit<ThemeProfile['decorations'], 'composerMelody'> & {
   composerMelody: ThemeProfile['decorations']['composerMelody'] & { dataUrl?: string | null }
 }
@@ -204,7 +210,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }): void {
   const runtimeConfig = {
     themeId,
     videoPlayback,
@@ -299,6 +305,77 @@ describe('renderer home DOM adaptation', () => {
     expect(menu?.classList.contains('dream-account-menu')).toBe(false)
     expect(rows[0]?.querySelector('.dream-account-menu-icon')).toBeNull()
     expect(rows[0]?.querySelector('.native-icon')?.classList.contains('dream-account-menu-native-icon')).toBe(false)
+  })
+
+  it('creates one account menu media layer, updates no layout, and removes it on close or cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <div role="menu" data-state="open">
+        <div role="menuitem"><span><svg></svg></span><span>示例账号</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>示例团队</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>剩余用量</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>隐藏宠物</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>设置</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>退出登录</span></div>
+      </div>`
+    const media = {
+      hero: null,
+      polaroid: null,
+      accountMenuBackground: {
+        mode: 'gif' as const,
+        dataUrl: 'data:image/gif;base64,AQ==',
+        style: { opacity: '0.72', objectPosition: '25% 75%', transform: 'scale(1.4)', transformOrigin: '25% 75%' }
+      }
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, media)
+
+    const menu = window.document.querySelector('[role="menu"]') as unknown as HTMLElement | null
+    const firstLayer = menu?.querySelector(':scope > .dream-account-menu-background') as HTMLImageElement | null
+    expect(firstLayer?.getAttribute('aria-hidden')).toBe('true')
+    expect(firstLayer?.getAttribute('src')).toBe('data:image/gif;base64,AQ==')
+    expect(firstLayer?.style.opacity).toBe('0.72')
+    expect(firstLayer?.style.objectPosition).toBe('25% 75%')
+    expect(firstLayer?.style.transform).toBe('scale(1.4)')
+    expect(menu?.querySelectorAll(':scope > .dream-account-menu-background')).toHaveLength(1)
+
+    stateOf(window).ensure()
+    expect(menu?.querySelector(':scope > .dream-account-menu-background')).toBe(firstLayer)
+    expect(menu?.querySelectorAll(':scope > .dream-account-menu-background')).toHaveLength(1)
+
+    menu?.setAttribute('data-state', 'closed')
+    stateOf(window).ensure()
+    expect(window.document.querySelector('.dream-account-menu-background')).toBeNull()
+    expect(menu?.classList.contains('dream-account-menu')).toBe(false)
+
+    menu?.setAttribute('data-state', 'open')
+    stateOf(window).ensure()
+    expect(menu?.querySelectorAll(':scope > .dream-account-menu-background')).toHaveLength(1)
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-account-menu-background')).toBeNull()
+  })
+
+  it('falls back to the account menu surface when media data is missing', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <div role="menu" data-state="open">
+        <div role="menuitem"><span><svg></svg></span><span>示例账号</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>示例团队</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>剩余用量</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>隐藏宠物</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>设置</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>退出登录</span></div>
+      </div>`
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: null,
+      polaroid: null,
+      accountMenuBackground: {
+        mode: 'image',
+        dataUrl: null,
+        style: { opacity: '1', objectPosition: '50% 50%', transform: 'scale(1)', transformOrigin: '50% 50%' }
+      }
+    })
+    expect(window.document.querySelector('.dream-account-menu')).not.toBeNull()
+    expect(window.document.querySelector('.dream-account-menu-background')).toBeNull()
   })
 
   it('ignores unrelated menus without fixed account actions', () => {

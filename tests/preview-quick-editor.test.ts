@@ -62,6 +62,7 @@ describe('preview quick editor', () => {
       assets,
       heroUrl,
       polaroidUrl,
+      accountMenuBackgroundUrl: profile.accountMenuBackground.source ? assets[profile.accountMenuBackground.source.asset] : undefined,
       position: { left: 20, top: 30, placement: 'right' },
       popoverRef: createRef<HTMLDivElement>(),
       onChange,
@@ -117,6 +118,35 @@ describe('preview quick editor', () => {
     act(() => selected.click())
     expect(container.querySelector('[data-color-token="accountMenuUsageSelectedText"]')).not.toBeNull()
     expect(container.querySelector('[data-paint-token="accountMenuUsageSelectedBackground"]')).not.toBeNull()
+  })
+
+  it('edits the full account menu background and preserves the theme when media selection is cancelled', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    const onSelectImage = vi.fn()
+    renderEditor(PREVIEW_TARGETS['account-menu-surface'], profile, vi.fn(), undefined, undefined, undefined, onSelectImage)
+
+    expect(container.querySelector('.account-menu-background-controls .paint-control')).not.toBeNull()
+    const imageMode = [...container.querySelectorAll<HTMLButtonElement>('[aria-label="账号菜单背景类型"] button')].find((button) => button.textContent === '图片')
+    if (!imageMode) throw new Error('Account menu image mode is missing.')
+    act(() => imageMode.click())
+    expect(onSelectImage).toHaveBeenCalledWith('accountMenuBackground', 'image')
+    expect(profile.accountMenuBackground).toMatchObject({ mode: 'color', source: null })
+
+    profile.accountMenuBackground = {
+      mode: 'gif',
+      source: { asset: 'assets/account-menu.gif', kind: 'image', mimeType: 'image/gif' },
+      opacity: .7,
+      focus: { x: .25, y: .75 },
+      scale: 1.5
+    }
+    renderEditor(PREVIEW_TARGETS['account-menu-surface'], profile, vi.fn(), undefined, undefined, undefined, onSelectImage, { 'assets/account-menu.gif': 'data:image/gif;base64,AA==' })
+    expect(container.querySelector<HTMLImageElement>('.account-menu-background-asset-picker img')?.src).toContain('data:image/gif')
+    const ranges = [...container.querySelectorAll('.account-menu-background-controls .range-row')]
+    expect(ranges.map((row) => row.querySelector('span')?.textContent)).toEqual(['水平焦点', '垂直焦点', '缩放', '背景透明度'])
+    const remove = container.querySelector<HTMLButtonElement>('.account-menu-background-remove')
+    if (!remove) throw new Error('Account menu background remove action is missing.')
+    act(() => remove.click())
+    expect(profile.accountMenuBackground).toMatchObject({ mode: 'color', source: null })
   })
 
   it('edits user and Codex bubble paints independently and toggles bubble visibility', () => {

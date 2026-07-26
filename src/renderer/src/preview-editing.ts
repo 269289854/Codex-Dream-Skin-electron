@@ -11,6 +11,7 @@ export interface PreviewStyleEditor {
   kind: 'style'
   colors: readonly AppearanceColorToken[]
   paints: readonly AppearancePaintToken[]
+  accountMenuBackground?: boolean
   copyField?: PreviewCopyField
   iconSlot?: IconSlot
   fontSlot?: TypographySlot
@@ -36,6 +37,7 @@ export interface PreviewTargetDefinition {
 interface StyleTargetOptions {
   colors?: readonly AppearanceColorToken[]
   paints?: readonly AppearancePaintToken[]
+  accountMenuBackground?: boolean
   copyField?: PreviewCopyField
   iconSlot?: IconSlot
   fontSlot?: TypographySlot
@@ -49,7 +51,7 @@ const styleTarget = (label: string, group: AppearanceGroup, options: StyleTarget
   label,
   inspector: 'visual',
   inspectorAnchor: options.inspectorAnchor ?? `appearance-${group}`,
-  editor: { kind: 'style', colors: options.colors ?? [], paints: options.paints ?? [], copyField: options.copyField, iconSlot: options.iconSlot, fontSlot: options.fontSlot, visibility: options.visibility, decoration: options.decoration, conversationBubbleRole: options.conversationBubbleRole }
+  editor: { kind: 'style', colors: options.colors ?? [], paints: options.paints ?? [], accountMenuBackground: options.accountMenuBackground, copyField: options.copyField, iconSlot: options.iconSlot, fontSlot: options.fontSlot, visibility: options.visibility, decoration: options.decoration, conversationBubbleRole: options.conversationBubbleRole }
 })
 
 export const PREVIEW_TARGETS = {
@@ -80,7 +82,7 @@ export const PREVIEW_TARGETS = {
   'sidebar-footer': styleTarget('侧边栏页脚', 'sidebar', { colors: ['sidebarFooterText'], paints: ['sidebarFooter'], fontSlot: 'ui' }),
   'sidebar-avatar': styleTarget('头像', 'sidebar', { colors: ['sidebarAvatarText'], paints: ['sidebarAvatar'], fontSlot: 'ui' }),
   'icon-sidebar-mode': styleTarget('侧边栏模式图标', 'sidebar', { colors: ['sidebarModeIcon'], paints: ['sidebarModeBadge'], iconSlot: 'sidebarMode' }),
-  'account-menu-surface': styleTarget('账号菜单', 'account', { colors: ['accountMenuBorder'], paints: ['accountMenuSurface'] }),
+  'account-menu-surface': styleTarget('账号菜单', 'account', { colors: ['accountMenuBorder'], accountMenuBackground: true, inspectorAnchor: 'visual-account-menu-background' }),
   'account-menu-account': styleTarget('账号信息', 'account', { colors: ['accountMenuAccountText', 'accountMenuAccountHoverText', 'accountMenuAccountSelectedText'], paints: ['accountMenuAccountBackground', 'accountMenuAccountHoverBackground', 'accountMenuAccountSelectedBackground'], iconSlot: 'accountMenuAccount', fontSlot: 'accountMenuAccount' }),
   'account-menu-team': styleTarget('团队', 'account', { colors: ['accountMenuTeamText', 'accountMenuTeamHoverText', 'accountMenuTeamSelectedText'], paints: ['accountMenuTeamBackground', 'accountMenuTeamHoverBackground', 'accountMenuTeamSelectedBackground'], iconSlot: 'accountMenuTeam', fontSlot: 'accountMenuTeam' }),
   'account-menu-usage': styleTarget('剩余用量', 'account', { colors: ['accountMenuUsageText', 'accountMenuUsageHoverText', 'accountMenuUsageSelectedText'], paints: ['accountMenuUsageBackground', 'accountMenuUsageHoverBackground', 'accountMenuUsageSelectedBackground'], iconSlot: 'accountMenuUsage', fontSlot: 'accountMenuUsage' }),

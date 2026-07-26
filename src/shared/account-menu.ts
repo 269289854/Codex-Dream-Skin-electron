@@ -57,3 +57,34 @@ export const ACCOUNT_MENU_ITEMS = [
 
 export type AccountMenuItem = (typeof ACCOUNT_MENU_ITEMS)[number]
 export type AccountMenuItemId = AccountMenuItem['id']
+
+export interface AccountMenuBackgroundLayout {
+  opacity: number
+  focus: { x: number; y: number }
+  scale: number
+}
+
+export interface AccountMenuBackgroundStyle {
+  opacity: string
+  objectPosition: string
+  transform: string
+  transformOrigin: string
+}
+
+export function buildAccountMenuBackgroundStyle(background: AccountMenuBackgroundLayout): AccountMenuBackgroundStyle {
+  const position = `${percent(background.focus.x)} ${percent(background.focus.y)}`
+  return {
+    opacity: formatNumber(background.opacity),
+    objectPosition: position,
+    transform: `scale(${formatNumber(background.scale)})`,
+    transformOrigin: position
+  }
+}
+
+function percent(value: number): string {
+  return `${formatNumber(value * 100)}%`
+}
+
+function formatNumber(value: number): string {
+  return Number(value.toFixed(3)).toString()
+}

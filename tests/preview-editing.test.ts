@@ -102,8 +102,10 @@ describe('preview editing registry', () => {
     expect(PREVIEW_TARGETS['account-menu-surface'].editor).toMatchObject({
       kind: 'style',
       colors: ['accountMenuBorder'],
-      paints: ['accountMenuSurface']
+      paints: [],
+      accountMenuBackground: true
     })
+    expect(PREVIEW_TARGETS['account-menu-surface'].inspectorAnchor).toBe('visual-account-menu-background')
     expect(PREVIEW_TARGETS['account-menu-usage']).toMatchObject({
       inspectorAnchor: 'appearance-account',
       editor: {
@@ -141,7 +143,8 @@ describe('preview editing registry', () => {
   it('exposes every appearance token and the global UI font through preview targets', () => {
     const styleEditors = Object.values(PREVIEW_TARGETS).flatMap((target) => target.editor.kind === 'style' ? [target.editor] : [])
     expect(new Set(styleEditors.flatMap((editor) => editor.colors))).toEqual(new Set(Object.keys(APPEARANCE_COLOR_TOKENS).filter((token) => APPEARANCE_COLOR_TOKENS[token as keyof typeof APPEARANCE_COLOR_TOKENS].editable)))
-    expect(new Set(styleEditors.flatMap((editor) => editor.paints))).toEqual(new Set(Object.keys(APPEARANCE_PAINT_TOKENS).filter((token) => APPEARANCE_PAINT_TOKENS[token as keyof typeof APPEARANCE_PAINT_TOKENS].editable)))
+    const exposedPaints = styleEditors.flatMap((editor) => [...editor.paints, ...(editor.accountMenuBackground ? ['accountMenuSurface' as const] : [])])
+    expect(new Set(exposedPaints)).toEqual(new Set(Object.keys(APPEARANCE_PAINT_TOKENS).filter((token) => APPEARANCE_PAINT_TOKENS[token as keyof typeof APPEARANCE_PAINT_TOKENS].editable)))
     for (const target of ['conversation-user-message', 'conversation-codex-message', 'primary-button', 'sidebar-nav', 'sidebar-project', 'sidebar-task', 'action-card-text', 'project-chip', 'composer-model'] as const) {
       expect(PREVIEW_TARGETS[target].editor).toMatchObject({ kind: 'style', fontSlot: 'ui' })
     }

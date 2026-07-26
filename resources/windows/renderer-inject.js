@@ -12,6 +12,7 @@
   const sidebarCopyRestorers = new Map();
   const accountMenuRestorers = new WeakMap();
   const accountMenuRows = new Set();
+  const ACCOUNT_MENU_BACKGROUND_CLASS = "dream-account-menu-background";
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
@@ -1003,7 +1004,9 @@
     return (item?.aliases || []).some((alias) => label.includes(String(alias).toLowerCase()));
   };
   const findAccountMenuContract = () => {
-    const menus = [...document.querySelectorAll('[role="menu"][data-state="open"], [role="menu"]')].filter(isVisible);
+    const menus = [...document.querySelectorAll('[role="menu"][data-state="open"], [role="menu"]')]
+      .filter((root) => root.getAttribute("data-state") !== "closed" && root.getAttribute("aria-hidden") !== "true")
+      .filter(isVisible);
     for (const root of menus) {
       const rows = [...root.querySelectorAll('[role="menuitem"]')].filter((row) => row.closest('[role="menu"]') === root && isVisible(row));
       const usageIndex = rows.findIndex((row, index) => index >= 2 && accountMenuLabelMatches(row, "usage"));
@@ -1040,7 +1043,35 @@
   };
   const clearAccountMenu = () => {
     for (const row of [...accountMenuRows]) restoreAccountMenuRow(row);
+    document.querySelectorAll(`.${ACCOUNT_MENU_BACKGROUND_CLASS}`).forEach((node) => node.remove());
     document.querySelectorAll(".dream-account-menu").forEach((node) => node.classList.remove("dream-account-menu"));
+  };
+  const ensureAccountMenuBackground = (root) => {
+    document.querySelectorAll(`.${ACCOUNT_MENU_BACKGROUND_CLASS}`).forEach((node) => {
+      if (node.parentElement !== root) node.remove();
+    });
+    const config = mediaConfig?.accountMenuBackground;
+    const mode = config?.mode;
+    const dataUrl = typeof config?.dataUrl === "string" && config.dataUrl.startsWith("data:image/") ? config.dataUrl : "";
+    if (!(root instanceof HTMLElement) || (mode !== "image" && mode !== "gif") || !dataUrl) {
+      root?.querySelectorAll?.(`:scope > .${ACCOUNT_MENU_BACKGROUND_CLASS}`).forEach((node) => node.remove());
+      return;
+    }
+    let media = [...root.children].find((child) => child.classList?.contains(ACCOUNT_MENU_BACKGROUND_CLASS));
+    if (!(media instanceof HTMLImageElement)) {
+      media?.remove();
+      media = document.createElement("img");
+      media.className = ACCOUNT_MENU_BACKGROUND_CLASS;
+      media.setAttribute("aria-hidden", "true");
+      media.draggable = false;
+      root.insertBefore(media, root.firstChild);
+    }
+    if (media.src !== dataUrl) media.src = dataUrl;
+    const style = config?.style && typeof config.style === "object" ? config.style : {};
+    setInlineStyle(media, "opacity", typeof style.opacity === "string" ? style.opacity : "1");
+    setInlineStyle(media, "object-position", typeof style.objectPosition === "string" ? style.objectPosition : "50% 50%");
+    setInlineStyle(media, "transform", typeof style.transform === "string" ? style.transform : "scale(1)");
+    setInlineStyle(media, "transform-origin", typeof style.transformOrigin === "string" ? style.transformOrigin : "50% 50%");
   };
   const ensureAccountMenu = () => {
     const contract = findAccountMenuContract();
@@ -1050,6 +1081,7 @@
     });
     if (contract) {
       if (!contract.root.classList.contains("dream-account-menu")) contract.root.classList.add("dream-account-menu");
+      ensureAccountMenuBackground(contract.root);
       for (const item of accountMenu) {
         const row = contract.rows.get(item?.id);
         if (!(row instanceof HTMLElement) || typeof item?.iconSlot !== "string") continue;
@@ -1075,6 +1107,8 @@
         if (!row.classList.contains(record.className)) row.classList.add(record.className);
         renderSlot(record.injectedIcon, item.iconSlot, "✦");
       }
+    } else {
+      ensureAccountMenuBackground(null);
     }
     for (const row of [...accountMenuRows]) {
       if (!activeRows.has(row)) restoreAccountMenuRow(row);
@@ -2190,7 +2224,8 @@
     ".dream-composer-badge",
     ".dream-composer-melody",
     ".dream-composer-send-icon",
-    ".dream-account-menu-icon"
+    ".dream-account-menu-icon",
+    ".dream-account-menu-background"
   ].join(", ");
   const containsStructuralNode = (node) => node instanceof Element && (node.matches(structuralSelector) || Boolean(node.querySelector(structuralSelector)));
   const isInjectedNode = (node) => node instanceof Element && node.matches(injectedMutationSelector);
@@ -2210,7 +2245,7 @@
     if (relevant.some(mutationNeedsFullEnsure)) scheduleEnsure();
     else if (relevant.length > 0) scheduleContentSync();
   });
-  observer.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, characterData: true, attributes: true, attributeFilter: ["data-state", "hidden", "aria-hidden"], subtree: true });
   const resizeHandler = scheduleEnsure;
   window.addEventListener("resize", resizeHandler);
   if (document.fonts?.ready) {

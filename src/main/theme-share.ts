@@ -110,6 +110,7 @@ function themeMediaReferences(profile: ThemeProfile): Array<MediaReference | nul
     profile.polaroid.source,
     profile.conversationBackground.source,
     profile.windowBackground.source,
+    profile.accountMenuBackground.source,
     profile.decorations.composerMelody.source,
     ...conversationBubbleMediaReferences(profile)
   ]

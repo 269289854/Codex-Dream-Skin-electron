@@ -81,11 +81,18 @@ describe('CodexService operation queue', () => {
       softness: 16,
       cornerRadius: 32
     }]
+    profile.accountMenuBackground = {
+      mode: 'gif',
+      source: { asset: 'assets/account-menu.gif', kind: 'image', mimeType: 'image/gif' },
+      opacity: .72,
+      focus: { x: .25, y: .75 },
+      scale: 1.4
+    }
     const store = {
       root,
       themesRoot: join(root, 'themes'),
       get: vi.fn().mockResolvedValue(profile),
-      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', 'assets/window.png': 'data:image/png;base64,AA==' } })
+      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', 'assets/window.png': 'data:image/png;base64,AA==', 'assets/account-menu.gif': 'data:image/gif;base64,AQ==' } })
     }
     const service = new CodexService(store as never, join(process.cwd(), 'resources', 'windows'), '1.0.5', () => undefined)
     const builder = service as unknown as { buildPayload(themeId: string): Promise<{ script: string; version: string }> }
@@ -118,6 +125,8 @@ describe('CodexService operation queue', () => {
     expect(first.script).toContain('"dataUrl":"data:image/png;base64,AA=="')
     expect(first.script).toContain('"id":"22222222-2222-4222-8222-222222222222","visible":true,"style":{"background":"radial-gradient(circle at 40% 60%, #FFFFFF 0%, transparent 100%)"')
     expect(first.script).not.toContain('"windowBackground":{"visible":true,"mode":"image","paint"')
+    expect(first.script).toContain('"accountMenuBackground":{"mode":"gif","style":{"opacity":"0.72","objectPosition":"25% 75%","transform":"scale(1.4)","transformOrigin":"25% 75%"}')
+    expect(first.script).toContain('"asset":"assets/account-menu.gif","dataUrl":"data:image/gif;base64,AQ=="')
     expect(first.script).toContain('"conversationBubbles":{"visible":false,"user":{"mode":"none","dataUrl":null,"slice":25,"sliceInsets":[25,25,25,25],"frameWidth":24,"borderWidths":[24,48,24,48],"contentPadding":20}')
     expect(first.script).toContain('"codex":{"mode":"none","dataUrl":null,"slice":25,"sliceInsets":[25,25,25,25],"frameWidth":24,"borderWidths":[24,48,24,48],"contentPadding":20}')
     expect(first.script).toContain('"toolActivityBubbles":{"visible":false}')

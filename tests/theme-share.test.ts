@@ -71,6 +71,13 @@ describe('theme share packages', () => {
     draft.windowBackground.visible = true
     draft.windowBackground.mode = 'image'
     draft.windowBackground.source = windowReference
+    draft.accountMenuBackground = {
+      mode: 'gif',
+      source: composerGif.reference,
+      opacity: .72,
+      focus: { x: .25, y: .75 },
+      scale: 1.4
+    }
     draft.windowBackground.masks = [{
       id: '22222222-2222-4222-8222-222222222222',
       visible: true,
@@ -111,6 +118,7 @@ describe('theme share packages', () => {
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
     expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
     expect(checked.profile.windowBackground.source).toEqual(windowReference)
+    expect(checked.profile.accountMenuBackground).toEqual(draft.accountMenuBackground)
     expect(checked.profile.conversationBubbles.user.source).toEqual({ kind: 'preset', presetId: 'cloud-sprout' })
     expect(checked.profile.conversationBubbles.codex.source).toEqual({ kind: 'custom', reference: composerGif.reference })
     expect(checked.profile.resetColors.accent).toBe(original.resetColors.accent)
@@ -119,6 +127,7 @@ describe('theme share packages', () => {
     const imported = await store.importSharePackage(packagePath)
     expect(imported.id).not.toBe(original.id)
     expect(imported.name).toBe(draft.name)
+    expect(imported.accountMenuBackground).toEqual(draft.accountMenuBackground)
     expect(imported.copy.brandTitle).toBe('尚未保存的分享标题')
     expect(imported.colors).toEqual(draft.colors)
     expect(imported.decorations.sparkles.performanceMode).toBe('quality')

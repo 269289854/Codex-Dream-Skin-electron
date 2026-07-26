@@ -24,6 +24,9 @@ describe('renderer injection template', () => {
     expect(template).toContain('ensureAccountMenu()')
     expect(template).toContain('clearAccountMenu()')
     expect(template).toContain('data-dream-account-menu-item')
+    expect(template).toContain('dream-account-menu-background')
+    expect(template).toContain('ensureAccountMenuBackground')
+    expect(template).toContain('attributeFilter: ["data-state", "hidden", "aria-hidden"]')
     expect(template).toContain('[data-local-conversation-item-target-ids]')
     expect(template).toContain('ensureToolActivityBubbles()')
     expect(template).toContain('clearToolActivityBubbles()')
@@ -89,6 +92,19 @@ describe('renderer injection template', () => {
     expect(hoverRule).toContain('var(--dream-account-row-hover-background, transparent)')
     expect(selectedRule).toContain('var(--dream-account-row-selected-text, var(--dream-global-text))')
     expect(selectedRule).not.toContain('[data-highlighted]')
+  })
+
+  it('keeps the account menu media below row states without changing menu layout', async () => {
+    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const mediaRule = css.match(/\.dream-account-menu > \.dream-account-menu-background\s*\{[^}]+\}/)?.[0]
+    const contentRule = css.match(/\.dream-account-menu > :not\(\.dream-account-menu-background\)\s*\{[^}]+\}/)?.[0]
+    expect(mediaRule).toContain('position: absolute')
+    expect(mediaRule).toContain('object-fit: cover')
+    expect(mediaRule).toContain('pointer-events: none')
+    expect(contentRule).toContain('z-index: 1')
+    expect(css).toMatch(/\.dream-account-menu\s*\{[^}]*isolation:\s*isolate/)
+    expect(css).not.toMatch(/\.dream-account-menu\s*\{[^}]*width:/)
+    expect(css).not.toMatch(/\.dream-account-menu\s*\{[^}]*height:/)
   })
 
   it('keeps an open sidebar menu trigger fixed while its popover is anchored', async () => {

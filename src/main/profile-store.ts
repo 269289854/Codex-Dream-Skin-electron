@@ -441,6 +441,7 @@ export class ProfileStore {
       profile.polaroid.source,
       profile.conversationBackground.source,
       profile.windowBackground.source,
+      profile.accountMenuBackground.source,
       profile.decorations.composerMelody.source,
       ...conversationBubbleMediaReferences(profile)
     ]
@@ -495,6 +496,7 @@ export class ProfileStore {
     const conversationBubble = isConversationBubblePurpose(purpose)
     if (extension !== '.svg' && !MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('仅支持 PNG、WebP、JPEG、GIF、SVG、MP4 和 WebM。')
     if (purpose === 'composerMelody' && VIDEO_EXTENSIONS.has(extension)) throw new Error('输入框装饰只能选择图片或 GIF 文件。')
+    if (purpose === 'accountMenuBackground' && VIDEO_EXTENSIONS.has(extension)) throw new Error('账号菜单背景只能选择图片或 GIF 文件。')
     if (conversationBubble && VIDEO_EXTENSIONS.has(extension)) throw new Error('聊天气泡只能选择图片或 GIF 文件。')
     if (expectedKind === 'image' && (extension === '.gif' || VIDEO_EXTENSIONS.has(extension))) throw new Error('图片背景只支持 PNG、WebP、JPEG 或 SVG。')
     if (expectedKind === 'gif' && extension !== '.gif') throw new Error('GIF 背景必须选择 GIF 文件。')

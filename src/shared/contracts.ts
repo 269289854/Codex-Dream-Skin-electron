@@ -70,7 +70,7 @@ export interface OperationProgress {
   message: string
 }
 
-export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble'
+export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'accountMenuBackground' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble'
 export type VideoMediaRole = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground'
 export type AssetPurpose = MediaAssetPurpose | 'icon' | 'font'
 export type MediaSelectionKind = 'image' | 'gif' | 'video'

@@ -356,6 +356,9 @@ export type ConversationBackgroundMode = z.infer<typeof conversationBackgroundMo
 export const windowBackgroundModeSchema = conversationBackgroundModeSchema
 export type WindowBackgroundMode = z.infer<typeof windowBackgroundModeSchema>
 
+export const accountMenuBackgroundModeSchema = z.enum(['color', 'image', 'gif'])
+export type AccountMenuBackgroundMode = z.infer<typeof accountMenuBackgroundModeSchema>
+
 const conversationBackgroundFields = {
   visible: z.boolean(),
   mode: conversationBackgroundModeSchema,
@@ -418,8 +421,16 @@ const windowBackgroundSchema = z.object({
   masks: windowBackgroundMasksSchema
 }).strict().superRefine(refineConversationBackground)
 
+const accountMenuBackgroundSchema = z.object({
+  mode: accountMenuBackgroundModeSchema,
+  source: mediaReferenceSchema.nullable(),
+  opacity: normalized,
+  focus: pointSchema,
+  scale: z.number().finite().min(1).max(3)
+}).strict().superRefine(refineConversationBackground)
+
 function refineConversationBackground(background: {
-  mode: ConversationBackgroundMode
+  mode: ConversationBackgroundMode | AccountMenuBackgroundMode
   source: MediaReference | null
 }, context: z.RefinementCtx): void {
   if (background.mode === 'color') {
@@ -441,6 +452,7 @@ export type ConversationBackground = z.infer<typeof conversationBackgroundSchema
 export type ConversationBackgroundOverlay = z.infer<typeof conversationBackgroundOverlaySchema>
 export type WindowBackground = z.infer<typeof windowBackgroundSchema>
 export type WindowBackgroundMask = z.infer<typeof windowBackgroundMaskSchema>
+export type AccountMenuBackground = z.infer<typeof accountMenuBackgroundSchema>
 
 export const CONVERSATION_BUBBLE_PRESETS = [
   { id: 'daisy-heart', name: '雏菊爱心', fileName: 'daisy-heart.png' },
@@ -787,6 +799,7 @@ export const themeProfileSchema = z.object({
   decorations: decorationsSchema,
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  accountMenuBackground: accountMenuBackgroundSchema.default(createDefaultAccountMenuBackground()),
   conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
   toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
   resetColors: themeColorsSchema
@@ -933,6 +946,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
     },
     conversationBackground: createDefaultConversationBackground(),
     windowBackground: createDefaultWindowBackground(),
+    accountMenuBackground: createDefaultAccountMenuBackground(),
     conversationBubbles: createDefaultConversationBubbles(),
     toolActivityBubbles: createDefaultToolActivityBubbles(),
     colors: { ...palette },
@@ -974,6 +988,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
 export function parseThemeProfile(input: unknown): ThemeProfile {
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 0 && input.version <= 23) {
     const legacy = structuredClone(input) as Record<string, unknown>
+    delete legacy.accountMenuBackground
     const bubbles = legacy.conversationBubbles && typeof legacy.conversationBubbles === 'object' ? legacy.conversationBubbles as Record<string, unknown> : null
     if (bubbles && ('user' in bubbles || 'codex' in bubbles)) legacy.conversationBubbles = { visible: bubbles.visible !== false }
     input = legacy
@@ -1482,6 +1497,16 @@ export function createDefaultWindowBackground(): WindowBackground {
     scale: 1,
     mediaTransform: createDefaultMediaTransform(),
     masks: []
+  }
+}
+
+export function createDefaultAccountMenuBackground(): AccountMenuBackground {
+  return {
+    mode: 'color',
+    source: null,
+    opacity: 1,
+    focus: { x: 0.5, y: 0.5 },
+    scale: 1
   }
 }
 

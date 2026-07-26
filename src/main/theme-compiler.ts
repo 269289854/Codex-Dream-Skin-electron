@@ -21,6 +21,7 @@ export async function compileTheme(
   else if (!profile.polaroid.source && profile.polaroid.sourceImage) assetNames.add(profile.polaroid.sourceImage)
   if (profile.conversationBackground.source?.kind === 'image') assetNames.add(profile.conversationBackground.source.asset)
   if (profile.windowBackground.source?.kind === 'image') assetNames.add(profile.windowBackground.source.asset)
+  if (profile.accountMenuBackground.source?.kind === 'image') assetNames.add(profile.accountMenuBackground.source.asset)
   if (profile.decorations.composerMelody.source) assetNames.add(profile.decorations.composerMelody.source.asset)
   for (const reference of conversationBubbleMediaReferences(profile)) assetNames.add(reference.asset)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
@@ -45,6 +46,9 @@ export async function compileTheme(
   const windowBackground = profile.windowBackground.source?.kind === 'image'
     ? assets[profile.windowBackground.source.asset]
     : null
+  const accountMenuBackground = profile.accountMenuBackground.source?.kind === 'image'
+    ? assets[profile.accountMenuBackground.source.asset]
+    : null
   const polaroidLayout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, profile.polaroid.fence as Fence) : null
   const showPolaroid = profile.polaroid.visible && Boolean(polaroid && polaroidLayout)
   const polaroidStyle = profile.polaroid.style
@@ -62,7 +66,7 @@ export async function compileTheme(
 
   return {
     css,
-    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, accountMenu: ACCOUNT_MENU_ITEMS, home: { actions: HOME_ACTIONS }, assets: Object.fromEntries(Object.entries(assets).filter(([key]) => !key.startsWith('builtin/conversation-bubbles/') && !conversationBubbleAssets.has(key))), conversationBackground, windowBackground, conversationBubbles, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
+    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, accountMenu: ACCOUNT_MENU_ITEMS, home: { actions: HOME_ACTIONS }, assets: Object.fromEntries(Object.entries(assets).filter(([key]) => !key.startsWith('builtin/conversation-bubbles/') && !conversationBubbleAssets.has(key))), conversationBackground, windowBackground, accountMenuBackground, conversationBubbles, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
     assets
   }
 }
@@ -74,6 +78,7 @@ function createRuntimeProfile(profile: ThemeProfile): ThemeProfile {
     runtimeProfile.polaroid.source,
     runtimeProfile.conversationBackground.source,
     runtimeProfile.windowBackground.source,
+    runtimeProfile.accountMenuBackground.source,
     runtimeProfile.decorations.composerMelody.source,
     ...conversationBubbleMediaReferences(runtimeProfile)
   ]

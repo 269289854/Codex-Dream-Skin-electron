@@ -1499,6 +1499,93 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.appearance.paints.accountMenuUsageHoverBackground).toEqual({ kind: 'solid', color: '#abcdef' })
   })
 
+  it('previews account menu image and GIF backgrounds, preserves cancellation, and restores the color surface', async () => {
+    const surface = container.querySelector<HTMLElement>('[data-preview-target="account-menu-surface"]')
+    if (!surface) throw new Error('Account menu surface preview is missing.')
+    pointerDown(surface)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('账号菜单快捷配置')
+
+    const imageMode = (): HTMLButtonElement | undefined => [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] [aria-label="账号菜单背景类型"] button')].find((button) => button.textContent === '图片')
+    await act(async () => {
+      imageMode()?.click()
+      await Promise.resolve()
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'accountMenuBackground', 'image')
+    expect(profile.accountMenuBackground).toMatchObject({ mode: 'color', source: null })
+    expect(surface.querySelector('.codex-account-menu-background-media')).toBeNull()
+
+    selectMedia.mockResolvedValueOnce({
+      reference: { asset: 'assets/account-menu.png', kind: 'image', mimeType: 'image/png' },
+      relativePath: 'assets/account-menu.png',
+      previewUrl: 'data:image/png;base64,AQ==',
+      originalName: 'account-menu.png',
+      width: 800,
+      height: 1000
+    })
+    await act(async () => {
+      imageMode()?.click()
+      await Promise.resolve()
+    })
+    let media = surface.querySelector<HTMLImageElement>('.codex-account-menu-background-media')
+    expect(media?.getAttribute('src')).toBe('data:image/png;base64,AQ==')
+
+    const range = (label: string): HTMLInputElement | undefined => [...container.querySelectorAll<HTMLElement>('[role="dialog"] .account-menu-background-controls .range-row')].find((row) => row.querySelector('span')?.textContent === label)?.querySelector<HTMLInputElement>('input') ?? undefined
+    const horizontal = range('水平焦点')
+    const vertical = range('垂直焦点')
+    const scale = range('缩放')
+    const opacity = range('背景透明度')
+    if (!horizontal || !vertical || !scale || !opacity) throw new Error('Account menu background range controls are missing.')
+    act(() => {
+      setInputValue(horizontal, '.2')
+      setInputValue(vertical, '.8')
+      setInputValue(scale, '1.5')
+      setInputValue(opacity, '.6')
+    })
+    media = surface.querySelector<HTMLImageElement>('.codex-account-menu-background-media')
+    expect(media?.style.objectPosition).toBe('20% 80%')
+    expect(media?.style.transform).toBe('scale(1.5)')
+    expect(media?.style.opacity).toBe('0.6')
+
+    selectMedia.mockResolvedValueOnce({
+      reference: { asset: 'assets/account-menu.gif', kind: 'image', mimeType: 'image/gif' },
+      relativePath: 'assets/account-menu.gif',
+      previewUrl: 'data:image/gif;base64,Ag==',
+      originalName: 'account-menu.gif',
+      width: 800,
+      height: 1000
+    })
+    const gifMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] [aria-label="账号菜单背景类型"] button')].find((button) => button.textContent === 'GIF')
+    await act(async () => {
+      gifMode?.click()
+      await Promise.resolve()
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'accountMenuBackground', 'gif')
+    expect(surface.querySelector<HTMLImageElement>('.codex-account-menu-background-media')?.getAttribute('src')).toBe('data:image/gif;base64,Ag==')
+
+    const more = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.includes('更多设置'))
+    act(() => more?.click())
+    expect(container.querySelector('[data-inspector-anchor="visual-account-menu-background"] .account-menu-background-controls')).not.toBeNull()
+
+    pointerDown(surface)
+    const colorMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] [aria-label="账号菜单背景类型"] button')].find((button) => button.textContent === '颜色')
+    act(() => colorMode?.click())
+    expect(surface.querySelector('.codex-account-menu-background-media')).toBeNull()
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.accountMenuBackground).toMatchObject({
+      mode: 'color',
+      source: null,
+      opacity: .6,
+      focus: { x: .2, y: .8 },
+      scale: 1.5
+    })
+  })
+
   it('edits project and task section titles with independent copy, fonts, and two-state appearance', async () => {
     const projectTitle = container.querySelector('[data-preview-target="sidebar-project-title"]')
     const taskTitle = container.querySelector('[data-preview-target="sidebar-task-title"]')

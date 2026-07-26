@@ -20,6 +20,44 @@ function versionFourteenConversationBackground(background: ReturnType<typeof cre
 }
 
 describe('theme schema and compiler', () => {
+  it('defaults and validates account menu color, image, and GIF backgrounds without raising the theme version', () => {
+    const profile = createDefaultTheme(id)
+    expect(profile.version).toBe(24)
+    expect(profile.accountMenuBackground).toEqual({
+      mode: 'color',
+      source: null,
+      opacity: 1,
+      focus: { x: .5, y: .5 },
+      scale: 1
+    })
+
+    const oldV24 = structuredClone(profile) as Record<string, unknown>
+    delete oldV24.accountMenuBackground
+    expect(parseThemeProfile(oldV24).accountMenuBackground).toEqual(profile.accountMenuBackground)
+
+    const image = structuredClone(profile)
+    image.accountMenuBackground = {
+      mode: 'image',
+      source: { asset: 'assets/account-menu.png', kind: 'image', mimeType: 'image/png' },
+      opacity: .65,
+      focus: { x: .2, y: .8 },
+      scale: 1.75
+    }
+    expect(parseThemeProfile(image).accountMenuBackground).toEqual(image.accountMenuBackground)
+
+    const gif = structuredClone(image)
+    gif.accountMenuBackground.mode = 'gif'
+    gif.accountMenuBackground.source = { asset: 'assets/account-menu.gif', kind: 'image', mimeType: 'image/gif' }
+    expect(parseThemeProfile(gif).accountMenuBackground).toEqual(gif.accountMenuBackground)
+
+    expect(() => parseThemeProfile({ ...profile, accountMenuBackground: { ...image.accountMenuBackground, mode: 'color' } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, accountMenuBackground: { ...image.accountMenuBackground, source: { asset: 'assets/account-menu.gif', kind: 'image', mimeType: 'image/gif' } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, accountMenuBackground: { ...gif.accountMenuBackground, source: { asset: 'assets/account-menu.png', kind: 'image', mimeType: 'image/png' } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, accountMenuBackground: { ...image.accountMenuBackground, opacity: 1.1 } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, accountMenuBackground: { ...image.accountMenuBackground, focus: { x: -.1, y: .5 } } })).toThrow()
+    expect(() => parseThemeProfile({ ...profile, accountMenuBackground: { ...image.accountMenuBackground, scale: 3.01 } })).toThrow()
+  })
+
   it('provides validated creation palettes and clones default colors per theme', () => {
     for (const preset of THEME_COLOR_PRESETS) {
       expect(createThemeInputSchema.parse({ name: ` ${preset.name} `, colors: preset.colors })).toMatchObject({ name: preset.name, colors: preset.colors })

@@ -509,6 +509,50 @@ describe('ProfileStore', () => {
     expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
   })
 
+  it('imports, previews, duplicates, replaces, and prunes account menu image and GIF backgrounds', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-account-menu-background-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('账号菜单背景主题')
+    const pngSource = join(root, 'account-menu.png')
+    const gifSource = join(root, 'account-menu.gif')
+    const videoSource = join(root, 'account-menu.mp4')
+    await Promise.all([
+      writeFile(pngSource, TEST_PNG),
+      writeFile(gifSource, TEST_GIF),
+      writeFile(videoSource, Buffer.from('video'))
+    ])
+
+    const image = await store.importMediaAsset(profile.id, pngSource, 'accountMenuBackground', 'image')
+    profile.accountMenuBackground.mode = 'image'
+    profile.accountMenuBackground.source = image.reference
+    await store.update(profile)
+    await expect(store.getMediaPreviewUrl(profile.id, image.relativePath)).resolves.toContain('studio-media://')
+    expect((await store.compile(profile.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+    const imageDuplicate = await store.duplicate(profile, '账号菜单图片副本')
+    expect(imageDuplicate.accountMenuBackground.source).toEqual(image.reference)
+    expect((await store.compile(imageDuplicate.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+
+    const gif = await store.importMediaAsset(profile.id, gifSource, 'accountMenuBackground', 'gif')
+    profile.accountMenuBackground.mode = 'gif'
+    profile.accountMenuBackground.source = gif.reference
+    await store.update(profile)
+    await expect(readFile(store.resolveAsset(profile.id, image.relativePath))).rejects.toThrow()
+    expect((await store.compile(profile.id)).assets[gif.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    const gifDuplicate = await store.duplicate(profile, '账号菜单 GIF 副本')
+    expect(gifDuplicate.accountMenuBackground.source).toEqual(gif.reference)
+
+    await expect(store.importMediaAsset(profile.id, gifSource, 'accountMenuBackground', 'image')).rejects.toThrow('图片')
+    await expect(store.importMediaAsset(profile.id, pngSource, 'accountMenuBackground', 'gif')).rejects.toThrow('GIF')
+    await expect(store.importMediaAsset(profile.id, videoSource, 'accountMenuBackground', 'video')).rejects.toThrow('图片或 GIF')
+
+    profile.accountMenuBackground.mode = 'color'
+    profile.accountMenuBackground.source = null
+    await store.update(profile)
+    await expect(readFile(store.resolveAsset(profile.id, gif.relativePath))).rejects.toThrow()
+  })
+
   it('repairs persisted version sixteen generated section title colors', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-v16-title-colors-'))
     roots.push(root)

@@ -6,7 +6,7 @@ import {
   Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
-import { ACCOUNT_MENU_ITEMS } from '../../shared/account-menu'
+import { ACCOUNT_MENU_ITEMS, buildAccountMenuBackgroundStyle } from '../../shared/account-menu'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
@@ -35,6 +35,7 @@ import { PreviewQuickEditor } from './PreviewQuickEditor'
 import { VideoPlaybackPanel } from './VideoPlaybackPanel'
 import { VideoThumbnail } from './VideoThumbnail'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
+import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
 import {
   ICON_PREVIEW_TARGETS,
   findPreviewTarget,
@@ -106,7 +107,7 @@ export function App(): React.JSX.Element {
       setDraft(profile)
       const nextAssets = { ...compiled.assets }
       if (window.studio.assets.getPreviewUrl) {
-        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
+        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.accountMenuBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
           if (!source) continue
           try { nextAssets[source.asset] = await window.studio.assets.getPreviewUrl(id, source.asset) } catch { /* missing media is shown as fallback */ }
         }
@@ -365,7 +366,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.themes.getDefault(themeId)
       const restoredAssets: Record<string, string> = {}
-      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
+      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.accountMenuBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
         if (!source) continue
         restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
       }
@@ -538,6 +539,9 @@ export function App(): React.JSX.Element {
           profile.windowBackground.visible = true
           profile.windowBackground.mode = mode
           profile.windowBackground.source = imported.reference
+        } else if (purpose === 'accountMenuBackground') {
+          profile.accountMenuBackground.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
+          profile.accountMenuBackground.source = imported.reference
         } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble') {
           const role = purpose === 'conversationUserBubble' ? 'user' : 'codex'
           profile.conversationBubbles.visible = true
@@ -762,6 +766,7 @@ export function App(): React.JSX.Element {
   const polaroidUrl = draft.polaroid.source ? assets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
   const conversationBackgroundUrl = draft.conversationBackground.source ? assets[draft.conversationBackground.source.asset] : undefined
   const windowBackgroundUrl = draft.windowBackground.source ? assets[draft.windowBackground.source.asset] : undefined
+  const accountMenuBackgroundUrl = draft.accountMenuBackground.source ? assets[draft.accountMenuBackground.source.asset] : undefined
   const windowBackgroundVisible = draft.windowBackground.visible && (draft.windowBackground.mode === 'color' || Boolean(windowBackgroundUrl))
   const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
   const homeHeadingVisible = draft.decorations.homeHeading.visible && draft.decorations.homeHeading.text.length > 0
@@ -899,7 +904,7 @@ export function App(): React.JSX.Element {
                 >
                   {previewFontCss && <style>{previewFontCss}</style>}
                   <WindowBackgroundPreview profile={draft} backgroundUrl={windowBackgroundUrl} />
-                  <CodexSidebarPreview profile={draft} assets={assets} />
+                  <CodexSidebarPreview profile={draft} assets={assets} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />
                 <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
                   <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
                   <PreviewSparkles profile={draft} assets={assets} />
@@ -948,6 +953,7 @@ export function App(): React.JSX.Element {
               polaroidUrl={polaroidUrl}
               conversationBackgroundUrl={conversationBackgroundUrl}
               windowBackgroundUrl={windowBackgroundUrl}
+              accountMenuBackgroundUrl={accountMenuBackgroundUrl}
               mediaBusy={mediaBusy}
               position={popoverPosition}
               popoverRef={popoverRef}
@@ -968,6 +974,7 @@ export function App(): React.JSX.Element {
           {activeInspector === 'visual' && <>
             <Property title="视频播放" anchor="visual-video-playback" highlighted={inspectorAnchor === 'visual-video-playback'}><VideoPlaybackPanel profile={draft} inspections={videoInspections} optimizingRole={optimizingVideoRole} onChange={change} onOptimize={(role) => { void optimizeVideo(role) }} onActivateVariant={(role, variant) => { void activateVideoVariantForRole(role, variant) }} /></Property>
             <Property title="整个窗口背景" anchor="visual-window-background" highlighted={inspectorAnchor === 'visual-window-background'}><WindowBackgroundControls profile={draft} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('windowBackground', kind) }} /></Property>
+            <Property title="账号菜单背景" anchor="visual-account-menu-background" highlighted={inspectorAnchor === 'visual-account-menu-background'}><AccountMenuBackgroundControls profile={draft} backgroundUrl={accountMenuBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('accountMenuBackground', kind) }} /></Property>
             <Property title="侧栏固定文案" anchor="visual-sidebar-copy" highlighted={inspectorAnchor === 'visual-sidebar-copy'}>
               <label className="copy-field">模式标题<input value={draft.copy.sidebarModeTitle} maxLength={80} aria-invalid={!draft.copy.sidebarModeTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarModeTitle = value }) }} /></label>
               {SIDEBAR_NAV_ITEMS.map((item) => <label className="copy-field" key={item.id}>{item.label}<input value={draft.copy[item.copyField]} maxLength={80} aria-invalid={!draft.copy[item.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy[item.copyField] = value }) }} /></label>)}
@@ -1263,7 +1270,8 @@ function conversationBubblePreviewFrameProps(profile: ThemeProfile, assets: Reco
   }
 }
 
-function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+function CodexSidebarPreview({ profile, assets, accountMenuBackgroundUrl }: { profile: ThemeProfile; assets: Record<string, string>; accountMenuBackgroundUrl?: string }): React.JSX.Element {
+  const accountMenuMediaVisible = profile.accountMenuBackground.mode !== 'color' && Boolean(accountMenuBackgroundUrl)
   return (
     <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
       <div className="codex-sidebar-header" data-preview-target="sidebar-header">
@@ -1291,6 +1299,7 @@ function CodexSidebarPreview({ profile, assets }: { profile: ThemeProfile; asset
         <button className="codex-section-heading codex-task-heading" data-preview-target="sidebar-task-title" type="button" aria-expanded="false"><span>{profile.copy.sidebarTasksTitle}</span><ChevronRight size={14} aria-hidden="true" /></button>
       </section>
       <div className="codex-account-menu-preview" data-preview-target="account-menu-surface" role="menu" aria-label="账号菜单样式预览">
+        {accountMenuMediaVisible && <img className="codex-account-menu-background-media" src={accountMenuBackgroundUrl} alt="" aria-hidden="true" style={buildAccountMenuBackgroundStyle(profile.accountMenuBackground)} />}
         {ACCOUNT_MENU_ITEMS.map((item) => <button className={`codex-account-menu-row codex-account-menu-${item.id}`} data-preview-target={item.previewTarget} type="button" role="menuitem" key={item.id} aria-label={`编辑${item.label}样式`}>
           <span className="codex-account-menu-icon"><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /></span>
           <span className="codex-account-menu-label">{PREVIEW_ACCOUNT_MENU_LABELS[item.id]}</span>
@@ -1310,7 +1319,7 @@ function Property({ title, children, anchor, highlighted = false }: { title: str
 
 function AppearanceInspectorGroup({ group, profile, highlighted, onChange, onInteractionEnd }: { group: AppearanceGroup; profile: ThemeProfile; highlighted: boolean; onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void; onInteractionEnd: () => void }): React.JSX.Element {
   const colorTokens = (Object.keys(APPEARANCE_COLOR_TOKENS) as AppearanceColorToken[]).filter((token) => APPEARANCE_COLOR_TOKENS[token].group === group && APPEARANCE_COLOR_TOKENS[token].editable && !sidebarSectionTitleColorTokens.has(token))
-  const paintTokens = (Object.keys(APPEARANCE_PAINT_TOKENS) as AppearancePaintToken[]).filter((token) => APPEARANCE_PAINT_TOKENS[token].group === group && APPEARANCE_PAINT_TOKENS[token].editable && !sidebarSectionTitlePaintTokens.has(token))
+  const paintTokens = (Object.keys(APPEARANCE_PAINT_TOKENS) as AppearancePaintToken[]).filter((token) => APPEARANCE_PAINT_TOKENS[token].group === group && APPEARANCE_PAINT_TOKENS[token].editable && token !== 'accountMenuSurface' && !sidebarSectionTitlePaintTokens.has(token))
   return <Property title={appearanceGroupLabels[group]} anchor={`appearance-${group}`} highlighted={highlighted}><div className="appearance-editor">
     {group === 'conversation' && <label className="toggle-row"><span>显示工具活动气泡</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
     {colorTokens.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}

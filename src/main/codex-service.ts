@@ -8,7 +8,7 @@ import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy } from '../shared/particle-effects'
 import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
-import { ACCOUNT_MENU_ITEMS } from '../shared/account-menu'
+import { ACCOUNT_MENU_ITEMS, buildAccountMenuBackgroundStyle } from '../shared/account-menu'
 import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
 import { resolveConversationBubbles } from '../shared/conversation-bubbles'
@@ -273,6 +273,8 @@ export class CodexService {
     const { overlay, ...conversationBackground } = profile.conversationBackground
     const windowBackground = profile.windowBackground
     const windowBackgroundSource = windowBackground.source
+    const accountMenuBackground = profile.accountMenuBackground
+    const accountMenuBackgroundSource = accountMenuBackground.source
     const composerMelody = profile.decorations.composerMelody
     const conversationOverlayStyle = buildConversationOverlayStyle(overlay)
     const windowBackgroundStyle = {
@@ -297,7 +299,10 @@ export class CodexService {
           : { ...conversationBackground, overlayStyle: conversationOverlayStyle, dataUrl: null },
         windowBackground: windowBackgroundSource
           ? { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, kind: windowBackgroundSource.kind, mimeType: windowBackgroundSource.mimeType, asset: windowBackgroundSource.asset, dataUrl: windowBackgroundSource.kind === 'image' ? compiled.assets[windowBackgroundSource.asset] : null }
-          : { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, dataUrl: null }
+          : { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, dataUrl: null },
+        accountMenuBackground: accountMenuBackgroundSource
+          ? { mode: accountMenuBackground.mode, style: buildAccountMenuBackgroundStyle(accountMenuBackground), kind: accountMenuBackgroundSource.kind, mimeType: accountMenuBackgroundSource.mimeType, asset: accountMenuBackgroundSource.asset, dataUrl: compiled.assets[accountMenuBackgroundSource.asset] ?? null }
+          : { mode: accountMenuBackground.mode, style: buildAccountMenuBackgroundStyle(accountMenuBackground), dataUrl: null }
       },
       icons,
       decorations: {
