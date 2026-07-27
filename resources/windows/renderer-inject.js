@@ -417,8 +417,13 @@
   const isSidebarNavSelected = (node) => {
     if (!(node instanceof HTMLElement)) return false;
     if (node.matches('[aria-current="page"], [aria-selected="true"], [data-active="true"], [data-state="active"]')) return true;
-    return [...node.classList].some((token) => token === "bg-token-list-hover-background" || /(?:selected|active|current)/i.test(token));
+    return [...node.classList].some((token) => {
+      if (token.startsWith("dream-sidebar-")) return false;
+      return token === "bg-token-list-hover-background" || /(?:^|[-_])(?:selected|active|current)(?:$|[-_])/i.test(token);
+    });
   };
+  const isSidebarTaskSelected = (node) => node instanceof HTMLElement
+    && (node.dataset.appActionSidebarThreadActive === "true" || isSidebarNavSelected(node));
   const findSidebarNavLabelNode = (button, item) => {
     const aliases = (item.aliases || []).map((candidate) => String(candidate).toLowerCase());
     const candidates = [...button.querySelectorAll("span")].filter((node) => node.children.length === 0 && node.textContent?.trim());
@@ -526,10 +531,10 @@
     replaceMarks(".dream-sidebar-header", "dream-sidebar-header", [...sidebar.querySelectorAll(":scope > header, :scope > div > header")]);
     replaceMarks(".dream-sidebar-search-button", "dream-sidebar-search-button", [...sidebar.querySelectorAll('button[aria-label*="搜索"], button[aria-label*="Search" i]')]);
     replaceMarks(".dream-sidebar-project-row", "dream-sidebar-project-row", [...sidebar.querySelectorAll('[role="listitem"][data-sidebar-project-kind] > span > [role="button"], [data-project-id], [data-testid*="project" i]')]);
-    replaceMarks(".dream-sidebar-task-row", "dream-sidebar-task-row", [...sidebar.querySelectorAll('[data-app-action-sidebar-thread-row], [data-task-id], [data-testid*="task" i], button[aria-label*="任务"], button[aria-label*="task" i]')]);
+    replaceMarks(".dream-sidebar-task-row", "dream-sidebar-task-row", [...sidebar.querySelectorAll('[data-app-action-sidebar-thread-row], [data-task-id], [data-testid*="task-row" i], [data-testid*="thread-row" i]')]);
     document.querySelectorAll(".dream-sidebar-task-row-selected").forEach((node) => node.classList.remove("dream-sidebar-task-row-selected"));
     document.querySelectorAll(".dream-sidebar-task-row").forEach((node) => {
-      const selected = isSidebarNavSelected(node) || [...node.querySelectorAll("*")].some(isSidebarNavSelected);
+      const selected = isSidebarTaskSelected(node);
       node.classList.toggle("dream-sidebar-task-row-selected", selected);
     });
     replaceMarks(".dream-sidebar-footer", "dream-sidebar-footer", [...sidebar.querySelectorAll(":scope > footer, :scope > div > footer")]);
