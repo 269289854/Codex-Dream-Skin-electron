@@ -970,7 +970,7 @@ export class ProfileStore {
     const file = await stat(path)
     if (kind === 'image') {
       if (file.size > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
-      await this.inspectImage(path, extname(asset).toLowerCase())
+      await this.inspectImage(await readFile(path), extname(asset).toLowerCase())
       return
     }
     if (kind === 'video') {
@@ -1009,8 +1009,8 @@ export class ProfileStore {
     this.assertFontHeader(extension, data.subarray(0, 4))
   }
 
-  private async inspectImage(sourcePath: string, extension: string): Promise<{ width: number; height: number; pages: number }> {
-    const metadata = await sharp(sourcePath, { animated: extension === '.gif' }).metadata().catch(() => null)
+  private async inspectImage(source: string | Buffer, extension: string): Promise<{ width: number; height: number; pages: number }> {
+    const metadata = await sharp(source, { animated: extension === '.gif' }).metadata().catch(() => null)
     if (!metadata?.width || !metadata.height) throw new Error('媒体图片无效或无法读取尺寸。')
     const expectedFormat = extension === '.jpg' || extension === '.jpeg' ? 'jpeg' : extension.slice(1)
     if (metadata.format !== expectedFormat) throw new Error('媒体图片内容与扩展名不匹配。')

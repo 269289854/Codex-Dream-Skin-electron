@@ -2,6 +2,7 @@ import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { unzipSync, zipSync } from 'fflate'
+import sharp from 'sharp'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { collectThemeAssets, createShareProfile, decodeShareZip, sha256, validateShareContents } from '../src/main/theme-share'
@@ -36,7 +37,7 @@ describe('theme share packages', () => {
     expect(collectThemeAssets(shared)).not.toContain('assets/hero.webm')
   })
 
-  it('exports the current draft once per referenced asset and imports it as a new theme', async () => {
+  it('exports the current draft once per referenced asset, including WebP, and imports it as a new theme', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-'))
     roots.push(root)
     const resourcesRoot = join(process.cwd(), 'resources', 'windows')
@@ -51,12 +52,15 @@ describe('theme share packages', () => {
     await store.initialize()
     const original = await store.create('分享主题')
     const source = join(root, 'hero.png')
+    const polaroidSource = join(root, 'polaroid.webp')
     const gifSource = join(root, 'composer.gif')
     const fontSource = join(root, 'title.woff2')
     await writeFile(source, png)
+    await sharp({ create: { width: 2, height: 2, channels: 4, background: '#7651d6' } }).webp().toFile(polaroidSource)
     await writeFile(gifSource, gif)
     await writeFile(fontSource, Buffer.from('wOF2'))
     const image = await store.importAsset(original.id, source, 'hero')
+    const polaroidImage = await store.importAsset(original.id, polaroidSource, 'polaroid')
     const windowReference = { asset: image.relativePath, kind: 'image' as const, mimeType: 'image/png' as const }
     const composerGif = await store.importMediaAsset(original.id, gifSource, 'composerMelody', 'gif')
     const font = await store.importFontAsset(original.id, fontSource)
@@ -65,7 +69,7 @@ describe('theme share packages', () => {
     draft.colors.accent = '#123456'
     draft.decorations.sparkles.performanceMode = 'quality'
     draft.hero.sourceImage = image.relativePath
-    draft.polaroid.sourceImage = image.relativePath
+    draft.polaroid.sourceImage = polaroidImage.relativePath
     draft.hero.mediaTransform = { flipHorizontal: true, flipVertical: false }
     draft.polaroid.mediaTransform = { flipHorizontal: false, flipVertical: true }
     draft.windowBackground.visible = true
@@ -112,7 +116,7 @@ describe('theme share packages', () => {
     await store.exportSharePackage(draft, packagePath)
     expect((await stat(packagePath)).isFile()).toBe(true)
     const archive = unzipSync(await readFile(packagePath))
-    expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
+    expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, polaroidImage.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
     expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 24 })
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
@@ -137,12 +141,14 @@ describe('theme share packages', () => {
     expect(imported.conversationBubbles.codex.source).toEqual({ kind: 'custom', reference: composerGif.reference })
     expect(imported.hero.mediaTransform).toEqual({ flipHorizontal: true, flipVertical: false })
     expect(imported.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: true })
+    expect(imported.polaroid.sourceImage).toBe(polaroidImage.relativePath)
     expect(imported.windowBackground).toMatchObject({ visible: true, mode: 'image', source: windowReference, masks: [{ id: '22222222-2222-4222-8222-222222222222', shape: 'ellipse' }] })
     expect(Date.parse(imported.updatedAt)).toBeGreaterThanOrEqual(Date.parse(original.updatedAt))
     expect((await store.get(original.id)).copy.brandTitle).not.toBe(imported.copy.brandTitle)
     expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await store.compile(imported.id)).assets[font.relativePath]).toBe(font.dataUrl)
     expect((await store.compile(imported.id)).assets[composerGif.relativePath]).toBe(`data:image/gif;base64,${gif.toString('base64')}`)
+    expect((await store.compile(imported.id)).assets[polaroidImage.relativePath]).toMatch(/^data:image\/webp;base64,/)
     expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
   })
