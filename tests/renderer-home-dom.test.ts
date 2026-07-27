@@ -64,8 +64,8 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
       <button type="button" aria-label="搜索">Search</button>
       <button type="button" data-project-id="sample">Project</button>
       <button type="button" data-task-id="sample">Task</button>
-      <div data-app-action-sidebar-thread-row="" aria-current="page" class="bg-token-list-hover-background"><span data-thread-title="true">Current task</span></div>
-      <div data-app-action-sidebar-thread-row=""><span data-thread-title="true">Other task</span></div>
+      <div data-app-action-sidebar-thread-row="" data-app-action-sidebar-thread-active="true" aria-current="page" class="bg-token-list-hover-background"><span data-thread-title="true">Current task</span><button type="button" aria-label="归档任务" class="enabled:active:text-token-foreground/70"></button></div>
+      <div data-app-action-sidebar-thread-row="" data-app-action-sidebar-thread-active="false"><span data-thread-title="true">Other task</span><button type="button" aria-label="置顶任务" class="enabled:active:text-token-foreground/70"></button></div>
       <footer><span data-testid="team-avatar">DT</span></footer>
       <nav aria-label="primary">
         <div class="native-new-task-row"><a aria-current="page" href="#new"><span>新建任务</span></a><button type="button" aria-label="新建任务">+</button></div>
@@ -584,6 +584,7 @@ describe('renderer home DOM adaptation', () => {
     const otherThreadRow = window.document.querySelectorAll('[data-app-action-sidebar-thread-row]')[1]
     expect(otherThreadRow?.classList.contains('dream-sidebar-task-row')).toBe(true)
     expect(otherThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
+    expect(otherThreadRow?.querySelector('button')?.classList.contains('dream-sidebar-task-row')).toBe(false)
     expect(window.document.querySelector('aside footer')?.classList.contains('dream-sidebar-footer')).toBe(true)
     expect(window.document.querySelector('[data-testid="team-avatar"]')?.classList.contains('dream-sidebar-avatar')).toBe(true)
     const newTaskRow = window.document.querySelector('.native-new-task-row')
@@ -592,6 +593,7 @@ describe('renderer home DOM adaptation', () => {
 
     activeThreadRow?.removeAttribute('aria-current')
     activeThreadRow?.classList.remove('bg-token-list-hover-background')
+    activeThreadRow?.setAttribute('data-app-action-sidebar-thread-active', 'false')
     stateOf(window).ensure()
     expect(activeThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
     expect(modeButton?.querySelectorAll(':scope > .dream-sidebar-mode-icon')).toHaveLength(1)
