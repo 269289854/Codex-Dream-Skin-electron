@@ -16,6 +16,8 @@ import { compileTheme } from './theme-compiler'
 import { createVideoVariantReference, mediaMimeTypeForPath, mediaReferenceAssets, mediaReferenceForPath } from '../shared/media'
 import { conversationBubbleMediaReferences } from '../shared/conversation-bubbles'
 import { ensureGifInfiniteLoop } from '../shared/gif'
+import { MAX_ICON_GIF_BYTES } from '../shared/icon-assets'
+import { inspectIconGif, prepareIconGif } from './icon-assets'
 import {
   MAX_SHARE_ENTRIES,
   MAX_SHARE_FONT_BYTES,
@@ -50,7 +52,7 @@ interface BundledSystemThemeAssets {
 const MAX_ASSET_BYTES = 30 * 1024 * 1024
 const MAX_FONT_BYTES = 12 * 1024 * 1024
 const BUNDLED_SYSTEM_ASSETS = new Set(['assets/dream-reference.png', 'assets/dream-polaroid.png'])
-const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg'])
+const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif'])
 const MEDIA_IMAGE_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif'])
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm'])
 const FONT_EXTENSIONS = new Set<ImportedFontFormat>(['ttf', 'otf', 'woff', 'woff2'])
@@ -65,7 +67,7 @@ const MAX_SHARE_METADATA_BYTES = 5 * 1024 * 1024
 export class ProfileStore {
   readonly themesRoot: string
   private readonly settingsPath: string
-  private readonly pendingMediaAssets = new Map<string, Set<string>>()
+  private readonly pendingAssets = new Map<string, Set<string>>()
 
   constructor(readonly root: string, private readonly bundledSystemAssets?: BundledSystemThemeAssets) {
     this.themesRoot = join(root, 'themes')
@@ -219,6 +221,9 @@ export class ProfileStore {
       if (manifest.themeName !== source.name || !shareProfileVersionMatches(manifest, themeInput, source.version)) throw new Error('分享包清单与主题配置不一致。')
       const listed = new Map(manifest.assets.map((asset) => [asset.path, asset]))
       const referenced = collectThemeAssets(source)
+      const gifIconAssets = new Set(Object.values(source.icons)
+        .filter((icon) => icon.kind === 'asset' && extname(icon.asset).toLowerCase() === '.gif')
+        .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
       if (referenced.length !== listed.size || referenced.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')
       for (const [path, entry] of entries) {
         this.throwIfAborted(signal, '主题导入已取消。')
@@ -229,6 +234,12 @@ export class ProfileStore {
           const manifestAsset = listed.get(path)
           if (!manifestAsset || manifestAsset.size !== file.size || (await hashFile(entry.path)).toLowerCase() !== manifestAsset.sha256.toLowerCase()) throw new Error(`素材校验失败: ${path}`)
           await this.validateShareAssetFile(path, entry.path, assetKind(path))
+          if (gifIconAssets.has(path)) {
+            const source = await readFile(entry.path)
+            await inspectIconGif(source)
+            const normalized = ensureGifInfiniteLoop(source)
+            if (normalized !== source) await writeFile(entry.path, normalized)
+          }
         }
       }
       for (const asset of manifest.assets) if (!entries.has(asset.path)) throw new Error(`分享包缺少素材: ${asset.path}`)
@@ -287,29 +298,50 @@ export class ProfileStore {
 
     const extension = extname(sourcePath).toLowerCase()
     if (extension !== '.svg' && !RASTER_EXTENSIONS.has(extension)) throw new Error('Unsupported image format.')
+    if (extension === '.gif' && purpose !== 'icon') throw new Error('GIF 仅支持作为自定义图标导入。')
     const outputExtension = extension === '.svg' ? '.png' : extension
     const relativePath = `assets/${purpose}-${randomUUID()}${outputExtension}`
     const destination = this.resolveAsset(themeId, relativePath)
+    const temporary = `${destination}.${randomUUID()}.tmp`
     await mkdir(dirname(destination), { recursive: true })
 
-    if (extension === '.svg') {
-      const source = await readFile(sourcePath, 'utf8')
-      this.assertSafeSvg(source)
-      await sharp(Buffer.from(source)).png().toFile(destination)
-    } else {
-      await this.inspectImage(sourcePath, extension)
-      await copyFile(sourcePath, destination)
-    }
+    try {
+      let gifPosterDataUrl: string | undefined
+      let importedMetadata: { width: number; height: number } | null = null
+      if (extension === '.svg') {
+        const source = await readFile(sourcePath, 'utf8')
+        this.assertSafeSvg(source)
+        await sharp(Buffer.from(source)).png().toFile(temporary)
+      } else if (extension === '.gif') {
+        const prepared = await prepareIconGif(await readFile(sourcePath))
+        await writeFile(temporary, prepared.bytes)
+        gifPosterDataUrl = prepared.posterDataUrl
+        importedMetadata = prepared
+      } else {
+        await this.inspectImage(sourcePath, extension)
+        await copyFile(sourcePath, temporary)
+      }
 
-    const metadata = await sharp(destination).metadata()
-    if (!metadata.width || !metadata.height) throw new Error('Imported image dimensions are unavailable.')
-    return {
-      relativePath,
-      dataUrl: await this.readAssetDataUrl(themeId, relativePath),
-      mediaType: this.mediaType(outputExtension),
-      originalName: basename(sourcePath),
-      width: metadata.width,
-      height: metadata.height
+      const metadata = importedMetadata ?? await sharp(temporary).metadata()
+      if (!metadata.width || !metadata.height) throw new Error('Imported image dimensions are unavailable.')
+      await this.syncFile(temporary)
+      await rename(temporary, destination)
+      this.trackPendingAsset(themeId, relativePath)
+      return {
+        relativePath,
+        dataUrl: await this.readAssetDataUrl(themeId, relativePath),
+        gifPosterDataUrl,
+        mediaType: this.mediaType(outputExtension),
+        originalName: basename(sourcePath),
+        width: metadata.width,
+        height: metadata.height
+      }
+    } catch (error) {
+      await Promise.all([
+        rm(temporary, { force: true }).catch(() => undefined),
+        rm(destination, { force: true }).catch(() => undefined)
+      ])
+      throw error
     }
   }
 
@@ -398,8 +430,8 @@ export class ProfileStore {
       const original = this.videoVariant(originalAsset, mediaMimeTypeForPath(originalAsset) as 'video/mp4' | 'video/webm', inspection)
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
       const reference = createVideoVariantReference(original, optimized)
-      this.trackPendingMedia(themeId, originalAsset)
-      this.trackPendingMedia(themeId, optimizedAsset)
+      this.trackPendingAsset(themeId, originalAsset)
+      this.trackPendingAsset(themeId, optimizedAsset)
       return {
         reference,
         relativePath: optimizedAsset,
@@ -430,10 +462,10 @@ export class ProfileStore {
     }
   }
 
-  private trackPendingMedia(themeId: string, asset: string): void {
-    const pending = this.pendingMediaAssets.get(themeId) ?? new Set<string>()
+  private trackPendingAsset(themeId: string, asset: string): void {
+    const pending = this.pendingAssets.get(themeId) ?? new Set<string>()
     pending.add(asset)
-    this.pendingMediaAssets.set(themeId, pending)
+    this.pendingAssets.set(themeId, pending)
   }
 
   private mediaReferences(profile: ThemeProfile): Array<MediaReference | null> {
@@ -463,11 +495,11 @@ export class ProfileStore {
 
   private async pruneReplacedAssets(previous: ThemeProfile, next: ThemeProfile): Promise<void> {
     const retained = new Set(this.collectAssets(next))
-    const candidates = new Set([...this.collectAssets(previous), ...(this.pendingMediaAssets.get(next.id) ?? [])])
+    const candidates = new Set([...this.collectAssets(previous), ...(this.pendingAssets.get(next.id) ?? [])])
     await Promise.all([...candidates]
       .filter((asset) => !retained.has(asset))
       .map((asset) => rm(this.resolveAsset(next.id, asset), { force: true }).catch(() => undefined)))
-    this.pendingMediaAssets.delete(next.id)
+    this.pendingAssets.delete(next.id)
   }
 
   private async writeProfile(profile: ThemeProfile): Promise<void> {
@@ -560,7 +592,7 @@ export class ProfileStore {
     }
 
     const reference = mediaReferenceForPath(relativePath)
-    this.trackPendingMedia(themeId, relativePath)
+    this.trackPendingAsset(themeId, relativePath)
     return {
       reference,
       relativePath,
@@ -586,7 +618,7 @@ export class ProfileStore {
     const reference = this.mediaReferences(profile).find((candidate) =>
       candidate?.kind === 'video' && mediaReferenceAssets(candidate).some((variant) => variant.asset === asset)
     )
-    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset)) throw new Error('该视频未被当前主题引用。')
+    if (!reference && !this.pendingAssets.get(themeId)?.has(asset)) throw new Error('该视频未被当前主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
     if (!file.isFile()) throw new Error('视频文件不存在。')
@@ -599,7 +631,7 @@ export class ProfileStore {
     const savedReference = this.mediaReferenceForRole(profile, role)
     const reference = savedReference?.kind === 'video' && savedReference.asset === asset
       ? savedReference
-      : this.pendingMediaAssets.get(themeId)?.has(asset) ? mediaReferenceForPath(asset) : null
+      : this.pendingAssets.get(themeId)?.has(asset) ? mediaReferenceForPath(asset) : null
     if (reference?.kind !== 'video') throw new Error('视频与主题位置不匹配。')
     if (reference.videoVariants) throw new Error('该视频已经包含优化版本。')
     const sourcePath = this.resolveAsset(themeId, reference.asset)
@@ -625,7 +657,7 @@ export class ProfileStore {
       const original = this.videoVariant(reference.asset, reference.mimeType, inspection)
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
       const nextReference = createVideoVariantReference(original, optimized)
-      this.trackPendingMedia(themeId, optimizedAsset)
+      this.trackPendingAsset(themeId, optimizedAsset)
       return {
         reference: nextReference,
         relativePath: optimizedAsset,
@@ -646,7 +678,7 @@ export class ProfileStore {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体预览参数无效。')
     const profile = await this.get(themeId)
     const reference = this.mediaReferences(profile).find((media) => media && mediaReferenceAssets(media).some((variant) => variant.asset === asset))
-    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被当前主题引用。')
+    if (!reference && !this.pendingAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被当前主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
     if (!file.isFile()) throw new Error('媒体文件不存在。')
@@ -657,7 +689,7 @@ export class ProfileStore {
     if (typeof themeId !== 'string' || typeof asset !== 'string') throw new Error('媒体参数无效。')
     const profile = await this.get(themeId)
     const reference = this.mediaReferences(profile).find((media) => media && mediaReferenceAssets(media).some((variant) => variant.asset === asset))
-    if (!reference && !this.pendingMediaAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被主题引用。')
+    if (!reference && !this.pendingAssets.get(themeId)?.has(asset) && !(await this.isBundledSystemAsset(themeId, asset))) throw new Error('该媒体未被主题引用。')
     const path = this.resolveAsset(themeId, asset)
     const file = await stat(path)
     if (!file.isFile()) throw new Error('媒体文件不存在。')
@@ -1059,6 +1091,16 @@ export class ProfileStore {
       const extension = extname(reference.asset).toLowerCase()
       const metadata = await this.inspectImage(sourcePath, extension)
       this.assertConversationBubbleInspection(metadata, extension)
+    }
+    const gifIconAssets = new Set(Object.values(profile.icons)
+      .filter((icon) => icon.kind === 'asset' && extname(icon.asset).toLowerCase() === '.gif')
+      .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
+    for (const asset of gifIconAssets) {
+      const sourcePath = this.resolveAsset(profile.id, asset)
+      const sourceStat = await stat(sourcePath)
+      if (!sourceStat.isFile()) throw new Error(`GIF 图标不存在: ${asset}`)
+      if (sourceStat.size > MAX_ICON_GIF_BYTES) throw new Error('GIF 图标不能超过 5 MB。')
+      await inspectIconGif(await readFile(sourcePath))
     }
   }
 

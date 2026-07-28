@@ -93,7 +93,7 @@ function registerIpc(): void {
       properties: ['openFile'],
       filters: safePurpose === 'font'
         ? [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff', 'woff2'] }]
-        : [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
+        : [{ name: safePurpose === 'icon' ? 'Images and GIF' : 'Images', extensions: safePurpose === 'icon' ? ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg'] : ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
     }
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, options)

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppearanceColorControl, FontControl, PaintControl, RenderIcon, ThemeIconControl } from '../src/renderer/src/editor-controls'
 import type { ThemePaint } from '../src/shared/appearance'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
+import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
 import { createDefaultTheme } from '../src/shared/theme'
 import { builtinIconLabels, builtinIconOptions, builtinIcons } from '../src/renderer/src/icons'
 
@@ -217,6 +218,22 @@ describe('editor appearance controls', () => {
     act(() => button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onImport).toHaveBeenCalledOnce()
     expect(container.querySelector('img.custom-icon')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+  })
+
+  it('labels GIF icons and uses their compiled poster only when requested', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    const asset = 'assets/search.gif'
+    const gif = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='
+    const poster = 'data:image/png;base64,iVBORw0KGgo='
+    profile.icons.sidebarSearch = { kind: 'asset', asset }
+    const assets = { [asset]: gif, [iconGifPosterAssetKey(asset)]: poster }
+
+    act(() => root.render(React.createElement(ThemeIconControl, { slot: 'sidebarSearch', profile, assets, onChange: vi.fn(), onImport: vi.fn() })))
+    expect(container.querySelector('.icon-picker-trigger-label')?.textContent).toBe('自定义 GIF')
+    expect(container.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe(gif)
+
+    act(() => root.render(React.createElement(RenderIcon, { slot: 'sidebarSearch', profile, assets, usePoster: true })))
+    expect(container.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe(poster)
   })
 
   it('offers at least 50 visual builtin icons with runtime glyph fallbacks', () => {

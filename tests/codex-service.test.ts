@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultTheme } from '../src/shared/theme'
 import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
+import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
 
 const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
@@ -88,11 +89,13 @@ describe('CodexService operation queue', () => {
       focus: { x: .25, y: .75 },
       scale: 1.4
     }
+    profile.icons.sidebarSearch = { kind: 'asset', asset: 'assets/search.gif' }
+    const searchPosterKey = iconGifPosterAssetKey('assets/search.gif')
     const store = {
       root,
       themesRoot: join(root, 'themes'),
       get: vi.fn().mockResolvedValue(profile),
-      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', 'assets/window.png': 'data:image/png;base64,AA==', 'assets/account-menu.gif': 'data:image/gif;base64,AQ==' } })
+      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', 'assets/window.png': 'data:image/png;base64,AA==', 'assets/account-menu.gif': 'data:image/gif;base64,AQ==', 'assets/search.gif': 'data:image/gif;base64,Ag==', [searchPosterKey]: 'data:image/png;base64,Aw==' } })
     }
     const service = new CodexService(store as never, join(process.cwd(), 'resources', 'windows'), '1.0.5', () => undefined)
     const builder = service as unknown as { buildPayload(themeId: string): Promise<{ script: string; version: string }> }
@@ -132,6 +135,7 @@ describe('CodexService operation queue', () => {
     expect(first.script).toContain('"toolActivityBubbles":{"visible":false}')
     expect(first.script).toContain(`"accountMenu":${JSON.stringify(ACCOUNT_MENU_ITEMS)}`)
     expect(first.script).toContain('"accountMenuUsage":{"name":"clock"}')
+    expect(first.script).toContain('"sidebarSearch":{"dataUrl":"data:image/gif;base64,Ag==","posterDataUrl":"data:image/png;base64,Aw=="}')
     expect(first.script).toContain('--dream-font-account-menu-usage')
     expect(first.script).toContain('"sparklePolicy":{"mode":"balanced"')
     expect(first.script).toContain('"sparkleCyclePositionPolicy":{"x":{"min":5,"max":95,"minDelta":12},"y":{"min":5,"max":91,"minDelta":12}}')

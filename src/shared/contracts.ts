@@ -19,6 +19,7 @@ export interface AppUpdateStatus {
 export interface ImportedAsset {
   relativePath: string
   dataUrl: string
+  gifPosterDataUrl?: string
   mediaType: string
   originalName: string
   width: number

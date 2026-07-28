@@ -207,7 +207,7 @@ const fullOverlayStyle: ConversationOverlayStyle = {
   filter: 'none'
 }
 
-function inject(window: Window, icons: Record<string, { name?: string; dataUrl?: string }> = {
+function inject(window: Window, icons: Record<string, { name?: string; dataUrl?: string; posterDataUrl?: string }> = {
   cardPrimary: { name: 'wand-sparkles' },
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
@@ -609,6 +609,50 @@ describe('renderer home DOM adaptation', () => {
     expect(activeThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
     expect(otherThreadRow?.classList.contains('dream-sidebar-task-row')).toBe(false)
     expect(otherThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
+  })
+
+  it('preserves the search button while replacing, repairing, and restoring only its icon', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Search-Icon')
+    const button = window.document.querySelector('button[aria-label="搜索"]') as HTMLButtonElement | null
+    if (!button) throw new Error('Search button fixture is missing.')
+    button.title = '搜索任务'
+    button.innerHTML = '<svg class="native-search" viewBox="0 0 20 20"><path d="native-search" /></svg>'
+    const nativeMarkup = button.innerHTML
+    const clicked = vi.fn()
+    button.addEventListener('click', clicked)
+
+    inject(window, { sidebarSearch: { name: 'search' } })
+    expect(window.document.querySelector('button[aria-label="搜索"]')).toBe(button)
+    expect(button.innerHTML).toBe(nativeMarkup)
+
+    const gif = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='
+    inject(window, { sidebarSearch: { dataUrl: gif, posterDataUrl: 'data:image/png;base64,iVBORw0KGgo=' } })
+    const image = button.querySelector('.dream-custom-icon') as HTMLImageElement | null
+    expect(window.document.querySelector('button[aria-label="搜索"]')).toBe(button)
+    expect(button.title).toBe('搜索任务')
+    expect(button.getAttribute('aria-label')).toBe('搜索')
+    expect(image?.src).toBe(gif)
+    button.click()
+    expect(clicked).toHaveBeenCalledOnce()
+
+    stateOf(window).ensure()
+    expect(button.querySelector('.dream-custom-icon')).toBe(image)
+
+    const replacement = window.document.createElement('button')
+    replacement.type = 'button'
+    replacement.setAttribute('aria-label', '搜索')
+    replacement.title = '搜索任务'
+    replacement.innerHTML = nativeMarkup
+    button.replaceWith(replacement as unknown as Node)
+    stateOf(window).ensure()
+    expect((replacement.querySelector('.dream-custom-icon') as HTMLImageElement | null)?.src).toBe(gif)
+
+    stateOf(window).cleanup()
+    expect(replacement.innerHTML).toBe(nativeMarkup)
+    expect(replacement.classList.contains('dream-sidebar-search-button')).toBe(false)
+    expect(replacement.title).toBe('搜索任务')
+    expect(replacement.getAttribute('aria-label')).toBe('搜索')
   })
 
   it('renders one stable brand signature GIF node across repeated synchronization', () => {
@@ -1065,7 +1109,7 @@ describe('renderer home DOM adaptation', () => {
     expect(layer?.style.getPropertyValue('--dream-particle-negative-width')).toBe('-1016px')
   })
 
-  it('keeps every configured particle animated while applying deterministic performance limits', () => {
+  it('keeps every particle visible while applying deterministic performance budgets', () => {
     for (const mode of PARTICLE_PERFORMANCE_MODES) {
       for (const count of [1, 8, 20, 24]) {
         const window = createWindow()
@@ -1073,19 +1117,23 @@ describe('renderer home DOM adaptation', () => {
         const decorations = structuredClone(defaultDecorations)
         decorations.sparkles = { ...decorations.sparkles, performanceMode: mode, count, glow: 10, extraColors: ['#20bcc3'] }
         const particles = createSparkleParticles(decorations.sparkles)
-        inject(window, undefined, undefined, undefined, undefined, decorations, particles)
+        const gifIcon = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='
+        const posterIcon = 'data:image/png;base64,iVBORw0KGgo='
+        inject(window, { backgroundSparkle: { dataUrl: gifIcon, posterDataUrl: posterIcon } }, undefined, undefined, undefined, decorations, particles)
 
         const layer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
         const nodes = [...(layer?.querySelectorAll(':scope > .dream-particle') ?? [])] as HTMLElement[]
         const expected = resolveParticleRenderPolicy(mode, count)
         expect(nodes).toHaveLength(count)
-        expect(expected.animatedIndexes).toEqual(Array.from({ length: count }, (_, index) => index))
         expect(layer?.dataset.dreamPerformance).toBe(mode)
         expect(layer?.dataset.dreamTrails).toBe(expected.showTrails ? 'true' : 'false')
         expect(nodes.flatMap((node, index) => node.dataset.dreamAnimated === 'true' ? [index] : [])).toEqual(expected.animatedIndexes)
         expect(nodes.every((node) => node.style.getPropertyValue('--dream-particle-x').endsWith('%'))).toBe(true)
         expect(nodes.every((node) => node.style.getPropertyValue('--dream-sparkle-size').endsWith('px'))).toBe(true)
         expect(nodes.every((node) => node.querySelector('.dream-particle-content') !== null)).toBe(true)
+        expect((nodes[expected.animatedIndexes[0] ?? 0]?.querySelector('.dream-custom-icon') as HTMLImageElement | null)?.src).toBe(gifIcon)
+        const staticIndex = nodes.findIndex((node) => node.dataset.dreamAnimated === 'false')
+        if (staticIndex >= 0) expect((nodes[staticIndex]?.querySelector('.dream-custom-icon') as HTMLImageElement | null)?.src).toBe(posterIcon)
         expect(nodes[0]?.style.getPropertyValue('--dream-sparkle-glow')).toBe(`${mode === 'quality' ? 10 : mode === 'balanced' ? 6 : 0}px`)
         if (expected.targetFps) {
           const duration = Number.parseFloat(nodes[expected.animatedIndexes[0] ?? 0]?.style.getPropertyValue('--dream-particle-duration') ?? '0')
@@ -1156,11 +1204,14 @@ describe('renderer home DOM adaptation', () => {
     const layer = window.document.querySelector('.dream-sparkles') as unknown as HTMLElement | null
     const nodes = [...(layer?.querySelectorAll(':scope > .dream-particle') ?? [])] as HTMLElement[]
     const animated = nodes[0]
-    const secondAnimated = nodes[1]
-    if (!layer || !animated || !secondAnimated) throw new Error('Particle cycle fixture is incomplete.')
+    const staticParticle = nodes[1]
+    const secondAnimated = nodes[2]
+    if (!layer || !animated || !staticParticle || !secondAnimated) throw new Error('Particle cycle fixture is incomplete.')
     expect(animated.dataset.dreamAnimated).toBe('true')
-    expect(nodes.every((node) => node.dataset.dreamAnimated === 'true')).toBe(true)
+    expect(nodes.flatMap((node, index) => node.dataset.dreamAnimated === 'true' ? [index] : [])).toEqual([0, 2, 3, 5])
+    expect(staticParticle.dataset.dreamAnimated).toBe('false')
     const secondX = secondAnimated.style.getPropertyValue('--dream-particle-x')
+    const staticX = staticParticle.style.getPropertyValue('--dream-particle-x')
     const random = vi.spyOn(window.Math, 'random').mockReturnValue(.5)
 
     dispatchAnimationIteration(window, animated, 'dream-particle-rain')
@@ -1175,6 +1226,9 @@ describe('renderer home DOM adaptation', () => {
     expect(random).toHaveBeenCalledTimes(1)
     dispatchAnimationIteration(window, secondAnimated, 'dream-particle-twinkle')
     expect(secondAnimated.style.getPropertyValue('--dream-particle-x')).toBe(secondX)
+    expect(random).toHaveBeenCalledTimes(1)
+    dispatchAnimationIteration(window, staticParticle, 'dream-particle-rain')
+    expect(staticParticle.style.getPropertyValue('--dream-particle-x')).toBe(staticX)
     expect(random).toHaveBeenCalledTimes(1)
 
     window.document.documentElement.setAttribute('data-dream-motion-paused', '')

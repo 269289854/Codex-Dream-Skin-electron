@@ -1388,6 +1388,45 @@ describe('Studio preview editing interaction', () => {
     expect(selectIcon).toHaveBeenCalledTimes(2)
   })
 
+  it('opens search quick editing and imports a GIF without replacing the preview button', async () => {
+    const searchButton = container.querySelector<HTMLButtonElement>('[data-preview-target="sidebar-search"]')
+    if (!searchButton) throw new Error('Search preview button is missing.')
+    const originalButton = searchButton
+    selectIcon.mockResolvedValueOnce({
+      relativePath: 'assets/icon-search.gif',
+      dataUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      gifPosterDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      mediaType: 'image/gif',
+      originalName: 'search.gif',
+      width: 32,
+      height: 32
+    })
+
+    pointerDown(searchButton)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('搜索按钮快捷配置')
+    const trigger = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="sidebarSearch"] .icon-picker-trigger')
+    if (!trigger) throw new Error('Search icon selector is missing.')
+    act(() => trigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    const custom = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="sidebarSearch"] [data-icon-name="__asset"]')
+    if (!custom) throw new Error('Search custom GIF option is missing.')
+    await act(async () => {
+      custom.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    expect(selectIcon).toHaveBeenCalledWith(profile.id)
+    expect(container.querySelector('[data-preview-target="sidebar-search"]')).toBe(originalButton)
+    expect(originalButton.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe('data:image/gif;base64,R0lGODlhAQABAAAAACw=')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.icons.sidebarSearch).toEqual({ kind: 'asset', asset: 'assets/icon-search.gif' })
+  })
+
   it('edits each sidebar navigation item without changing the other items', async () => {
     const newTask = container.querySelector('[data-preview-target="sidebar-nav-new-task"]')
     const pullRequests = container.querySelector('[data-preview-target="sidebar-nav-pull-requests"]')
@@ -1782,6 +1821,25 @@ describe('Studio preview editing interaction', () => {
     pointerDown(firstParticle)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('背景粒子快捷配置')
     expect(firstParticle.getAttribute('data-preview-selected')).toBe('true')
+    selectIcon.mockResolvedValueOnce({
+      relativePath: 'assets/sparkle.gif',
+      dataUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      gifPosterDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      mediaType: 'image/gif',
+      originalName: 'sparkle.gif',
+      width: 32,
+      height: 32
+    })
+    const sparkleIconTrigger = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="backgroundSparkle"] .icon-picker-trigger')
+    if (!sparkleIconTrigger) throw new Error('Sparkle icon selector is missing.')
+    act(() => sparkleIconTrigger.click())
+    const sparkleGif = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="backgroundSparkle"] [data-icon-name="__asset"]')
+    if (!sparkleGif) throw new Error('Sparkle GIF import option is missing.')
+    await act(async () => {
+      sparkleGif.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(firstParticle.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe('data:image/gif;base64,R0lGODlhAQABAAAAACw=')
     const quality = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .particle-performance-modes button')].find((button) => button.textContent === '精细')
     const balanced = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .particle-performance-modes button')].find((button) => button.textContent === '平衡')
     const performance = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .particle-performance-modes button')].find((button) => button.textContent === '省电')
@@ -1792,12 +1850,13 @@ describe('Studio preview editing interaction', () => {
     act(() => performance.click())
     expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-performance')).toBe('performance')
     expect(container.querySelector('.preview-sparkles')?.getAttribute('data-dream-trails')).toBe('false')
-    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(6)
+    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(4)
     const performanceParticles = [...container.querySelectorAll<HTMLElement>('[data-preview-target="sparkles"]')]
     const animatedParticle = performanceParticles[0]
-    const secondAnimated = performanceParticles[1]
+    const secondAnimated = performanceParticles[2]
     if (!animatedParticle || !secondAnimated) throw new Error('Particle performance fixture is incomplete.')
-    expect(performanceParticles.every((particle) => particle.dataset.dreamAnimated === 'true')).toBe(true)
+    expect(performanceParticles.flatMap((particle, index) => particle.dataset.dreamAnimated === 'true' ? [index] : [])).toEqual([0, 2, 3, 5])
+    expect(performanceParticles[1]?.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe('data:image/png;base64,iVBORw0KGgo=')
     const secondX = secondAnimated.style.getPropertyValue('--dream-particle-x')
     const randomTwinkle = vi.spyOn(Math, 'random').mockReturnValue(.5)
     const animatedIteration = new browserWindow.Event('animationiteration', { bubbles: true })
@@ -1819,7 +1878,7 @@ describe('Studio preview editing interaction', () => {
       count.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
     })
     expect(container.querySelectorAll('[data-preview-target="sparkles"]')).toHaveLength(10)
-    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(10)
+    expect(container.querySelectorAll('[data-preview-target="sparkles"][data-dream-animated="true"]')).toHaveLength(8)
 
     const undo = container.querySelector<HTMLButtonElement>('button[title="撤销"]')
     if (!undo) throw new Error('Undo command is missing.')
@@ -1927,7 +1986,7 @@ describe('Studio preview editing interaction', () => {
       sparkles: { effect: 'rain', speed: 1.5, performanceMode: 'balanced', seed: 0, extraColors: ['#20bcc3'] },
       composerMelody: { text: '<b>自定义旋律 ♪</b>', effect: 'scroll', direction: 'right', fontSize: 22, position: { x: 0.7, y: 0.35 } }
     })
-    expect(savedProfiles.at(-1)?.icons).toMatchObject({ backgroundSparkle: { name: 'sparkles' }, backgroundRain: { name: 'star' } })
+    expect(savedProfiles.at(-1)?.icons).toMatchObject({ backgroundSparkle: { kind: 'asset', asset: 'assets/sparkle.gif' }, backgroundRain: { name: 'star' } })
 
     const reset = container.querySelector<HTMLButtonElement>('button[title="恢复默认"]')
     if (!reset) throw new Error('Restore defaults command is missing.')

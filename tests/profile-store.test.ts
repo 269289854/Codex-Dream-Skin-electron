@@ -10,6 +10,7 @@ import { ProfileStore } from '../src/main/profile-store'
 import { resolveAppearanceColor } from '../src/shared/appearance'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { ensureGifInfiniteLoop } from '../src/shared/gif'
+import { iconGifPosterAssetKey, MAX_ICON_GIF_BYTES } from '../src/shared/icon-assets'
 import { CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
@@ -96,7 +97,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 25, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 26, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -156,7 +157,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 25,
+      version: 26,
       videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
@@ -342,6 +343,58 @@ describe('ProfileStore', () => {
     const assetDirectory = join(store.themesRoot, profile.id, 'assets')
     expect(await readFile(join(store.themesRoot, profile.id, imported.relativePath))).toEqual(TEST_PNG)
     expect((await readdir(assetDirectory)).some((entry) => entry.endsWith('.tmp'))).toBe(false)
+  })
+
+  it('imports, compiles, duplicates, and validates GIF icons with compile-only posters', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-gif-icons-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('GIF 图标主题')
+    const gifSource = join(root, 'search.gif')
+    const svgSource = join(root, 'search.svg')
+    const oversized = join(root, 'oversized.gif')
+    const overDimension = join(root, 'over-dimension.gif')
+    const overFrames = join(root, 'over-frames.gif')
+    const wrongHeader = join(root, 'wrong-header.gif')
+    await Promise.all([
+      writeFile(gifSource, TEST_GIF),
+      writeFile(svgSource, '<svg xmlns="http://www.w3.org/2000/svg" width="19" height="19"><circle cx="9.5" cy="9.5" r="8" fill="#ffffff"/></svg>'),
+      writeFile(oversized, Buffer.alloc(MAX_ICON_GIF_BYTES + 1)),
+      sharp({ create: { width: 513, height: 1, channels: 4, background: '#ffffff' } }).gif().toFile(overDimension),
+      writeFile(overFrames, animatedGif(181)),
+      writeFile(wrongHeader, TEST_PNG)
+    ])
+
+    const imported = await store.importAsset(profile.id, gifSource, 'icon')
+    const normalized = Buffer.from(ensureGifInfiniteLoop(TEST_GIF))
+    expect(imported).toMatchObject({ mediaType: 'image/gif', originalName: 'search.gif', width: 1, height: 1 })
+    expect(imported.dataUrl).toBe(`data:image/gif;base64,${normalized.toString('base64')}`)
+    expect(imported.gifPosterDataUrl).toMatch(/^data:image\/png;base64,/)
+    expect(await readFile(join(store.themesRoot, profile.id, imported.relativePath))).toEqual(normalized)
+
+    const svg = await store.importAsset(profile.id, svgSource, 'icon')
+    expect(svg).toMatchObject({ mediaType: 'image/png', width: 19, height: 19 })
+    expect(svg.relativePath.endsWith('.png')).toBe(true)
+
+    for (const slot of Object.keys(profile.icons) as Array<keyof typeof profile.icons>) {
+      profile.icons[slot] = { kind: 'asset', asset: imported.relativePath }
+    }
+    await store.update(profile)
+    const compiled = await store.compile(profile.id)
+    expect(compiled.assets[imported.relativePath]).toBe(imported.dataUrl)
+    expect(compiled.assets[iconGifPosterAssetKey(imported.relativePath)]).toBe(imported.gifPosterDataUrl)
+    expect(JSON.stringify(await store.get(profile.id))).not.toContain('icon-posters')
+
+    const duplicate = await store.duplicate(profile, 'GIF 图标主题副本')
+    expect(duplicate.icons.sidebarSearch).toEqual(profile.icons.sidebarSearch)
+    expect((await store.compile(duplicate.id)).assets[iconGifPosterAssetKey(imported.relativePath)]).toBe(imported.gifPosterDataUrl)
+
+    await expect(store.importAsset(profile.id, oversized, 'icon')).rejects.toThrow('5 MB')
+    await expect(store.importAsset(profile.id, overDimension, 'icon')).rejects.toThrow('512px')
+    await expect(store.importAsset(profile.id, overFrames, 'icon')).rejects.toThrow('180 帧')
+    await expect(store.importAsset(profile.id, wrongHeader, 'icon')).rejects.toThrow('文件头')
+    expect((await readdir(join(store.themesRoot, profile.id, 'assets'))).some((entry) => entry.endsWith('.tmp'))).toBe(false)
   })
 
   it('exposes every bundled bubble preset to Studio compilation', async () => {
@@ -577,7 +630,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(25)
+    expect(migrated.version).toBe(26)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'

@@ -12,6 +12,7 @@ import {
 } from '../../shared/appearance'
 import { HOME_ACTION_FALLBACK_BUILTINS } from '../../shared/home-layout'
 import { resolveBuiltinIconGlyph } from '../../shared/icon-glyphs'
+import { iconGifPosterAssetKey } from '../../shared/icon-assets'
 import type { IconSlot, ThemeColors, ThemeProfile } from '../../shared/theme'
 import { BUILTIN_FONTS, type FontSelection } from '../../shared/typography'
 import type { TypographySlot } from './preview-editing'
@@ -22,7 +23,7 @@ export const colorLabels: Record<keyof ThemeColors, string> = {
 }
 
 export const iconLabels: Record<IconSlot, string> = {
-  sidebarMode: '侧边栏模式', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '呼吸闪烁', backgroundFloat: '轻盈漂浮', backgroundRain: '垂直雨落', backgroundMeteor: '斜向流星', backgroundSnow: '摇曳飘雪', project: '项目', decoration: '装饰', polaroidPin: '图钉', sidebarNavNewTask: '新建任务图标', sidebarNavPullRequests: '拉取请求图标', sidebarNavSites: '站点图标', sidebarNavScheduled: '已安排图标', sidebarNavPlugins: '插件图标', accountMenuAccount: '账号信息图标', accountMenuTeam: '团队图标', accountMenuUsage: '剩余用量图标', accountMenuHidePet: '隐藏宠物图标', accountMenuSettings: '设置图标', accountMenuLogout: '退出登录图标'
+  sidebarMode: '侧边栏模式', sidebarSearch: '搜索图标', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '呼吸闪烁', backgroundFloat: '轻盈漂浮', backgroundRain: '垂直雨落', backgroundMeteor: '斜向流星', backgroundSnow: '摇曳飘雪', project: '项目', decoration: '装饰', polaroidPin: '图钉', sidebarNavNewTask: '新建任务图标', sidebarNavPullRequests: '拉取请求图标', sidebarNavSites: '站点图标', sidebarNavScheduled: '已安排图标', sidebarNavPlugins: '插件图标', accountMenuAccount: '账号信息图标', accountMenuTeam: '团队图标', accountMenuUsage: '剩余用量图标', accountMenuHidePet: '隐藏宠物图标', accountMenuSettings: '设置图标', accountMenuLogout: '退出登录图标'
 }
 
 export const typographyLabels: Record<TypographySlot, string> = {
@@ -230,7 +231,7 @@ export function ThemeIconControl({ slot, profile, assets, onChange, onImport, hi
   }, [open])
 
   const currentName = source.kind === 'builtin' ? source.name : null
-  const currentLabel = source.kind === 'asset' ? '自定义图片' : builtinIconLabels[source.name] ?? source.name
+  const currentLabel = source.kind === 'asset' ? source.asset.toLowerCase().endsWith('.gif') ? '自定义 GIF' : '自定义图片' : builtinIconLabels[source.name] ?? source.name
   const togglePicker = (): void => setOpen((value) => !value)
   const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
@@ -252,7 +253,7 @@ export function ThemeIconControl({ slot, profile, assets, onChange, onImport, hi
         {open && <div className="icon-picker-menu" id={listId} role="listbox" aria-label={`${iconLabels[slot]}图标`}>
           <button className={source.kind === 'asset' ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={source.kind === 'asset'} data-icon-name="__asset" onClick={() => { onImport(); setOpen(false) }}>
             <span className="icon-picker-option-icon"><RenderIcon slot={slot} profile={{ ...profile, icons: { ...profile.icons, [slot]: { kind: 'builtin', name: 'image' } } }} assets={assets} /></span>
-            <span>自定义图片</span>
+            <span>自定义图片 / GIF</span>
           </button>
           {builtinIconOptions.map((name) => {
             const Icon = builtinIcons[name] ?? Sparkles
@@ -268,11 +269,16 @@ export function ThemeIconControl({ slot, profile, assets, onChange, onImport, hi
   </div>
 }
 
-interface RenderIconProps { slot: IconSlot; profile: ThemeProfile; assets: Record<string, string>; injected?: boolean; fallbackGlyph?: string }
+interface RenderIconProps { slot: IconSlot; profile: ThemeProfile; assets: Record<string, string>; injected?: boolean; fallbackGlyph?: string; usePoster?: boolean }
 
-export function RenderIcon({ slot, profile, assets, injected = false, fallbackGlyph }: RenderIconProps): React.JSX.Element {
+export function RenderIcon({ slot, profile, assets, injected = false, fallbackGlyph, usePoster = false }: RenderIconProps): React.JSX.Element {
   const source = profile.icons[slot]
-  if (source.kind === 'asset') return <img className="custom-icon" src={assets[source.asset]} alt="" />
+  if (source.kind === 'asset') {
+    const sourceUrl = usePoster && source.asset.toLowerCase().endsWith('.gif')
+      ? assets[iconGifPosterAssetKey(source.asset)] ?? assets[source.asset]
+      : assets[source.asset]
+    return <img className="custom-icon" src={sourceUrl} alt="" draggable={false} />
+  }
   const fallbackBuiltin = HOME_ACTION_FALLBACK_BUILTINS[slot as keyof typeof HOME_ACTION_FALLBACK_BUILTINS]
   if (fallbackGlyph && source.name === fallbackBuiltin) return <span className="builtin-icon-glyph" aria-hidden="true">{fallbackGlyph}</span>
   if (injected) return <span className="builtin-icon-glyph" aria-hidden="true">{resolveBuiltinIconGlyph(source.name)}</span>

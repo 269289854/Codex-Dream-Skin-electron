@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { describe, expect, it } from 'vitest'
+import { prepareIconGif } from '../src/main/icon-assets'
 import { compileTheme } from '../src/main/theme-compiler'
 import { ensureGifInfiniteLoop } from '../src/shared/gif'
 import { createDefaultTheme } from '../src/shared/theme'
@@ -59,6 +60,17 @@ describe('GIF loop normalization', () => {
 
     expect(readLoopCount(compiledBytes)).toBe(0)
     expect(runtimeBytes).toEqual(compiledBytes)
+  })
+
+  it('normalizes finite and missing icon loops while generating a PNG first frame', async () => {
+    for (const source of [gifWithLoopCount(2), TEST_GIF]) {
+      const prepared = await prepareIconGif(source)
+      expect(readLoopCount(prepared.bytes)).toBe(0)
+      expect(prepared.dataUrl).toBe(`data:image/gif;base64,${prepared.bytes.toString('base64')}`)
+      expect(prepared.posterDataUrl).toMatch(/^data:image\/png;base64,/)
+      expect(Buffer.from(prepared.posterDataUrl.split(',')[1] ?? '', 'base64').subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      expect(prepared).toMatchObject({ width: 1, height: 1, frames: 1 })
+    }
   })
 })
 

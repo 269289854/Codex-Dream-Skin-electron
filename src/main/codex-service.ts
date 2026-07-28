@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
 import { paintToCss } from '../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../shared/conversation-overlay'
+import { iconGifPosterAssetKey } from '../shared/icon-assets'
 import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy } from '../shared/particle-effects'
@@ -268,7 +269,12 @@ export class CodexService {
     const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot)
     const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
-      source.kind === 'asset' ? { dataUrl: compiled.assets[source.asset] } : { name: source.name }
+      source.kind === 'asset'
+        ? {
+            dataUrl: compiled.assets[source.asset],
+            posterDataUrl: source.asset.toLowerCase().endsWith('.gif') ? compiled.assets[iconGifPosterAssetKey(source.asset)] : undefined
+          }
+        : { name: source.name }
     ]))
     const { overlay, ...conversationBackground } = profile.conversationBackground
     const windowBackground = profile.windowBackground

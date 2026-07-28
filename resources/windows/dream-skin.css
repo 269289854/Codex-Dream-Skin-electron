@@ -271,6 +271,12 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-search-button:ho
   background: var(--dream-sidebar-search-button-hover) !important;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-search-button .dream-custom-icon {
+  width: 19px !important;
+  height: 19px !important;
+  object-fit: contain;
+}
+
 html.codex-dream-skin aside.app-shell-left-panel button:is([aria-label^="切换模式"], [aria-label^="Switch mode"]) {
   background: transparent !important;
   border-color: transparent !important;

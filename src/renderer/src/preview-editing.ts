@@ -70,7 +70,7 @@ export const PREVIEW_TARGETS = {
   'sidebar-project-title': styleTarget('项目标题', 'sidebar', { copyField: 'sidebarProjectsTitle', colors: ['sidebarProjectsTitleText', 'sidebarProjectsTitleHoverText'], paints: ['sidebarProjectsTitleBackground', 'sidebarProjectsTitleHoverBackground'], fontSlot: 'sidebarProjectsTitle', inspectorAnchor: 'visual-sidebar-section-titles' }),
   'sidebar-task-title': styleTarget('任务标题', 'sidebar', { copyField: 'sidebarTasksTitle', colors: ['sidebarTasksTitleText', 'sidebarTasksTitleHoverText'], paints: ['sidebarTasksTitleBackground', 'sidebarTasksTitleHoverBackground'], fontSlot: 'sidebarTasksTitle', inspectorAnchor: 'visual-sidebar-section-titles' }),
   'sidebar-arrow': styleTarget('Codex 箭头', 'sidebar', { colors: ['sidebarArrow'] }),
-  'sidebar-search': styleTarget('搜索按钮', 'sidebar', { colors: ['sidebarSearchIcon'], paints: ['sidebarSearchButton', 'sidebarSearchButtonHover'] }),
+  'sidebar-search': styleTarget('搜索按钮', 'sidebar', { colors: ['sidebarSearchIcon'], paints: ['sidebarSearchButton', 'sidebarSearchButtonHover'], iconSlot: 'sidebarSearch' }),
   'sidebar-nav': styleTarget('导航项', 'sidebar', { colors: ['sidebarNavText', 'sidebarNavHoverText', 'sidebarNavSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], fontSlot: 'ui' }),
   'sidebar-nav-new-task': styleTarget('新建任务导航项', 'sidebar', { copyField: 'sidebarNavNewTask', iconSlot: 'sidebarNavNewTask', fontSlot: 'sidebarNavNewTask', colors: ['sidebarNavNewTaskText', 'sidebarNavNewTaskHoverText', 'sidebarNavNewTaskSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], inspectorAnchor: 'visual-sidebar-copy' }),
   'sidebar-nav-pull-requests': styleTarget('拉取请求导航项', 'sidebar', { copyField: 'sidebarNavPullRequests', iconSlot: 'sidebarNavPullRequests', fontSlot: 'sidebarNavPullRequests', colors: ['sidebarNavPullRequestsText', 'sidebarNavPullRequestsHoverText', 'sidebarNavPullRequestsSelectedText'], paints: ['sidebarNavItem', 'sidebarNavItemHover', 'sidebarNavItemSelected'], inspectorAnchor: 'visual-sidebar-copy' }),
@@ -132,6 +132,7 @@ export const PREVIEW_TARGET_ATTRIBUTE = 'data-preview-target'
 
 export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
   sidebarMode: 'icon-sidebar-mode',
+  sidebarSearch: 'sidebar-search',
   branding: 'icon-branding',
   cardPrimary: 'icon-card-primary',
   cardSecondary: 'icon-card-secondary',

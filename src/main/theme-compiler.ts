@@ -10,6 +10,8 @@ import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CONVERSATION_BUBBLE_PRESETS, type ConversationBubblePresetId, type MediaReference, type ThemeProfile } from '../shared/theme'
 import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey, resolveConversationBubbles } from '../shared/conversation-bubbles'
 import { ensureGifInfiniteLoop } from '../shared/gif'
+import { iconGifPosterAssetKey } from '../shared/icon-assets'
+import { prepareIconGifDataUrl } from './icon-assets'
 
 export async function compileTheme(
   profile: ThemeProfile,
@@ -32,6 +34,14 @@ export async function compileTheme(
 
   const assets: Record<string, string> = {}
   for (const asset of assetNames) assets[asset] = await readAsset(asset)
+  const gifIconAssets = new Set(Object.values(profile.icons)
+    .filter((icon) => icon.kind === 'asset' && icon.asset.toLowerCase().endsWith('.gif'))
+    .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
+  for (const asset of gifIconAssets) {
+    const prepared = await prepareIconGifDataUrl(assets[asset] ?? '')
+    assets[asset] = prepared.dataUrl
+    assets[iconGifPosterAssetKey(asset)] = prepared.posterDataUrl
+  }
   const brandSignatureGifAsset = profile.brandSignature.source?.mimeType === 'image/gif'
     ? profile.brandSignature.source.asset
     : null

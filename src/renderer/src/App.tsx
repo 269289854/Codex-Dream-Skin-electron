@@ -3,13 +3,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download, ExternalLink,
   GitBranch, Home, Image, Laptop, LogOut, MessageSquare, Mic, MonitorPlay, Palette, Play,
-  Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Sparkles, Trash2, Undo2, Upload, X
+  Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
 import { ACCOUNT_MENU_ITEMS, buildAccountMenuBackgroundStyle } from '../../shared/account-menu'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
+import { iconGifPosterAssetKey } from '../../shared/icon-assets'
 import { PARTICLE_EFFECT_IDS, createParticleCyclePosition, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy, type ParticleCyclePosition } from '../../shared/particle-effects'
 import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
@@ -608,7 +609,11 @@ export function App(): React.JSX.Element {
     try {
       const imported = await window.studio.assets.selectIcon(draft.id)
       if (!imported) return
-      setAssets((current) => ({ ...current, [imported.relativePath]: imported.dataUrl }))
+      setAssets((current) => ({
+        ...current,
+        [imported.relativePath]: imported.dataUrl,
+        ...(imported.gifPosterDataUrl ? { [iconGifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
+      }))
       change((profile) => { profile.icons[slot] = { kind: 'asset', asset: imported.relativePath } })
     } catch (reason) { setError(messageOf(reason)) }
   }
@@ -1164,7 +1169,7 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
         '--dream-sparkle-color': colors[particle.colorIndex % colors.length],
         '--dream-sparkle-glow': `${policy.glowLimit === null ? config.glow : Math.min(config.glow, policy.glowLimit)}px`
       } as React.CSSProperties}
-    ><span className="preview-particle-trail" aria-hidden="true" /><span className="preview-sparkle-content"><RenderIcon slot={iconSlot} profile={profile} assets={assets} injected /></span></button>)}
+    ><span className="preview-particle-trail" aria-hidden="true" /><span className="preview-sparkle-content"><RenderIcon slot={iconSlot} profile={profile} assets={assets} injected usePoster={!animatedIndexes.has(index)} /></span></button>)}
   </div>
 }
 
@@ -1300,7 +1305,7 @@ function CodexSidebarPreview({ profile, assets, accountMenuBackgroundUrl }: { pr
     <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
       <div className="codex-sidebar-header" data-preview-target="sidebar-header">
         <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">{profile.copy.sidebarModeTitle}</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} injected /></span></div>
-        <button className="codex-sidebar-icon-button" data-preview-target="sidebar-search" type="button" title="搜索"><Search size={19} /></button>
+        <button className="codex-sidebar-icon-button" data-preview-target="sidebar-search" type="button" title="搜索" aria-label="搜索"><RenderIcon slot="sidebarSearch" profile={profile} assets={assets} /></button>
       </div>
       <nav className="codex-primary-nav" aria-label="主要导航" data-preview-target="sidebar-nav">
         {SIDEBAR_NAV_ITEMS.map((item) => <button type="button" data-preview-target={item.previewTarget} key={item.id}><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /><span>{profile.copy[item.copyField]}</span></button>)}

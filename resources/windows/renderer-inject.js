@@ -9,6 +9,8 @@
   const WINDOW_BACKGROUND_ID = "codex-dream-skin-window-background";
   const projectAnchorRestorers = new WeakMap();
   const sidebarNavRestorers = new WeakMap();
+  const sidebarSearchRestorers = new WeakMap();
+  const sidebarSearchButtons = new Set();
   const sidebarCopyRestorers = new Map();
   const accountMenuRestorers = new WeakMap();
   const accountMenuRows = new Set();
@@ -77,15 +79,16 @@
   };
 
   const builtinGlyphs = themeConfig?.builtinGlyphs || {};
-  const renderSlot = (node, slot, fallback, useActionFallback = false) => {
+  const renderSlot = (node, slot, fallback, useActionFallback = false, usePoster = false) => {
     if (!node) return false;
     const source = themeConfig?.icons?.[slot];
-    if (source?.dataUrl) {
+    const dataUrl = usePoster && source?.posterDataUrl ? source.posterDataUrl : source?.dataUrl;
+    if (dataUrl) {
       const currentImage = node.querySelector(":scope > .dream-custom-icon");
-      if (currentImage?.getAttribute("src") === source.dataUrl && node.children.length === 1) return true;
+      if (currentImage?.getAttribute("src") === dataUrl && node.children.length === 1) return true;
       node.textContent = "";
       const image = document.createElement("img");
-      image.src = source.dataUrl;
+      image.src = dataUrl;
       image.alt = "";
       image.className = "dream-custom-icon";
       node.appendChild(image);
@@ -272,8 +275,9 @@
       node.style.setProperty("--dream-sparkle-color", colorIndex === 0 ? "var(--dream-sparkle)" : colors[colorIndex - 1]);
       const configuredGlow = Number.isFinite(config.glow) ? config.glow : 0;
       node.style.setProperty("--dream-sparkle-glow", `${glowLimit === null ? configuredGlow : Math.min(configuredGlow, glowLimit)}px`);
-      node.classList.toggle("dream-sparkle-image", renderSlot(content, iconSlot, "✦"));
-      node.dataset.dreamAnimated = animatedIndexes.has(index) ? "true" : "false";
+      const animated = animatedIndexes.has(index);
+      node.classList.toggle("dream-sparkle-image", renderSlot(content, iconSlot, "✦", false, !animated));
+      node.dataset.dreamAnimated = animated ? "true" : "false";
       node.dataset.dreamIndex = particleIndex;
     });
   };
@@ -459,6 +463,40 @@
     return candidates.find((node) => aliases.some((alias) => node.textContent.trim().toLowerCase() === alias)) || candidates.at(-1) || button;
   };
   const findSidebarNavIconNode = (button) => [...button.querySelectorAll("span")].find((node) => node.querySelector(":scope > svg")) || button.querySelector("svg")?.parentElement || null;
+  const findSidebarSearchIconNode = (button) => {
+    const directIcon = button.querySelector(":scope > svg, :scope > .dream-custom-icon");
+    if (directIcon) return button;
+    return button.querySelector("svg, .dream-custom-icon")?.parentElement || button;
+  };
+  const restoreSidebarSearch = (button) => {
+    const record = sidebarSearchRestorers.get(button);
+    if (!record) return;
+    if (record.iconNode?.isConnected) record.iconNode.innerHTML = record.iconHtml;
+    sidebarSearchRestorers.delete(button);
+    sidebarSearchButtons.delete(button);
+  };
+  const ensureSidebarSearchIcons = (sidebar) => {
+    const buttons = sidebar ? [...sidebar.querySelectorAll('button[aria-label*="搜索"], button[aria-label*="Search" i]')].filter((node) => node instanceof HTMLElement) : [];
+    const activeButtons = new Set();
+    const source = themeConfig?.icons?.sidebarSearch;
+    for (const button of buttons) {
+      activeButtons.add(button);
+      if (!source?.dataUrl && (!source?.name || source.name === "search")) {
+        restoreSidebarSearch(button);
+        continue;
+      }
+      const existing = sidebarSearchRestorers.get(button);
+      const iconNode = existing?.iconNode || findSidebarSearchIconNode(button);
+      if (!existing) {
+        sidebarSearchRestorers.set(button, { iconNode, iconHtml: iconNode.innerHTML });
+        sidebarSearchButtons.add(button);
+      }
+      renderSlot(iconNode, "sidebarSearch", "⌕");
+    }
+    for (const button of [...sidebarSearchButtons]) {
+      if (!button.isConnected || !activeButtons.has(button)) restoreSidebarSearch(button);
+    }
+  };
   const restoreSidebarNav = (button) => {
     const record = sidebarNavRestorers.get(button);
     if (!record) return;
@@ -552,11 +590,13 @@
       for (const className of ["dream-sidebar-header", "dream-sidebar-search-button", "dream-sidebar-project-row", "dream-sidebar-project-row-selected", "dream-sidebar-task-row", "dream-sidebar-task-row-selected", "dream-sidebar-footer", "dream-sidebar-avatar"]) {
         document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
       }
+      ensureSidebarSearchIcons(null);
       ensureSidebarNavigation();
       return;
     }
     ensureSidebarNavigation();
     ensureSidebarFixedCopy();
+    ensureSidebarSearchIcons(sidebar);
     replaceMarks(".dream-sidebar-header", "dream-sidebar-header", [...sidebar.querySelectorAll(":scope > header, :scope > div > header")]);
     replaceMarks(".dream-sidebar-search-button", "dream-sidebar-search-button", [...sidebar.querySelectorAll('button[aria-label*="搜索"], button[aria-label*="Search" i]')]);
     replaceMarks(".dream-sidebar-project-row", "dream-sidebar-project-row", [...sidebar.querySelectorAll('[role="listitem"][data-sidebar-project-kind] > span > [role="button"], [data-project-id], [data-testid*="project" i]')]);
@@ -2136,6 +2176,7 @@
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
+    for (const button of [...sidebarSearchButtons]) restoreSidebarSearch(button);
     document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => { if (node instanceof HTMLElement) restoreSidebarNav(node); node.removeAttribute("data-dream-sidebar-nav"); });
     clearAccountMenu();
     for (const [labelNode, record] of sidebarCopyRestorers) {
