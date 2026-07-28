@@ -6,14 +6,17 @@ import sharp from 'sharp'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { collectThemeAssets, createShareProfile, decodeShareZip, sha256, validateShareContents } from '../src/main/theme-share'
+import { ensureGifInfiniteLoop } from '../src/shared/gif'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, DEFAULT_THEME_COLORS } from '../src/shared/theme'
+
+sharp.cache(false)
 
 const roots: string[] = []
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
 const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })))
 })
 
 describe('theme share packages', () => {
@@ -94,6 +97,7 @@ describe('theme share packages', () => {
       cornerRadius: 28
     }]
     draft.icons.branding = { kind: 'asset', asset: image.relativePath }
+    draft.brandSignature = { mode: 'gif', source: composerGif.reference, mediaWidth: 136 }
     draft.decorations.composerMelody.source = composerGif.reference
     draft.typography.importedFonts.push({ id: font.id, family: font.family, asset: font.relativePath, originalName: font.originalName, format: font.format })
     draft.typography.slots.brandTitle = { kind: 'imported', id: font.id }
@@ -117,9 +121,10 @@ describe('theme share packages', () => {
     expect((await stat(packagePath)).isFile()).toBe(true)
     const archive = unzipSync(await readFile(packagePath))
     expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, polaroidImage.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
-    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 24 })
+    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 25 })
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
     expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(checked.profile.brandSignature).toEqual(draft.brandSignature)
     expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
     expect(checked.profile.windowBackground.source).toEqual(windowReference)
     expect(checked.profile.accountMenuBackground).toEqual(draft.accountMenuBackground)
@@ -133,6 +138,7 @@ describe('theme share packages', () => {
     expect(imported.name).toBe(draft.name)
     expect(imported.accountMenuBackground).toEqual(draft.accountMenuBackground)
     expect(imported.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(imported.brandSignature).toEqual(draft.brandSignature)
     expect(imported.colors).toEqual(draft.colors)
     expect(imported.decorations.sparkles.performanceMode).toBe('quality')
     expect(imported.resetColors).toEqual(draft.colors)
@@ -147,7 +153,7 @@ describe('theme share packages', () => {
     expect((await store.get(original.id)).copy.brandTitle).not.toBe(imported.copy.brandTitle)
     expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await store.compile(imported.id)).assets[font.relativePath]).toBe(font.dataUrl)
-    expect((await store.compile(imported.id)).assets[composerGif.relativePath]).toBe(`data:image/gif;base64,${gif.toString('base64')}`)
+    expect((await store.compile(imported.id)).assets[composerGif.relativePath]).toBe(`data:image/gif;base64,${Buffer.from(ensureGifInfiniteLoop(gif)).toString('base64')}`)
     expect((await store.compile(imported.id)).assets[polaroidImage.relativePath]).toMatch(/^data:image\/webp;base64,/)
     expect((await store.compile(imported.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
     expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
@@ -178,7 +184,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(24)
+    expect(imported.version).toBe(25)
     expect(imported.videoPlayback).toEqual({ pausePolicy: 'hidden' })
     expect(imported.conversationBubbles).toEqual({
       visible: true,
@@ -208,7 +214,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(24)
+    expect(imported.version).toBe(25)
     expect(imported.conversationBubbles).toEqual({
       visible: false,
       user: createDefaultConversationBubbleStyle(),
@@ -247,7 +253,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(24)
+    expect(imported.version).toBe(25)
     expect(imported.conversationBubbles).toEqual({
       visible: true,
       user: createDefaultConversationBubbleStyle(),

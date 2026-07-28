@@ -154,17 +154,24 @@ describe('Studio preview editing interaction', () => {
         },
         delete: async () => undefined,
         activate: activateTheme,
-        compile: async () => ({
-          css: '',
-          rendererPayload: '',
-          assets: {
-            'assets/polaroid.png': 'data:image/png;base64,AA==',
-            ...Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
-              conversationBubblePresetAssetKey(preset.id),
-              `data:image/png;base64,${preset.id}`
-            ]))
+        compile: async (id) => {
+          const selected = themeProfiles.find((item) => item.id === id)
+          const signatureGif = selected?.brandSignature.source?.mimeType === 'image/gif'
+            ? selected.brandSignature.source.asset
+            : null
+          return {
+            css: '',
+            rendererPayload: '',
+            assets: {
+              'assets/polaroid.png': 'data:image/png;base64,AA==',
+              ...(signatureGif ? { [signatureGif]: 'data:image/gif;base64,COMPILED' } : {}),
+              ...Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
+                conversationBubblePresetAssetKey(preset.id),
+                `data:image/png;base64,${preset.id}`
+              ]))
+            }
           }
-        })
+        }
       },
     assets: {
       selectImage: async () => null,
@@ -2000,6 +2007,113 @@ describe('Studio preview editing interaction', () => {
       brandSubtitle: '保存后的品牌副标题',
       brandSignature: 'MIKU SAVED'
     })
+  })
+
+  it('selects and previews brand signature images and GIFs while preserving cancelled choices', async () => {
+    const signatureTarget = container.querySelector<HTMLElement>('[data-preview-target="copy-brand-signature"]')
+    if (!signatureTarget) throw new Error('Brand signature target is missing.')
+    pointerDown(signatureTarget)
+    const modeButton = (label: string): HTMLButtonElement => {
+      const button = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .brand-signature-modes button')].find((candidate) => candidate.textContent === label)
+      if (!button) throw new Error(`${label} brand signature mode is missing.`)
+      return button
+    }
+
+    await act(async () => {
+      modeButton('图片').click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'brandSignature', 'image')
+    expect(container.querySelector('[data-preview-target="copy-brand-signature"]')?.getAttribute('data-dream-brand-signature-mode')).toBe('text')
+
+    selectMedia.mockResolvedValueOnce({
+      reference: { asset: 'assets/signature.png', kind: 'image', mimeType: 'image/png' },
+      relativePath: 'assets/signature.png',
+      previewUrl: 'data:image/png;base64,AA==',
+      originalName: 'signature.png',
+      width: 320,
+      height: 96
+    })
+    await act(async () => {
+      modeButton('图片').click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const imagePreview = container.querySelector<HTMLElement>('[data-preview-target="copy-brand-signature"]')
+    expect(imagePreview?.getAttribute('data-dream-brand-signature-mode')).toBe('image')
+    expect(imagePreview?.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+    expect(container.querySelector('[role="dialog"] .quick-copy-field')).toBeNull()
+
+    const width = container.querySelector<HTMLInputElement>('[role="dialog"] .brand-signature-controls input[type="range"]')
+    if (!width) throw new Error('Brand signature width control is missing.')
+    act(() => {
+      Object.getOwnPropertyDescriptor(browserWindow.HTMLInputElement.prototype, 'value')?.set?.call(width, '150')
+      width.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
+    })
+    expect(container.querySelector<HTMLElement>('[data-preview-target="copy-brand-signature"]')?.style.width).toBe('150px')
+
+    act(() => modeButton('文字').click())
+    expect(container.querySelector('[data-preview-target="copy-brand-signature"]')?.textContent).toBe(profile.copy.brandSignature)
+    const callsBeforeReuse = selectMedia.mock.calls.length
+    act(() => modeButton('图片').click())
+    expect(selectMedia).toHaveBeenCalledTimes(callsBeforeReuse)
+    expect(container.querySelector('[data-preview-target="copy-brand-signature"] img')).not.toBeNull()
+
+    const remove = container.querySelector<HTMLButtonElement>('[role="dialog"] .brand-signature-remove')
+    if (!remove) throw new Error('Brand signature remove command is missing.')
+    act(() => remove.click())
+    expect(container.querySelector('[data-preview-target="copy-brand-signature"]')?.getAttribute('data-dream-brand-signature-mode')).toBe('text')
+
+    selectMedia.mockResolvedValueOnce({
+      reference: { asset: 'assets/signature.gif', kind: 'image', mimeType: 'image/gif' },
+      relativePath: 'assets/signature.gif',
+      previewUrl: 'data:image/gif;base64,AA==',
+      originalName: 'signature.gif',
+      width: 320,
+      height: 96
+    })
+    await act(async () => {
+      modeButton('GIF').click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const gifPreview = container.querySelector<HTMLElement>('[data-preview-target="copy-brand-signature"]')
+    expect(gifPreview?.getAttribute('data-dream-brand-signature-mode')).toBe('gif')
+    expect(gifPreview?.querySelector('img')?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.brandSignature).toMatchObject({
+      mode: 'gif',
+      source: { asset: 'assets/signature.gif', mimeType: 'image/gif' },
+      mediaWidth: 150
+    })
+  })
+
+  it('keeps the normalized compiled asset when loading an existing brand signature GIF', async () => {
+    const asset = 'assets/existing-signature.gif'
+    profile.brandSignature = {
+      mode: 'gif',
+      source: { asset, kind: 'image', mimeType: 'image/gif' },
+      mediaWidth: 96
+    }
+    const switchTheme = async (name: string): Promise<void> => {
+      const label = [...container.querySelectorAll('.theme-item strong')].find((node) => node.textContent === name)
+      const button = label?.closest('button')
+      if (!button) throw new Error(`${name} theme is missing.`)
+      await act(async () => {
+        button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+        await Promise.resolve()
+        await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+      })
+    }
+
+    await switchTheme('备用主题')
+    await switchTheme(profile.name)
+
+    expect(container.querySelector<HTMLImageElement>('[data-preview-target="copy-brand-signature"] img')?.src).toBe('data:image/gif;base64,COMPILED')
   })
 
   it('keeps optional brand copy targets selectable after they are cleared', () => {

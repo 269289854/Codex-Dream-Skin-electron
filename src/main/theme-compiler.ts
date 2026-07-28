@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import type { CompiledTheme } from '../shared/contracts'
 import type { Fence } from '../shared/geometry'
 import { ACCOUNT_MENU_ITEMS } from '../shared/account-menu'
@@ -8,6 +9,7 @@ import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CONVERSATION_BUBBLE_PRESETS, type ConversationBubblePresetId, type MediaReference, type ThemeProfile } from '../shared/theme'
 import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey, resolveConversationBubbles } from '../shared/conversation-bubbles'
+import { ensureGifInfiniteLoop } from '../shared/gif'
 
 export async function compileTheme(
   profile: ThemeProfile,
@@ -22,6 +24,7 @@ export async function compileTheme(
   if (profile.conversationBackground.source?.kind === 'image') assetNames.add(profile.conversationBackground.source.asset)
   if (profile.windowBackground.source?.kind === 'image') assetNames.add(profile.windowBackground.source.asset)
   if (profile.accountMenuBackground.source?.kind === 'image') assetNames.add(profile.accountMenuBackground.source.asset)
+  if (profile.brandSignature.source) assetNames.add(profile.brandSignature.source.asset)
   if (profile.decorations.composerMelody.source) assetNames.add(profile.decorations.composerMelody.source.asset)
   for (const reference of conversationBubbleMediaReferences(profile)) assetNames.add(reference.asset)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
@@ -29,6 +32,12 @@ export async function compileTheme(
 
   const assets: Record<string, string> = {}
   for (const asset of assetNames) assets[asset] = await readAsset(asset)
+  const brandSignatureGifAsset = profile.brandSignature.source?.mimeType === 'image/gif'
+    ? profile.brandSignature.source.asset
+    : null
+  if (brandSignatureGifAsset && assets[brandSignatureGifAsset]) {
+    assets[brandSignatureGifAsset] = ensureInfiniteLoopingGifDataUrl(assets[brandSignatureGifAsset])
+  }
   if (readConversationBubblePreset) {
     for (const preset of CONVERSATION_BUBBLE_PRESETS) {
       assets[conversationBubblePresetAssetKey(preset.id)] = await readConversationBubblePreset(preset.id)
@@ -79,6 +88,7 @@ function createRuntimeProfile(profile: ThemeProfile): ThemeProfile {
     runtimeProfile.conversationBackground.source,
     runtimeProfile.windowBackground.source,
     runtimeProfile.accountMenuBackground.source,
+    runtimeProfile.brandSignature.source,
     runtimeProfile.decorations.composerMelody.source,
     ...conversationBubbleMediaReferences(runtimeProfile)
   ]
@@ -90,3 +100,13 @@ function createRuntimeProfile(profile: ThemeProfile): ThemeProfile {
 
 function percent(value: number): string { return `${(value * 100).toFixed(3).replace(/\.0+$|(?<=\.[0-9]*?)0+$/g, '')}%` }
 function escapeCssUrl(value: string): string { return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n\f]/g, '') }
+
+function ensureInfiniteLoopingGifDataUrl(dataUrl: string): string {
+  const prefix = 'data:image/gif;base64,'
+  if (!dataUrl.startsWith(prefix)) return dataUrl
+  const source = Buffer.from(dataUrl.slice(prefix.length), 'base64')
+  const normalized = ensureGifInfiniteLoop(source)
+  return normalized === source
+    ? dataUrl
+    : `${prefix}${Buffer.from(normalized).toString('base64')}`
+}

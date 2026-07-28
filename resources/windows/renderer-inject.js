@@ -98,6 +98,35 @@
     }
   };
 
+  const ensureBrandSignature = (node, copy) => {
+    if (!(node instanceof HTMLElement)) return;
+    const config = themeConfig?.brandSignature;
+    const requestedMode = config?.mode === "image" || config?.mode === "gif" ? config.mode : "text";
+    const dataUrl = typeof config?.dataUrl === "string" && config.dataUrl.startsWith("data:image/") ? config.dataUrl : "";
+    const mode = requestedMode !== "text" && dataUrl ? requestedMode : "text";
+    node.dataset.dreamBrandSignatureMode = mode;
+    node.classList.toggle("dream-signature-media", mode !== "text");
+    if (mode === "text") {
+      node.style.removeProperty("--dream-signature-media-width");
+      const text = typeof copy?.brandSignature === "string" ? copy.brandSignature : "MIKU ✦ 01";
+      if (node.children.length > 0 || node.textContent !== text) node.textContent = text;
+      return;
+    }
+
+    const width = clamp(Math.round(Number(config?.mediaWidth) || 96), 32, 190);
+    node.style.setProperty("--dream-signature-media-width", `${width}px`);
+    let image = node.querySelector(":scope > .dream-signature-media-image");
+    if (!(image instanceof HTMLImageElement) || node.children.length !== 1) {
+      node.replaceChildren();
+      image = document.createElement("img");
+      image.className = "dream-signature-media-image";
+      image.alt = "";
+      image.draggable = false;
+      node.appendChild(image);
+    }
+    if (image.getAttribute("src") !== dataUrl) image.src = dataUrl;
+  };
+
   const clearSidebarModeIcon = (button) => {
     button?.classList.remove("dream-sidebar-mode-button");
     button?.querySelector(":scope > .dream-sidebar-mode-icon")?.remove();
@@ -2020,7 +2049,7 @@
     const brandSignature = chrome.querySelector(".dream-signature");
     if (brandTitle) brandTitle.textContent = typeof copy.brandTitle === "string" ? copy.brandTitle : "初音未来主题 Codex App";
     if (brandSubtitle) brandSubtitle.textContent = typeof copy.brandSubtitle === "string" ? copy.brandSubtitle : "你的专属 AI 编程与创作伙伴";
-    if (brandSignature) brandSignature.textContent = typeof copy.brandSignature === "string" ? copy.brandSignature : "MIKU ✦ 01";
+    ensureBrandSignature(brandSignature, copy);
     chrome.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     const polaroid = chrome.querySelector(".dream-polaroid");
     if (polaroid) {

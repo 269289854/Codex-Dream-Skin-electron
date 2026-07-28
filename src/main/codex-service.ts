@@ -318,6 +318,10 @@ export class CodexService {
       sparklePolicy: resolveParticleRenderPolicy(profile.decorations.sparkles.performanceMode, profile.decorations.sparkles.count),
       sparkleCyclePositionPolicy: resolveParticleCyclePositionPolicy(profile.decorations.sparkles.effect),
       composerBadge: profile.composerBadge,
+      brandSignature: {
+        ...profile.brandSignature,
+        dataUrl: profile.brandSignature.source ? compiled.assets[profile.brandSignature.source.asset] ?? null : null
+      },
       conversationBubbles: resolveConversationBubbles(profile.conversationBubbles, compiled.assets),
       toolActivityBubbles: { visible: profile.toolActivityBubbles.visible },
       builtinGlyphs: BUILTIN_ICON_GLYPHS,

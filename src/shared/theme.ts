@@ -517,6 +517,27 @@ const toolActivityBubblesSchema = z.object({
 
 export type ToolActivityBubbles = z.infer<typeof toolActivityBubblesSchema>
 
+export const BRAND_SIGNATURE_MODES = ['text', 'image', 'gif'] as const
+export type BrandSignatureMode = (typeof BRAND_SIGNATURE_MODES)[number]
+
+const brandSignatureSchema = z.object({
+  mode: z.enum(BRAND_SIGNATURE_MODES),
+  source: mediaReferenceSchema.nullable(),
+  mediaWidth: z.number().int().min(32).max(190)
+}).strict().superRefine((signature, context) => {
+  if (signature.source?.kind === 'video') {
+    context.addIssue({ code: 'custom', path: ['source'], message: '品牌签名只能使用图片或 GIF 素材。' })
+  }
+  if (signature.mode === 'image' && (!signature.source || signature.source.mimeType === 'image/gif')) {
+    context.addIssue({ code: 'custom', path: ['source'], message: '图片签名必须引用静态图片素材。' })
+  }
+  if (signature.mode === 'gif' && (!signature.source || signature.source.mimeType !== 'image/gif')) {
+    context.addIssue({ code: 'custom', path: ['source'], message: 'GIF 签名必须引用 GIF 素材。' })
+  }
+})
+
+export type BrandSignature = z.infer<typeof brandSignatureSchema>
+
 const legacyCommonProfileFields = {
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
@@ -792,10 +813,28 @@ const versionTwentyThreeThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionTwentyFourThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(24),
   videoPlayback: globalVideoPlaybackSchema,
+  decorations: decorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  accountMenuBackground: accountMenuBackgroundSchema.default(createDefaultAccountMenuBackground()),
+  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(25),
+  videoPlayback: globalVideoPlaybackSchema,
+  brandSignature: brandSignatureSchema,
   decorations: decorationsSchema,
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
@@ -916,9 +955,10 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 24,
+    version: 25,
     updatedAt: new Date().toISOString(),
     videoPlayback: { pausePolicy: 'hidden' },
+    brandSignature: createDefaultBrandSignature(),
     copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
     hero: {
       source: null,
@@ -986,6 +1026,11 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
+  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 0 && input.version <= 24) {
+    const legacy = structuredClone(input) as Record<string, unknown>
+    delete legacy.brandSignature
+    input = legacy
+  }
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 0 && input.version <= 23) {
     const legacy = structuredClone(input) as Record<string, unknown>
     delete legacy.accountMenuBackground
@@ -1027,10 +1072,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 24) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 25) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 24) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionTwentyFour(versionTwentyFourThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 23) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -1388,7 +1437,7 @@ function migrateVersionTwentyTwo(legacy: z.infer<typeof versionTwentyTwoThemeSch
 }
 
 function migrateVersionTwentyThree(legacy: z.infer<typeof versionTwentyThreeThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionTwentyFour(versionTwentyFourThemeSchema.parse({
     ...legacy,
     version: 24,
     conversationBubbles: {
@@ -1396,6 +1445,14 @@ function migrateVersionTwentyThree(legacy: z.infer<typeof versionTwentyThreeThem
       user: createDefaultConversationBubbleStyle(),
       codex: createDefaultConversationBubbleStyle()
     }
+  }))
+}
+
+function migrateVersionTwentyFour(legacy: z.infer<typeof versionTwentyFourThemeSchema>): ThemeProfile {
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 25,
+    brandSignature: createDefaultBrandSignature()
   }))
 }
 
@@ -1578,6 +1635,10 @@ function createDefaultDecorations(): z.infer<typeof decorationsSchema> {
       fontSize: 17
     }
   }
+}
+
+function createDefaultBrandSignature(): BrandSignature {
+  return { mode: 'text', source: null, mediaWidth: 96 }
 }
 
 function createVersionTwentyDefaultDecorations(): z.infer<typeof versionTwentyDecorationsSchema> {

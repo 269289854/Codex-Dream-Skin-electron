@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { resolveAppearanceColor } from '../src/shared/appearance'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
+import { ensureGifInfiniteLoop } from '../src/shared/gif'
 import { CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 const roots: string[] = []
@@ -95,7 +96,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 24, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 25, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -155,7 +156,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 24,
+      version: 25,
       videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
@@ -576,7 +577,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(24)
+    expect(migrated.version).toBe(25)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'
@@ -624,6 +625,55 @@ describe('ProfileStore', () => {
     await expect(store.importMediaAsset(profile.id, gifSource, 'composerMelody', 'image')).rejects.toThrow('图片')
     await expect(store.importMediaAsset(profile.id, videoSource, 'composerMelody', 'video')).rejects.toThrow('图片或 GIF')
     await expect(store.importMediaAsset(profile.id, fakeGif, 'composerMelody', 'gif')).rejects.toThrow('内容与扩展名不匹配')
+  })
+
+  it('imports, compiles, duplicates, replaces, and prunes brand signature images and GIFs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-brand-signature-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('品牌签名素材主题')
+    const pngSource = join(root, 'signature.png')
+    const gifSource = join(root, 'signature.gif')
+    const svgSource = join(root, 'signature.svg')
+    const videoSource = join(root, 'signature.mp4')
+    await Promise.all([
+      writeFile(pngSource, TEST_PNG),
+      writeFile(gifSource, TEST_GIF),
+      writeFile(svgSource, '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="26"><rect width="96" height="26" fill="#ffffff"/></svg>'),
+      writeFile(videoSource, Buffer.from('video'))
+    ])
+
+    const image = await store.importMediaAsset(profile.id, pngSource, 'brandSignature', 'image')
+    profile.brandSignature = { mode: 'image', source: image.reference, mediaWidth: 120 }
+    await store.update(profile)
+    expect((await store.compile(profile.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+    const imageDuplicate = await store.duplicate(profile, '品牌图片签名副本')
+    expect(imageDuplicate.brandSignature).toEqual(profile.brandSignature)
+    expect((await store.compile(imageDuplicate.id)).assets[image.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+
+    const svg = await store.importMediaAsset(profile.id, svgSource, 'brandSignature', 'image')
+    expect(svg.reference).toMatchObject({ kind: 'image', mimeType: 'image/png' })
+    expect(svg.relativePath.endsWith('.png')).toBe(true)
+
+    const gif = await store.importMediaAsset(profile.id, gifSource, 'brandSignature', 'gif')
+    profile.brandSignature = { mode: 'gif', source: gif.reference, mediaWidth: 150 }
+    await store.update(profile)
+    await expect(readFile(join(store.themesRoot, profile.id, image.relativePath))).rejects.toThrow()
+    const infiniteGif = Buffer.from(ensureGifInfiniteLoop(TEST_GIF))
+    expect(await readFile(join(store.themesRoot, profile.id, gif.relativePath))).toEqual(infiniteGif)
+    expect((await store.compile(profile.id)).assets[gif.relativePath]).toBe(`data:image/gif;base64,${infiniteGif.toString('base64')}`)
+    const gifDuplicate = await store.duplicate(profile, '品牌 GIF 签名副本')
+    expect(gifDuplicate.brandSignature).toEqual(profile.brandSignature)
+    expect((await store.compile(gifDuplicate.id)).assets[gif.relativePath]).toBe(`data:image/gif;base64,${infiniteGif.toString('base64')}`)
+
+    await expect(store.importMediaAsset(profile.id, pngSource, 'brandSignature', 'gif')).rejects.toThrow('GIF')
+    await expect(store.importMediaAsset(profile.id, gifSource, 'brandSignature', 'image')).rejects.toThrow('图片')
+    await expect(store.importMediaAsset(profile.id, videoSource, 'brandSignature', 'video')).rejects.toThrow('图片或 GIF')
+
+    profile.brandSignature = { ...profile.brandSignature, mode: 'text', source: null }
+    await store.update(profile)
+    await expect(readFile(join(store.themesRoot, profile.id, gif.relativePath))).rejects.toThrow()
   })
 
   it('duplicates the current draft and every referenced asset without changing the source profile', async () => {

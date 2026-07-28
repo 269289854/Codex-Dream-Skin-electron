@@ -36,6 +36,7 @@ import { VideoPlaybackPanel } from './VideoPlaybackPanel'
 import { VideoThumbnail } from './VideoThumbnail'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
 import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
+import { BrandSignatureControls } from './BrandSignatureControls'
 import {
   ICON_PREVIEW_TARGETS,
   findPreviewTarget,
@@ -106,9 +107,12 @@ export function App(): React.JSX.Element {
       const [profile, compiled] = await Promise.all([window.studio.themes.get(id), window.studio.themes.compile(id)])
       setDraft(profile)
       const nextAssets = { ...compiled.assets }
+      const compiledBrandSignatureGif = profile.brandSignature.source?.mimeType === 'image/gif'
+        ? profile.brandSignature.source.asset
+        : null
       if (window.studio.assets.getPreviewUrl) {
-        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.accountMenuBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
-          if (!source) continue
+        for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.accountMenuBackground.source, profile.brandSignature.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
+          if (!source || source.asset === compiledBrandSignatureGif) continue
           try { nextAssets[source.asset] = await window.studio.assets.getPreviewUrl(id, source.asset) } catch { /* missing media is shown as fallback */ }
         }
       }
@@ -366,7 +370,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.themes.getDefault(themeId)
       const restoredAssets: Record<string, string> = {}
-      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.accountMenuBackground.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
+      for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.accountMenuBackground.source, profile.brandSignature.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
         if (!source) continue
         restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
       }
@@ -514,7 +518,7 @@ export function App(): React.JSX.Element {
     try {
       const imported = window.studio.assets.selectMedia
         ? await window.studio.assets.selectMedia(draft.id, purpose, requestedKind)
-        : purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
+        : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
@@ -542,6 +546,9 @@ export function App(): React.JSX.Element {
         } else if (purpose === 'accountMenuBackground') {
           profile.accountMenuBackground.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
           profile.accountMenuBackground.source = imported.reference
+        } else if (purpose === 'brandSignature') {
+          profile.brandSignature.source = imported.reference
+          profile.brandSignature.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
         } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble') {
           const role = purpose === 'conversationUserBubble' ? 'user' : 'codex'
           profile.conversationBubbles.visible = true
@@ -906,7 +913,7 @@ export function App(): React.JSX.Element {
                   <WindowBackgroundPreview profile={draft} backgroundUrl={windowBackgroundUrl} />
                   <CodexSidebarPreview profile={draft} assets={assets} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />
                 <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
-                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><em data-preview-target="copy-brand-signature" tabIndex={0} role="button" aria-label="编辑品牌签名">{draft.copy.brandSignature}</em></header>
+                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><PreviewBrandSignature profile={draft} assets={assets} /></header>
                   <PreviewSparkles profile={draft} assets={assets} />
                   {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
@@ -983,7 +990,8 @@ export function App(): React.JSX.Element {
             <Property title="品牌文案" anchor="visual-brand-copy" highlighted={inspectorAnchor === 'visual-brand-copy'}>
               <label className="copy-field">品牌主标题<input value={draft.copy.brandTitle} maxLength={80} aria-invalid={!draft.copy.brandTitle.trim() || draft.copy.brandTitle.length > 80} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandTitle = value }) }} /></label>
               <label className="copy-field">品牌副标题<textarea value={draft.copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSubtitle = value }) }} /></label>
-              <label className="copy-field">品牌签名<input value={draft.copy.brandSignature} maxLength={32} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSignature = value }) }} /></label>
+              <BrandSignatureControls profile={draft} assets={assets} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('brandSignature', kind) }} />
+              {draft.brandSignature.mode === 'text' && <label className="copy-field">品牌签名<input value={draft.copy.brandSignature} maxLength={32} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSignature = value }) }} /></label>}
               {brandValidationError && <p className="field-error">{brandValidationError}</p>}
             </Property>
             <Property title="首页文案" anchor="visual-copy" highlighted={inspectorAnchor === 'visual-copy'}>
@@ -1163,6 +1171,22 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
 function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
   const melody = profile.decorations.composerMelody
   return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <PreviewComposerDecoration profile={profile} assets={assets} />}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="添加"><Plus size={18} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="语音输入"><Mic size={17} /></button><button className="preview-send-command bg-token-foreground" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
+}
+
+function PreviewBrandSignature({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+  const config = profile.brandSignature
+  const mediaUrl = config.source ? assets[config.source.asset] : undefined
+  return <em
+    className={config.mode === 'text' ? 'preview-brand-signature' : 'preview-brand-signature is-media'}
+    data-preview-target="copy-brand-signature"
+    data-dream-brand-signature-mode={config.mode}
+    tabIndex={0}
+    role="button"
+    aria-label="编辑品牌签名"
+    style={config.mode === 'text' ? undefined : { width: `${config.mediaWidth}px` }}
+  >
+    {config.mode === 'text' ? profile.copy.brandSignature : mediaUrl && <img src={mediaUrl} alt="" draggable={false} />}
+  </em>
 }
 
 function PreviewComposerDecoration({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {

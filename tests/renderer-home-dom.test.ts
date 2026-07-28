@@ -186,6 +186,8 @@ type RuntimeDecorations = Omit<ThemeProfile['decorations'], 'composerMelody'> & 
   composerMelody: ThemeProfile['decorations']['composerMelody'] & { dataUrl?: string | null }
 }
 
+type RuntimeBrandSignature = ThemeProfile['brandSignature'] & { dataUrl?: string | null }
+
 type RuntimeConversationBubblesConfig = {
   visible: boolean
   user?: RuntimeConversationBubbleFrame
@@ -210,13 +212,14 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }, brandSignature: RuntimeBrandSignature = { ...defaultProfile.brandSignature, dataUrl: null }): void {
   const runtimeConfig = {
     themeId,
     videoPlayback,
     media,
     icons,
     composerBadge,
+    brandSignature,
     conversationBubbles,
     toolActivityBubbles,
     decorations,
@@ -606,6 +609,35 @@ describe('renderer home DOM adaptation', () => {
     expect(activeThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
     expect(otherThreadRow?.classList.contains('dream-sidebar-task-row')).toBe(false)
     expect(otherThreadRow?.classList.contains('dream-sidebar-task-row-selected')).toBe(false)
+  })
+
+  it('renders one stable brand signature GIF node across repeated synchronization', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Signature-GIF')
+    const signature: RuntimeBrandSignature = {
+      mode: 'gif',
+      source: { asset: 'assets/signature.gif', kind: 'image', mimeType: 'image/gif' },
+      mediaWidth: 144,
+      dataUrl: 'data:image/gif;base64,AA=='
+    }
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, signature)
+
+    const container = window.document.querySelector('.dream-signature') as HTMLElement | null
+    const image = container?.querySelector('.dream-signature-media-image') as HTMLImageElement | null
+    expect(container?.dataset.dreamBrandSignatureMode).toBe('gif')
+    expect(container?.classList.contains('dream-signature-media')).toBe(true)
+    expect(container?.style.getPropertyValue('--dream-signature-media-width')).toBe('144px')
+    expect(image?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
+
+    stateOf(window).ensure()
+    stateOf(window).ensure()
+    expect(window.document.querySelectorAll('.dream-signature-media-image')).toHaveLength(1)
+    expect(window.document.querySelector('.dream-signature-media-image')).toBe(image)
+    expect(dreamSkinCss).toContain('.dream-signature-media-image')
+    expect(dreamSkinCss).toContain('object-fit: contain')
+
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-signature')).toBeNull()
   })
 
   it('supports the English native mode button label', () => {

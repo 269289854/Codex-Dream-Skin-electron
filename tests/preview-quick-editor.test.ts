@@ -244,6 +244,50 @@ describe('preview quick editor', () => {
     }
   })
 
+  it('switches brand signature media modes without exposing text-only controls', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    const selectMedia = vi.fn()
+    renderEditor(PREVIEW_TARGETS['copy-brand-signature'], profile, vi.fn(), (mutator) => mutator(profile), undefined, undefined, selectMedia)
+
+    const imageMode = [...container.querySelectorAll<HTMLButtonElement>('.brand-signature-modes button')].find((button) => button.textContent === '图片')
+    if (!imageMode) throw new Error('Brand signature image mode is missing.')
+    act(() => imageMode.click())
+    expect(selectMedia).toHaveBeenCalledWith('brandSignature', 'image')
+    expect(profile.brandSignature).toEqual({ mode: 'text', source: null, mediaWidth: 96 })
+
+    profile.brandSignature = {
+      mode: 'gif',
+      source: { asset: 'assets/signature.gif', kind: 'image', mimeType: 'image/gif' },
+      mediaWidth: 144
+    }
+    renderEditor(
+      PREVIEW_TARGETS['copy-brand-signature'],
+      profile,
+      vi.fn(),
+      (mutator) => mutator(profile),
+      undefined,
+      undefined,
+      selectMedia,
+      { 'assets/signature.gif': 'data:image/gif;base64,AA==' }
+    )
+    expect(container.querySelector('.quick-copy-field')).toBeNull()
+    expect(container.querySelector('[data-font-slot="brandSignature"]')).toBeNull()
+    expect(container.querySelector<HTMLImageElement>('.brand-signature-asset-picker img')?.getAttribute('src')).toBe('data:image/gif;base64,AA==')
+    expect(container.querySelector<HTMLInputElement>('.brand-signature-controls input[type="range"]')?.max).toBe('190')
+
+    const textMode = [...container.querySelectorAll<HTMLButtonElement>('.brand-signature-modes button')].find((button) => button.textContent === '文字')
+    if (!textMode) throw new Error('Brand signature text mode is missing.')
+    act(() => textMode.click())
+    expect(profile.brandSignature.mode).toBe('text')
+    expect(profile.brandSignature.source?.asset).toBe('assets/signature.gif')
+
+    profile.brandSignature.mode = 'gif'
+    const remove = container.querySelector<HTMLButtonElement>('.brand-signature-remove')
+    if (!remove) throw new Error('Brand signature remove command is missing.')
+    act(() => remove.click())
+    expect(profile.brandSignature).toEqual({ mode: 'text', source: null, mediaWidth: 144 })
+  })
+
   it('sets independent home copy fonts and restores global inheritance', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     const cases = [

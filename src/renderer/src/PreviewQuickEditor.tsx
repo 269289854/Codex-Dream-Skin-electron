@@ -21,6 +21,7 @@ import { ParticleEffectControls } from './ParticleEffectControls'
 import { PolaroidControls } from './PolaroidControls'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
 import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
+import { BrandSignatureControls } from './BrandSignatureControls'
 import { VideoThumbnail } from './VideoThumbnail'
 import type { PopoverPosition, PreviewCopyField, PreviewTargetDefinition, TypographySlot } from './preview-editing'
 
@@ -69,6 +70,8 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
   const copyField = editor.kind === 'style' ? editor.copyField : undefined
   const decoration = editor.kind === 'style' ? editor.decoration : undefined
   const copyConfig = copyField ? copyFieldConfig[copyField] : null
+  const brandSignatureTarget = copyField === 'brandSignature'
+  const brandSignatureTextMode = !brandSignatureTarget || profile.brandSignature.mode === 'text'
   const copyInvalid = copyField && copyConfig ? (
     profile.copy[copyField].length > copyConfig.maxLength ||
     (copyField === 'headingTemplate' && Boolean(headingTemplateError(profile.copy.headingTemplate))) ||
@@ -84,7 +87,8 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {editor.kind === 'style' && editor.visibility === 'composerBadge' && <label className="toggle-row"><span>显示输入框装饰</span><input type="checkbox" checked={profile.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.composerBadge.visible = visible }) }} /></label>}
       {editor.kind === 'style' && editor.conversationBubbleRole && <ConversationBubbleControls profile={profile} assets={assets} role={editor.conversationBubbleRole} mediaBusy={mediaBusy} showRoleTabs={false} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage(conversationBubbleRolePurpose(editor.conversationBubbleRole!), kind)} />}
       {editor.kind === 'style' && editor.visibility === 'toolActivityBubbles' && <label className="toggle-row"><span>显示工具活动气泡</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
-      {copyField && copyConfig && <label className="quick-copy-field">{copyConfig.label}{copyConfig.rows
+      {brandSignatureTarget && <BrandSignatureControls profile={profile} assets={assets} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('brandSignature', kind)} />}
+      {copyField && copyConfig && brandSignatureTextMode && <label className="quick-copy-field">{copyConfig.label}{copyConfig.rows
         ? <textarea value={profile.copy[copyField]} maxLength={copyConfig.maxLength} rows={copyConfig.rows} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />
         : <input value={profile.copy[copyField]} maxLength={copyConfig.maxLength} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />}</label>}
       {copyField === 'brandTitle' && copyInvalid && <p className="field-error">品牌主标题不能为空。</p>}
@@ -94,10 +98,9 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {editor.kind === 'conversationBackground' && <ConversationBackgroundControls profile={profile} backgroundUrl={conversationBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('conversationBackground', kind)} />}
       {editor.kind === 'windowBackground' && <WindowBackgroundControls compact profile={profile} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('windowBackground', kind)} />}
       {editor.kind === 'style' && editor.accountMenuBackground && <AccountMenuBackgroundControls profile={profile} backgroundUrl={accountMenuBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('accountMenuBackground', kind)} />}
-
-      {editor.kind === 'style' && !decoration && editor.colors.filter((token) => tokenState(APPEARANCE_COLOR_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
+      {editor.kind === 'style' && !decoration && brandSignatureTextMode && editor.colors.filter((token) => tokenState(APPEARANCE_COLOR_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
       {editor.kind === 'style' && !decoration && editor.paints.filter((token) => tokenState(APPEARANCE_PAINT_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
-      {editor.kind === 'style' && !decoration && editor.fontSlot && <FontControl slot={editor.fontSlot} profile={profile} onChange={(selection) => onChange((next) => { assignFontSlot(next, editor.fontSlot!, selection) })} onImport={() => onImportFont(editor.fontSlot!)} />}
+      {editor.kind === 'style' && !decoration && brandSignatureTextMode && editor.fontSlot && <FontControl slot={editor.fontSlot} profile={profile} onChange={(selection) => onChange((next) => { assignFontSlot(next, editor.fontSlot!, selection) })} onImport={() => onImportFont(editor.fontSlot!)} />}
       {editor.kind === 'style' && !decoration && editor.iconSlot && <div className="icon-editor quick-icon-editor"><ThemeIconControl slot={editor.iconSlot} profile={profile} assets={assets} onChange={(name) => onChange((next) => { next.icons[editor.iconSlot!] = { kind: 'builtin', name } })} onImport={() => onImportIcon(editor.iconSlot!)} /></div>}
       {decoration === 'sparkles' && <ParticleEffectControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} />}
       {decoration === 'homeHeading' && <HomeHeadingDecorationControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} />}
@@ -105,7 +108,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
     </div>
     <footer className="preview-edit-popover-footer">
       <button type="button" onClick={() => onMore()}><PanelRightOpen size={15} />更多设置</button>
-      {editor.kind === 'style' && editor.fontSlot && <button type="button" onClick={() => onMore('font')}><Type size={15} />字体管理</button>}
+      {editor.kind === 'style' && brandSignatureTextMode && editor.fontSlot && <button type="button" onClick={() => onMore('font')}><Type size={15} />字体管理</button>}
       {editor.kind === 'style' && editor.iconSlot && !decoration && <button type="button" onClick={() => onMore('icon')}><Box size={15} />图标设置</button>}
     </footer>
   </section>

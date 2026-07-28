@@ -30,7 +30,7 @@ const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(24),
+  profileVersion: z.number().int().min(0).max(25),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -101,7 +101,7 @@ export function shareProfileVersionMatches(manifest: ThemeShareManifest, seriali
   if (!serializedProfile || typeof serializedProfile !== 'object' || !('version' in serializedProfile)) return false
   const serializedVersion = serializedProfile.version
   if (typeof serializedVersion !== 'number' || manifest.profileVersion !== serializedVersion) return false
-  return serializedVersion === parsedVersion || (parsedVersion === 24 && serializedVersion >= 0 && serializedVersion <= 23)
+  return serializedVersion === parsedVersion || (parsedVersion === 25 && serializedVersion >= 0 && serializedVersion <= 24)
 }
 
 function themeMediaReferences(profile: ThemeProfile): Array<MediaReference | null> {
@@ -111,6 +111,7 @@ function themeMediaReferences(profile: ThemeProfile): Array<MediaReference | nul
     profile.conversationBackground.source,
     profile.windowBackground.source,
     profile.accountMenuBackground.source,
+    profile.brandSignature.source,
     profile.decorations.composerMelody.source,
     ...conversationBubbleMediaReferences(profile)
   ]

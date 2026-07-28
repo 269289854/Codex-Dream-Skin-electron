@@ -15,6 +15,7 @@ import type { ImportedFontFormat } from '../shared/typography'
 import { compileTheme } from './theme-compiler'
 import { createVideoVariantReference, mediaMimeTypeForPath, mediaReferenceAssets, mediaReferenceForPath } from '../shared/media'
 import { conversationBubbleMediaReferences } from '../shared/conversation-bubbles'
+import { ensureGifInfiniteLoop } from '../shared/gif'
 import {
   MAX_SHARE_ENTRIES,
   MAX_SHARE_FONT_BYTES,
@@ -232,7 +233,7 @@ export class ProfileStore {
       }
       for (const asset of manifest.assets) if (!entries.has(asset.path)) throw new Error(`分享包缺少素材: ${asset.path}`)
 
-      const imported = { ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString(), resetColors: { ...source.colors } }
+      const imported = parseThemeProfile({ ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString(), resetColors: { ...source.colors } })
       const importedRoot = this.themeRoot(imported.id)
       this.throwIfAborted(signal, '主题导入已取消。')
       await this.writeJsonAtomic(join(temporaryRoot, 'theme.json'), imported)
@@ -442,6 +443,7 @@ export class ProfileStore {
       profile.conversationBackground.source,
       profile.windowBackground.source,
       profile.accountMenuBackground.source,
+      profile.brandSignature.source,
       profile.decorations.composerMelody.source,
       ...conversationBubbleMediaReferences(profile)
     ]
@@ -495,6 +497,7 @@ export class ProfileStore {
     const extension = extname(sourcePath).toLowerCase()
     const conversationBubble = isConversationBubblePurpose(purpose)
     if (extension !== '.svg' && !MEDIA_IMAGE_EXTENSIONS.has(extension) && !VIDEO_EXTENSIONS.has(extension)) throw new Error('仅支持 PNG、WebP、JPEG、GIF、SVG、MP4 和 WebM。')
+    if (purpose === 'brandSignature' && VIDEO_EXTENSIONS.has(extension)) throw new Error('品牌签名只能选择图片或 GIF 文件。')
     if (purpose === 'composerMelody' && VIDEO_EXTENSIONS.has(extension)) throw new Error('输入框装饰只能选择图片或 GIF 文件。')
     if (purpose === 'accountMenuBackground' && VIDEO_EXTENSIONS.has(extension)) throw new Error('账号菜单背景只能选择图片或 GIF 文件。')
     if (conversationBubble && VIDEO_EXTENSIONS.has(extension)) throw new Error('聊天气泡只能选择图片或 GIF 文件。')
@@ -536,6 +539,10 @@ export class ProfileStore {
         this.assertSafeSvg(source)
         await sharp(Buffer.from(source)).png().toFile(temporary)
         this.throwIfAborted(signal, '媒体导入已取消。')
+      } else if (purpose === 'brandSignature' && extension === '.gif') {
+        const normalized = ensureGifInfiniteLoop(await readFile(sourcePath, { signal }))
+        if (normalized.byteLength > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
+        await writeFile(temporary, normalized, { signal })
       } else {
         await pipeline(createReadStream(sourcePath), createWriteStreamChecked(temporary), { signal })
       }
