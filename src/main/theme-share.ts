@@ -30,7 +30,7 @@ const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(26),
+  profileVersion: z.number().int().min(0).max(28),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -101,7 +101,7 @@ export function shareProfileVersionMatches(manifest: ThemeShareManifest, seriali
   if (!serializedProfile || typeof serializedProfile !== 'object' || !('version' in serializedProfile)) return false
   const serializedVersion = serializedProfile.version
   if (typeof serializedVersion !== 'number' || manifest.profileVersion !== serializedVersion) return false
-  return serializedVersion === parsedVersion || (parsedVersion === 26 && serializedVersion >= 0 && serializedVersion <= 25)
+  return serializedVersion === parsedVersion || (parsedVersion === 28 && serializedVersion >= 0 && serializedVersion <= 27)
 }
 
 function themeMediaReferences(profile: ThemeProfile): Array<MediaReference | null> {

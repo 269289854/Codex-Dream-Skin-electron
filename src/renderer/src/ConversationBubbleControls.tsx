@@ -10,6 +10,12 @@ import { conversationBubblePresetAssetKey } from '../../shared/conversation-bubb
 import type { MediaSelectionKind } from '../../shared/contracts'
 import { Range } from './editor-controls'
 
+const conversationBubbleRoleLabels: Record<ConversationBubbleRole, string> = {
+  user: '我的消息',
+  codex: 'Codex 回复',
+  plan: '生成计划'
+}
+
 interface ConversationBubbleControlsProps {
   profile: ThemeProfile
   assets: Record<string, string>
@@ -35,21 +41,30 @@ export function ConversationBubbleControls({
   onInteractionEnd,
   onSelectMedia
 }: ConversationBubbleControlsProps): React.JSX.Element {
+  const [customPickerOpen, setCustomPickerOpen] = React.useState(false)
   const style = profile.conversationBubbles[role]
+  const roleLabel = conversationBubbleRoleLabels[role]
   const customUrl = style.source.kind === 'custom' ? assets[style.source.reference.asset] : undefined
   const selectedPresetId = style.source.kind === 'preset' ? style.source.presetId : CONVERSATION_BUBBLE_PRESETS[0].id
-  const selectNone = (): void => onChange((next) => {
-    next.conversationBubbles[role].source = { kind: 'none' }
-  })
-  const selectPreset = (presetId: (typeof CONVERSATION_BUBBLE_PRESETS)[number]['id']): void => onChange((next) => {
-    next.conversationBubbles.visible = true
-    next.conversationBubbles[role] = {
-      ...createDefaultConversationBubbleStyle(),
-      source: { kind: 'preset', presetId }
-    }
-  })
+  React.useEffect(() => setCustomPickerOpen(false), [role, style.source.kind])
+  const selectNone = (): void => {
+    setCustomPickerOpen(false)
+    onChange((next) => {
+      next.conversationBubbles[role].source = { kind: 'none' }
+    })
+  }
+  const selectPreset = (presetId: (typeof CONVERSATION_BUBBLE_PRESETS)[number]['id']): void => {
+    setCustomPickerOpen(false)
+    onChange((next) => {
+      next.conversationBubbles.visible = true
+      next.conversationBubbles[role] = {
+        ...createDefaultConversationBubbleStyle(),
+        source: { kind: 'preset', presetId }
+      }
+    })
+  }
   const openCustom = (): void => {
-    if (style.source.kind !== 'custom') onSelectMedia('image')
+    if (style.source.kind !== 'custom') setCustomPickerOpen(true)
   }
   const updateLayout = (field: 'slice' | 'frameWidth' | 'contentPadding', value: number, historyGroup: string): void => onChange((next) => {
     next.conversationBubbles[role][field] = value
@@ -60,14 +75,20 @@ export function ConversationBubbleControls({
     {showRoleTabs && <div className="conversation-bubble-role-tabs segmented-control" aria-label="聊天气泡角色">
       <button type="button" className={role === 'user' ? 'active' : ''} onClick={() => onRoleChange?.('user')}>我的消息</button>
       <button type="button" className={role === 'codex' ? 'active' : ''} onClick={() => onRoleChange?.('codex')}>Codex 回复</button>
+      <button type="button" className={role === 'plan' ? 'active' : ''} onClick={() => onRoleChange?.('plan')}>生成计划</button>
     </div>}
     <div className="conversation-bubble-mode-tabs segmented-control" aria-label="聊天气泡模式">
       <button type="button" className={style.source.kind === 'none' ? 'active' : ''} onClick={selectNone}>无边框</button>
       <button type="button" className={style.source.kind === 'preset' ? 'active' : ''} onClick={() => selectPreset(selectedPresetId)}>预设</button>
-      <button type="button" className={style.source.kind === 'custom' ? 'active' : ''} onClick={openCustom}>自定义</button>
+      <button type="button" className={style.source.kind === 'custom' || customPickerOpen ? 'active' : ''} onClick={openCustom}>自定义</button>
     </div>
 
-    {style.source.kind === 'preset' && <div className="conversation-bubble-preset-grid" role="radiogroup" aria-label={`${role === 'user' ? '我的消息' : 'Codex 回复'}气泡预设`}>
+    {style.source.kind !== 'custom' && customPickerOpen && <div className="conversation-bubble-custom-actions is-picker">
+      <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('image')}><Upload size={13} />选择图片</button>
+      <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('gif')}><Upload size={13} />选择 GIF</button>
+    </div>}
+
+    {style.source.kind === 'preset' && <div className="conversation-bubble-preset-grid" role="radiogroup" aria-label={`${roleLabel}气泡预设`}>
       {CONVERSATION_BUBBLE_PRESETS.map((preset) => {
         const source = assets[conversationBubblePresetAssetKey(preset.id)]
         const selected = style.source.kind === 'preset' && selectedPresetId === preset.id
@@ -79,7 +100,7 @@ export function ConversationBubbleControls({
     </div>}
 
     {style.source.kind === 'custom' && <div className="conversation-bubble-custom">
-      <div className="conversation-bubble-custom-preview">{customUrl ? <img src={customUrl} alt={`${role === 'user' ? '我的消息' : 'Codex 回复'}自定义气泡`} /> : <ImageIcon size={20} />}</div>
+      <div className="conversation-bubble-custom-preview">{customUrl ? <img src={customUrl} alt={`${roleLabel}自定义气泡`} /> : <ImageIcon size={20} />}</div>
       <div className="conversation-bubble-custom-actions">
         <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('image')}><Upload size={13} />选择图片</button>
         <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('gif')}><Upload size={13} />选择 GIF</button>

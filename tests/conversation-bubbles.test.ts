@@ -76,7 +76,7 @@ describe('conversation bubble frames', () => {
     }
   })
 
-  it('resolves user and Codex frames independently', () => {
+  it('resolves user, Codex, and plan frames independently', () => {
     const profile = createDefaultTheme(themeId)
     profile.conversationBubbles.user = {
       source: { kind: 'preset', presetId: 'moon-stars' },
@@ -95,8 +95,16 @@ describe('conversation bubble frames', () => {
       frameWidth: 18,
       contentPadding: 28
     }
+    profile.conversationBubbles.plan = {
+      source: { kind: 'preset', presetId: 'ocean-shell' },
+      fit: 'nineSlice',
+      slice: 25,
+      frameWidth: 24,
+      contentPadding: 20
+    }
     const resolved = resolveConversationBubbles(profile.conversationBubbles, {
       [conversationBubblePresetAssetKey('moon-stars')]: 'data:image/png;base64,USER',
+      [conversationBubblePresetAssetKey('ocean-shell')]: 'data:image/png;base64,PLAN',
       'assets/codex-bubble.gif': 'data:image/gif;base64,CODEX'
     })
 
@@ -119,6 +127,15 @@ describe('conversation bubble frames', () => {
         frameWidth: 18,
         borderWidths: [18, 36, 18, 36],
         contentPadding: 28
+      },
+      plan: {
+        mode: 'nineSlice',
+        dataUrl: 'data:image/png;base64,PLAN',
+        slice: 25,
+        sliceInsets: [46, 25, 48, 25],
+        frameWidth: 24,
+        borderWidths: [44.16, 48, 46.08, 48],
+        contentPadding: 20
       }
     })
   })
@@ -142,6 +159,13 @@ describe('conversation bubble frames', () => {
       frameWidth: 24,
       contentPadding: 30
     }
+    profile.conversationBubbles.plan = {
+      source: { kind: 'preset', presetId: 'rainbow-candy' },
+      fit: 'nineSlice',
+      slice: 25,
+      frameWidth: 24,
+      contentPadding: 20
+    }
 
     const compiled = await compileTheme(
       profile,
@@ -153,6 +177,7 @@ describe('conversation bubble frames', () => {
       conversationBubbles: {
         user: { dataUrl: string }
         codex: { dataUrl: string }
+        plan: { dataUrl: string }
       }
     }
 
@@ -161,6 +186,7 @@ describe('conversation bubble frames', () => {
     expect(Object.keys(payload.assets).some((asset) => asset.startsWith('builtin/conversation-bubbles/'))).toBe(false)
     expect(payload.conversationBubbles.user.dataUrl).toBe('data:image/png;base64,daisy-heart')
     expect(payload.conversationBubbles.codex.dataUrl).toBe('data:image/gif;base64,assets/codex-bubble.gif')
+    expect(payload.conversationBubbles.plan.dataUrl).toBe('data:image/png;base64,rainbow-candy')
   })
 
   it('keeps Studio and runtime CSS on the same undistorted frame and inner-fill primitives', async () => {

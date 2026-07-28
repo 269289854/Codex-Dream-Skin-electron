@@ -22,7 +22,7 @@ function versionFourteenConversationBackground(background: ReturnType<typeof cre
 describe('theme schema and compiler', () => {
   it('defaults and validates account menu color, image, and GIF backgrounds without raising the theme version', () => {
     const profile = createDefaultTheme(id)
-    expect(profile.version).toBe(26)
+    expect(profile.version).toBe(28)
     expect(profile.accountMenuBackground).toEqual({
       mode: 'color',
       source: null,
@@ -58,19 +58,25 @@ describe('theme schema and compiler', () => {
     expect(() => parseThemeProfile({ ...profile, accountMenuBackground: { ...image.accountMenuBackground, scale: 3.01 } })).toThrow()
   })
 
-  it('migrates version twenty-five search icons and strictly validates the current slot', () => {
+  it('migrates version twenty-five search and version twenty-six composer tool icons', () => {
     const current = createDefaultTheme(id)
     const { sidebarSearch: _sidebarSearch, ...legacyIcons } = current.icons
     const migrated = parseThemeProfile({ ...current, version: 25, icons: legacyIcons })
 
-    expect(migrated.version).toBe(26)
+    expect(migrated.version).toBe(28)
     expect(migrated.icons.sidebarSearch).toEqual({ kind: 'builtin', name: 'search' })
     expect(migrated.icons.sidebarMode).toEqual(current.icons.sidebarMode)
 
-    const { sidebarSearch: _missing, ...missingSearch } = current.icons
-    expect(() => parseThemeProfile({ ...current, icons: missingSearch })).toThrow()
+    const { composerAdd: _composerAdd, composerMicrophone: _composerMicrophone, ...versionTwentySixIcons } = current.icons
+    const migratedTwentySix = parseThemeProfile({ ...current, version: 26, icons: versionTwentySixIcons })
+    expect(migratedTwentySix.icons.composerAdd).toEqual({ kind: 'builtin', name: 'plus' })
+    expect(migratedTwentySix.icons.composerMicrophone).toEqual({ kind: 'builtin', name: 'mic' })
+
+    const { composerAdd: _missing, ...missingComposerAdd } = current.icons
+    expect(() => parseThemeProfile({ ...current, icons: missingComposerAdd })).toThrow()
+    expect(() => parseThemeProfile({ ...current, icons: { ...current.icons, composerMicrophone: { kind: 'builtin' } } })).toThrow()
     expect(() => parseThemeProfile({ ...current, icons: { ...current.icons, sidebarSearch: { kind: 'builtin' } } })).toThrow()
-    expect(() => parseThemeProfile({ ...current, icons: { ...current.icons, unknownSearchSlot: { kind: 'builtin', name: 'search' } } })).toThrow()
+    expect(() => parseThemeProfile({ ...current, icons: { ...current.icons, unknownComposerSlot: { kind: 'builtin', name: 'plus' } } })).toThrow()
   })
 
   it('migrates and strictly validates brand signature text, image, and GIF modes', async () => {
@@ -82,7 +88,7 @@ describe('theme schema and compiler', () => {
     legacy.version = 24
     delete legacy.brandSignature
     expect(parseThemeProfile(legacy)).toMatchObject({
-      version: 26,
+      version: 28,
       copy: { brandSignature: profile.copy.brandSignature },
       brandSignature: { mode: 'text', source: null, mediaWidth: 96 }
     })
@@ -153,7 +159,7 @@ describe('theme schema and compiler', () => {
     const current = createDefaultTheme(id)
     const { videoPlayback: _videoPlayback, ...versionTwentyOne } = current
     const migrated = parseThemeProfile({ ...versionTwentyOne, version: 21 })
-    expect(migrated).toMatchObject({ version: 26, videoPlayback: { pausePolicy: 'hidden' } })
+    expect(migrated).toMatchObject({ version: 28, videoPlayback: { pausePolicy: 'hidden' } })
     expect(VIDEO_PAUSE_POLICIES).toEqual(['hidden', 'unfocused'])
     expect(parseThemeProfile({ ...current, videoPlayback: { pausePolicy: 'unfocused' } }).videoPlayback.pausePolicy).toBe('unfocused')
     expect(() => parseThemeProfile({ ...current, videoPlayback: { pausePolicy: 'background' } })).toThrow()
@@ -177,15 +183,17 @@ describe('theme schema and compiler', () => {
   it('defaults conversation and tool bubbles on and migrates legacy bubble settings', () => {
     const current = createDefaultTheme(id)
     const second = createDefaultTheme('22222222-2222-4222-8222-222222222222')
-    expect(current.version).toBe(26)
+    expect(current.version).toBe(28)
     expect(current.videoPlayback).toEqual({ pausePolicy: 'hidden' })
     expect(current.decorations.sparkles.performanceMode).toBe('balanced')
     expect(current.conversationBubbles).toMatchObject({
       visible: true,
       user: { source: { kind: 'none' }, fit: 'nineSlice', slice: 25, frameWidth: 24, contentPadding: 20 },
-      codex: { source: { kind: 'none' }, fit: 'nineSlice', slice: 25, frameWidth: 24, contentPadding: 20 }
+      codex: { source: { kind: 'none' }, fit: 'nineSlice', slice: 25, frameWidth: 24, contentPadding: 20 },
+      plan: { source: { kind: 'none' }, fit: 'nineSlice', slice: 25, frameWidth: 24, contentPadding: 20 }
     })
     expect(current.conversationBubbles.user).not.toBe(current.conversationBubbles.codex)
+    expect(current.conversationBubbles.plan).not.toBe(current.conversationBubbles.codex)
     expect(current.toolActivityBubbles).toEqual({ visible: true })
     expect(current.toolActivityBubbles).not.toBe(second.toolActivityBubbles)
     const shared = { kind: 'linear' as const, angle: 215, stops: [{ color: '#123456', position: 0 }, { color: '#abcdef', position: 1 }] }
@@ -197,7 +205,7 @@ describe('theme schema and compiler', () => {
       appearance: { ...current.appearance, paints: { conversationMessage: shared, conversationMessageHover: sharedHover } }
     })
 
-    expect(migrated).toMatchObject({ version: 26, videoPlayback: { pausePolicy: 'hidden' }, conversationBubbles: { visible: true }, toolActivityBubbles: { visible: true } })
+    expect(migrated).toMatchObject({ version: 28, videoPlayback: { pausePolicy: 'hidden' }, conversationBubbles: { visible: true }, toolActivityBubbles: { visible: true } })
     expect(migrated.appearance.paints.conversationMessage).toEqual(shared)
     expect(migrated.appearance.paints.conversationUserMessage).toEqual(shared)
     expect(migrated.appearance.paints.conversationMessageHover).toEqual(sharedHover)
@@ -212,13 +220,55 @@ describe('theme schema and compiler', () => {
 
     const migratedTwentyThree = parseThemeProfile({ ...current, version: 23, conversationBubbles: { visible: false } })
     expect(migratedTwentyThree).toMatchObject({
-      version: 26,
+      version: 28,
       conversationBubbles: {
         visible: false,
         user: { source: { kind: 'none' } },
-        codex: { source: { kind: 'none' } }
+        codex: { source: { kind: 'none' } },
+        plan: { source: { kind: 'none' } }
       }
     })
+    const codexPaint = { kind: 'solid' as const, color: '#123456' }
+    const codexHoverPaint = { kind: 'solid' as const, color: '#654321' }
+    const { plan: _legacyPlan, ...versionTwentySevenBubbles } = current.conversationBubbles
+    const migratedTwentySeven = parseThemeProfile({
+      ...current,
+      version: 27,
+      appearance: {
+        colors: { conversationText: '#102030', conversationLink: '#304050' },
+        paints: { conversationMessage: codexPaint, conversationMessageHover: codexHoverPaint }
+      },
+      conversationBubbles: {
+        ...versionTwentySevenBubbles,
+        user: { ...versionTwentySevenBubbles.user, source: { kind: 'preset', presetId: 'moon-stars' } },
+        codex: { ...versionTwentySevenBubbles.codex, source: { kind: 'preset', presetId: 'ocean-shell' } }
+      }
+    })
+    expect(migratedTwentySeven).toMatchObject({
+      version: 28,
+      conversationBubbles: {
+        user: { source: { kind: 'preset', presetId: 'moon-stars' } },
+        codex: { source: { kind: 'preset', presetId: 'ocean-shell' } },
+        plan: { source: { kind: 'none' } }
+      },
+      appearance: {
+        colors: {
+          conversationText: '#102030',
+          conversationLink: '#304050',
+          conversationPlanText: '#102030',
+          conversationPlanLink: '#304050'
+        },
+        paints: {
+          conversationMessage: codexPaint,
+          conversationMessageHover: codexHoverPaint,
+          conversationPlanMessage: codexPaint,
+          conversationPlanMessageHover: codexHoverPaint
+        }
+      }
+    })
+    expect(migratedTwentySeven.conversationBubbles.plan).not.toBe(migratedTwentySeven.conversationBubbles.codex)
+    expect(() => parseThemeProfile({ ...current, conversationBubbles: versionTwentySevenBubbles })).toThrow()
+    expect(() => parseThemeProfile({ ...current, conversationBubbles: { ...current.conversationBubbles, plan: { ...current.conversationBubbles.plan, source: { kind: 'preset', presetId: 'unknown' } } } })).toThrow()
     const preset = CONVERSATION_BUBBLE_PRESETS[0]
     expect(parseThemeProfile({
       ...current,
@@ -260,7 +310,7 @@ describe('theme schema and compiler', () => {
       typography: { ...current.typography, slots: legacySlots }
     })
 
-    expect(migrated.version).toBe(26)
+    expect(migrated.version).toBe(28)
     expect(migrated.typography.slots.sidebarProjectsTitle).toEqual({ kind: 'inherit' })
     expect(migrated.typography.slots.sidebarTasksTitle).toEqual({ kind: 'inherit' })
     expect(migrated.appearance.colors).toEqual({ sidebarHeaderText: 'rgb(34 68 102 / .8)' })
@@ -301,7 +351,7 @@ describe('theme schema and compiler', () => {
         }
       }
     })
-    expect(migrated.version).toBe(26)
+    expect(migrated.version).toBe(28)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe(migrated.colors.ink)
 
@@ -343,7 +393,7 @@ describe('theme schema and compiler', () => {
 
   it('migrates version twelve sidebar defaults and validates independent navigation settings', () => {
     const current = createDefaultTheme(id)
-    expect(current.version).toBe(26)
+    expect(current.version).toBe(28)
     expect(current.copy).toMatchObject({ ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY })
     for (const item of SIDEBAR_NAV_ITEMS) {
       expect(current.icons[item.iconSlot]).toEqual({ kind: 'builtin', name: item.iconName })
@@ -386,11 +436,11 @@ describe('theme schema and compiler', () => {
       icons: versionTwelveIcons,
       typography: { ...current.typography, slots: versionTwelveSlots }
     })
-    expect(migrated.version).toBe(26)
+    expect(migrated.version).toBe(28)
     expect(migrated.copy).toMatchObject({ ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY })
 
     const migratedThirteen = parseThemeProfile({ ...currentWithoutResetColors, version: 13, conversationBackground: versionFourteenConversationBackground(current.conversationBackground) })
-    expect(migratedThirteen.version).toBe(26)
+    expect(migratedThirteen.version).toBe(28)
     expect(migratedThirteen.resetColors).toEqual(current.colors)
 
     const navigationColorTokens = Object.keys(APPEARANCE_COLOR_TOKENS).filter((token) => /^sidebarNav(NewTask|PullRequests|Sites|Scheduled|Plugins)/.test(token))
@@ -411,7 +461,7 @@ describe('theme schema and compiler', () => {
   it('validates current themes and migrates version zero through nine profiles', () => {
     const current = createDefaultTheme(id)
     const expectedCopy = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY }
-    expect(parseThemeProfile(current).version).toBe(26)
+    expect(parseThemeProfile(current).version).toBe(28)
     expect(current.hero.playback).toEqual({ autoplay: true, loop: true, sound: false, volume: 0.7 })
     expect(current.polaroid.playback).toEqual({ autoplay: true, loop: true, sound: false, volume: 0.7 })
     expect(current.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
@@ -506,7 +556,7 @@ describe('theme schema and compiler', () => {
         overlayOpacity: .37
       }
     })
-    expect(migratedFourteen.version).toBe(26)
+    expect(migratedFourteen.version).toBe(28)
     expect(migratedFourteen.conversationBackground.overlay).toEqual({
       paint: { kind: 'solid', color: 'rgb(10 20 30 / .5)' },
       opacity: .37,
@@ -519,7 +569,7 @@ describe('theme schema and compiler', () => {
 
     const { mode: _versionEightMode, style: _versionEightStyle, ...versionEightPolaroid } = current.polaroid
     const migratedEight = parseThemeProfile({ ...legacyCurrent, version: 8, polaroid: versionEightPolaroid })
-    expect(migratedEight.version).toBe(26)
+    expect(migratedEight.version).toBe(28)
     expect(migratedEight.polaroid.mode).toBe('fence')
 
     const { backgroundFloat: _backgroundFloat, backgroundRain: _backgroundRain, backgroundMeteor: _backgroundMeteor, backgroundSnow: _backgroundSnow, ...versionSevenIcons } = current.icons
@@ -532,7 +582,7 @@ describe('theme schema and compiler', () => {
       decorations: { ...versionSevenDecorations, sparkles: Object.fromEntries(Object.entries(current.decorations.sparkles).filter(([key]) => key !== 'effect' && key !== 'speed')) }
     }
     const migratedSeven = parseThemeProfile(versionSeven)
-    expect(migratedSeven.version).toBe(26)
+    expect(migratedSeven.version).toBe(28)
     expect(migratedSeven.polaroid.mode).toBe('fence')
     expect(migratedSeven.decorations.sparkles).toMatchObject({ effect: 'twinkle', speed: 1 })
     expect(migratedSeven.icons.backgroundSparkle).toEqual(current.icons.backgroundSparkle)
@@ -546,7 +596,7 @@ describe('theme schema and compiler', () => {
     const { style: _styleSix, ...versionSixPolaroid } = current.polaroid
     const versionSix = { ...currentWithoutDecorations, version: 6, polaroid: versionSixPolaroid, icons: currentWithoutBackgroundSparkle, composerBadge: current.composerBadge, typography: versionSixTypography }
     const migratedSix = parseThemeProfile(versionSix)
-    expect(migratedSix.version).toBe(26)
+    expect(migratedSix.version).toBe(28)
     expect(migratedSix.decorations.sparkles.count).toBe(6)
     expect(migratedSix.decorations.composerMelody.text).toBe('♫ · · · ♡ · · · ♪')
     expect(migratedSix.decorations.homeHeading).toEqual(current.decorations.homeHeading)
@@ -557,7 +607,7 @@ describe('theme schema and compiler', () => {
     const { composerBadge: _composerBadgeIcon, ...versionFiveIcons } = currentWithoutBackgroundSparkle
     const versionFour = { ...versionFiveFields, version: 4, polaroid: versionFourPolaroid, icons: versionFiveIcons }
     const migratedFour = parseThemeProfile(versionFour)
-    expect(migratedFour.version).toBe(26)
+    expect(migratedFour.version).toBe(28)
     expect(migratedFour.appearance).toEqual({ colors: {}, paints: {} })
     expect(migratedFour.typography.slots.brandSignature).toEqual({ kind: 'builtin', id: 'segoe-script' })
 
@@ -570,7 +620,7 @@ describe('theme schema and compiler', () => {
       typography: versionSixTypography
     }
     const migratedFive = parseThemeProfile(versionFive)
-    expect(migratedFive.version).toBe(26)
+    expect(migratedFive.version).toBe(28)
     expect(migratedFive.icons.composerBadge).toEqual({ kind: 'builtin', name: 'music' })
     expect(migratedFive.composerBadge.visible).toBe(true)
     expect(migratedFive.appearance.colors.composerBadgeIcon).toBe('#123456')
@@ -585,27 +635,27 @@ describe('theme schema and compiler', () => {
     const { sidebarMode: _sidebarMode, composerBadge: _composerBadgeLegacy, backgroundSparkle: _backgroundSparkleLegacy, backgroundFloat: _backgroundFloatLegacy, backgroundRain: _backgroundRainLegacy, backgroundMeteor: _backgroundMeteorLegacy, backgroundSnow: _backgroundSnowLegacy, ...legacyIcons } = current.icons
     const versionThree = { ...versionFour, version: 3, copy: legacyCopy, icons: legacyIcons }
     const migratedThree = parseThemeProfile(versionThree)
-    expect(migratedThree.version).toBe(26)
+    expect(migratedThree.version).toBe(28)
     expect(migratedThree.copy).toEqual(expectedCopy)
     expect(migratedThree.icons.sidebarMode).toEqual({ kind: 'builtin', name: 'music' })
 
     const { visible: _visibleTwo, mode: _modeTwo, style: _styleTwo, ...versionTwoPolaroid } = current.polaroid
     const versionTwo = { ...versionThree, version: 2, polaroid: versionTwoPolaroid }
     const migratedTwo = parseThemeProfile(versionTwo)
-    expect(migratedTwo.version).toBe(26)
+    expect(migratedTwo.version).toBe(28)
     expect(migratedTwo.polaroid.visible).toBe(true)
     expect(migratedTwo.polaroid.mode).toBe('fence')
 
     const { copy: _copy, ...versionOneFields } = versionTwo
     const versionOne = { ...versionOneFields, version: 1, name: '已有主题' }
     const migratedOne = parseThemeProfile(versionOne)
-    expect(migratedOne.version).toBe(26)
+    expect(migratedOne.version).toBe(28)
     expect(migratedOne.name).toBe('已有主题')
     expect(migratedOne.copy).toEqual(expectedCopy)
     expect(migratedOne.hero).toEqual(current.hero)
 
     const migratedZero = parseThemeProfile({ id, name: '旧主题', version: 0, colors: { accent: '#123456' } })
-    expect(migratedZero.version).toBe(26)
+    expect(migratedZero.version).toBe(28)
     expect(migratedZero.colors.accent).toBe('#123456')
     expect(migratedZero.resetColors).toEqual(migratedZero.colors)
     expect(migratedZero.colors.surface).toBe('#F7FFFF')
@@ -628,7 +678,7 @@ describe('theme schema and compiler', () => {
     const { mediaTransform: _polaroidTransform, ...versionElevenPolaroid } = current.polaroid
     const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...legacyCurrent } = current
     const migrated = parseThemeProfile({ ...legacyCurrent, version: 11, hero: versionElevenHero, polaroid: versionElevenPolaroid })
-    expect(migrated.version).toBe(26)
+    expect(migrated.version).toBe(28)
     expect(migrated.resetColors).toEqual(current.colors)
     expect(migrated.hero.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
     expect(migrated.polaroid.mediaTransform).toEqual({ flipHorizontal: false, flipVertical: false })
@@ -697,7 +747,7 @@ describe('theme schema and compiler', () => {
     const { style: _style, ...versionNinePolaroid } = profile.polaroid
     const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...legacyProfile } = profile
     const migrated = parseThemeProfile({ ...legacyProfile, version: 9, polaroid: versionNinePolaroid })
-    expect(migrated.version).toBe(26)
+    expect(migrated.version).toBe(28)
     expect(migrated.polaroid.mode).toBe('fence')
     expect(migrated.polaroid.style.shadow.blur).toBe(10)
     expect(() => parseThemeProfile({ ...profile, polaroid: { ...profile.polaroid, style: { ...profile.polaroid.style, opacity: 1.1 } } })).toThrow()
@@ -714,12 +764,15 @@ describe('theme schema and compiler', () => {
     expect(compiled.rendererPayload).not.toContain('<')
     expect(compiled.rendererPayload).toContain('headingTemplate')
     const rendererPayload = JSON.parse(compiled.rendererPayload)
-    expect(rendererPayload.version).toBe(26)
+    expect(rendererPayload.version).toBe(28)
+    expect(rendererPayload.profile.icons.composerAdd).toEqual({ kind: 'builtin', name: 'plus' })
+    expect(rendererPayload.profile.icons.composerMicrophone).toEqual({ kind: 'builtin', name: 'mic' })
     expect(rendererPayload.accountMenu).toEqual(ACCOUNT_MENU_ITEMS)
     expect(rendererPayload.conversationBubbles).toEqual({
       visible: true,
       user: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 },
-      codex: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 }
+      codex: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 },
+      plan: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 }
     })
     expect(rendererPayload.toolActivityBubbles).toEqual({ visible: true })
     expect(compiled.rendererPayload).toContain('\\u003cb>')

@@ -510,7 +510,7 @@ html.codex-dream-skin .dream-conversation-background-overlay {
   pointer-events: none !important;
 }
 
-html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble) {
+html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble, .dream-conversation-plan-bubble) {
   box-sizing: border-box;
   display: block;
   position: relative;
@@ -522,6 +522,10 @@ html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-c
   color: var(--dream-conversation-text);
 }
 
+html.codex-dream-skin .dream-conversation-plan-bubble {
+  color: var(--dream-conversation-plan-text);
+}
+
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble {
   padding: var(--dream-user-bubble-content-padding);
 }
@@ -530,8 +534,13 @@ html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubbl
   padding: var(--dream-codex-bubble-content-padding);
 }
 
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble {
+  padding: var(--dream-plan-bubble-content-padding);
+}
+
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble,
-html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble {
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble,
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble {
   box-sizing: border-box !important;
   overflow: visible !important;
   border-radius: 0 !important;
@@ -541,7 +550,9 @@ html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubbl
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::before,
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::after,
 html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::before,
-html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::after {
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::after,
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::before,
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::after {
   content: "";
   box-sizing: border-box;
   position: absolute;
@@ -549,13 +560,15 @@ html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubbl
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::before,
-html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::before {
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::before,
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::before {
   z-index: 1;
   inset: 0;
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::after,
-html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::after {
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::after,
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::after {
   z-index: 0;
   inset: 0;
   border-radius: 7px;
@@ -577,8 +590,17 @@ html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubbl
   background: var(--dream-conversation-message-hover);
 }
 
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::after {
+  background: var(--dream-conversation-plan-message);
+}
+
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble:hover::after {
+  background: var(--dream-conversation-plan-message-hover);
+}
+
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble > *,
-html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble > * {
+html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble > *,
+html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble > * {
   position: relative;
   z-index: 2;
 }
@@ -595,6 +617,12 @@ html.codex-dream-skin[data-dream-codex-bubble-frame="nineSlice"] .dream-conversa
   padding-inline: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-frame-width) * 2)) !important;
 }
 
+html.codex-dream-skin[data-dream-plan-bubble-frame="nineSlice"] .dream-conversation-plan-bubble {
+  min-block-size: var(--dream-plan-bubble-frame-min-block-size) !important;
+  padding-block: max(var(--dream-plan-bubble-content-padding), var(--dream-plan-bubble-frame-width)) !important;
+  padding-inline: max(var(--dream-plan-bubble-content-padding), calc(var(--dream-plan-bubble-frame-width) * 2)) !important;
+}
+
 html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversation-user-bubble::after {
   inset: calc(var(--dream-user-bubble-frame-width) * .6667) calc(var(--dream-user-bubble-frame-width) * .5) !important;
   border-radius: calc(var(--dream-user-bubble-frame-width) * .5) !important;
@@ -603,6 +631,11 @@ html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversat
 html.codex-dream-skin[data-dream-codex-bubble-frame="nineSlice"] .dream-conversation-codex-bubble::after {
   inset: calc(var(--dream-codex-bubble-frame-width) * .6667) calc(var(--dream-codex-bubble-frame-width) * .5) !important;
   border-radius: calc(var(--dream-codex-bubble-frame-width) * .5) !important;
+}
+
+html.codex-dream-skin[data-dream-plan-bubble-frame="nineSlice"] .dream-conversation-plan-bubble::after {
+  inset: calc(var(--dream-plan-bubble-frame-width) * .6667) calc(var(--dream-plan-bubble-frame-width) * .5) !important;
+  border-radius: calc(var(--dream-plan-bubble-frame-width) * .5) !important;
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversation-user-bubble::before {
@@ -625,6 +658,16 @@ html.codex-dream-skin[data-dream-codex-bubble-frame="nineSlice"] .dream-conversa
   border-image-repeat: stretch;
 }
 
+html.codex-dream-skin[data-dream-plan-bubble-frame="nineSlice"] .dream-conversation-plan-bubble::before {
+  border-style: solid;
+  border-color: transparent;
+  border-width: var(--dream-plan-bubble-frame-border-widths);
+  border-image-source: var(--dream-plan-bubble-frame-source);
+  border-image-slice: var(--dream-plan-bubble-frame-slice);
+  border-image-width: var(--dream-plan-bubble-frame-border-widths);
+  border-image-repeat: stretch;
+}
+
 html.codex-dream-skin[data-dream-user-bubble-frame="stretch"] .dream-conversation-user-bubble::before {
   background-image: var(--dream-user-bubble-frame-source);
   background-repeat: no-repeat;
@@ -634,6 +677,13 @@ html.codex-dream-skin[data-dream-user-bubble-frame="stretch"] .dream-conversatio
 
 html.codex-dream-skin[data-dream-codex-bubble-frame="stretch"] .dream-conversation-codex-bubble::before {
   background-image: var(--dream-codex-bubble-frame-source);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+html.codex-dream-skin[data-dream-plan-bubble-frame="stretch"] .dream-conversation-plan-bubble::before {
+  background-image: var(--dream-plan-bubble-frame-source);
   background-repeat: no-repeat;
   background-position: center;
   background-size: 100% 100%;
@@ -655,8 +705,20 @@ html.codex-dream-skin .dream-conversation-codex-bubble:hover {
   background: var(--dream-conversation-message-hover);
 }
 
-html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble) a {
+html.codex-dream-skin .dream-conversation-plan-bubble {
+  background: var(--dream-conversation-plan-message);
+}
+
+html.codex-dream-skin .dream-conversation-plan-bubble:hover {
+  background: var(--dream-conversation-plan-message-hover);
+}
+
+html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble, .dream-conversation-plan-bubble) a {
   color: var(--dream-conversation-link) !important;
+}
+
+html.codex-dream-skin .dream-conversation-plan-bubble a {
+  color: var(--dream-conversation-plan-link) !important;
 }
 
 html.codex-dream-skin .dream-conversation-tool-bubble {

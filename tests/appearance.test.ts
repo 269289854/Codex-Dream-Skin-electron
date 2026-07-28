@@ -99,6 +99,16 @@ describe('appearance model', () => {
     expect(paintToCss(resolveAppearancePaint(createEmptyAppearance(), legacyColors, 'accountMenuUsageHoverBackground'))).toMatch(/^linear-gradient\(90deg, /)
   })
 
+  it('registers independent plan text, link, normal, and hover tokens', () => {
+    expect(APPEARANCE_COLOR_TOKENS.conversationPlanText).toMatchObject({ targets: ['conversation-plan-message'], cssVariable: '--dream-conversation-plan-text' })
+    expect(APPEARANCE_COLOR_TOKENS.conversationPlanLink).toMatchObject({ targets: ['conversation-plan-message'], cssVariable: '--dream-conversation-plan-link' })
+    expect(APPEARANCE_PAINT_TOKENS.conversationPlanMessage).toMatchObject({ targets: ['conversation-plan-message'], cssVariable: '--dream-conversation-plan-message' })
+    expect(APPEARANCE_PAINT_TOKENS.conversationPlanMessageHover).toMatchObject({ targets: ['conversation-plan-message'], cssVariable: '--dream-conversation-plan-message-hover', state: 'hover' })
+    expect(resolveAppearancePaint(createEmptyAppearance(), legacyColors, 'conversationPlanMessage')).toEqual(
+      resolveAppearancePaint(createEmptyAppearance(), legacyColors, 'conversationMessage')
+    )
+  })
+
   it('restores the original cyan, pink, and lavender gradients when no paint is overridden', () => {
     const appearance = createEmptyAppearance()
     expect(paintToCss(resolveAppearancePaint(appearance, legacyColors, 'canvas'))).toMatch(/^linear-gradient\(135deg, /)

@@ -90,6 +90,8 @@ describe('CodexService operation queue', () => {
       scale: 1.4
     }
     profile.icons.sidebarSearch = { kind: 'asset', asset: 'assets/search.gif' }
+    profile.icons.composerAdd = { kind: 'asset', asset: 'assets/search.gif' }
+    profile.icons.composerMicrophone = { kind: 'asset', asset: 'assets/window.png' }
     const searchPosterKey = iconGifPosterAssetKey('assets/search.gif')
     const store = {
       root,
@@ -136,6 +138,8 @@ describe('CodexService operation queue', () => {
     expect(first.script).toContain(`"accountMenu":${JSON.stringify(ACCOUNT_MENU_ITEMS)}`)
     expect(first.script).toContain('"accountMenuUsage":{"name":"clock"}')
     expect(first.script).toContain('"sidebarSearch":{"dataUrl":"data:image/gif;base64,Ag==","posterDataUrl":"data:image/png;base64,Aw=="}')
+    expect(first.script).toContain('"composerAdd":{"dataUrl":"data:image/gif;base64,Ag==","posterDataUrl":"data:image/png;base64,Aw=="}')
+    expect(first.script).toContain('"composerMicrophone":{"dataUrl":"data:image/png;base64,AA=="}')
     expect(first.script).toContain('--dream-font-account-menu-usage')
     expect(first.script).toContain('"sparklePolicy":{"mode":"balanced"')
     expect(first.script).toContain('"sparkleCyclePositionPolicy":{"x":{"min":5,"max":95,"minDelta":12},"y":{"min":5,"max":91,"minDelta":12}}')

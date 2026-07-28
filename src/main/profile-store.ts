@@ -1268,8 +1268,8 @@ function isVideoMediaRole(value: unknown): value is VideoMediaRole {
   return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
 }
 
-function isConversationBubblePurpose(purpose: MediaAssetPurpose): purpose is 'conversationUserBubble' | 'conversationCodexBubble' {
-  return purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble'
+function isConversationBubblePurpose(purpose: MediaAssetPurpose): purpose is 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble' {
+  return purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble'
 }
 
 function requireSeparator(): string {

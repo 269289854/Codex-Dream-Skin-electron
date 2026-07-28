@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download, ExternalLink,
-  GitBranch, Home, Image, Laptop, LogOut, MessageSquare, Mic, MonitorPlay, Palette, Play,
+  GitBranch, Home, Image, Laptop, LogOut, MessageSquare, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
@@ -519,7 +519,7 @@ export function App(): React.JSX.Element {
     try {
       const imported = window.studio.assets.selectMedia
         ? await window.studio.assets.selectMedia(draft.id, purpose, requestedKind)
-        : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
+        : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
@@ -550,8 +550,8 @@ export function App(): React.JSX.Element {
         } else if (purpose === 'brandSignature') {
           profile.brandSignature.source = imported.reference
           profile.brandSignature.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
-        } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble') {
-          const role = purpose === 'conversationUserBubble' ? 'user' : 'codex'
+        } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble') {
+          const role = purpose === 'conversationUserBubble' ? 'user' : purpose === 'conversationCodexBubble' ? 'codex' : 'plan'
           profile.conversationBubbles.visible = true
           profile.conversationBubbles[role].source = { kind: 'custom', reference: imported.reference }
         } else {
@@ -1175,7 +1175,7 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
 
 function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
   const melody = profile.decorations.composerMelody
-  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <PreviewComposerDecoration profile={profile} assets={assets} />}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="添加"><Plus size={18} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-tool" type="button" title="语音输入"><Mic size={17} /></button><button className="preview-send-command bg-token-foreground" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
+  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <PreviewComposerDecoration profile={profile} assets={assets} />}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-add" type="button" title="添加" aria-label="编辑添加按钮图标"><RenderIcon slot="composerAdd" profile={profile} assets={assets} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-microphone" type="button" title="语音输入" aria-label="编辑麦克风按钮图标"><RenderIcon slot="composerMicrophone" profile={profile} assets={assets} /></button><button className="preview-send-command bg-token-foreground" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
 }
 
 function PreviewBrandSignature({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
@@ -1256,6 +1256,7 @@ function ConversationPreview({ profile, assets }: { profile: ThemeProfile; asset
   const sourceUrl = background.source ? assets[background.source.asset] : undefined
   const userFrame = conversationBubblePreviewFrameProps(profile, assets, 'user')
   const codexFrame = conversationBubblePreviewFrameProps(profile, assets, 'codex')
+  const planFrame = conversationBubblePreviewFrameProps(profile, assets, 'plan')
   const mediaStyle: React.CSSProperties = {
     objectPosition: `${background.focus.x * 100}% ${background.focus.y * 100}%`,
     opacity: background.visible ? background.opacity : 0,
@@ -1272,6 +1273,7 @@ function ConversationPreview({ profile, assets }: { profile: ThemeProfile; asset
       <article className={`preview-message user${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-user-message" tabIndex={0} {...userFrame}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article>
       <section className="preview-assistant-response">
         <article className={`preview-message assistant${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-codex-message" tabIndex={0} {...codexFrame}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p></article>
+        <article className={`preview-message assistant plan${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-plan-message" tabIndex={0} {...planFrame}><strong>生成计划</strong><p>整理主题模型、Studio 预览与运行时注入，并逐项完成验证。</p></article>
         <article className={`preview-tool-activity${profile.toolActivityBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-tool-activity" tabIndex={0}>
           <header><Play size={12} aria-hidden="true" /><strong>已运行命令</strong><span>2.1 秒</span></header>
           <code>npm test -- tests/theme.test.ts</code>

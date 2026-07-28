@@ -847,15 +847,17 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('[data-inspector-anchor="typography"]')?.classList.contains('inspector-highlight')).toBe(true)
   })
 
-  it('edits and persists independent user and Codex chat bubbles from the preview', async () => {
+  it('edits and persists independent user, Codex, and plan chat bubbles from the preview', async () => {
     const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
     if (!conversation) throw new Error('Conversation preview command is missing.')
     act(() => conversation.click())
     const userBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')
     const codexBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
-    if (!userBubble || !codexBubble) throw new Error('Independent conversation bubble targets are missing.')
+    const planBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-plan-message"]')
+    if (!userBubble || !codexBubble || !planBubble) throw new Error('Independent conversation bubble targets are missing.')
     expect(userBubble.classList.contains('bubble')).toBe(true)
     expect(codexBubble.classList.contains('bubble')).toBe(true)
+    expect(planBubble.classList.contains('bubble')).toBe(true)
 
     pointerDown(userBubble)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('我的消息快捷配置')
@@ -878,6 +880,17 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Codex 回复快捷配置')
     expect(container.querySelector('[role="dialog"] [data-paint-token="conversationMessage"]')).not.toBeNull()
     expect(container.querySelector('[role="dialog"] [data-paint-token="conversationUserMessage"]')).toBeNull()
+    expect(container.querySelector('[role="dialog"] [data-paint-token="conversationPlanMessage"]')).toBeNull()
+
+    const refreshedPlanBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-plan-message"]')
+    if (!refreshedPlanBubble) throw new Error('Plan bubble target disappeared.')
+    pointerDown(refreshedPlanBubble)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('生成计划快捷配置')
+    expect(container.querySelector('[role="dialog"] [data-paint-token="conversationPlanMessage"]')).not.toBeNull()
+    expect(container.querySelector('[role="dialog"] [data-paint-token="conversationMessage"]')).toBeNull()
+    const planColor = container.querySelector<HTMLInputElement>('[role="dialog"] [data-paint-token="conversationPlanMessage"] .gradient-stop .color-text-input')
+    if (!planColor) throw new Error('Plan bubble paint control is missing.')
+    act(() => setInputValue(planColor, '#654321'))
 
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
@@ -890,6 +903,11 @@ describe('Studio preview editing interaction', () => {
     expect(savedUserPaint?.kind).toBe('linear')
     if (savedUserPaint?.kind !== 'linear') throw new Error('User bubble paint should remain a gradient.')
     expect(savedUserPaint.stops[0]?.color).toBe('#123456')
+    const savedPlanPaint = savedProfiles.at(-1)?.appearance.paints.conversationPlanMessage
+    expect(savedPlanPaint?.kind).toBe('linear')
+    if (savedPlanPaint?.kind !== 'linear') throw new Error('Plan bubble paint should remain a gradient.')
+    expect(savedPlanPaint.stops[0]?.color).toBe('#654321')
+    expect(savedProfiles.at(-1)?.appearance.paints.conversationMessage).toBeUndefined()
   })
 
   it('selects presets and custom GIF frames for each preview role without losing the prior style on cancel', async () => {
@@ -922,6 +940,13 @@ describe('Studio preview editing interaction', () => {
       customMode.click()
       await Promise.resolve()
     })
+    const cancelledImage = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('选择图片'))
+    if (!cancelledImage) throw new Error('Initial bubble image picker is missing.')
+    await act(async () => {
+      cancelledImage.click()
+      await Promise.resolve()
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationUserBubble', 'image')
     expect(container.querySelector('[role="dialog"] .conversation-bubble-preset-grid')).not.toBeNull()
     expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
 
@@ -933,13 +958,13 @@ describe('Studio preview editing interaction', () => {
       width: 768,
       height: 384
     })
-    const refreshedCustomMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
-    if (!refreshedCustomMode) throw new Error('Refreshed custom bubble mode is missing.')
+    const selectUserGif = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('选择 GIF'))
+    if (!selectUserGif) throw new Error('Initial bubble GIF picker is missing.')
     await act(async () => {
-      refreshedCustomMode.click()
+      selectUserGif.click()
       await Promise.resolve()
     })
-    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationUserBubble', 'image')
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationUserBubble', 'gif')
     const stretch = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-fit-tabs button')].find((button) => button.textContent === '整图拉伸')
     if (!stretch) throw new Error('Stretch bubble fit is missing.')
     act(() => stretch.click())
@@ -963,6 +988,31 @@ describe('Studio preview editing interaction', () => {
     expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-border-widths')).toBe('44.16px 48px 46.08px 48px')
     expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-min-block-size')).toBe('91px')
 
+    selectMedia.mockResolvedValueOnce({
+      reference: { asset: 'assets/plan-bubble.gif', kind: 'image', mimeType: 'image/gif' },
+      relativePath: 'assets/plan-bubble.gif',
+      previewUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+      originalName: 'plan-bubble.gif',
+      width: 768,
+      height: 384
+    })
+    const planBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-plan-message"]')
+    if (!planBubble) throw new Error('Plan bubble preview is missing.')
+    pointerDown(planBubble)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('生成计划快捷配置')
+    expect(container.querySelector('[role="dialog"] [data-bubble-role-controls="plan"]')).not.toBeNull()
+    const planCustomMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
+    if (!planCustomMode) throw new Error('Plan custom bubble mode is missing.')
+    act(() => planCustomMode.click())
+    const selectPlanGif = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('选择 GIF'))
+    if (!selectPlanGif) throw new Error('Plan bubble GIF picker is missing.')
+    await act(async () => {
+      selectPlanGif.click()
+      await Promise.resolve()
+    })
+    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationPlanBubble', 'gif')
+    expect(container.querySelector('[data-preview-target="conversation-plan-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
+
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
     await act(async () => {
@@ -975,6 +1025,16 @@ describe('Studio preview editing interaction', () => {
     })
     expect(savedProfiles.at(-1)?.conversationBubbles.codex).toEqual({
       source: { kind: 'preset', presetId: 'ocean-shell' },
+      fit: 'nineSlice',
+      slice: 25,
+      frameWidth: 24,
+      contentPadding: 20
+    })
+    expect(savedProfiles.at(-1)?.conversationBubbles.plan).toEqual({
+      source: {
+        kind: 'custom',
+        reference: { asset: 'assets/plan-bubble.gif', kind: 'image', mimeType: 'image/gif' }
+      },
       fit: 'nineSlice',
       slice: 25,
       frameWidth: 24,
@@ -1033,7 +1093,8 @@ describe('Studio preview editing interaction', () => {
     expect(saved?.conversationBubbles).toEqual({
       visible: true,
       user: createDefaultConversationBubbleStyle(),
-      codex: createDefaultConversationBubbleStyle()
+      codex: createDefaultConversationBubbleStyle(),
+      plan: createDefaultConversationBubbleStyle()
     })
     expect(saved?.appearance.colors).toMatchObject({ conversationToolText: '#123456', conversationToolMutedText: '#607080' })
     expect(saved?.appearance.paints.conversationToolBackground).toBeDefined()
@@ -1425,6 +1486,61 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.icons.sidebarSearch).toEqual({ kind: 'asset', asset: 'assets/icon-search.gif' })
+  })
+
+  it('independently imports image and GIF icons for composer add and microphone buttons', async () => {
+    const addButton = container.querySelector<HTMLButtonElement>('[data-preview-target="composer-add"]')
+    const microphoneButton = container.querySelector<HTMLButtonElement>('[data-preview-target="composer-microphone"]')
+    if (!addButton || !microphoneButton) throw new Error('Composer tool preview buttons are missing.')
+
+    const importIcon = async (
+      button: HTMLButtonElement,
+      slot: 'composerAdd' | 'composerMicrophone',
+      label: string,
+      result: { relativePath: string; dataUrl: string; gifPosterDataUrl?: string; mediaType: string; originalName: string }
+    ): Promise<void> => {
+      selectIcon.mockResolvedValueOnce({ ...result, width: 32, height: 32 })
+      pointerDown(button)
+      expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(`${label}快捷配置`)
+      const trigger = container.querySelector<HTMLButtonElement>(`[role="dialog"] [data-icon-slot="${slot}"] .icon-picker-trigger`)
+      if (!trigger) throw new Error(`${slot} icon selector is missing.`)
+      act(() => trigger.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+      const custom = container.querySelector<HTMLButtonElement>(`[role="dialog"] [data-icon-slot="${slot}"] [data-icon-name="__asset"]`)
+      if (!custom) throw new Error(`${slot} custom icon option is missing.`)
+      await act(async () => {
+        custom.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+        await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+      })
+    }
+
+    await importIcon(addButton, 'composerAdd', '添加按钮', {
+      relativePath: 'assets/composer-add.png',
+      dataUrl: 'data:image/png;base64,AA==',
+      mediaType: 'image/png',
+      originalName: 'composer-add.png'
+    })
+    expect(container.querySelector('[data-preview-target="composer-add"]')).toBe(addButton)
+    expect(addButton.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe('data:image/png;base64,AA==')
+
+    await importIcon(microphoneButton, 'composerMicrophone', '麦克风按钮', {
+      relativePath: 'assets/composer-microphone.gif',
+      dataUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+      gifPosterDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      mediaType: 'image/gif',
+      originalName: 'composer-microphone.gif'
+    })
+    expect(container.querySelector('[data-preview-target="composer-microphone"]')).toBe(microphoneButton)
+    expect(microphoneButton.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe('data:image/gif;base64,R0lGODlhAQABAAAAACw=')
+    expect(selectIcon).toHaveBeenCalledTimes(2)
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.icons.composerAdd).toEqual({ kind: 'asset', asset: 'assets/composer-add.png' })
+    expect(savedProfiles.at(-1)?.icons.composerMicrophone).toEqual({ kind: 'asset', asset: 'assets/composer-microphone.gif' })
   })
 
   it('edits each sidebar navigation item without changing the other items', async () => {

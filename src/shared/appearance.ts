@@ -62,6 +62,8 @@ export const APPEARANCE_COLOR_TOKENS = {
   globalBorder: colorToken('全局边框', 'global', '--dream-global-border', 'border', ['canvas']),
   conversationText: colorToken('会话正文', 'conversation', '--dream-conversation-text', 'ink', ['conversation-user-message', 'conversation-codex-message']),
   conversationLink: colorToken('会话链接', 'conversation', '--dream-conversation-link', 'accent', ['conversation-user-message', 'conversation-codex-message']),
+  conversationPlanText: colorToken('生成计划正文', 'conversation', '--dream-conversation-plan-text', 'ink', ['conversation-plan-message']),
+  conversationPlanLink: colorToken('生成计划链接', 'conversation', '--dream-conversation-plan-link', 'accent', ['conversation-plan-message']),
   conversationToolText: colorToken('工具活动文字', 'conversation', '--dream-conversation-tool-text', 'ink', ['conversation-tool-activity']),
   conversationToolMutedText: colorToken('工具活动详情', 'conversation', '--dream-conversation-tool-muted-text', 'border', ['conversation-tool-activity']),
   primaryButtonText: colorToken('主要按钮文字', 'conversation', '--dream-primary-button-text', 'surface', ['primary-button']),
@@ -207,6 +209,8 @@ export const APPEARANCE_PAINT_TOKENS = {
   conversationUserMessageHover: paintToken('我的消息悬停', 'conversation', '--dream-conversation-user-message-hover', 'lavender', ['conversation-user-message'], 'hover'),
   conversationMessage: paintToken('Codex 回复', 'conversation', '--dream-conversation-message', 'surface', ['conversation-codex-message']),
   conversationMessageHover: paintToken('Codex 回复悬停', 'conversation', '--dream-conversation-message-hover', 'lavender', ['conversation-codex-message'], 'hover'),
+  conversationPlanMessage: paintToken('生成计划', 'conversation', '--dream-conversation-plan-message', 'surface', ['conversation-plan-message']),
+  conversationPlanMessageHover: paintToken('生成计划悬停', 'conversation', '--dream-conversation-plan-message-hover', 'lavender', ['conversation-plan-message'], 'hover'),
   conversationToolBackground: paintToken('工具活动气泡', 'conversation', '--dream-conversation-tool-background', 'surface', ['conversation-tool-activity']),
   conversationToolHoverBackground: paintToken('工具活动气泡悬停', 'conversation', '--dream-conversation-tool-hover-background', 'lavender', ['conversation-tool-activity'], 'hover'),
   primaryButton: paintToken('主要按钮', 'conversation', '--dream-primary-button', 'accent', ['primary-button']),
@@ -322,9 +326,11 @@ export function resolveDefaultAppearancePaint(colors: LegacyThemeColors, token: 
     case 'conversationUserMessageHover':
       return linear(135, [[tint(colors.accent, 0.22), 0], [tint(colors.lavender, 0.2), 0.55], [tint(colors.pink, 0.16), 1]])
     case 'conversationMessage':
+    case 'conversationPlanMessage':
     case 'conversationToolBackground':
       return linear(145, [[colors.surface, 0], [tint(colors.lavender, 0.06), 0.54], [tint(colors.pink, 0.05), 1]])
     case 'conversationMessageHover':
+    case 'conversationPlanMessageHover':
     case 'conversationToolHoverBackground':
       return linear(135, [[tint(colors.accent, 0.1), 0], [tint(colors.lavender, 0.16), 0.55], [tint(colors.pink, 0.12), 1]])
     case 'primaryButton':

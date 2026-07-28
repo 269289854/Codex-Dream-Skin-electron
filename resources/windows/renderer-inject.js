@@ -14,6 +14,8 @@
   const sidebarCopyRestorers = new Map();
   const accountMenuRestorers = new WeakMap();
   const accountMenuRows = new Set();
+  const composerToolRestorers = new WeakMap();
+  const composerToolButtons = new Set();
   const ACCOUNT_MENU_BACKGROUND_CLASS = "dream-account-menu-background";
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
@@ -1375,6 +1377,15 @@
       borderWidths: '--dream-codex-bubble-frame-border-widths',
       minBlockSize: '--dream-codex-bubble-frame-min-block-size',
       padding: '--dream-codex-bubble-content-padding'
+    },
+    plan: {
+      attribute: 'data-dream-plan-bubble-frame',
+      source: '--dream-plan-bubble-frame-source',
+      slice: '--dream-plan-bubble-frame-slice',
+      width: '--dream-plan-bubble-frame-width',
+      borderWidths: '--dream-plan-bubble-frame-border-widths',
+      minBlockSize: '--dream-plan-bubble-frame-min-block-size',
+      padding: '--dream-plan-bubble-content-padding'
     }
   };
   const normalizeConversationBubbleQuad = (value, fallback, min, max) => {
@@ -1434,6 +1445,7 @@
   const clearConversationBubbles = () => {
     document.querySelectorAll('.dream-conversation-user-bubble').forEach((node) => node.classList.remove('dream-conversation-user-bubble'));
     document.querySelectorAll('.dream-conversation-codex-bubble').forEach((node) => node.classList.remove('dream-conversation-codex-bubble'));
+    document.querySelectorAll('.dream-conversation-plan-bubble').forEach((node) => node.classList.remove('dream-conversation-plan-bubble'));
   };
   const ensureConversationBubbles = () => {
     if (themeConfig?.conversationBubbles?.visible === false) {
@@ -1448,13 +1460,46 @@
     });
     userBubbles.forEach((node) => node.classList.add('dream-conversation-user-bubble'));
 
+    const codexContentSelector = [
+      '[data-selected-text-overlay-target]',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'p',
+      'ul',
+      'ol',
+      'pre',
+      'blockquote',
+      'table'
+    ].join(',');
     const codexBubbles = new Set([...document.querySelectorAll('[data-response-annotation-conversation]')].filter((node) =>
-      node instanceof HTMLElement && (node.matches('[data-selected-text-overlay-target]') || node.querySelector('[data-selected-text-overlay-target]'))
+      node instanceof HTMLElement && (node.matches(codexContentSelector) || node.querySelector(codexContentSelector))
     ));
+    const excludedAssistantSelector = [
+      '[data-user-message-bubble]',
+      '[data-local-conversation-item-target-ids]',
+      '[data-tool-result]',
+      '[data-file-diff-card]'
+    ].join(',');
+    const planBubbles = new Set();
+    document.querySelectorAll('[data-message-author-role="assistant"]').forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.closest(excludedAssistantSelector)) return;
+      if (node.querySelector('[data-response-annotation-conversation]')) return;
+      if (!node.textContent?.trim() && !node.querySelector(codexContentSelector)) return;
+      planBubbles.add(node);
+    });
     document.querySelectorAll('.dream-conversation-codex-bubble').forEach((node) => {
       if (!codexBubbles.has(node)) node.classList.remove('dream-conversation-codex-bubble');
     });
     codexBubbles.forEach((node) => node.classList.add('dream-conversation-codex-bubble'));
+    document.querySelectorAll('.dream-conversation-plan-bubble').forEach((node) => {
+      if (!planBubbles.has(node)) node.classList.remove('dream-conversation-plan-bubble');
+    });
+    planBubbles.forEach((node) => node.classList.add('dream-conversation-plan-bubble'));
   };
 
   const clearToolActivityBubbles = () => {
@@ -1489,10 +1534,96 @@
   const isComposerStopButton = (button) =>
     /(?:停止|取消|stop|cancel)/i.test(composerButtonLabel(button));
 
-  const ensureComposerSendIcon = (composer) => {
+  const findComposerSendButton = (composer) => {
     const buttons = composer ? [...composer.querySelectorAll("button")].filter(isVisible) : [];
     const labeledButton = buttons.find((button) => /^(?:发送|提交|停止|send|submit|stop)/i.test(composerButtonLabel(button)));
-    const button = labeledButton || buttons.find((candidate) => candidate.classList.contains("bg-token-foreground")) || null;
+    return labeledButton || buttons.find((candidate) => candidate.classList.contains("bg-token-foreground")) || null;
+  };
+
+  const findComposerToolIconNode = (button) => {
+    const directIcon = button?.querySelector(":scope > svg, :scope > .dream-custom-icon");
+    if (directIcon) return button;
+    return button?.querySelector("svg, .dream-custom-icon")?.parentElement || button || null;
+  };
+
+  const restoreComposerToolIcon = (button) => {
+    const record = composerToolRestorers.get(button);
+    if (record?.iconNode?.isConnected) record.iconNode.innerHTML = record.iconHtml;
+    button?.classList.remove("dream-composer-tool-icon-button");
+    button?.removeAttribute("data-dream-composer-icon-slot");
+    composerToolRestorers.delete(button);
+    composerToolButtons.delete(button);
+  };
+
+  const composerIconOnlyButton = (button) =>
+    button instanceof HTMLElement &&
+    Boolean(button.querySelector("svg, .dream-custom-icon")) &&
+    !button.textContent.trim();
+
+  const findComposerToolButtons = (composer) => {
+    const buttons = composer ? [...composer.querySelectorAll("button")].filter(isVisible) : [];
+    const sendButton = findComposerSendButton(composer);
+    let addButton = buttons.find((button) => button.getAttribute("data-dream-composer-icon-slot") === "composerAdd") ||
+      buttons.find((button) =>
+        button !== sendButton && /添加|附件|上传|选择文件|文件和照片|add|attach|upload|paperclip/i.test(composerButtonLabel(button))
+      ) || null;
+    let microphoneButton = buttons.find((button) => button.getAttribute("data-dream-composer-icon-slot") === "composerMicrophone") ||
+      buttons.find((button) =>
+        button !== sendButton && /语音输入|语音听写|听写|麦克风|录音|voice|dictat|microphone|\bmic\b/i.test(composerButtonLabel(button))
+      ) || null;
+    const unclaimed = buttons.filter((button) =>
+      button !== sendButton &&
+      button !== addButton &&
+      button !== microphoneButton &&
+      composerIconOnlyButton(button)
+    );
+    if (!addButton && !microphoneButton && unclaimed.length === 2) {
+      [addButton, microphoneButton] = unclaimed;
+    } else if (!addButton && microphoneButton && unclaimed.length === 1) {
+      [addButton] = unclaimed;
+    } else if (!microphoneButton && addButton && unclaimed.length === 1) {
+      [microphoneButton] = unclaimed;
+    }
+    return { addButton, microphoneButton };
+  };
+
+  const ensureComposerToolIcon = (button, slot, nativeName, fallback) => {
+    if (!(button instanceof HTMLElement)) return;
+    const source = themeConfig?.icons?.[slot];
+    if (!source?.dataUrl && (!source?.name || source.name === nativeName)) {
+      restoreComposerToolIcon(button);
+      return;
+    }
+    const existing = composerToolRestorers.get(button);
+    const iconNode = existing?.iconNode || findComposerToolIconNode(button);
+    if (!(iconNode instanceof HTMLElement)) return;
+    if (!existing) {
+      composerToolRestorers.set(button, { iconNode, iconHtml: iconNode.innerHTML });
+      composerToolButtons.add(button);
+    }
+    button.classList.add("dream-composer-tool-icon-button");
+    button.setAttribute("data-dream-composer-icon-slot", slot);
+    renderSlot(iconNode, slot, fallback);
+  };
+
+  const ensureComposerToolIcons = (composer) => {
+    const activeButtons = new Set();
+    const { addButton, microphoneButton } = findComposerToolButtons(composer);
+    if (addButton instanceof HTMLElement) {
+      activeButtons.add(addButton);
+      ensureComposerToolIcon(addButton, "composerAdd", "plus", "+");
+    }
+    if (microphoneButton instanceof HTMLElement) {
+      activeButtons.add(microphoneButton);
+      ensureComposerToolIcon(microphoneButton, "composerMicrophone", "mic", "♩");
+    }
+    for (const button of [...composerToolButtons]) {
+      if (!button.isConnected || !activeButtons.has(button)) restoreComposerToolIcon(button);
+    }
+  };
+
+  const ensureComposerSendIcon = (composer) => {
+    const button = findComposerSendButton(composer);
     document.querySelectorAll(".dream-composer-send-button").forEach((current) => {
       if (current !== button) clearComposerSendIcon(current);
     });
@@ -2058,6 +2189,7 @@
     markCurrentNode(".composer-surface-chrome.dream-composer", composerSurface, "dream-composer");
     ensureComposerBadge(composerSurface);
     ensureComposerMelody(composerSurface);
+    ensureComposerToolIcons(composerSurface);
     ensureComposerSendIcon(composerSurface);
     ensureWindowBackground();
     ensureConversationBackground();
@@ -2160,6 +2292,7 @@
     document.querySelectorAll(".dream-composer").forEach((node) => node.classList.remove("dream-composer"));
     document.querySelectorAll(".dream-composer-badge").forEach((node) => node.remove());
     document.querySelectorAll(".dream-composer-melody").forEach((node) => node.remove());
+    for (const button of [...composerToolButtons]) restoreComposerToolIcon(button);
     document.querySelectorAll(".dream-composer-send-button").forEach(clearComposerSendIcon);
     clearConversationBubbles();
     clearConversationBubbleFrameConfig();
@@ -2265,6 +2398,7 @@
     const composer = findVisible(document, ".composer-surface-chrome");
     ensureComposerBadge(composer);
     ensureComposerMelody(composer);
+    ensureComposerToolIcons(composer);
     ensureComposerSendIcon(composer);
     ensureAccountMenu();
     const home = document.querySelector("[role=main].dream-home");
@@ -2298,6 +2432,7 @@
     ".dream-conversation-background",
     ".dream-composer-badge",
     ".dream-composer-melody",
+    ".dream-composer-tool-icon-button .dream-custom-icon",
     ".dream-composer-send-icon",
     ".dream-account-menu-icon",
     ".dream-account-menu-background"

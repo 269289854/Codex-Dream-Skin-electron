@@ -531,6 +531,12 @@ html[data-dream-motion-paused="true"] :is(
 .dream-composer button:active,
 .dream-composer button[aria-pressed="true"] { background: var(--dream-composer-tool-button-selected) !important; }
 
+.dream-composer .dream-composer-tool-icon-button .dream-custom-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
 .dream-composer :is([data-testid*="permission"], [class*="text-token-description"]) {
   color: var(--dream-composer-permission-text) !important;
 }

@@ -97,7 +97,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 26, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 28, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -157,7 +157,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 26,
+      version: 28,
       videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
@@ -388,6 +388,8 @@ describe('ProfileStore', () => {
 
     const duplicate = await store.duplicate(profile, 'GIF 图标主题副本')
     expect(duplicate.icons.sidebarSearch).toEqual(profile.icons.sidebarSearch)
+    expect(duplicate.icons.composerAdd).toEqual(profile.icons.composerAdd)
+    expect(duplicate.icons.composerMicrophone).toEqual(profile.icons.composerMicrophone)
     expect((await store.compile(duplicate.id)).assets[iconGifPosterAssetKey(imported.relativePath)]).toBe(imported.gifPosterDataUrl)
 
     await expect(store.importAsset(profile.id, oversized, 'icon')).rejects.toThrow('5 MB')
@@ -423,16 +425,20 @@ describe('ProfileStore', () => {
     const profile = await store.create('自定义气泡主题')
     const svgSource = join(root, 'user-bubble.svg')
     const gifSource = join(root, 'codex-bubble.gif')
+    const planSource = join(root, 'plan-bubble.png')
     await Promise.all([
       writeFile(svgSource, '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect width="320" height="160" rx="24" fill="#ffffff"/></svg>'),
-      writeFile(gifSource, TEST_GIF)
+      writeFile(gifSource, TEST_GIF),
+      writeFile(planSource, TEST_PNG)
     ])
 
     const user = await store.importMediaAsset(profile.id, svgSource, 'conversationUserBubble', 'image')
     const codex = await store.importMediaAsset(profile.id, gifSource, 'conversationCodexBubble', 'gif')
+    const plan = await store.importMediaAsset(profile.id, planSource, 'conversationPlanBubble', 'image')
     expect(user.reference).toMatchObject({ kind: 'image', mimeType: 'image/png' })
     expect(user.relativePath).toMatch(/\.png$/)
     expect(codex.reference).toMatchObject({ kind: 'image', mimeType: 'image/gif' })
+    expect(plan.reference).toMatchObject({ kind: 'image', mimeType: 'image/png' })
     profile.conversationBubbles.user.source = { kind: 'custom', reference: user.reference }
     profile.conversationBubbles.codex = {
       source: { kind: 'custom', reference: codex.reference },
@@ -441,27 +447,39 @@ describe('ProfileStore', () => {
       frameWidth: 24,
       contentPadding: 28
     }
+    profile.conversationBubbles.plan = {
+      source: { kind: 'custom', reference: plan.reference },
+      fit: 'nineSlice',
+      slice: 30,
+      frameWidth: 20,
+      contentPadding: 24
+    }
     await store.update(profile)
 
     const compiled = await store.compile(profile.id)
     const payload = JSON.parse(compiled.rendererPayload) as {
       assets: Record<string, string>
-      conversationBubbles: { user: { dataUrl: string }; codex: { dataUrl: string } }
+      conversationBubbles: { user: { dataUrl: string }; codex: { dataUrl: string }; plan: { dataUrl: string } }
     }
     expect(payload.assets).not.toHaveProperty(user.relativePath)
     expect(payload.assets).not.toHaveProperty(codex.relativePath)
+    expect(payload.assets).not.toHaveProperty(plan.relativePath)
     expect(payload.conversationBubbles.user.dataUrl).toMatch(/^data:image\/png;base64,/)
     expect(payload.conversationBubbles.codex.dataUrl).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect(payload.conversationBubbles.plan.dataUrl).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
 
     const duplicate = await store.duplicate(profile, '自定义气泡副本')
     expect(duplicate.conversationBubbles).toEqual(profile.conversationBubbles)
     expect((await store.compile(duplicate.id)).assets[user.relativePath]).toMatch(/^data:image\/png;base64,/)
     expect((await store.compile(duplicate.id)).assets[codex.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect((await store.compile(duplicate.id)).assets[plan.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
 
     profile.conversationBubbles.user.source = { kind: 'none' }
+    profile.conversationBubbles.plan.source = { kind: 'none' }
     await store.update(profile)
     await expect(readFile(join(store.themesRoot, profile.id, user.relativePath))).rejects.toThrow()
     await expect(readFile(join(store.themesRoot, profile.id, codex.relativePath))).resolves.toEqual(TEST_GIF)
+    await expect(readFile(join(store.themesRoot, profile.id, plan.relativePath))).rejects.toThrow()
   })
 
   it('rejects oversized, over-dimensioned, over-frame, video, and cancelled bubble imports without artifacts', async () => {
@@ -486,7 +504,7 @@ describe('ProfileStore', () => {
     await expect(store.importMediaAsset(profile.id, oversized, 'conversationUserBubble', 'image')).rejects.toThrow('10 MB')
     await expect(store.importMediaAsset(profile.id, overDimension, 'conversationUserBubble', 'image')).rejects.toThrow('2048px')
     await expect(store.importMediaAsset(profile.id, overFrames, 'conversationCodexBubble', 'gif')).rejects.toThrow('180')
-    await expect(store.importMediaAsset(profile.id, video, 'conversationCodexBubble', 'video')).rejects.toThrow('图片或 GIF')
+    await expect(store.importMediaAsset(profile.id, video, 'conversationPlanBubble', 'video')).rejects.toThrow('图片或 GIF')
     const controller = new AbortController()
     controller.abort()
     await expect(store.importMediaAsset(profile.id, valid, 'conversationUserBubble', 'image', controller.signal)).rejects.toThrow('取消')
@@ -630,7 +648,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(26)
+    expect(migrated.version).toBe(28)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'

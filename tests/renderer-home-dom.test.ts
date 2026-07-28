@@ -90,6 +90,8 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
             </div></div>
             <div class="composer-surface-chrome">
               <div class="ProseMirror" contenteditable="true"></div>
+              <button type="button" aria-label="添加文件和照片"><svg data-native-add viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"></path></svg></button>
+              <button type="button" aria-label="语音输入"><span class="native-microphone"><svg data-native-microphone viewBox="0 0 20 20"><path d="M10 3v10"></path></svg></span></button>
               <button type="button" aria-label="发送" class="size-token-button-composer rounded-full bg-token-foreground"><svg viewBox="0 0 20 20" width="20" height="20"><path d="M10 16V4"></path></svg></button>
             </div>
           </div>
@@ -125,6 +127,8 @@ function layeredHomeFixture(projectName: string, voiceLabel = 'Try ChatGPT Voice
                 </div></div>
                 <div class="composer-surface-chrome">
                   <div class="ProseMirror" contenteditable="true"></div>
+                  <button type="button" aria-label="添加文件和照片"><svg data-native-add viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"></path></svg></button>
+                  <button type="button" aria-label="语音输入"><span class="native-microphone"><svg data-native-microphone viewBox="0 0 20 20"><path d="M10 3v10"></path></svg></span></button>
                   <button type="button" aria-label="发送" class="size-token-button-composer rounded-full bg-token-foreground"><svg viewBox="0 0 20 20" width="20" height="20"><path d="M10 16V4"></path></svg></button>
                 </div>
               </div>
@@ -192,6 +196,7 @@ type RuntimeConversationBubblesConfig = {
   visible: boolean
   user?: RuntimeConversationBubbleFrame
   codex?: RuntimeConversationBubbleFrame
+  plan?: RuntimeConversationBubbleFrame
 }
 
 const fullOverlayStyle: ConversationOverlayStyle = {
@@ -393,7 +398,7 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-account-menu-icon')).toBeNull()
   })
 
-  it('wraps only user and Codex prose, follows streaming additions, and clears bubble classes', () => {
+  it('wraps user, Codex, and plan prose independently, follows streaming additions, and clears bubble classes', () => {
     const window = createWindow()
     window.document.body.innerHTML = `
       <main class="main-surface">
@@ -403,26 +408,44 @@ describe('renderer home DOM adaptation', () => {
           <div data-tool-result>工具结果</div>
           <div data-file-diff-card>文件差异</div>
         </div>
+        <article data-message-author-role="assistant" data-generated-plan>
+          <header>套餐</header>
+          <h1>生成计划</h1>
+          <p>计划摘要</p>
+        </article>
+        <article data-message-author-role="assistant" data-nested-response>
+          <div data-response-annotation-conversation><p>新版富文本回复</p></div>
+        </article>
+        <article data-message-author-role="assistant" data-local-conversation-item-target-ids="tool-1">
+          <p>工具活动</p>
+        </article>
         <div data-response-annotation-conversation data-empty-response>无正文标记</div>
       </main>`
     inject(window)
 
     expect(window.document.querySelector('[data-user-message-bubble]')?.classList.contains('dream-conversation-user-bubble')).toBe(true)
     expect(window.document.querySelector('[data-response-annotation-conversation]:not([data-empty-response])')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-generated-plan]')?.classList.contains('dream-conversation-plan-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-generated-plan]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-nested-response]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-nested-response] [data-response-annotation-conversation]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-local-conversation-item-target-ids]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-empty-response]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-tool-result]')?.className).toBe('')
     expect(window.document.querySelector('[data-file-diff-card]')?.className).toBe('')
 
-    const streaming = window.document.createElement('div')
-    streaming.setAttribute('data-response-annotation-conversation', '')
-    streaming.innerHTML = '<p data-selected-text-overlay-target>流式正文</p>'
+    const streaming = window.document.createElement('article')
+    streaming.setAttribute('data-message-author-role', 'assistant')
+    streaming.innerHTML = '<h2>流式生成计划</h2><p>流式正文</p>'
     window.document.querySelector('main')?.append(streaming)
     stateOf(window).ensure()
-    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(streaming.classList.contains('dream-conversation-plan-bubble')).toBe(true)
+    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(false)
 
     inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { visible: false })
     expect(window.document.querySelector('.dream-conversation-user-bubble')).toBeNull()
     expect(window.document.querySelector('.dream-conversation-codex-bubble')).toBeNull()
+    expect(window.document.querySelector('.dream-conversation-plan-bubble')).toBeNull()
     stateOf(window).cleanup()
     expect(window.document.querySelector('[data-user-message-bubble]')?.className).toBe('')
   })
@@ -435,11 +458,13 @@ describe('renderer home DOM adaptation', () => {
         <div data-local-conversation-final-assistant>
           <div data-response-annotation-conversation><p data-selected-text-overlay-target>Codex 正文</p></div>
         </div>
+        <article data-message-author-role="assistant"><p>生成计划正文</p></article>
       </main>`
     const user = window.document.querySelector('[data-user-message-bubble]')
     const codex = window.document.querySelector('[data-response-annotation-conversation]')
-    if (!user || !codex) throw new Error('Conversation bubble fixtures are missing.')
-    const childCounts = [user.childNodes.length, codex.childNodes.length]
+    const plan = window.document.querySelector('[data-message-author-role="assistant"]')
+    if (!user || !codex || !plan) throw new Error('Conversation bubble fixtures are missing.')
+    const childCounts = [user.childNodes.length, codex.childNodes.length, plan.childNodes.length]
     const frames: RuntimeConversationBubblesConfig = {
       visible: true,
       user: {
@@ -459,6 +484,15 @@ describe('renderer home DOM adaptation', () => {
         frameWidth: 18,
         borderWidths: [18, 36, 18, 36],
         contentPadding: 28
+      },
+      plan: {
+        mode: 'nineSlice',
+        dataUrl: 'data:image/png;base64,UExBTg==',
+        slice: 20,
+        sliceInsets: [20, 30, 25, 30],
+        frameWidth: 16,
+        borderWidths: [16, 32, 20, 32],
+        contentPadding: 24
       }
     }
 
@@ -466,15 +500,21 @@ describe('renderer home DOM adaptation', () => {
     const root = window.document.documentElement
     expect(root.getAttribute('data-dream-user-bubble-frame')).toBe('nineSlice')
     expect(root.getAttribute('data-dream-codex-bubble-frame')).toBe('stretch')
+    expect(root.getAttribute('data-dream-plan-bubble-frame')).toBe('nineSlice')
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-slice')).toBe('35% 25% 40% 25%')
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-width')).toBe('24px')
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('33.6px 48px 38.4px 48px')
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('72px')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('28px')
-    expect([user.childNodes.length, codex.childNodes.length]).toEqual(childCounts)
+    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-slice')).toBe('20% 30% 25% 30%')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-border-widths')).toBe('16px 32px 20px 32px')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-content-padding')).toBe('24px')
+    expect(plan.classList.contains('dream-conversation-plan-bubble')).toBe(true)
+    expect(plan.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect([user.childNodes.length, codex.childNodes.length, plan.childNodes.length]).toEqual(childCounts)
 
     stateOf(window).ensure()
-    expect([user.childNodes.length, codex.childNodes.length]).toEqual(childCounts)
+    expect([user.childNodes.length, codex.childNodes.length, plan.childNodes.length]).toEqual(childCounts)
     const streaming = window.document.createElement('div')
     streaming.setAttribute('data-response-annotation-conversation', '')
     streaming.innerHTML = '<p data-selected-text-overlay-target>新增流式正文</p>'
@@ -486,12 +526,17 @@ describe('renderer home DOM adaptation', () => {
     stateOf(window).cleanup()
     expect(root.hasAttribute('data-dream-user-bubble-frame')).toBe(false)
     expect(root.hasAttribute('data-dream-codex-bubble-frame')).toBe(false)
+    expect(root.hasAttribute('data-dream-plan-bubble-frame')).toBe(false)
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-source')).toBe('')
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('')
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-source')).toBe('')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-border-widths')).toBe('')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-content-padding')).toBe('')
     expect(user.classList.contains('dream-conversation-user-bubble')).toBe(false)
     expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(plan.classList.contains('dream-conversation-plan-bubble')).toBe(false)
   })
 
   it('falls back to symmetric frame geometry for legacy or invalid runtime values', () => {
@@ -1034,6 +1079,58 @@ describe('renderer home DOM adaptation', () => {
     stateOf(window).cleanup()
     expect(button?.querySelector('.dream-composer-send-icon')).toBeNull()
     expect(button?.querySelector(':scope > svg')).not.toBeNull()
+  })
+
+  it('reuses custom composer tool images, preserves button behavior, repairs replacements, and restores native icons', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const addButton = window.document.querySelector('button[aria-label="添加文件和照片"]') as unknown as HTMLButtonElement | null
+    const microphoneButton = window.document.querySelector('button[aria-label="语音输入"]') as unknown as HTMLButtonElement | null
+    if (!addButton || !microphoneButton) throw new Error('Composer tool fixture buttons are missing.')
+    const nativeAddHtml = addButton.innerHTML
+    const nativeMicrophoneHtml = microphoneButton.innerHTML
+    let addClicks = 0
+    let microphoneClicks = 0
+    addButton.addEventListener('click', () => { addClicks += 1 })
+    microphoneButton.addEventListener('click', () => { microphoneClicks += 1 })
+
+    inject(window, {
+      composerAdd: { dataUrl: 'data:image/png;base64,AQ==' },
+      composerMicrophone: { dataUrl: 'data:image/gif;base64,Ag==' }
+    })
+
+    expect(addButton.classList.contains('dream-composer-tool-icon-button')).toBe(true)
+    expect(addButton.getAttribute('data-dream-composer-icon-slot')).toBe('composerAdd')
+    expect(addButton.getAttribute('aria-label')).toBe('添加文件和照片')
+    expect(microphoneButton.getAttribute('data-dream-composer-icon-slot')).toBe('composerMicrophone')
+    expect(microphoneButton.getAttribute('aria-label')).toBe('语音输入')
+    const addImage = addButton.querySelector<HTMLImageElement>('img.dream-custom-icon')
+    const microphoneImage = microphoneButton.querySelector<HTMLImageElement>('img.dream-custom-icon')
+    expect(addImage?.src).toBe('data:image/png;base64,AQ==')
+    expect(microphoneImage?.src).toBe('data:image/gif;base64,Ag==')
+
+    addButton.click()
+    microphoneButton.click()
+    expect(addClicks).toBe(1)
+    expect(microphoneClicks).toBe(1)
+    stateOf(window).ensure()
+    expect(addButton.querySelector('img.dream-custom-icon')).toBe(addImage)
+    expect(microphoneButton.querySelector('img.dream-custom-icon')).toBe(microphoneImage)
+
+    const replacement = window.document.createElement('button') as unknown as HTMLButtonElement
+    replacement.type = 'button'
+    replacement.setAttribute('aria-label', '语音输入')
+    replacement.innerHTML = nativeMicrophoneHtml
+    microphoneButton.replaceWith(replacement)
+    stateOf(window).ensure()
+    expect(replacement.querySelector<HTMLImageElement>('img.dream-custom-icon')?.src).toBe('data:image/gif;base64,Ag==')
+
+    stateOf(window).cleanup()
+    expect(addButton.innerHTML).toBe(nativeAddHtml)
+    expect(addButton.classList.contains('dream-composer-tool-icon-button')).toBe(false)
+    expect(addButton.hasAttribute('data-dream-composer-icon-slot')).toBe(false)
+    expect(replacement.innerHTML).toBe(nativeMicrophoneHtml)
+    expect(replacement.classList.contains('dream-composer-tool-icon-button')).toBe(false)
   })
 
   it('renders configured multi-color sparkle images idempotently and removes them during cleanup', () => {

@@ -25,6 +25,7 @@ export interface RuntimeConversationBubbles {
   visible: boolean
   user: RuntimeConversationBubbleFrame
   codex: RuntimeConversationBubbleFrame
+  plan: RuntimeConversationBubbleFrame
 }
 
 const PRESET_SOURCE_WIDTH = 768
@@ -122,10 +123,12 @@ export function resolveConversationBubbles(conversationBubbles: ConversationBubb
   return {
     visible: conversationBubbles.visible,
     user: resolveConversationBubbleFrame(conversationBubbles.user, assets),
-    codex: resolveConversationBubbleFrame(conversationBubbles.codex, assets)
+    codex: resolveConversationBubbleFrame(conversationBubbles.codex, assets),
+    plan: resolveConversationBubbleFrame(conversationBubbles.plan, assets)
   }
 }
 
-export function conversationBubbleRolePurpose(role: ConversationBubbleRole): 'conversationUserBubble' | 'conversationCodexBubble' {
-  return role === 'user' ? 'conversationUserBubble' : 'conversationCodexBubble'
+export function conversationBubbleRolePurpose(role: ConversationBubbleRole): 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble' {
+  if (role === 'user') return 'conversationUserBubble'
+  return role === 'codex' ? 'conversationCodexBubble' : 'conversationPlanBubble'
 }

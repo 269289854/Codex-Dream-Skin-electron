@@ -71,7 +71,7 @@ export interface OperationProgress {
   message: string
 }
 
-export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'accountMenuBackground' | 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble'
+export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'accountMenuBackground' | 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble'
 export type VideoMediaRole = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground'
 export type AssetPurpose = MediaAssetPurpose | 'icon' | 'font'
 export type MediaSelectionKind = 'image' | 'gif' | 'video'
@@ -120,7 +120,7 @@ export interface StudioApi {
     compile: (id: string) => Promise<CompiledTheme>
   }
   assets: {
-    selectImage: (themeId: string, purpose: Exclude<MediaAssetPurpose, 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble'>) => Promise<ImportedAsset | null>
+    selectImage: (themeId: string, purpose: Exclude<MediaAssetPurpose, 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble'>) => Promise<ImportedAsset | null>
     selectMedia: (themeId: string, purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => Promise<ImportedMediaAsset | null>
     getPreviewUrl: (themeId: string, asset: string) => Promise<string>
     inspectVideo: (themeId: string, asset: string) => Promise<VideoAssetInspection>

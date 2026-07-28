@@ -29,6 +29,10 @@ describe('runtime appearance compilation', () => {
       center: { x: .25, y: .75 },
       stops: [{ color: '#123456', position: 0 }, { color: '#abcdef', position: 1 }]
     }
+    profile.appearance.colors.conversationPlanText = '#203040'
+    profile.appearance.colors.conversationPlanLink = '#405060'
+    profile.appearance.paints.conversationPlanMessage = { kind: 'solid', color: '#f1f2f3' }
+    profile.appearance.paints.conversationPlanMessageHover = { kind: 'solid', color: '#e1e2e3' }
     profile.appearance.colors.conversationToolText = '#102030'
     profile.appearance.colors.conversationToolMutedText = '#607080'
     profile.appearance.paints.conversationToolBackground = { kind: 'solid', color: '#f5f7f9' }
@@ -40,6 +44,10 @@ describe('runtime appearance compilation', () => {
     expect(variables['--dream-sidebar-task-row-selected']).toBe('linear-gradient(90deg, #102030 0%, #f0d0e0 100%)')
     expect(variables['--dream-canvas']).toBe('linear-gradient(120deg, #fff 0%, rgb(10 20 30 / .5) 100%)')
     expect(variables['--dream-conversation-user-message']).toBe('radial-gradient(circle at 25% 75%, #123456 0%, #abcdef 100%)')
+    expect(variables['--dream-conversation-plan-text']).toBe('#203040')
+    expect(variables['--dream-conversation-plan-link']).toBe('#405060')
+    expect(variables['--dream-conversation-plan-message']).toBe('#f1f2f3')
+    expect(variables['--dream-conversation-plan-message-hover']).toBe('#e1e2e3')
     expect(variables['--dream-conversation-tool-text']).toBe('#102030')
     expect(variables['--dream-conversation-tool-muted-text']).toBe('#607080')
     expect(variables['--dream-conversation-tool-background']).toBe('#f5f7f9')
@@ -86,6 +94,7 @@ describe('runtime appearance compilation', () => {
     expect(css).toMatch(/\.dream-project-proxy\s*\{[^}]*font-family:\s*inherit;/)
     expect(css).toContain('.dream-conversation-user-bubble')
     expect(css).toContain('.dream-conversation-codex-bubble')
+    expect(css).toContain('.dream-conversation-plan-bubble')
     expect(css).toContain('.dream-conversation-tool-bubble')
     const toolBubbleRule = css.match(/html\.codex-dream-skin \.dream-conversation-tool-bubble\s*\{([^}]*)\}/)?.[1]
     const toolMutedRule = css.match(/html\.codex-dream-skin \.dream-conversation-tool-bubble :is\(\[class~="group\/output"\][^}]+\{([^}]*)\}/)?.[1]
