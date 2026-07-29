@@ -5,7 +5,7 @@ import {
   GitBranch, Home, Image, Laptop, LogOut, MessageSquare, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
-import type { AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
+import type { AppInfo, AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
 import { ACCOUNT_MENU_ITEMS, buildAccountMenuBackgroundStyle } from '../../shared/account-menu'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
@@ -38,6 +38,7 @@ import { VideoThumbnail } from './VideoThumbnail'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
 import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
 import { BrandSignatureControls } from './BrandSignatureControls'
+import { studioPlatformLabel } from './platform-ui'
 import {
   ICON_PREVIEW_TARGETS,
   findPreviewTarget,
@@ -78,6 +79,7 @@ export function App(): React.JSX.Element {
   const [runtimeBusy, setRuntimeBusy] = useState(false)
   const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
   const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null)
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [appUpdateActionError, setAppUpdateActionError] = useState<string | null>(null)
   const [appUpdateCheckBusy, setAppUpdateCheckBusy] = useState(false)
   const [draggingPlacement, setDraggingPlacement] = useState(false)
@@ -100,6 +102,12 @@ export function App(): React.JSX.Element {
   const historyGroupRef = useRef<string | null>(null)
   const dragCounterRef = useRef(0)
   const loadedThemeIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void window.studio.app.getInfo().then((info) => { if (active) setAppInfo(info) })
+    return () => { active = false }
+  }, [])
 
   const loadTheme = useCallback(async (id: string) => {
     loadedThemeIdRef.current = id
@@ -838,6 +846,7 @@ export function App(): React.JSX.Element {
   return (
     <main
       className="studio-shell"
+      data-platform={appInfo?.platform ?? 'unknown'}
       onDragEnter={(event) => {
         if (!event.dataTransfer.types.includes('Files')) return
         event.preventDefault()
@@ -859,7 +868,7 @@ export function App(): React.JSX.Element {
       <header className="titlebar">
         <span className="brand-mark"><Sparkles size={16} /></span>
         <strong>Codex Dream Skin Studio</strong>
-        <span className="title-status">Windows Theme Editor</span>
+        <span className="title-status">{studioPlatformLabel(appInfo?.platform ?? null)}</span>
         {updateVisible && <div className="app-update-notice" role="status" aria-live="polite" aria-atomic="true">
           <span className="app-update-dot" aria-hidden="true" />
           <span className="app-update-message">{updateMessage}</span>

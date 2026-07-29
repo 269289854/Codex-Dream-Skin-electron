@@ -314,6 +314,7 @@ describe('Studio preview editing interaction', () => {
   }
 
   it('always shows the update entry and disables checks outside installed builds', async () => {
+    expect(container.querySelector('.title-status')?.textContent).toBe('Windows Theme Editor')
     await emitAppUpdate({ phase: 'disabled', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: null })
 
     const panel = openRuntimeInspector()

@@ -5,6 +5,7 @@ button, input, select { font: inherit; color: inherit; letter-spacing: 0; }
 button { cursor: pointer; }
 .studio-shell { height: 100vh; display: grid; grid-template-rows: 42px minmax(0, 1fr); }
 .titlebar { -webkit-app-region: drag; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 150px 0 16px; border-bottom: 1px solid #cbdadd; background: #eef4f5; }
+.studio-shell[data-platform="darwin"] .titlebar { padding-right: 16px; padding-left: 82px; }
 .brand-mark { flex: 0 0 auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; color: #fff; background: #159ca3; }
 .titlebar > strong { flex: 0 1 auto; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }.title-status { flex: 0 0 auto; margin-left: auto; color: #718b90; font-size: 10px; }
 .app-update-notice { -webkit-app-region: no-drag; min-width: 0; max-width: 430px; height: 30px; display: flex; align-items: center; gap: 7px; padding: 3px 4px 3px 9px; border: 1px solid #e4b5ba; border-radius: 5px; color: #8f2936; background: #fff6f6; font-size: 10px; }

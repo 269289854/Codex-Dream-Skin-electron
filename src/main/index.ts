@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, protocol, type NativeImage, type OpenDialogOptions } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, protocol, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage, type OpenDialogOptions } from 'electron'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
@@ -69,6 +69,51 @@ function updateTray(): void {
     tray.destroy()
     tray = null
   }
+}
+
+function configureApplicationMenu(): void {
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null)
+    return
+  }
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about', label: `关于 ${app.name}` },
+        { type: 'separator' },
+        { role: 'services', label: '服务' },
+        { type: 'separator' },
+        { role: 'hide', label: `隐藏 ${app.name}` },
+        { role: 'hideOthers', label: '隐藏其他应用' },
+        { role: 'unhide', label: '全部显示' },
+        { type: 'separator' },
+        { role: 'quit', label: `退出 ${app.name}` }
+      ]
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo', label: '撤销' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪切' },
+        { role: 'copy', label: '复制' },
+        { role: 'paste', label: '粘贴' },
+        { role: 'selectAll', label: '全选' }
+      ]
+    },
+    {
+      label: '窗口',
+      submenu: [
+        { role: 'minimize', label: '最小化' },
+        { role: 'zoom', label: '缩放' },
+        { type: 'separator' },
+        { role: 'front', label: '前置全部窗口' }
+      ]
+    }
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 function registerIpc(): void {
@@ -260,7 +305,7 @@ function registerIpc(): void {
 }
 
 function createWindow(): void {
-  mainWindow = new BrowserWindow({
+  const windowOptions: BrowserWindowConstructorOptions = {
     width: 1480,
     height: 920,
     minWidth: 1120,
@@ -268,19 +313,24 @@ function createWindow(): void {
     show: false,
     icon: appIconPath || undefined,
     backgroundColor: '#eef4f5',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#eef4f5',
-      symbolColor: '#17414a',
-      height: 42
-    },
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 13 } }
+      : {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: {
+            color: '#eef4f5',
+            symbolColor: '#17414a',
+            height: 42
+          }
+        }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
     }
-  })
+  }
+  mainWindow = new BrowserWindow(windowOptions)
 
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('close', (event) => {
@@ -316,11 +366,12 @@ if (!hasSingleInstanceLock) {
     const platformResourcesRoot = app.isPackaged
       ? join(process.resourcesPath, process.platform === 'win32' ? 'windows' : 'macos')
       : join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'windows' : 'macos')
-    appIconPath = process.platform === 'win32' ? join(platformResourcesRoot, 'codex-dream-skin.ico') : ''
+    appIconPath = join(platformResourcesRoot, process.platform === 'win32' ? 'codex-dream-skin.ico' : 'codex-dream-skin-trayTemplate.png')
     const customIcon = nativeImage.createFromPath(appIconPath)
     trayIcon = customIcon.isEmpty()
       ? await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
       : customIcon.resize({ width: 16, height: 16 })
+    if (process.platform === 'darwin') trayIcon?.setTemplateImage(true)
     if (process.platform === 'win32') app.setAppUserModelId('com.codexdreamskin.studio')
     const studioRoot = process.platform === 'win32'
       ? join(process.env.LOCALAPPDATA ?? app.getPath('appData'), 'CodexDreamSkinStudio')
@@ -348,6 +399,7 @@ if (!hasSingleInstanceLock) {
       }
     )
     registerIpc()
+    configureApplicationMenu()
     createWindow()
     appUpdateService.start()
     void codexService.resume()
