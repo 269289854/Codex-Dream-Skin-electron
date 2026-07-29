@@ -508,7 +508,10 @@
       if (record.iconClass === null) record.iconNode.removeAttribute("class");
       else record.iconNode.setAttribute("class", record.iconClass);
     }
-    for (const className of record.classes) (record.row || button).classList.remove(className);
+    for (const className of record.classes) {
+      record.row?.classList.remove(className);
+      button.classList.remove(className);
+    }
     sidebarNavRestorers.delete(button);
   };
   const ensureSidebarNavigation = () => {
@@ -544,10 +547,11 @@
         renderSlot(iconNode, item.iconSlot, "✦");
       }
       const classes = [`dream-sidebar-nav-${item.id}`, `dream-sidebar-nav-${item.id}-selected`];
-      row.classList.add(classes[0]);
+      if (row !== action) row.classList.remove(...classes);
+      action.classList.add(classes[0]);
       if (item.id === "newTask") row.classList.add("dream-sidebar-new-task-row");
       const selected = isSidebarNavSelected(row) || [...row.querySelectorAll("*")].some(isSidebarNavSelected);
-      row.classList.toggle(classes[1], selected);
+      action.classList.toggle(classes[1], selected);
       if (item.id === "newTask") row.classList.toggle("dream-sidebar-new-task-row-selected", selected);
     }
     document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => {

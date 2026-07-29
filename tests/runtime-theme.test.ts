@@ -207,17 +207,15 @@ describe('runtime appearance compilation', () => {
     expect(css).toMatch(/\.dream-conversation-background-color,\s*html\.codex-dream-skin \.dream-conversation-background-media\s*\{[^}]*inset:\s*0 !important;[^}]*width:\s*100% !important;[^}]*height:\s*100% !important;/)
   })
 
-  it('keeps native sidebar navigation items rounded in every state', async () => {
+  it('keeps grouped new-task actions visually separate in every state', async () => {
     const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
     expect(css).toMatch(/aside\.app-shell-left-panel nav > :is\(a, button\)\s*\{[^}]*border-radius:\s*10px !important;/)
     expect(css).toMatch(/:is\(a, button\)\[aria-current="page"\][^}]*\{[^}]*border-radius:\s*10px !important;/)
-    expect(css).toMatch(/nav \.dream-sidebar-new-task-row\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item\) !important;/)
-    expect(css).not.toMatch(/nav \.dream-sidebar-new-task-row\s*\{[^}]*min-height:\s*40px !important;/)
-    expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
-    expect(css).toMatch(/nav \.dream-sidebar-new-task-row > :is\(a, button\)\s*\{[^}]*background:\s*transparent !important;/)
-    expect(css).not.toMatch(/nav \.dream-sidebar-new-task-row > :is\(a, button\)\s*\{[^}]*min-height:\s*40px !important;/)
-    expect(css).toMatch(/nav \.dream-sidebar-new-task-row:hover\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-hover\) !important;/)
-    expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected:hover\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
+    expect(css).toMatch(/nav \.dream-sidebar-new-task-row:not\(\[data-dream-sidebar-nav\]\)\s*\{[^}]*gap:\s*4px !important;[^}]*background:\s*transparent !important;/)
+    expect(css).toMatch(/nav \.dream-sidebar-new-task-row:not\(\[data-dream-sidebar-nav\]\) > :is\(a, button\)\s*\{[^}]*border-radius:\s*10px !important;/)
+    expect(css).not.toMatch(/nav \.dream-sidebar-new-task-row:not\(\[data-dream-sidebar-nav\]\) > :is\(a, button\)\s*\{[^}]*background:\s*transparent !important;/)
+    expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected:not\(\[data-dream-sidebar-nav\]\) \[data-dream-sidebar-nav="newTask"\]\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
+    expect(css).toMatch(/nav \.dream-sidebar-new-task-row-selected:not\(\[data-dream-sidebar-nav\]\) \[data-dream-sidebar-nav="newTask"\]:hover\s*\{[^}]*background:\s*var\(--dream-sidebar-nav-item-selected\) !important;/)
     expect(css).toMatch(/nav \.dream-sidebar-nav-icon\s*\{[^}]*width:\s*18px !important;[^}]*font-size:\s*18px !important;/)
     expect(css).toMatch(/\.dream-sidebar-task-row-selected[\s\S]*background:\s*var\(--dream-sidebar-task-row-selected\) !important;/)
     expect(css).toMatch(/\.dream-sidebar-task-row-selected[\s\S]*color:\s*var\(--dream-sidebar-task-selected-text\) !important;/)

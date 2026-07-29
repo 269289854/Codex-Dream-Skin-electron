@@ -139,48 +139,40 @@ html.codex-dream-skin aside.app-shell-left-panel :is(.dream-sidebar-projects-tit
   color: currentColor !important;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row {
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row:not([data-dream-sidebar-nav]) {
   width: 100% !important;
   display: flex !important;
   align-items: stretch !important;
-  overflow: hidden !important;
-  border: 0 !important;
-  border-radius: 10px !important;
-  background: var(--dream-sidebar-nav-item) !important;
-  color: var(--dream-sidebar-nav-text) !important;
-}
-
-html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row > :is(a, button) {
+  gap: 4px !important;
+  overflow: visible !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
-  color: inherit !important;
   box-shadow: none !important;
+  transform: none !important;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row > :is(a, button):first-child {
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row:not([data-dream-sidebar-nav]) > :is(a, button) {
+  border-radius: 10px !important;
+  overflow: hidden !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row:not([data-dream-sidebar-nav]) > :is(a, button):first-child {
   flex: 1 1 auto !important;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row:hover {
-  background: var(--dream-sidebar-nav-item-hover) !important;
-  color: var(--dream-sidebar-nav-hover-text) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dream-sidebar-border) 54%, transparent) !important;
-  transform: translateX(1px);
-}
-
-html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row-selected {
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row-selected:not([data-dream-sidebar-nav]) [data-dream-sidebar-nav="newTask"] {
   border: 1px solid var(--dream-sidebar-border) !important;
+  border-radius: 10px !important;
   background: var(--dream-sidebar-nav-item-selected) !important;
-  color: var(--dream-sidebar-nav-selected-text) !important;
   box-shadow: 0 4px 15px color-mix(in srgb, var(--dream-sidebar-border) 24%, transparent) !important;
+  transform: none !important;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row-selected:hover {
+html.codex-dream-skin aside.app-shell-left-panel nav .dream-sidebar-new-task-row-selected:not([data-dream-sidebar-nav]) [data-dream-sidebar-nav="newTask"]:hover {
   background: var(--dream-sidebar-nav-item-selected) !important;
-  color: var(--dream-sidebar-nav-selected-text) !important;
   box-shadow: 0 4px 15px color-mix(in srgb, var(--dream-sidebar-border) 24%, transparent) !important;
-  transform: none;
+  transform: none !important;
 }
 
 html.codex-dream-skin aside.app-shell-left-panel nav :is(.dream-sidebar-nav-newTask, .dream-sidebar-nav-pullRequests, .dream-sidebar-nav-sites, .dream-sidebar-nav-scheduled, .dream-sidebar-nav-plugins) {
