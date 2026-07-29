@@ -1,15 +1,61 @@
-# Windows 验收结果
+# 平台验收结果
 
-## 验收环境
+## macOS Universal 验收
+
+### 验收环境
+
+- 日期：2026-07-29。
+- 系统：macOS 26.5.2，Apple Silicon arm64。
+- 官方 Codex：`/Applications/ChatGPT.app`，版本 `26.721.81911`。
+- 官方身份：bundle ID `com.openai.codex`，OpenAI Team ID `2DC432GLL2`。
+- Studio：`1.0.8`，未签名 Universal 目录包、DMG 和 ZIP。
+
+### 自动检查
+
+以下检查通过：
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm run package:mac:dir
+npm run package:mac
+git diff --check
+```
+
+自动测试覆盖 macOS 应用签名解析、候选过滤、进程身份、端口所有权、严格 UTF-8、嵌套 TOML 保留、原子回滚、会话 v1→v2、平台不匹配、窗口菜单、更新禁用、跨平台分享和打包契约。`.cdstheme` 回归确认包内只使用 `/` 路径，拒绝反斜杠、盘符、绝对路径和路径穿越，并且主题 JSON 不包含源数据根目录。
+
+`tests/windows-port-selection.test.ts` 中 4 项 PowerShell 集成测试只在 Windows 执行，在本次 macOS `npm test` 中明确标记为跳过；`npm run test:config` 同样留待 Windows x64 环境执行，不将缺少 PowerShell 记作通过。
+
+`package:mac:dir` 和 `package:mac` 的产物验证脚本确认：Studio 主程序与内置 FFmpeg 均包含 `x86_64 arm64`；Sharp 与 libvips 同时包含各自正确的 x64/arm64 原生包；DMG、ZIP 可以解包；包内含共享资源和 macOS 资源，不含 Windows 资源；最低系统版本为 macOS 12.0。
+
+使用隔离的 HOME 和 Electron 用户数据目录启动打包后的 Universal 应用，通过仅监听本机的临时 CDP 端点将原生窗口调整为 `1120 × 720`。实测外框、内容视口和文档尺寸均为 `1120 × 720`，没有横向溢出；人工检查截图未发现控件重叠或失效，并确认只包含仓库公开名称和虚构示例数据。截图保留在忽略目录中检查后删除，未提交到仓库。
+
+### 真实官方应用检查
+
+- 只读检测成功找到 `/Applications/ChatGPT.app`，并验证 bundle ID、Team ID、签名、主可执行文件、真实路径、版本和当前运行状态。
+- 当前官方 Codex 正在承载本次开发任务。为避免中断任务，没有执行真实停止、带调试参数重启、CDP 注入、配置写入或恢复重启。
+- 因未建立真实调试会话，本轮没有读取官方 Codex 的实时 DOM/CDP 目标；共享注入逻辑保持现状，并继续由 Windows DOM、载荷和 CodexService 回归测试覆盖。
+
+### 已知限制
+
+- macOS 构建未签名、未公证，首次启动需要 Finder 右键“打开”或在“隐私与安全性”中确认；不建议全局关闭 Gatekeeper。
+- macOS 自动更新暂不可用，需要手动下载新版本。
+- 真实官方 Codex 的启动、停止、注入、会话恢复和配置作用域恢复仍需在不承载活动任务的 macOS 环境完成破坏性验收。
+- Linux、Apple 开发者签名和公证不在首版范围内。
+
+## Windows 历史验收
+
+### 验收环境
 
 - 日期：2026-07-17。
 - 系统：Windows x64。
 - Codex：Microsoft Store `OpenAI.Codex_26.715.2236.0_x64__2p2nqsd0c76g0`。
 - Studio：`0.1.0` Windows x64 unpacked 和 NSIS 构建。
 
-## 自动检查
+### 自动与真实验收
 
-以下命令均通过：
+当时以下命令均通过：
 
 ```powershell
 npm run typecheck
@@ -18,23 +64,9 @@ npm run test:config
 npm run package:win
 ```
 
-Vitest 共运行 5 个测试文件、8 项核心测试，覆盖主题配置和编译、素材访问边界、围栏几何、CDP 安全及 preload 载荷。PowerShell 配置测试额外覆盖中文路径、严格 UTF-8、原子安装/恢复，以及 `[desktop.open-in-target-preferences]` 和 `[desktop.open-in-target-preferences.perPath]` 子表的逐字节保留。
-
-## 真实 Codex 验收
-
-- 从系统文件选择器导入 `dream-reference.png` 成功，四点围栏、裁切预览、拖动、宽度和 `3` 度旋转均正常。
 - GUI 检测到 Store Codex `26.715.2236.0`，以回环地址 `127.0.0.1:9335` 启动并向 2 个 `app://` 页面注入主题。
-- “验证主题”和“重新注入”均通过，两个页面持续保有主题标记。
-- 当前宽屏视口 `1346 x 902` 下，真实首页包含 Hero、4 张功能卡片、输入区和独立拍立得。
-- CDP 模拟 `1280 x 820` 时，Hero 为 `930 x 390`，4 张卡片等宽排列，页面无横向溢出；拍立得位于右下且不遮挡输入区。
-- 任务页面保留主题颜色和装饰，但按设计隐藏首页 Hero、卡片和拍立得，不改变任务内容结构。
-- 活动主题下关闭窗口后 Studio 进程继续驻留；强制结束 Studio 模拟异常退出后，重新启动能够从 `session.json` 自动恢复为 `active`，重新连接 2 个 Codex 页面。
-- “恢复并重启 Codex”完成后，`9335` 调试端口关闭，主题外观键被清除，配置备份被归档。
-- 恢复前后 `[desktop]`、`[desktop.open-in-target-preferences]`、`[desktop.open-in-target-preferences.perPath]` 及中文路径内容一致。仅 Codex/Computer Use 自身运行期间更新的时间戳和临时管道值发生变化。
+- “验证主题”和“重新注入”通过；活动会话在 Studio 异常退出并重启后恢复。
+- “恢复并重启 Codex”关闭调试端口、清除主题外观键并归档配置备份。
+- 恢复前后 `[desktop]` 及其嵌套子表和中文路径内容保持一致。
 
-## 已知限制
-
-- 第一版仅支持 Windows x64 和 Microsoft Store Codex。
-- 拍立得区域由用户选择四个角点，不提供自动图像识别。
-- 不包含自动更新、在线主题商店或 macOS/Linux 支持。
-- 当前安装包未配置发行者代码签名证书，Windows SmartScreen 可能显示未知发布者提示。
+当前 macOS 主机没有 PowerShell、Wine 或 NSIS，因此本次 macOS 支持变更没有重新执行 `npm run test:config`、Windows x64 安装包或 Windows 自动更新实机回归；这些项目必须在 Windows x64 环境复验，不能视为本轮已通过。

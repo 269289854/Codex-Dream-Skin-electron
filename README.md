@@ -1,6 +1,6 @@
 # Codex Dream Skin Studio
 
-Codex Dream Skin Studio 是一款仅支持 Windows x64 的 Codex 桌面主题编辑器。它面向 Microsoft Store 安装的官方 Codex 桌面应用，提供本地主题制作、实时预览、主题分享，以及通过受验证的本机连接将主题应用到 Codex 的完整工作流。
+Codex Dream Skin Studio 是一款支持 Windows x64 与 macOS 12+ Universal（Intel + Apple Silicon）的 Codex 桌面主题编辑器。它面向经过平台签名身份验证的官方 Codex 桌面应用，提供本地主题制作、实时预览、跨平台主题分享，以及通过受验证的本机连接将主题应用到 Codex 的完整工作流。
 
 本项目使用 Electron、React、Vite 和 TypeScript 构建，是从 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 迁移并继续开发的独立开源项目，不是 OpenAI 官方产品，也不修改 Codex 安装包本身。
 
@@ -56,7 +56,7 @@ Codex Dream Skin Studio 是一款仅支持 Windows x64 的 Codex 桌面主题编
 
 “运行设置”提供完整的应用与恢复流程：
 
-- **检测 Codex**：检查 Microsoft Store 安装身份、版本和当前运行状态。
+- **检测 Codex**：检查 Windows Microsoft Store 身份，或 macOS 的 bundle ID、OpenAI Team ID、签名、版本和当前运行状态。
 - **安装配置**：先备份 Codex 配置，再设置启用本地主题所需的浅色基础配置。
 - **启动并应用**：必要时重启 Codex，开启仅监听回环地址的 CDP 端点，并注入当前主题。
 - **重新注入**：将保存后的主题重新编译并刷新到已连接的 Codex 页面。
@@ -72,6 +72,8 @@ Codex Dream Skin Studio 是一款仅支持 Windows x64 的 Codex 桌面主题编
 - 将当前预览中的主题（包括尚未保存的修改）导出为单个 `.cdstheme` 文件。
 - 导出包是自包含的 ZIP64 文件，包含主题配置、实际引用的图片、GIF、视频、图标和字体，接收方不需要原始素材。
 - 可以通过文件选择器导入，也可以将 `.cdstheme` 文件拖入 Studio 窗口；导入会创建新的主题，不会覆盖已有主题。
+- Windows 与 macOS 使用同一主题 schema 和分享格式；任一平台导出的 `.cdstheme` 都可以在另一平台导入。
+- 分享包内部固定使用 `/` 路径，不写入盘符、反斜杠、本机数据根目录或其他绝对路径。
 - 导入前会校验文件清单、路径、主题结构、素材大小、媒体头部和 SHA-256，并拒绝脚本或可执行文件。
 - 导入或复制失败时会清理临时数据并保持当前主题不变。
 
@@ -79,27 +81,35 @@ Codex Dream Skin Studio 是一款仅支持 Windows x64 的 Codex 桌面主题编
 
 ### 使用已发布安装包
 
-环境要求：
+支持环境：
 
-- Windows 10 或 Windows 11 x64。
-- Microsoft Store 安装的官方 Codex 桌面应用。
+- Windows 10/11 x64，以及 Microsoft Store 安装的官方 Codex 桌面应用。
+- macOS 12 或更新版本，支持 Intel 与 Apple Silicon；Codex 必须通过 `com.openai.codex` bundle ID 和 OpenAI Team ID `2DC432GLL2` 验证。
 - 安装包不要求单独安装 Node.js。
 
-使用步骤：
+Windows 安装：
 
 1. 安装并打开 Microsoft Store 版本 Codex。
 2. 安装并启动 `Codex Dream Skin Studio Setup.exe`。
-3. 在“我的主题”中创建或选择主题，在“视觉设计”中导入主视觉和拍立得素材。
-4. 调整颜色、字体、图标、首页文案和粒子装饰，并在中间预览中检查首页和会话页面。
-5. 打开“运行设置”，点击“检测 Codex”，再点击“启动并应用”。
-6. 保存主题后，使用“重新注入”将最新修改应用到运行中的 Codex。
-7. 不再使用主题时，点击“恢复并重启 Codex”还原原始配置。
 
-详细的媒体限制、拍立得围栏、分享文件、故障排查和数据目录说明见 [Windows 使用指南](docs/USER_GUIDE.md)。
+macOS 安装：
+
+1. 从 DMG 将 `Codex Dream Skin Studio.app` 拖入“应用程序”，或解压 ZIP 后移动到“应用程序”。
+2. 首次打开未签名构建时，在 Finder 中右键应用并选择“打开”；如果仍被阻止，在“系统设置 → 隐私与安全性”中确认“仍要打开”。
+3. 不要全局关闭 Gatekeeper，也不需要修改官方 Codex 应用的隔离属性、签名或应用包。
+
+两个平台的使用步骤相同：创建或选择主题，导入素材并调整外观；打开“运行设置”检测 Codex，再执行“启动并应用”；保存修改后使用“重新注入”，停用主题时使用“恢复并重启 Codex”。
+
+详细的媒体限制、拍立得围栏、跨平台分享、故障排查和数据目录说明见 [使用指南](docs/USER_GUIDE.md)。
 
 ## 数据与安全
 
-应用数据默认保存在 `%LOCALAPPDATA%\\CodexDreamSkinStudio`：
+Studio 数据目录：
+
+- Windows：`%LOCALAPPDATA%\\CodexDreamSkinStudio`。
+- macOS：`~/Library/Application Support/CodexDreamSkinStudio`。
+
+目录内容：
 
 - `themes/<id>/theme.json`：主题配置。
 - `themes/<id>/assets/`：主题引用的图片、视频、图标和字体。
@@ -108,26 +118,26 @@ Codex Dream Skin Studio 是一款仅支持 Windows x64 的 Codex 桌面主题编
 
 项目坚持以下边界：
 
-- 修改 Codex 配置前创建备份；配置写入使用严格 UTF-8、临时文件、同步落盘和原子替换，失败时保留可恢复内容。
-- 只连接经过身份、进程归属、浏览器 ID 和页面 ID 校验的 Microsoft Store Codex 实例，CDP 只允许回环地址（`127.0.0.1`、`localhost` 或 `::1`）。
-- 不修改 `WindowsApps` 中的安装文件、`app.asar`、官方签名或其他 Codex 程序文件。
+- 修改 Codex 配置前创建首次备份；配置写入使用严格 UTF-8、并发修改检测、同目录临时文件、同步落盘、原子替换和失败回滚。macOS 只修改 `~/.codex/config.toml` 中三个外观键，并逐字节保留无关内容、换行和嵌套表。
+- 只连接经过安装身份、真实路径、进程归属、启动时间、端口所有权、浏览器 ID 和 `app://` 页面目标校验的官方 Codex 实例；macOS CDP 仅允许 `127.0.0.1`。
+- Windows 不修改 `WindowsApps`；macOS 不修改 Codex `.app`、`app.asar`、签名文件或其他官方程序文件。
 - 渲染进程不能直接访问 Node.js、PowerShell、文件系统或任意 CDP 地址；导入素材会检查路径穿越、文件类型、文件头和大小限制。
 - Studio 和渲染进程不会获取视频的真实磁盘路径，运行时媒体通过已验证的主题文件绑定生成 `blob:` 地址，也不会关闭 Codex CSP。
 - 项目中的预览、测试、文档和截图只使用虚构示例数据，不同步开发者本机的项目、任务、账号或团队信息。详见 [隐私与示例数据约束](docs/PRIVACY.md)。
 
 ## 支持范围与限制
 
-- 目前仅支持 Windows 10/11 x64 和 Microsoft Store 版 Codex。
-- 不支持 macOS、Linux、其他 Codex 安装来源或在线主题商店。
-- 不包含自动更新功能。
+- 支持 Windows 10/11 x64 与 macOS 12+ Universal；Linux 不在首版范围内。
+- Windows 只支持 Microsoft Store 官方 Codex；macOS 只支持签名验证通过的 `com.openai.codex`，应用显示名可以不同。
+- Windows 正式安装版保留自动更新；macOS 构建暂不启用自动更新，需要手动下载新版本。
+- macOS DMG/ZIP 与 Windows 安装包当前均未配置发行者签名；请只从可信发布页下载，不要全局关闭 Gatekeeper 或 SmartScreen。
 - 拍立得区域需要用户手动选择四个角点，不提供自动图像识别。
 - 视频导入要求最长边不超过 4096px；GIF 和图片有单文件大小限制，视频导入、复制和分享时还需要足够的本地磁盘空间。
-- 当前安装包未配置发行者代码签名证书，Windows SmartScreen 可能显示未知发布者提示。
 
 ## 文档
 
-- [Windows 使用指南](docs/USER_GUIDE.md)
-- [Windows 验收结果](docs/QA_RESULTS.md)
+- [使用指南](docs/USER_GUIDE.md)
+- [平台验收结果](docs/QA_RESULTS.md)
 - [隐私与示例数据约束](docs/PRIVACY.md)
 - [侧边栏预览对齐说明](docs/SIDEBAR_PREVIEW_ALIGNMENT.md)
 - [拍立得拖拽与保存](docs/POLAROID_DRAGGING.md)
@@ -157,6 +167,15 @@ npm run build
 npm run package:dir
 npm run package:win
 ```
+
+在 macOS 上生成 Universal 目录包，或未签名的 Universal DMG 和 ZIP：
+
+```bash
+npm run package:mac:dir
+npm run package:mac
+```
+
+macOS 打包会为 x64/arm64 分别准备锁定版本的 FFmpeg，并同时携带 Sharp 的两套官方原生包，再由 Universal 合并阶段生成双架构主程序与 FFmpeg。`npm run test:config` 依赖 PowerShell，应在 Windows x64 环境执行。
 
 打包结果位于 `release/`。该目录是生成产物，不应手工修改或提交。
 
