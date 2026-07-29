@@ -45,10 +45,10 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
   }
 
   async start(preferredPort: number, restartExisting: boolean): Promise<CodexStartResult> {
+    const detection = await this.detect()
     const argumentsList = ['-Port', String(preferredPort)]
     if (restartExisting) argumentsList.push('-RestartExisting')
     const result = await this.bridge<WindowsStartResult>('Start', argumentsList, 65_000)
-    const detection = await this.detect()
     return this.toStartResult(result, detection.installationId)
   }
 
