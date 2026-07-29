@@ -71,8 +71,8 @@
     ],
     "extraResources": [
       {
-        "from": "resources/windows",
-        "to": "windows",
+        "from": "resources/shared",
+        "to": "shared",
         "filter": [
           "**/*"
         ]
@@ -80,6 +80,15 @@
     ],
     "win": {
       "icon": "resources/windows/codex-dream-skin.ico",
+      "extraResources": [
+        {
+          "from": "resources/windows",
+          "to": "windows",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ],
       "target": [
         {
           "target": "nsis",

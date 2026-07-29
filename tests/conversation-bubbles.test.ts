@@ -13,7 +13,7 @@ import {
 } from '../src/shared/theme'
 
 const themeId = '11111111-1111-4111-8111-111111111111'
-const presetRoot = join(process.cwd(), 'resources', 'windows', 'conversation-bubbles')
+const presetRoot = join(process.cwd(), 'resources', 'shared', 'conversation-bubbles')
 const expectedPresetSlices = {
   'daisy-heart': [65, 25, 28, 25],
   'calico-cat': [58, 25, 27, 25],
@@ -191,7 +191,7 @@ describe('conversation bubble frames', () => {
 
   it('keeps Studio and runtime CSS on the same undistorted frame and inner-fill primitives', async () => {
     const [runtimeCss, studioCss] = await Promise.all([
-      readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8'),
+      readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8'),
       readFile(join(process.cwd(), 'src', 'renderer', 'src', 'styles.css'), 'utf8')
     ])
 

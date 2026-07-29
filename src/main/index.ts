@@ -9,6 +9,7 @@ import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
 import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
 import { createStudioInstanceData, resolveStudioInstanceAction } from './app-lifecycle'
+import { WindowsCodexDriver } from './windows-codex-driver'
 import { captureIpcResult } from '../shared/ipc-result'
 import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
 import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
@@ -310,21 +311,23 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     if (process.platform !== 'win32') throw new Error('Codex Dream Skin Studio only supports Windows.')
     const localAppData = process.env.LOCALAPPDATA ?? app.getPath('userData')
-    const resourcesRoot = app.isPackaged ? join(process.resourcesPath, 'windows') : join(app.getAppPath(), 'resources', 'windows')
-    appIconPath = join(resourcesRoot, 'codex-dream-skin.ico')
+    const sharedResourcesRoot = app.isPackaged ? join(process.resourcesPath, 'shared') : join(app.getAppPath(), 'resources', 'shared')
+    const windowsResourcesRoot = app.isPackaged ? join(process.resourcesPath, 'windows') : join(app.getAppPath(), 'resources', 'windows')
+    appIconPath = join(windowsResourcesRoot, 'codex-dream-skin.ico')
     const customIcon = nativeImage.createFromPath(appIconPath)
     trayIcon = customIcon.isEmpty()
       ? await app.getFileIcon(process.execPath, { size: 'small' }).catch(() => null)
       : customIcon.resize({ width: 16, height: 16 })
     app.setAppUserModelId('com.codexdreamskin.studio')
     store = new ProfileStore(join(localAppData, 'CodexDreamSkinStudio'), {
-      hero: join(resourcesRoot, 'dream-reference.png'),
-      polaroid: join(resourcesRoot, 'dream-polaroid.png'),
-      conversationBubbles: Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [preset.id, join(resourcesRoot, 'conversation-bubbles', preset.fileName)])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>
+      hero: join(sharedResourcesRoot, 'dream-reference.png'),
+      polaroid: join(sharedResourcesRoot, 'dream-polaroid.png'),
+      conversationBubbles: Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [preset.id, join(sharedResourcesRoot, 'conversation-bubbles', preset.fileName)])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>
     })
     await store.initialize()
     protocol.handle('studio-media', async (request) => handleStudioMediaRequest(request))
-    codexService = new CodexService(store, resourcesRoot, appVersion, (status) => {
+    const platformDriver = new WindowsCodexDriver(store.root, windowsResourcesRoot)
+    codexService = new CodexService(store, sharedResourcesRoot, platformDriver, appVersion, (status) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
       try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
     })

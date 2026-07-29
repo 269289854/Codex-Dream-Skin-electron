@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { CodexDetection, RuntimePhase, RuntimeStatus } from '../shared/contracts'
+import type { CodexDetection, RuntimePhase, RuntimeStatus, SupportedDesktopPlatform } from '../shared/contracts'
 import { paintToCss } from '../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../shared/conversation-overlay'
 import { iconGifPosterAssetKey } from '../shared/icon-assets'
@@ -17,12 +17,17 @@ import type { ThemeProfile } from '../shared/theme'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CdpWatcher, type CdpSnapshot } from './cdp-watcher'
-import { runPowerShell } from './powershell'
 import type { ProfileStore } from './profile-store'
 import { buildRuntimeFontCss } from './theme-fonts'
+import type { CodexPlatformDriver, CodexStartResult } from './codex-platform'
 
-interface StartResult { port: number; browserId: string; version: string }
 interface RuntimePayload { script: string; version: string }
+interface RuntimeSessionV1 { version: 1; themeId: string; port: number; browserId: string }
+interface RuntimeSessionV2 extends Omit<RuntimeSessionV1, 'version'> {
+  version: 2
+  platform: SupportedDesktopPlatform
+  installationId: string
+}
 const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
 
 export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<string, string>): string {
@@ -58,6 +63,7 @@ export class CodexService {
   constructor(
     private readonly store: ProfileStore,
     private readonly resourcesRoot: string,
+    private readonly platformDriver: CodexPlatformDriver,
     private readonly studioVersion: string,
     private readonly onStatus: (status: RuntimeStatus) => void
   ) {}
@@ -70,16 +76,16 @@ export class CodexService {
   private async resumeInternal(): Promise<void> {
     let detection: CodexDetection
     try {
-      detection = await this.bridge<CodexDetection>('Detect')
+      detection = await this.platformDriver.detect()
       this.status.codexVersion = detection.version
       this.status.backupAvailable = detection.backupAvailable
     } catch (reason) {
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
-      this.patch('error', '启动时无法检测 Microsoft Store Codex')
+      this.patch('error', '启动时无法检测官方 Codex 应用')
       return
     }
 
-    let session: { version?: number; themeId?: string; port?: number; browserId?: string }
+    let session: Partial<RuntimeSessionV1 | RuntimeSessionV2>
     try {
       session = JSON.parse(await readFile(this.sessionPath(), 'utf8')) as typeof session
     } catch (reason) {
@@ -96,14 +102,20 @@ export class CodexService {
     }
 
     try {
-      if (session.version !== 1 || !session.themeId || !session.browserId || !session.port) throw new Error('Saved runtime session is invalid.')
+      if ((session.version !== 1 && session.version !== 2) || !session.themeId || !session.browserId || !session.port) throw new Error('Saved runtime session is invalid.')
+      if (session.version === 1 && this.platformDriver.platform !== 'win32') throw new Error('Legacy runtime sessions are only supported on Windows.')
+      if (session.version === 2 && (session.platform !== detection.platform || session.installationId !== detection.installationId)) {
+        throw new Error('Saved runtime session belongs to another Codex installation.')
+      }
       await this.store.get(session.themeId)
+      const verified = await this.platformDriver.verifySession(session.port, session.browserId, detection)
       this.status.port = session.port
       this.activeThemeId = session.themeId
       this.patch('injecting', '正在恢复上次主题会话')
       const payload = await this.buildPayload(session.themeId)
       await this.writeRuntimePayload(payload.script)
       await this.replaceWatcher(session.browserId, payload)
+      if (session.version === 1) await this.writeSession(session.themeId, verified)
       this.patch('active', '已恢复上次主题会话')
     } catch (reason) {
       await rm(this.sessionPath(), { force: true })
@@ -116,9 +128,9 @@ export class CodexService {
   async detect(): Promise<CodexDetection> { return this.enqueueOperation(() => this.detectInternal()) }
 
   private async detectInternal(): Promise<CodexDetection> {
-    this.patch('detecting', '正在检测 Microsoft Store Codex')
+    this.patch('detecting', '正在检测官方 Codex 应用')
     try {
-      const detection = await this.bridge<CodexDetection>('Detect')
+      const detection = await this.platformDriver.detect()
       this.status.codexVersion = detection.version
       this.status.backupAvailable = detection.backupAvailable
       this.patch('ready', detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex')
@@ -138,7 +150,7 @@ export class CodexService {
     try {
       const payload = await this.buildPayload(themeId)
       await this.writeRuntimePayload(payload.script)
-      await this.bridge('ApplyConfig', ['-ThemePath', join(this.store.themesRoot, themeId, 'theme.json')])
+      await this.platformDriver.applyConfig(join(this.store.themesRoot, themeId, 'theme.json'))
       this.status.backupAvailable = true
       this.patch('ready', '主题配置已安装')
       return payload
@@ -153,14 +165,12 @@ export class CodexService {
     try {
       const payload = await this.installThemeInternal(themeId)
       this.patch('starting', '正在启动 Codex 本地主题会话')
-      const args = ['-Port', String(this.status.port)]
-      if (restartExisting) args.push('-RestartExisting')
-      const result = await this.bridge<StartResult>('Start', args, 65_000)
+      const result = await this.platformDriver.start(this.status.port, restartExisting)
       this.status.port = result.port
       this.status.codexVersion = result.version
       this.activeThemeId = themeId
       const snapshot = await this.replaceWatcher(result.browserId, payload)
-      await this.writeSession(themeId, result.browserId)
+      await this.writeSession(themeId, result)
       this.patch('active', `主题已注入 ${snapshot.targetCount} 个 Codex 页面`)
       return this.getStatus()
     } catch (reason) { throw this.fail(reason) }
@@ -225,8 +235,7 @@ export class CodexService {
       this.watcher = null
       this.activeThemeId = null
       await rm(this.sessionPath(), { force: true })
-      const args = restartCodex ? ['-RestartCodex'] : []
-      await this.bridge('Restore', args, 65_000)
+      await this.platformDriver.restore(restartCodex)
       this.status.backupAvailable = false
       this.patch('stopped', restartCodex ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置')
       return this.getStatus()
@@ -378,11 +387,11 @@ export class CodexService {
   private async recoverActiveSessionInternal(themeId: string): Promise<void> {
     try {
       this.patch('starting', '正在恢复 Codex 主题会话')
-      const result = await this.bridge<StartResult>('Start', ['-Port', String(this.status.port), '-RestartExisting'], 65_000)
+      const result = await this.platformDriver.start(this.status.port, true)
       const payload = await this.buildPayload(themeId)
       await this.writeRuntimePayload(payload.script)
       await this.replaceWatcher(result.browserId, payload)
-      await this.writeSession(themeId, result.browserId)
+      await this.writeSession(themeId, result)
       this.patch('active', 'Codex 主题会话已自动恢复')
     } catch (reason) {
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
@@ -393,14 +402,18 @@ export class CodexService {
   }
 
   private sessionPath(): string { return join(this.store.root, 'runtime', 'session.json') }
-  private async writeSession(themeId: string, browserId: string): Promise<void> {
+  private async writeSession(themeId: string, result: CodexStartResult): Promise<void> {
     const path = this.sessionPath()
     await mkdir(join(this.store.root, 'runtime'), { recursive: true })
-    await writeFile(path, `${JSON.stringify({ version: 1, themeId, port: this.status.port, browserId }, null, 2)}\n`, 'utf8')
-  }
-
-  private bridge<T>(action: string, extra: string[] = [], timeoutMs?: number): Promise<T> {
-    return runPowerShell<T>(join(this.resourcesRoot, 'studio-bridge.ps1'), ['-Action', action, '-StudioRoot', this.store.root, ...extra], timeoutMs)
+    const session: RuntimeSessionV2 = {
+      version: 2,
+      themeId,
+      port: result.port,
+      browserId: result.browserId,
+      platform: result.platform,
+      installationId: result.installationId
+    }
+    await writeFile(path, `${JSON.stringify(session, null, 2)}\n`, 'utf8')
   }
   private enqueueOperation<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.operationTail.then(operation)

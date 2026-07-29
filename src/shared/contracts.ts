@@ -6,6 +6,9 @@ export interface AppInfo {
   platform: NodeJS.Platform
 }
 
+export type SupportedDesktopPlatform = 'win32' | 'darwin'
+export type CodexDistribution = 'windows-store' | 'mac-app-bundle'
+
 export type AppUpdatePhase = 'disabled' | 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error'
 
 export interface AppUpdateStatus {
@@ -80,9 +83,11 @@ export type RuntimePhase = 'idle' | 'detecting' | 'ready' | 'installing' | 'star
 
 export interface CodexDetection {
   found: boolean
+  platform: SupportedDesktopPlatform
+  distribution: CodexDistribution
   version: string
   executable: string
-  packageFamilyName: string
+  installationId: string
   running: boolean
   backupAvailable: boolean
 }

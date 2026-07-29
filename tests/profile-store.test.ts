@@ -240,7 +240,7 @@ describe('ProfileStore', () => {
   it('creates the production system preset from the bundled hero and polaroid images', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-production-system-'))
     roots.push(root)
-    const resources = join(process.cwd(), 'resources', 'windows')
+    const resources = join(process.cwd(), 'resources', 'shared')
     const store = new ProfileStore(root, {
       hero: join(resources, 'dream-reference.png'),
       polaroid: join(resources, 'dream-polaroid.png')
@@ -405,7 +405,7 @@ describe('ProfileStore', () => {
     const bundled = await writeBundledSystemAssets(root)
     const conversationBubbles = Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
       preset.id,
-      join(process.cwd(), 'resources', 'windows', 'conversation-bubbles', preset.fileName)
+      join(process.cwd(), 'resources', 'shared', 'conversation-bubbles', preset.fileName)
     ])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>
     const store = new ProfileStore(root, { ...bundled, conversationBubbles })
     await store.initialize()

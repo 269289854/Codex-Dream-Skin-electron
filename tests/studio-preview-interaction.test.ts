@@ -190,7 +190,7 @@ describe('Studio preview editing interaction', () => {
       files: { getPathForFile },
       operations: { cancel: async () => undefined, subscribeProgress: () => () => undefined },
       codex: {
-        detect: async () => ({ found: true, version: 'test', executable: '', packageFamilyName: '', running: false, backupAvailable: false }),
+        detect: async () => ({ found: true, platform: 'win32', distribution: 'windows-store', version: 'test', executable: '', installationId: 'OpenAI.Codex_test', running: false, backupAvailable: false }),
         installTheme,
         start: async () => runtimeStatus,
         verify: async () => runtimeStatus,

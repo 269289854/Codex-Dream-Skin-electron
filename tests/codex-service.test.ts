@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -10,13 +10,16 @@ const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
 vi.mock('../src/main/powershell', () => ({ runPowerShell: runPowerShellMock }))
 
+import type { CodexPlatformDriver } from '../src/main/codex-platform'
 import { CodexService } from '../src/main/codex-service'
 
 const detection = {
   found: true,
+  platform: 'win32' as const,
+  distribution: 'windows-store' as const,
   version: '26.715.2305.0',
   executable: 'C:\\WindowsApps\\Codex\\app\\ChatGPT.exe',
-  packageFamilyName: 'OpenAI.Codex_test',
+  installationId: 'OpenAI.Codex_test',
   running: false,
   backupAvailable: false
 }
@@ -24,7 +27,19 @@ const detection = {
 function createService(): CodexService {
   const root = join(tmpdir(), `codex-dream-skin-missing-${process.pid}-${Date.now()}`)
   const store = { root, themesRoot: join(root, 'themes') } as never
-  return new CodexService(store, join(root, 'resources'), '1.0.5', () => undefined)
+  const driver = createDriver()
+  return new CodexService(store, join(root, 'resources'), driver, '1.0.5', () => undefined)
+}
+
+function createDriver(): CodexPlatformDriver {
+  return {
+    platform: 'win32',
+    detect: vi.fn(() => runPowerShellMock()),
+    applyConfig: vi.fn(),
+    start: vi.fn(),
+    verifySession: vi.fn(),
+    restore: vi.fn()
+  }
 }
 
 describe('CodexService operation queue', () => {
@@ -99,12 +114,12 @@ describe('CodexService operation queue', () => {
       get: vi.fn().mockResolvedValue(profile),
       compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', 'assets/window.png': 'data:image/png;base64,AA==', 'assets/account-menu.gif': 'data:image/gif;base64,AQ==', 'assets/search.gif': 'data:image/gif;base64,Ag==', [searchPosterKey]: 'data:image/png;base64,Aw==' } })
     }
-    const service = new CodexService(store as never, join(process.cwd(), 'resources', 'windows'), '1.0.5', () => undefined)
+    const service = new CodexService(store as never, join(process.cwd(), 'resources', 'shared'), createDriver(), '1.0.5', () => undefined)
     const builder = service as unknown as { buildPayload(themeId: string): Promise<{ script: string; version: string }> }
 
     const first = await builder.buildPayload(profile.id)
     const second = await builder.buildPayload(profile.id)
-    const updatedService = new CodexService(store as never, join(process.cwd(), 'resources', 'windows'), '1.0.6', () => undefined)
+    const updatedService = new CodexService(store as never, join(process.cwd(), 'resources', 'shared'), createDriver(), '1.0.6', () => undefined)
     const updatedBuilder = updatedService as unknown as { buildPayload(themeId: string): Promise<{ script: string; version: string }> }
     const updated = await updatedBuilder.buildPayload(profile.id)
     profile.decorations.sparkles.performanceMode = 'performance'
@@ -162,6 +177,56 @@ describe('CodexService operation queue', () => {
     })
     expect(watcher.verify).toHaveBeenCalledTimes(1)
     expect(watcher.inject).toHaveBeenCalledTimes(1)
+  })
+
+  it('verifies and migrates a legacy Windows session before reconnecting', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-session-v1-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const store = { root, themesRoot: join(root, 'themes'), get: vi.fn().mockResolvedValue({ id: themeId }) } as never
+    const driver = createDriver()
+    vi.mocked(driver.detect).mockResolvedValue(detection)
+    vi.mocked(driver.verifySession).mockResolvedValue({
+      port: 9335,
+      browserId: 'browser-1',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    })
+    const service = new CodexService(store, join(process.cwd(), 'resources', 'shared'), driver, '1.0.8', () => undefined)
+    ;(service as unknown as { buildPayload: () => Promise<{ script: string; version: string }> }).buildPayload = vi.fn().mockResolvedValue({ script: 'true', version: 'studio-0123456789abcdef01234567' })
+    ;(service as unknown as { replaceWatcher: () => Promise<{ connected: boolean; targetCount: number }> }).replaceWatcher = vi.fn().mockResolvedValue({ connected: true, targetCount: 1 })
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({ version: 1, themeId, port: 9335, browserId: 'browser-1' })}\n`)
+
+    await service.resume()
+
+    expect(driver.verifySession).toHaveBeenCalledWith(9335, 'browser-1', detection)
+    expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toEqual({
+      version: 2,
+      themeId,
+      port: 9335,
+      browserId: 'browser-1',
+      platform: 'win32',
+      installationId: detection.installationId
+    })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('rejects a saved session from another platform before opening CDP', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-session-platform-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const store = { root, themesRoot: join(root, 'themes'), get: vi.fn() } as never
+    const driver = createDriver()
+    vi.mocked(driver.detect).mockResolvedValue(detection)
+    const service = new CodexService(store, join(process.cwd(), 'resources', 'shared'), driver, '1.0.8', () => undefined)
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({ version: 2, themeId, port: 9335, browserId: 'browser-1', platform: 'darwin', installationId: 'com.openai.codex' })}\n`)
+
+    await service.resume()
+
+    expect(driver.verifySession).not.toHaveBeenCalled()
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
   })
 
 })

@@ -7,7 +7,7 @@ import { buildThemeStyleVariables, buildThemeVariableDeclarations } from '../src
 import { createDefaultTheme } from '../src/shared/theme'
 
 const id = '11111111-1111-4111-8111-111111111111'
-const resourcesRoot = join(process.cwd(), 'resources', 'windows')
+const resourcesRoot = join(process.cwd(), 'resources', 'shared')
 
 describe('runtime appearance compilation', () => {
   it('emits every registered token with legacy fallbacks and structured gradients', () => {

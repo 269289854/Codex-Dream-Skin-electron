@@ -5,7 +5,7 @@ import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTIONS } from '../src/shar
 
 describe('renderer injection template', () => {
   it('produces valid JavaScript with no unresolved markers', async () => {
-    const template = await readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8')
+    const template = await readFile(join(process.cwd(), 'resources', 'shared', 'renderer-inject.js'), 'utf8')
     const payload = template
       .replace('__DREAM_VERSION_JSON__', JSON.stringify('test-version'))
       .replace('__DREAM_CSS_JSON__', JSON.stringify(':root { --test: 1; }'))
@@ -36,7 +36,7 @@ describe('renderer injection template', () => {
 
   it('shares the home layout stylesheet with the Studio preview', async () => {
     const [layoutCss, rendererEntry, studio, codexService] = await Promise.all([
-      readFile(join(process.cwd(), 'resources', 'windows', 'dream-home-layout.css'), 'utf8'),
+      readFile(join(process.cwd(), 'resources', 'shared', 'dream-home-layout.css'), 'utf8'),
       readFile(join(process.cwd(), 'src', 'renderer', 'src', 'main.tsx'), 'utf8'),
       readFile(join(process.cwd(), 'src', 'renderer', 'src', 'App.tsx'), 'utf8'),
       readFile(join(process.cwd(), 'src', 'main', 'codex-service.ts'), 'utf8')
@@ -75,14 +75,14 @@ describe('renderer injection template', () => {
   })
 
   it('keeps legacy home layout rules out of the base theme', async () => {
-    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const css = await readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8')
     expect(css).not.toContain('.dream-home .dream-hero')
     expect(css).not.toContain('.dream-action-grid')
     expect(css).not.toContain('.dream-home .dream-composer')
   })
 
   it('maps native menu highlighting to hover colors instead of selected colors', async () => {
-    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const css = await readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8')
     const baseRule = css.match(/\.dream-account-menu \[data-dream-account-menu-item\]\s*\{[^}]+\}/)?.[0]
     const hoverRule = css.match(/\[data-dream-account-menu-item\]:is\(:hover, \[data-highlighted\]\)\s*\{[^}]+\}/)?.[0]
     const selectedRule = css.match(/\[data-dream-account-menu-item\]:is\(\[aria-selected="true"\], \[data-state="checked"\], \[data-state="open"\], :focus-visible\)\s*,?[\s\S]*?\{[^}]+\}/)?.[0]
@@ -95,7 +95,7 @@ describe('renderer injection template', () => {
   })
 
   it('keeps the account menu media below row states without changing menu layout', async () => {
-    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const css = await readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8')
     const mediaRule = css.match(/\.dream-account-menu > \.dream-account-menu-background\s*\{[^}]+\}/)?.[0]
     const contentRule = css.match(/\.dream-account-menu > :not\(\.dream-account-menu-background\)\s*\{[^}]+\}/)?.[0]
     expect(mediaRule).toContain('position: absolute')
@@ -108,7 +108,7 @@ describe('renderer injection template', () => {
   })
 
   it('keeps an open sidebar menu trigger fixed while its popover is anchored', async () => {
-    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const css = await readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8')
     const triggerRule = css.match(/aside\.app-shell-left-panel button\[aria-haspopup="menu"\]\[aria-expanded="true"\]\s*\{[^}]+\}/)?.[0]
     expect(triggerRule).toContain('transform: none !important')
   })
@@ -121,7 +121,7 @@ describe('renderer injection template', () => {
   })
 
   it('keeps the custom polaroid surface transparent and leaves shadow styling configurable', async () => {
-    const css = await readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8')
+    const css = await readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8')
     const rule = css.match(/\.dream-polaroid\s*\{[^}]+\}/)?.[0]
     const surfaceRule = css.match(/\.dream-polaroid-surface\s*\{[^}]+\}/)?.[0]
     const shadowRule = css.match(/\.dream-polaroid-shadow\s*\{[^}]+\}/)?.[0]

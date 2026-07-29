@@ -4,7 +4,7 @@ import { App } from './App'
 import './styles.css'
 import './particle-effects.css'
 import './bundled-fonts.css'
-import '../../../resources/windows/dream-home-layout.css'
+import '../../../resources/shared/dream-home-layout.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

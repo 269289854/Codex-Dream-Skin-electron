@@ -22,11 +22,11 @@ const defaultDecorations = defaultProfile.decorations
 
 beforeAll(async () => {
   ;[template, dreamSkinCss, particleEffectsCss, previewParticleEffectsCss, homeLayoutCss] = await Promise.all([
-    readFile(join(process.cwd(), 'resources', 'windows', 'renderer-inject.js'), 'utf8'),
-    readFile(join(process.cwd(), 'resources', 'windows', 'dream-skin.css'), 'utf8'),
-    readFile(join(process.cwd(), 'resources', 'windows', 'dream-particle-effects.css'), 'utf8'),
+    readFile(join(process.cwd(), 'resources', 'shared', 'renderer-inject.js'), 'utf8'),
+    readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8'),
+    readFile(join(process.cwd(), 'resources', 'shared', 'dream-particle-effects.css'), 'utf8'),
     readFile(join(process.cwd(), 'src', 'renderer', 'src', 'particle-effects.css'), 'utf8'),
-    readFile(join(process.cwd(), 'resources', 'windows', 'dream-home-layout.css'), 'utf8')
+    readFile(join(process.cwd(), 'resources', 'shared', 'dream-home-layout.css'), 'utf8')
   ])
 })
 

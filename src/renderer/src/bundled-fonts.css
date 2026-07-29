@@ -1,9 +1,9 @@
-@import "../../../resources/windows/fonts/noto-sans-sc/wght.css";
-@import "../../../resources/windows/fonts/noto-serif-sc/wght.css";
+@import "../../../resources/shared/fonts/noto-sans-sc/wght.css";
+@import "../../../resources/shared/fonts/noto-serif-sc/wght.css";
 
 @font-face {
   font-family: "Dream LXGW WenKai";
-  src: url("../../../resources/windows/fonts/lxgw-wenkai/lxgw-wenkai-latin-500-normal.woff2") format("woff2");
+  src: url("../../../resources/shared/fonts/lxgw-wenkai/lxgw-wenkai-latin-500-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
   font-display: swap;
@@ -11,7 +11,7 @@
 
 @font-face {
   font-family: "Dream JetBrains Mono";
-  src: url("../../../resources/windows/fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+  src: url("../../../resources/shared/fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 100 800;
   font-display: swap;

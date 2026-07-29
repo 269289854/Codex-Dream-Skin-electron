@@ -44,7 +44,7 @@ describe('theme share packages', () => {
   it('exports the current draft once per referenced asset, including WebP, and imports it as a new theme', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-'))
     roots.push(root)
-    const resourcesRoot = join(process.cwd(), 'resources', 'windows')
+    const resourcesRoot = join(process.cwd(), 'resources', 'shared')
     const store = new ProfileStore(root, {
       hero: join(resourcesRoot, 'dream-reference.png'),
       polaroid: join(resourcesRoot, 'dream-polaroid.png'),
@@ -131,6 +131,8 @@ describe('theme share packages', () => {
     await store.exportSharePackage(draft, packagePath)
     expect((await stat(packagePath)).isFile()).toBe(true)
     const archive = unzipSync(await readFile(packagePath))
+    expect(Object.keys(archive).every((path) => !path.includes('\\') && !path.startsWith('/'))).toBe(true)
+    expect(Buffer.from(archive['theme.json']!).toString('utf8')).not.toContain(root)
     expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, polaroidImage.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
     expect(Buffer.from(archive['theme.json']!).toString('utf8')).not.toContain('icon-posters')
     expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 28 })
@@ -318,6 +320,8 @@ describe('theme share packages', () => {
   it('rejects malformed archive paths before parsing theme content', () => {
     expect(() => decodeShareZip(new Uint8Array([1, 2, 3]))).toThrow()
     expect(() => decodeShareZip(zipSync({ '../outside.png': png }))).toThrow('路径无效')
+    expect(() => decodeShareZip(zipSync({ 'assets\\windows-path.png': png }))).toThrow('路径无效')
+    expect(() => decodeShareZip(zipSync({ 'C:/assets/absolute.png': png }))).toThrow('路径无效')
     const tooManyEntries = Object.fromEntries(Array.from({ length: 129 }, (_, index) => [`assets/image-${index}.png`, new Uint8Array()]))
     expect(() => decodeShareZip(zipSync(tooManyEntries))).toThrow('条目数量')
   })
