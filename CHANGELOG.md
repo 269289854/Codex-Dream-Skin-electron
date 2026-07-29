@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.8 - 2026-07-29
+
+- Added independent planning bubbles and customizable tool activity icons.
+- Added GIF icon support and improved particle animation performance.
+- Added customizable brand signature media.
+- Improved theme import configuration and sidebar task selection handling.
+- Refactored planning bubble styling and selector logic.
+
 ## 1.0.0 - 2026-07-18
 
 - Added the Codex Dream Skin Studio Windows application icon to the window, taskbar tray, installer, and uninstaller.
