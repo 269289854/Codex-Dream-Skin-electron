@@ -247,8 +247,8 @@ button { cursor: pointer; }
 .preview-message.bubble { position: relative; isolation: isolate; }
 .preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]) { box-sizing: border-box; overflow: visible; padding: var(--dream-preview-bubble-content-padding); border-radius: 0; background: transparent !important; }
 .preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::before,.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { content: ""; box-sizing: border-box; position: absolute; pointer-events: none; }
-.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::before { z-index: 1; inset: 0; }
-.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { z-index: 0; inset: 0; border-radius: 7px; }
+.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::before { z-index: -1; inset: 0; }
+.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { z-index: -2; inset: 0; border-radius: 7px; }
 .preview-message.user.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { background: var(--dream-conversation-user-message); }
 .preview-message.user.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]):hover::after,.preview-message.user.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])[data-preview-state="hover"]::after { background: var(--dream-conversation-user-message-hover); }
 .preview-message.assistant.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { background: var(--dream-conversation-message); }

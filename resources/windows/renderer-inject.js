@@ -1475,7 +1475,8 @@
       'blockquote',
       'table'
     ].join(',');
-    const codexBubbles = new Set([...document.querySelectorAll('[data-response-annotation-conversation]')].filter((node) =>
+    const responseAnnotationSelector = '[data-response-annotation-conversation]';
+    const codexBubbles = new Set([...document.querySelectorAll(responseAnnotationSelector)].filter((node) =>
       node instanceof HTMLElement && (node.matches(codexContentSelector) || node.querySelector(codexContentSelector))
     ));
     const excludedAssistantSelector = [
@@ -1484,6 +1485,12 @@
       '[data-tool-result]',
       '[data-file-diff-card]'
     ].join(',');
+    document.querySelectorAll('[data-content-search-unit-key$=":assistant"]').forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.querySelector(responseAnnotationSelector)) return;
+      if (node.matches(excludedAssistantSelector) || node.querySelector(excludedAssistantSelector)) return;
+      if (node.matches(codexContentSelector) || node.querySelector(codexContentSelector)) codexBubbles.add(node);
+    });
     const planMarkerSelector = [
       '[data-generated-plan]',
       '[data-plan-card]',
@@ -1533,14 +1540,14 @@
       const candidate = marker instanceof HTMLElement ? marker : node;
       const explicitPlan = summaryCard || marker instanceof HTMLElement;
       if (!explicitPlan && candidate.closest(excludedAssistantSelector)) return;
-      if (!explicitPlan && candidate.querySelector('[data-response-annotation-conversation]')) return;
+      if (!explicitPlan && candidate.querySelector(responseAnnotationSelector)) return;
       const contentNodes = candidate.matches(codexContentSelector)
         ? [candidate]
         : [...candidate.querySelectorAll(codexContentSelector)];
       const contentNode = contentNodes.find((content) =>
         content instanceof HTMLElement &&
         (explicitPlan || !content.closest(excludedAssistantSelector)) &&
-        (explicitPlan || !content.closest('[data-response-annotation-conversation]')) &&
+        (explicitPlan || !content.closest(responseAnnotationSelector)) &&
         Boolean(content.textContent?.trim())
       );
       if (!(contentNode instanceof HTMLElement)) return;

@@ -208,8 +208,11 @@ describe('conversation bubble frames', () => {
       expect(runtimeCss).toContain(declaration)
       expect(studioCss).toContain(declaration)
     }
+    expect(runtimeCss).toContain('padding-block: max(var(--dream-user-bubble-content-padding), var(--dream-user-bubble-frame-width)) !important')
     expect(runtimeCss).toContain('padding-inline: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-frame-width) * 2)) !important')
+    expect(runtimeCss).toContain('padding-block: max(var(--dream-codex-bubble-content-padding), var(--dream-codex-bubble-frame-width)) !important')
     expect(runtimeCss).toContain('padding-inline: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-frame-width) * 2)) !important')
+    expect(studioCss).toContain('padding-block: max(var(--dream-preview-bubble-content-padding), var(--dream-preview-bubble-frame-width)) !important')
     expect(studioCss).toContain('padding-inline: max(var(--dream-preview-bubble-content-padding), calc(var(--dream-preview-bubble-frame-width) * 2)) !important')
     expect(runtimeCss).not.toContain('border-image-repeat: round')
     expect(studioCss).not.toContain('border-image-repeat: round')

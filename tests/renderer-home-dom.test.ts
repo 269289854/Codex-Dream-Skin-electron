@@ -425,6 +425,9 @@ describe('renderer home DOM adaptation', () => {
           <div data-local-conversation-item-target-ids="tool-2"><p>工具活动结果</p></div>
         </section>
         <div data-response-annotation-conversation data-empty-response>无正文标记</div>
+        <div data-content-search-unit-key="turn-1:assistant" data-streaming-assistant>
+          <div data-selected-text-overlay-target><p>正在生成的 Codex 正文</p></div>
+        </div>
       </main>`
     inject(window)
 
@@ -441,8 +444,17 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('[data-local-conversation-item-target-ids]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-tool-only-assistant]')?.classList.contains('dream-conversation-plan-bubble')).toBe(false)
     expect(window.document.querySelector('[data-empty-response]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-streaming-assistant]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-streaming-assistant] [data-selected-text-overlay-target]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-tool-result]')?.className).toBe('')
     expect(window.document.querySelector('[data-file-diff-card]')?.className).toBe('')
+
+    const streamingAssistant = window.document.querySelector('[data-streaming-assistant]')
+    if (!(streamingAssistant instanceof window.HTMLElement)) throw new Error('Streaming assistant fixture is missing.')
+    streamingAssistant.innerHTML = '<div data-response-annotation-conversation><h4 class="sr-only">Codex 回复</h4><div data-selected-text-overlay-target><p>已完成的 Codex 正文</p></div></div>'
+    stateOf(window).ensure()
+    expect(streamingAssistant.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(streamingAssistant.querySelector('[data-response-annotation-conversation]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
 
     const streaming = window.document.createElement('section')
     streaming.setAttribute('data-local-conversation-item-target-ids', 'plan-2')
@@ -542,11 +554,29 @@ describe('renderer home DOM adaptation', () => {
     expect([user.childNodes.length, codex.childNodes.length, plan.childNodes.length]).toEqual(childCounts)
     const streaming = window.document.createElement('div')
     streaming.setAttribute('data-response-annotation-conversation', '')
-    streaming.innerHTML = '<p data-selected-text-overlay-target>新增流式正文</p>'
+    streaming.innerHTML = '<h4 class="sr-only">Codex 回复</h4><div data-selected-text-overlay-target><p>新增流式正文</p></div>'
     window.document.querySelector('main')?.append(streaming)
     stateOf(window).ensure()
+    const streamingSurface = streaming.querySelector('[data-selected-text-overlay-target]')
     expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
-    expect(streaming.childNodes).toHaveLength(1)
+    expect(streamingSurface?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(streaming.childNodes).toHaveLength(2)
+    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*z-index: -1;/)
+    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::after \{\s*z-index: -2;/)
+    expect(dreamSkinCss).toContain('padding-block: max(var(--dream-codex-bubble-content-padding), var(--dream-codex-bubble-frame-width))')
+
+    streamingSurface?.append(window.document.createElement('p'))
+    stateOf(window).ensure()
+    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect([streaming, ...streaming.querySelectorAll('*')].filter((node) => node.classList.contains('dream-conversation-codex-bubble'))).toHaveLength(1)
+
+    const finalSurface = window.document.createElement('div')
+    finalSurface.setAttribute('data-selected-text-overlay-target', '')
+    finalSurface.innerHTML = '<p>最终正文第一段</p><p>最终正文第二段</p>'
+    streamingSurface?.replaceWith(finalSurface)
+    stateOf(window).ensure()
+    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(finalSurface.classList.contains('dream-conversation-codex-bubble')).toBe(false)
 
     stateOf(window).cleanup()
     expect(root.hasAttribute('data-dream-user-bubble-frame')).toBe(false)
