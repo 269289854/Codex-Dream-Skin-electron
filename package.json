@@ -1,7 +1,7 @@
 {
   "name": "codex-dream-skin-studio",
   "version": "1.0.8",
-  "description": "Windows visual theme editor for Codex desktop",
+  "description": "Windows and macOS visual theme editor for Codex desktop",
   "main": "dist-electron/main/index.js",
   "author": "Codex Dream Skin contributors",
   "license": "MIT",
@@ -12,8 +12,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:config": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests/config-utf8.ps1",
+    "generate:mac-icons": "node scripts/generate-macos-icons.mjs",
     "package:dir": "npm run build && electron-builder --win --x64 --dir",
-    "package:win": "npm run build && electron-builder --win nsis --x64"
+    "package:win": "npm run build && electron-builder --win nsis --x64",
+    "package:mac:dir": "npm run build && npm run generate:mac-icons && electron-builder --mac --universal --dir && npm run verify:mac:dir",
+    "package:mac": "npm run build && npm run generate:mac-icons && electron-builder --mac --universal && npm run verify:mac",
+    "verify:mac:dir": "node scripts/verify-macos-artifacts.mjs --dir",
+    "verify:mac": "node scripts/verify-macos-artifacts.mjs"
   },
   "dependencies": {
     "archiver": "^8.0.0",
@@ -49,7 +54,7 @@
   "build": {
     "appId": "com.codexdreamskin.studio",
     "productName": "Codex Dream Skin Studio",
-    "artifactName": "Codex-Dream-Skin-Studio-Setup-${version}.${ext}",
+    "beforePack": "scripts/prepare-ffmpeg.cjs",
     "publish": [
       {
         "provider": "github",
@@ -67,7 +72,7 @@
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules/ffmpeg-static/ffmpeg.exe*"
+      "node_modules/ffmpeg-static/ffmpeg*"
     ],
     "extraResources": [
       {
@@ -80,6 +85,7 @@
     ],
     "win": {
       "icon": "resources/windows/codex-dream-skin.ico",
+      "artifactName": "Codex-Dream-Skin-Studio-Setup-${version}.${ext}",
       "extraResources": [
         {
           "from": "resources/windows",
@@ -97,6 +103,41 @@
           ]
         }
       ]
+    },
+    "mac": {
+      "icon": "resources/macos/codex-dream-skin.icns",
+      "identity": null,
+      "notarize": false,
+      "minimumSystemVersion": "12.0.0",
+      "category": "public.app-category.developer-tools",
+      "artifactName": "Codex-Dream-Skin-Studio-${version}-mac-${arch}.${ext}",
+      "x64ArchFiles": "Contents/Resources/app.asar.unpacked/node_modules/@img/{sharp,sharp-libvips}-darwin-*/**/*",
+      "extraResources": [
+        {
+          "from": "resources/macos",
+          "to": "macos",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "sign": false
     },
     "nsis": {
       "oneClick": false,

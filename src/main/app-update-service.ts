@@ -1,12 +1,12 @@
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater'
-import { basename, dirname } from 'node:path'
+import { win32 } from 'node:path'
 import type { AppUpdateStatus } from '../shared/contracts'
 
 export const APP_UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
-export function isAppUpdateEnabled(isPackaged: boolean, executablePath: string): boolean {
-  if (!isPackaged) return false
-  return !basename(dirname(executablePath)).toLowerCase().endsWith('-unpacked')
+export function isAppUpdateEnabled(platform: NodeJS.Platform, isPackaged: boolean, executablePath: string): boolean {
+  if (platform !== 'win32' || !isPackaged) return false
+  return !win32.basename(win32.dirname(executablePath)).toLowerCase().endsWith('-unpacked')
 }
 
 interface AppUpdateDriverHandlers {

@@ -40,9 +40,13 @@ describe('AppUpdateService', () => {
   })
 
   it('disables updates for electron-builder unpacked output', () => {
-    expect(isAppUpdateEnabled(false, 'D:\\repo\\electron.exe')).toBe(false)
-    expect(isAppUpdateEnabled(true, 'D:\\repo\\release\\win-unpacked\\Codex Dream Skin Studio.exe')).toBe(false)
-    expect(isAppUpdateEnabled(true, 'C:\\Program Files\\Codex Dream Skin Studio\\Codex Dream Skin Studio.exe')).toBe(true)
+    expect(isAppUpdateEnabled('win32', false, 'D:\\repo\\electron.exe')).toBe(false)
+    expect(isAppUpdateEnabled('win32', true, 'D:\\repo\\release\\win-unpacked\\Codex Dream Skin Studio.exe')).toBe(false)
+    expect(isAppUpdateEnabled('win32', true, 'C:\\Program Files\\Codex Dream Skin Studio\\Codex Dream Skin Studio.exe')).toBe(true)
+  })
+
+  it('keeps automatic updates disabled on macOS packages', () => {
+    expect(isAppUpdateEnabled('darwin', true, '/Applications/Codex Dream Skin Studio.app/Contents/MacOS/Codex Dream Skin Studio')).toBe(false)
   })
 
   it('checks on startup and every six hours without overlapping requests', async () => {

@@ -38,7 +38,7 @@ import { VideoThumbnail } from './VideoThumbnail'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
 import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
 import { BrandSignatureControls } from './BrandSignatureControls'
-import { studioPlatformLabel } from './platform-ui'
+import { appUpdateDisabledMessage, studioPlatformLabel } from './platform-ui'
 import {
   ICON_PREVIEW_TARGETS,
   findPreviewTarget,
@@ -816,7 +816,7 @@ export function App(): React.JSX.Element {
   const updatePanelMessage = !appUpdate
     ? '正在读取更新状态…'
     : appUpdate.phase === 'disabled'
-      ? '仅安装版支持检查更新'
+      ? appUpdateDisabledMessage(appInfo?.platform ?? null)
       : appUpdate.phase === 'checking' || appUpdateCheckBusy
         ? '正在检查更新…'
         : updateError && !updateVisible

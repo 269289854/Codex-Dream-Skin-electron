@@ -18,7 +18,7 @@ async function selectPort(availabilityBody: string): Promise<number> {
   return Number(stdout.trim())
 }
 
-describe('Windows CDP port selection', () => {
+describe.runIf(process.platform === 'win32')('Windows CDP port selection', () => {
   it('keeps the preferred port when it is available', async () => {
     await expect(selectPort('return $Port -eq 9335')).resolves.toBe(9335)
   })

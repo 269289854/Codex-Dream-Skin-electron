@@ -393,7 +393,7 @@ if (!hasSingleInstanceLock) {
     appUpdateService = new AppUpdateService(
       new ElectronAppUpdateDriver(autoUpdater, () => { quitting = true }),
       app.getVersion(),
-      isAppUpdateEnabled(app.isPackaged, process.execPath),
+      isAppUpdateEnabled(process.platform, app.isPackaged, process.execPath),
       (status) => {
         for (const window of BrowserWindow.getAllWindows()) window.webContents.send('app:update-status', status)
       }
