@@ -96,6 +96,18 @@ describe('runtime appearance compilation', () => {
     expect(css).toContain('.dream-conversation-codex-bubble')
     expect(css).toContain('.dream-conversation-plan-bubble')
     expect(css).toContain('.dream-conversation-tool-bubble')
+    const planBubbleRule = css.match(/html\.codex-dream-skin \.dream-conversation-plan-bubble\s*\{([^}]*)\}/)?.[1]
+    const framedPlanBubbleRule = css.match(/html\.codex-dream-skin\[data-dream-plan-bubble-frame\]:not\(\[data-dream-plan-bubble-frame="none"\]\) \.dream-conversation-plan-bubble\s*\{([^}]*)\}/)?.[1]
+    expect(planBubbleRule).not.toContain('padding:')
+    expect(planBubbleRule).not.toContain('width: fit-content')
+    expect(framedPlanBubbleRule).toContain('background: transparent !important')
+    expect(framedPlanBubbleRule).not.toContain('overflow:')
+    expect(framedPlanBubbleRule).not.toContain('padding:')
+    expect(css).not.toContain('.dream-conversation-plan-bubble > *')
+    expect(css).toContain('.dream-conversation-plan-bubble > :is(.relative.flex.h-10, .relative.overflow-hidden)')
+    expect(css).toContain('.dream-conversation-plan-bubble:has(> .relative.overflow-hidden[aria-hidden="true"])')
+    expect(css).toContain('min-block-size: max(40px, var(--dream-plan-bubble-frame-min-block-size))')
+    expect(css).toContain('padding-block: max(0px, calc((var(--dream-plan-bubble-frame-min-block-size) - 40px) * .5))')
     const toolBubbleRule = css.match(/html\.codex-dream-skin \.dream-conversation-tool-bubble\s*\{([^}]*)\}/)?.[1]
     const toolMutedRule = css.match(/html\.codex-dream-skin \.dream-conversation-tool-bubble :is\(\[class~="group\/output"\][^}]+\{([^}]*)\}/)?.[1]
     expect(toolBubbleRule).toContain('color: var(--dream-conversation-tool-text)')

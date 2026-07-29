@@ -408,39 +408,51 @@ describe('renderer home DOM adaptation', () => {
           <div data-tool-result>工具结果</div>
           <div data-file-diff-card>文件差异</div>
         </div>
-        <article data-message-author-role="assistant" data-generated-plan>
-          <header>套餐</header>
-          <h1>生成计划</h1>
-          <p>计划摘要</p>
-        </article>
+        <section data-local-conversation-item-target-ids="plan-1" data-plan-implementation-host>
+          <div data-plan-card-surface class="relative rounded-lg bg-token-foreground/5 overflow-clip" style="background-color: rgba(229, 231, 235, .78)">
+            <button data-plan-open-layer type="button" aria-hidden="true" tabindex="-1" class="absolute inset-0 z-10 cursor-interaction"></button>
+            <div class="relative flex h-10 flex-wrap items-center justify-between gap-2 px-3 py-2"><span>计划</span><div><button>复制</button><button>赞</button></div></div>
+            <div class="relative overflow-hidden"><div class="px-4 py-3"><div class="text-size-chat"><h1>生成计划</h1><h2>Summary</h2><p>计划摘要</p></div></div></div>
+          </div>
+        </section>
         <article data-message-author-role="assistant" data-nested-response>
           <div data-response-annotation-conversation><p>新版富文本回复</p></div>
         </article>
         <article data-message-author-role="assistant" data-local-conversation-item-target-ids="tool-1">
           <p>工具活动</p>
         </article>
+        <section data-local-conversation-final-assistant data-tool-only-assistant>
+          <div data-local-conversation-item-target-ids="tool-2"><p>工具活动结果</p></div>
+        </section>
         <div data-response-annotation-conversation data-empty-response>无正文标记</div>
       </main>`
     inject(window)
 
     expect(window.document.querySelector('[data-user-message-bubble]')?.classList.contains('dream-conversation-user-bubble')).toBe(true)
     expect(window.document.querySelector('[data-response-annotation-conversation]:not([data-empty-response])')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
-    expect(window.document.querySelector('[data-generated-plan]')?.classList.contains('dream-conversation-plan-bubble')).toBe(true)
-    expect(window.document.querySelector('[data-generated-plan]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-plan-card-surface]')?.classList.contains('dream-conversation-plan-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-plan-implementation-host]')?.classList.contains('dream-conversation-plan-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-plan-implementation-host]')?.classList.contains('dream-conversation-tool-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-plan-card-surface]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-plan-open-layer]')?.className).toBe('absolute inset-0 z-10 cursor-interaction')
+    expect(window.document.querySelector('[data-plan-open-layer]')?.getAttribute('tabindex')).toBe('-1')
     expect(window.document.querySelector('[data-nested-response]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-nested-response] [data-response-annotation-conversation]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
     expect(window.document.querySelector('[data-local-conversation-item-target-ids]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-tool-only-assistant]')?.classList.contains('dream-conversation-plan-bubble')).toBe(false)
     expect(window.document.querySelector('[data-empty-response]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-tool-result]')?.className).toBe('')
     expect(window.document.querySelector('[data-file-diff-card]')?.className).toBe('')
 
-    const streaming = window.document.createElement('article')
-    streaming.setAttribute('data-message-author-role', 'assistant')
-    streaming.innerHTML = '<h2>流式生成计划</h2><p>流式正文</p>'
+    const streaming = window.document.createElement('section')
+    streaming.setAttribute('data-local-conversation-item-target-ids', 'plan-2')
+    streaming.innerHTML = '<div data-streaming-plan-surface class="relative rounded-lg bg-token-foreground/5 overflow-clip" style="background-color: rgb(229, 231, 235)"><div class="relative flex h-10 flex-wrap items-center justify-between gap-2 px-3 py-2"><span>计划</span></div><div class="relative overflow-hidden"><div class="px-4 py-3"><div class="text-size-chat"><h2>流式生成计划</h2><p>流式正文</p></div></div></div></div>'
     window.document.querySelector('main')?.append(streaming)
     stateOf(window).ensure()
-    expect(streaming.classList.contains('dream-conversation-plan-bubble')).toBe(true)
-    expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(streaming.classList.contains('dream-conversation-plan-bubble')).toBe(false)
+    expect(streaming.classList.contains('dream-conversation-tool-bubble')).toBe(false)
+    expect(streaming.querySelector('[data-streaming-plan-surface]')?.classList.contains('dream-conversation-plan-bubble')).toBe(true)
+    expect(streaming.querySelector('[data-streaming-plan-surface]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
 
     inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { visible: false })
     expect(window.document.querySelector('.dream-conversation-user-bubble')).toBeNull()
@@ -458,11 +470,17 @@ describe('renderer home DOM adaptation', () => {
         <div data-local-conversation-final-assistant>
           <div data-response-annotation-conversation><p data-selected-text-overlay-target>Codex 正文</p></div>
         </div>
-        <article data-message-author-role="assistant"><p>生成计划正文</p></article>
+        <section data-local-conversation-item-target-ids="plan-1">
+          <div data-plan-card-surface class="relative rounded-lg bg-token-foreground/5 overflow-clip" style="background-color: rgb(229, 231, 235); overflow: clip; padding: 0; width: auto">
+            <button data-plan-open-layer type="button" aria-hidden="true" tabindex="-1" class="absolute inset-0 z-10 cursor-interaction" style="position: absolute; inset: 0; z-index: 10"></button>
+            <div class="relative flex h-10 flex-wrap items-center justify-between gap-2 px-3 py-2"><span>计划</span></div>
+            <div class="relative overflow-hidden" aria-hidden="true" inert><div class="px-4 py-3"><div class="text-size-chat"><h1>生成计划</h1><p>生成计划正文</p></div></div></div>
+          </div>
+        </section>
       </main>`
     const user = window.document.querySelector('[data-user-message-bubble]')
     const codex = window.document.querySelector('[data-response-annotation-conversation]')
-    const plan = window.document.querySelector('[data-message-author-role="assistant"]')
+    const plan = window.document.querySelector('[data-plan-card-surface]')
     if (!user || !codex || !plan) throw new Error('Conversation bubble fixtures are missing.')
     const childCounts = [user.childNodes.length, codex.childNodes.length, plan.childNodes.length]
     const frames: RuntimeConversationBubblesConfig = {
@@ -491,13 +509,14 @@ describe('renderer home DOM adaptation', () => {
         slice: 20,
         sliceInsets: [20, 30, 25, 30],
         frameWidth: 16,
-        borderWidths: [16, 32, 20, 32],
+        borderWidths: [54, 32, 36, 32],
         contentPadding: 24
       }
     }
 
-    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, frames)
+    inject(window, undefined, undefined, dreamSkinCss, undefined, undefined, undefined, undefined, frames)
     const root = window.document.documentElement
+    const planOpenLayer = window.document.querySelector('[data-plan-open-layer]')
     expect(root.getAttribute('data-dream-user-bubble-frame')).toBe('nineSlice')
     expect(root.getAttribute('data-dream-codex-bubble-frame')).toBe('stretch')
     expect(root.getAttribute('data-dream-plan-bubble-frame')).toBe('nineSlice')
@@ -507,10 +526,16 @@ describe('renderer home DOM adaptation', () => {
     expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('72px')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('28px')
     expect(root.style.getPropertyValue('--dream-plan-bubble-frame-slice')).toBe('20% 30% 25% 30%')
-    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-border-widths')).toBe('16px 32px 20px 32px')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-border-widths')).toBe('54px 32px 36px 32px')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-min-block-size')).toBe('90px')
     expect(root.style.getPropertyValue('--dream-plan-bubble-content-padding')).toBe('24px')
     expect(plan.classList.contains('dream-conversation-plan-bubble')).toBe(true)
     expect(plan.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.getComputedStyle(plan).overflow).toBe('clip')
+    expect(window.getComputedStyle(plan).padding).toBe('0px')
+    expect(window.getComputedStyle(planOpenLayer as unknown as Parameters<typeof window.getComputedStyle>[0]).position).toBe('absolute')
+    expect(window.getComputedStyle(planOpenLayer as unknown as Parameters<typeof window.getComputedStyle>[0]).zIndex).toBe('10')
+    expect(window.getComputedStyle(plan).minBlockSize).toBe('max(40px, 90px)')
     expect([user.childNodes.length, codex.childNodes.length, plan.childNodes.length]).toEqual(childCounts)
 
     stateOf(window).ensure()

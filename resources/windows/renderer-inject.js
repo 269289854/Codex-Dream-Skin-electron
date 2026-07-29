@@ -1484,13 +1484,72 @@
       '[data-tool-result]',
       '[data-file-diff-card]'
     ].join(',');
+    const planMarkerSelector = [
+      '[data-generated-plan]',
+      '[data-plan-card]',
+      '[data-content-type="plan"]',
+      '[data-message-type="plan"]',
+      '[data-response-type="plan"]',
+      '[data-testid*="plan" i]'
+    ].join(',');
+    const planCandidateSelector = [
+      planMarkerSelector,
+      '[data-message-author-role="assistant"]',
+      '[data-local-conversation-final-assistant]'
+    ].join(',');
+    // planImplementation cards do not currently expose a semantic data attribute.
+    const planSummaryCards = new Set([...document.querySelectorAll('.relative.rounded-lg.overflow-clip')].filter((node) =>
+      node instanceof HTMLElement &&
+      node.classList.contains('bg-token-foreground/5') &&
+      node.querySelector(':scope > .relative.flex.h-10.flex-wrap.items-center.justify-between.gap-2.px-3.py-2') &&
+      node.querySelector(':scope > .relative.overflow-hidden > .px-4.py-3 .text-size-chat')
+    ));
+    const hasVisibleBackground = (node) => {
+      const style = window.getComputedStyle(node);
+      if (style.backgroundImage && style.backgroundImage !== 'none') return true;
+      const color = String(style.backgroundColor || '').replace(/\s+/g, '').toLowerCase();
+      if (!color || color === 'transparent') return false;
+      const rgba = color.match(/^rgba\((?:[^,]+,){3}([^)]+)\)$/);
+      return !rgba || Number(rgba[1]) > 0;
+    };
+    const findPlanBubbleSurface = (candidate, contentNode) => {
+      const existing = candidate.matches('.dream-conversation-plan-bubble')
+        ? candidate
+        : candidate.querySelector('.dream-conversation-plan-bubble');
+      if (existing instanceof HTMLElement) return existing;
+      let current = contentNode.matches(codexContentSelector) ? contentNode.parentElement : contentNode;
+      while (current instanceof HTMLElement && (current === candidate || candidate.contains(current))) {
+        if (hasVisibleBackground(current)) return current;
+        if (current === candidate) break;
+        current = current.parentElement;
+      }
+      return candidate;
+    };
     const planBubbles = new Set();
-    document.querySelectorAll('[data-message-author-role="assistant"]').forEach((node) => {
+    new Set([...document.querySelectorAll(planCandidateSelector), ...planSummaryCards]).forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
-      if (node.closest(excludedAssistantSelector)) return;
-      if (node.querySelector('[data-response-annotation-conversation]')) return;
-      if (!node.textContent?.trim() && !node.querySelector(codexContentSelector)) return;
-      planBubbles.add(node);
+      const summaryCard = planSummaryCards.has(node);
+      const marker = summaryCard ? node : node.matches(planMarkerSelector) ? node : node.querySelector(planMarkerSelector);
+      const candidate = marker instanceof HTMLElement ? marker : node;
+      const explicitPlan = summaryCard || marker instanceof HTMLElement;
+      if (!explicitPlan && candidate.closest(excludedAssistantSelector)) return;
+      if (!explicitPlan && candidate.querySelector('[data-response-annotation-conversation]')) return;
+      const contentNodes = candidate.matches(codexContentSelector)
+        ? [candidate]
+        : [...candidate.querySelectorAll(codexContentSelector)];
+      const contentNode = contentNodes.find((content) =>
+        content instanceof HTMLElement &&
+        (explicitPlan || !content.closest(excludedAssistantSelector)) &&
+        (explicitPlan || !content.closest('[data-response-annotation-conversation]')) &&
+        Boolean(content.textContent?.trim())
+      );
+      if (!(contentNode instanceof HTMLElement)) return;
+      planBubbles.add(findPlanBubbleSurface(candidate, contentNode));
+    });
+    planBubbles.forEach((plan) => {
+      codexBubbles.forEach((codex) => {
+        if (plan === codex || plan.contains(codex) || codex.contains(plan)) codexBubbles.delete(codex);
+      });
     });
     document.querySelectorAll('.dream-conversation-codex-bubble').forEach((node) => {
       if (!codexBubbles.has(node)) node.classList.remove('dream-conversation-codex-bubble');
@@ -1512,7 +1571,10 @@
     }
     const selector = '[data-local-conversation-item-target-ids]';
     const toolActivities = new Set([...document.querySelectorAll(selector)].filter((node) =>
-      node instanceof HTMLElement && !node.parentElement?.closest(selector)
+      node instanceof HTMLElement &&
+      !node.parentElement?.closest(selector) &&
+      !node.matches('.dream-conversation-plan-bubble') &&
+      !node.querySelector('.dream-conversation-plan-bubble')
     ));
     document.querySelectorAll('.dream-conversation-tool-bubble').forEach((node) => {
       if (!toolActivities.has(node)) node.classList.remove('dream-conversation-tool-bubble');
