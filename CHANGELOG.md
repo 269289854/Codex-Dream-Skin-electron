@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.9 - 2026-07-29
+
+- Added macOS 12+ support with Universal DMG and ZIP packages for Apple Silicon and Intel Macs.
+- Added verified macOS Codex detection, launch, configuration backup, session recovery, and platform-aware Studio controls.
+- Added macOS installation guidance and packaging verification for bundled native dependencies and resources.
+- Fixed conversation bubble layering and separated the New Task primary and auxiliary hover/selected states.
+
 ## 1.0.8 - 2026-07-29
 
 - Added independent planning bubbles and customizable tool activity icons.

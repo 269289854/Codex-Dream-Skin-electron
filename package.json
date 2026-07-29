@@ -1,6 +1,6 @@
 {
   "name": "codex-dream-skin-studio",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Windows and macOS visual theme editor for Codex desktop",
   "main": "dist-electron/main/index.js",
   "author": "Codex Dream Skin contributors",
