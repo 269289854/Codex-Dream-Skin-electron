@@ -55,6 +55,7 @@ describe('runtime appearance compilation', () => {
     expect(variables['--dream-font-home-heading']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-home-subtitle']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-brand-title']).toBe('var(--dream-font-ui)')
+    expect(variables['--dream-font-brand-signature']).toBe('"Dream Dancing Script", cursive')
     expect(variables['--dream-font-sidebar-projects-title']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-sidebar-tasks-title']).toBe('var(--dream-font-ui)')
     expect(variables['--dream-font-sidebar-nav-new-task']).toBe('var(--dream-font-ui)')
@@ -256,9 +257,11 @@ describe('runtime appearance compilation', () => {
     expect(css).not.toContain('VU5VU0VE')
   })
 
-  it('embeds a selected bundled font and skips all bundled files by default', async () => {
+  it('embeds the default signature font and only other selected bundled fonts', async () => {
     const profile = createDefaultTheme(id)
-    expect(await buildRuntimeFontCss(profile, {}, resourcesRoot)).toBe('')
+    const defaultCss = await buildRuntimeFontCss(profile, {}, resourcesRoot)
+    expect(defaultCss).toContain('font-family: "Dream Dancing Script"')
+    expect(defaultCss).toContain('font-weight: 400 700')
     profile.typography.slots.ui = { kind: 'builtin', id: 'jetbrains-mono' }
     const css = await buildRuntimeFontCss(profile, {}, resourcesRoot)
     expect(css).toContain('font-family: "Dream JetBrains Mono"')

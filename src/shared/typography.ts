@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const BUILTIN_FONTS = {
   'system-ui': { label: '系统界面字体', family: 'system-ui, -apple-system, "Segoe UI", sans-serif', resource: null },
   'segoe-script': { label: 'Segoe Script', family: '"Segoe Script", "Segoe Print", cursive', resource: null },
+  'dancing-script': { label: 'Dancing Script', family: '"Dream Dancing Script", cursive', resource: 'fonts/dancing-script/dancing-script-latin-wght-normal.woff2' },
   'noto-sans-sc': { label: '思源黑体', family: '"Noto Sans SC Variable", sans-serif', resource: 'fonts/noto-sans-sc/wght.css' },
   'noto-serif-sc': { label: '思源宋体', family: '"Noto Serif SC Variable", serif', resource: 'fonts/noto-serif-sc/wght.css' },
   'lxgw-wenkai': { label: '霞鹜文楷', family: '"Dream LXGW WenKai", serif', resource: 'fonts/lxgw-wenkai/lxgw-wenkai-latin-500-normal.woff2' },
@@ -134,7 +135,7 @@ export function createDefaultTypography(): ThemeTypography {
       homeSubtitle: { kind: 'inherit' },
       brandTitle: { kind: 'inherit' },
       brandSubtitle: { kind: 'inherit' },
-      brandSignature: { kind: 'builtin', id: 'segoe-script' },
+      brandSignature: { kind: 'builtin', id: 'dancing-script' },
       homeHeadingDecoration: { kind: 'inherit' },
       composerMelody: { kind: 'inherit' },
       sidebarProjectsTitle: { kind: 'inherit' },

@@ -5,7 +5,7 @@ import { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import { extname, join } from 'node:path'
 import electronUpdater from 'electron-updater'
-import { ProfileStore } from './profile-store'
+import { ProfileStore, type VideoSourcePreflight } from './profile-store'
 import { CodexService } from './codex-service'
 import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
 import { createStudioInstanceData, resolveStudioInstanceAction } from './app-lifecycle'
@@ -196,37 +196,65 @@ function registerIpc(): void {
     const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options)
     if (result.canceled || !result.filePaths[0]) return null
     const sourcePath = result.filePaths[0]
-    let optimizeVideo = false
-    if (extname(sourcePath).toLowerCase() === '.mp4' || extname(sourcePath).toLowerCase() === '.webm') {
-      const inspection = await store.inspectVideoSource(sourcePath)
-      if (inspection.highLoad) {
-        const messageOptions = {
-          type: 'question' as const,
-          title: '优化视频主题性能',
-          message: '该视频的解码负载较高，是否生成适合主题播放的优化版本？',
-          detail: videoOptimizationDetail(inspection),
-          buttons: ['优化后导入', '保留原视频', '取消'],
-          defaultId: 0,
-          cancelId: 2,
-          noLink: true
-        }
-        const decision = mainWindow ? await dialog.showMessageBox(mainWindow, messageOptions) : await dialog.showMessageBox(messageOptions)
-        if (decision.response === 2) return null
-        optimizeVideo = decision.response === 0
-      }
-    }
     const id = randomUUID()
     const controller = new AbortController()
     operationControllers.set(id, controller)
-    emitProgress({ id, kind: 'media-import', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导入媒体' })
+    const sourceExtension = extname(sourcePath).toLowerCase()
+    const videoSelected = sourceExtension === '.mp4' || sourceExtension === '.webm'
+    emitProgress({ id, kind: 'media-import', phase: videoSelected ? 'validating' : 'started', processedBytes: 0, totalBytes: null, message: videoSelected ? '正在检查视频' : '正在导入媒体' })
     try {
+      let optimizeVideo = false
+      let preflight: VideoSourcePreflight | undefined
+      if (videoSelected) {
+        preflight = await store.preflightVideoSource(sourcePath, controller.signal)
+        const inspection = preflight.inspection
+        if (inspection.portable === false) {
+          const messageOptions = {
+            type: 'warning' as const,
+            title: '转换视频以确保兼容',
+            message: '该视频无法保证在 Windows 与 macOS 的 Codex 中播放，需要先转换为 H.264 / AAC。',
+            detail: videoOptimizationDetail(inspection),
+            buttons: ['转换后导入', '取消'],
+            defaultId: 0,
+            cancelId: 1,
+            noLink: true
+          }
+          const decision = mainWindow ? await dialog.showMessageBox(mainWindow, messageOptions) : await dialog.showMessageBox(messageOptions)
+          if (controller.signal.aborted) throw new Error('媒体导入已取消。')
+          if (decision.response === 1) {
+            controller.abort()
+            throw new Error('媒体导入已取消。')
+          }
+          optimizeVideo = true
+        } else if (inspection.highLoad) {
+          const messageOptions = {
+            type: 'question' as const,
+            title: '优化视频主题性能',
+            message: '该视频的解码负载较高，是否生成适合主题播放的优化版本？',
+            detail: videoOptimizationDetail(inspection),
+            buttons: ['优化后导入', '保留原视频', '取消'],
+            defaultId: 0,
+            cancelId: 2,
+            noLink: true
+          }
+          const decision = mainWindow ? await dialog.showMessageBox(mainWindow, messageOptions) : await dialog.showMessageBox(messageOptions)
+          if (controller.signal.aborted) throw new Error('媒体导入已取消。')
+          if (decision.response === 2) {
+            controller.abort()
+            throw new Error('媒体导入已取消。')
+          }
+          optimizeVideo = decision.response === 0
+        }
+      }
       if (optimizeVideo) emitProgress({ id, kind: 'media-import', phase: 'optimizing', processedBytes: 0, totalBytes: null, message: '正在生成 1080p / 30 FPS 优化视频' })
-      const imported = await store.importMediaAsset(themeId, sourcePath, purpose, kind, controller.signal, optimizeVideo)
+      else emitProgress({ id, kind: 'media-import', phase: 'copying', processedBytes: 0, totalBytes: null, message: '正在导入媒体' })
+      const imported = await store.importMediaAsset(themeId, sourcePath, purpose, kind, controller.signal, optimizeVideo, preflight)
       emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '媒体导入完成' })
       return imported
     } catch (error) {
-      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? error.message : '媒体导入失败' })
-      throw error
+      const failure = controller.signal.aborted ? new Error('媒体导入已取消。') : error
+      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: failure instanceof Error ? failure.message : '媒体导入失败' })
+      throw failure
     } finally {
       operationControllers.delete(id)
     }
@@ -439,7 +467,10 @@ function emitProgress(progress: OperationProgress): void {
 function videoOptimizationDetail(inspection: VideoAssetInspection): string {
   const landscape = inspection.width >= inspection.height
   const target = landscape ? '1920×1080' : '1080×1920'
-  return `当前视频：${inspection.width}×${inspection.height}，${inspection.frameRate.toFixed(2)} FPS。\n优化版本：不超过 ${target}，最高 30 FPS。原片会保留，可随时切回。`
+  const result = `转换版本：H.264 / AAC，不超过 ${target}，最高 30 FPS。`
+  return inspection.portable
+    ? `当前视频：${inspection.width}×${inspection.height}，${inspection.frameRate.toFixed(2)} FPS。\n${result} 原片会保留，可随时切回。`
+    : `当前视频：${inspection.codec}${inspection.videoProfile ? ` (${inspection.videoProfile})` : ''}${inspection.audioCodec ? ` / ${inspection.audioCodec}${inspection.audioProfile ? ` (${inspection.audioProfile})` : ''}` : ''}，${inspection.width}×${inspection.height}。\n${result} 不兼容原片不会加入主题。`
 }
 
 function isVideoMediaRole(value: unknown): value is VideoMediaRole {

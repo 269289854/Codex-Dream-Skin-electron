@@ -9,15 +9,28 @@ import type { ImportedFontFormat } from '../shared/typography'
 
 export const THEME_SHARE_FORMAT = 'codex-dream-skin-theme' as const
 export const THEME_SHARE_VERSION = 2 as const
-export const MAX_SHARE_COMPRESSED_BYTES = 500 * 1024 * 1024
-export const MAX_SHARE_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024
+const GIB = 1024 ** 3
+export const MAX_SHARE_COMPRESSED_BYTES = 20 * GIB
+export const MAX_SHARE_UNCOMPRESSED_BYTES = 10 * GIB
+export const MAX_SHARE_VIDEO_BYTES = 2 * GIB
 export const MAX_SHARE_ENTRIES = 128
 export const MAX_SHARE_IMAGE_BYTES = 30 * 1024 * 1024
 export const MAX_SHARE_FONT_BYTES = 12 * 1024 * 1024
+export const MAX_SHARE_METADATA_BYTES = 5 * 1024 * 1024
 
 const RASTER_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif'])
 const FONT_EXTENSIONS = new Set<ImportedFontFormat>(['ttf', 'otf', 'woff', 'woff2'])
-const MAX_SHARE_METADATA_BYTES = 5 * 1024 * 1024
+const WINDOWS_RESERVED_NAMES = new Set([
+  'con',
+  'prn',
+  'aux',
+  'nul',
+  'clock$',
+  'conin$',
+  'conout$',
+  ...Array.from({ length: 9 }, (_, index) => `com${index + 1}`),
+  ...Array.from({ length: 9 }, (_, index) => `lpt${index + 1}`)
+])
 
 const assetManifestSchema = z.object({
   path: z.string().min(1),
@@ -50,7 +63,10 @@ export function collectThemeAssets(profile: ThemeProfile): string[] {
 export function createShareProfile(profile: ThemeProfile): ThemeProfile {
   const shared = structuredClone(profile)
   for (const reference of themeMediaReferences(shared)) {
-    if (reference?.videoVariants) delete reference.videoVariants
+    if (!reference?.videoVariants) continue
+    reference.asset = reference.videoVariants.optimized.asset
+    reference.mimeType = reference.videoVariants.optimized.mimeType
+    delete reference.videoVariants
   }
   return parseThemeProfile(shared)
 }
@@ -84,15 +100,15 @@ export function sha256(data: Uint8Array): string {
 export function parseThemeShareManifest(input: unknown): ThemeShareManifest {
   const manifest = manifestSchema.parse(input)
   const seen = new Set<string>()
+  let totalSize = 0
   for (const asset of manifest.assets) {
     assertSharePath(asset.path)
     const canonicalPath = asset.path.toLowerCase()
     if (!asset.path.startsWith('assets/') || seen.has(canonicalPath)) throw new Error('分享包素材清单包含重复或非法路径。')
     seen.add(canonicalPath)
     if (asset.kind !== assetKind(asset.path)) throw new Error('分享包素材类型与文件扩展名不匹配。')
-    if ((asset.kind === 'image' && asset.size > MAX_SHARE_IMAGE_BYTES) || (asset.kind === 'font' && asset.size > MAX_SHARE_FONT_BYTES)) {
-      throw new Error('分享包中的单个素材超过大小限制。')
-    }
+    assertShareEntrySize(asset.path, asset.size)
+    totalSize = addShareUncompressedBytes(totalSize, asset.size)
   }
   return manifest
 }
@@ -118,10 +134,47 @@ function themeMediaReferences(profile: ThemeProfile): Array<MediaReference | nul
 }
 
 export function assertSharePath(path: string): void {
-  if (!path || path.includes('\\') || path.startsWith('/') || /[\u0000-\u001f<>:"|?*]/.test(path) || /^[a-zA-Z]:/.test(path) || path.split('/').some((part) => !part || part === '.' || part === '..' || part.endsWith(' ') || part.endsWith('.'))) {
+  const parts = path.split('/')
+  if (!path || path.includes('\\') || path.startsWith('/') || /[\u0000-\u001f<>:"|?*]/.test(path) || /^[a-zA-Z]:/.test(path) || parts.some((part) => !part || part === '.' || part === '..' || part.endsWith(' ') || part.endsWith('.') || isWindowsReservedName(part))) {
     throw new Error('分享包路径无效。')
   }
   if (path !== 'manifest.json' && path !== 'theme.json' && !path.startsWith('assets/')) throw new Error('分享包包含额外文件。')
+}
+
+function isWindowsReservedName(segment: string): boolean {
+  const firstComponent = segment.split('.', 1)[0]?.trimEnd().toLowerCase()
+  return firstComponent !== undefined && WINDOWS_RESERVED_NAMES.has(firstComponent)
+}
+
+export function assertShareCompressedSize(size: number): void {
+  assertSafeByteCount(size)
+  if (size > MAX_SHARE_COMPRESSED_BYTES) throw new Error('分享包超过 20 GiB 压缩大小限制。')
+}
+
+export function shareEntryLimit(path: string): number {
+  assertSharePath(path)
+  if (!path.startsWith('assets/')) return MAX_SHARE_METADATA_BYTES
+  const kind = assetKind(path)
+  if (kind === 'image') return MAX_SHARE_IMAGE_BYTES
+  if (kind === 'font') return MAX_SHARE_FONT_BYTES
+  return MAX_SHARE_VIDEO_BYTES
+}
+
+export function assertShareEntrySize(path: string, size: number): void {
+  assertSafeByteCount(size)
+  if (size > shareEntryLimit(path)) throw new Error('分享包中的单个条目超过大小限制。')
+}
+
+export function addShareUncompressedBytes(total: number, size: number): number {
+  assertSafeByteCount(total)
+  assertSafeByteCount(size)
+  const next = total + size
+  if (!Number.isSafeInteger(next) || next > MAX_SHARE_UNCOMPRESSED_BYTES) throw new Error('分享包解压总量超过 10 GiB 限制。')
+  return next
+}
+
+function assertSafeByteCount(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error('分享包大小信息无效。')
 }
 
 export function encodeJson(value: unknown): Uint8Array {
@@ -129,7 +182,7 @@ export function encodeJson(value: unknown): Uint8Array {
 }
 
 export function decodeShareZip(source: Uint8Array): Map<string, Buffer> {
-  if (source.byteLength > MAX_SHARE_COMPRESSED_BYTES) throw new Error('分享包超过 500 MB 压缩大小限制。')
+  assertShareCompressedSize(source.byteLength)
   const hasZipSignature = source.byteLength >= 4 && source[0] === 0x50 && source[1] === 0x4b && ((source[2] === 0x03 && source[3] === 0x04) || (source[2] === 0x05 && source[3] === 0x06))
   if (!hasZipSignature) {
     throw new Error('分享包 ZIP 无效。')
@@ -148,14 +201,10 @@ export function decodeShareZip(source: Uint8Array): Map<string, Buffer> {
       const canonicalPath = file.name.toLowerCase()
       if (seenPaths.has(canonicalPath)) throw new Error('分享包包含重复条目。')
       seenPaths.add(canonicalPath)
-      const entryLimit = file.name.startsWith('assets/')
-        ? assetKind(file.name) === 'image' ? MAX_SHARE_IMAGE_BYTES : assetKind(file.name) === 'font' ? MAX_SHARE_FONT_BYTES : MAX_SHARE_UNCOMPRESSED_BYTES
-        : MAX_SHARE_METADATA_BYTES
-      if (file.originalSize !== undefined && file.originalSize > entryLimit) throw new Error('分享包中的单个条目超过大小限制。')
-      if (file.originalSize !== undefined && file.originalSize > MAX_SHARE_UNCOMPRESSED_BYTES) throw new Error('分享包解压大小超过限制。')
+      const entryLimit = shareEntryLimit(file.name)
+      if (file.originalSize !== undefined) assertShareEntrySize(file.name, file.originalSize)
       if (file.originalSize !== undefined) {
-        totalSize += file.originalSize
-        if (totalSize > MAX_SHARE_UNCOMPRESSED_BYTES) throw new Error('分享包解压总量超过 1 GB 限制。')
+        totalSize = addShareUncompressedBytes(totalSize, file.originalSize)
       }
       const chunks: Buffer[] = []
       let size = 0
@@ -172,9 +221,10 @@ export function decodeShareZip(source: Uint8Array): Map<string, Buffer> {
           return
         }
         if (file.originalSize === undefined) {
-          totalSize += chunk.byteLength
-          if (totalSize > MAX_SHARE_UNCOMPRESSED_BYTES) {
-            failure = new Error('分享包解压总量超过 1 GB 限制。')
+          try {
+            totalSize = addShareUncompressedBytes(totalSize, chunk.byteLength)
+          } catch (error) {
+            failure = error instanceof Error ? error : new Error('分享包解压总量超过限制。')
             file.terminate()
             return
           }

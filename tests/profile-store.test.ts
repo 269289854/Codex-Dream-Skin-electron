@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, readdir, rm, truncate, writeFile } from 'node:fs/promises'
+import { copyFile, mkdtemp, readFile, readdir, rename, rm, stat, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { resolveAppearanceColor } from '../src/shared/appearance'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
@@ -145,6 +145,79 @@ describe('ProfileStore', () => {
     await expect(store.delete(systemTheme.id)).rejects.toThrow('系统默认主题不能删除')
     await store.delete(created.id)
     expect(await store.list()).toEqual([expect.objectContaining({ id: systemTheme.id, active: true, system: true })])
+  })
+
+  it('recovers missing settings and theme JSON from .previous while preferring valid primary files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-json-recovery-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const created = await store.create('恢复主题')
+    await store.activate(created.id)
+    const settingsPath = join(root, 'settings.json')
+    const themePath = join(root, 'themes', created.id, 'theme.json')
+
+    await rename(settingsPath, `${settingsPath}.previous`)
+    await rename(themePath, `${themePath}.previous`)
+    const recovered = new ProfileStore(root)
+    await recovered.initialize()
+    await expect(recovered.get(created.id)).resolves.toMatchObject({ id: created.id, name: '恢复主题' })
+    expect((await recovered.list()).find((theme) => theme.id === created.id)).toMatchObject({ active: true })
+    await expect(stat(`${settingsPath}.previous`)).rejects.toThrow()
+    await expect(stat(`${themePath}.previous`)).rejects.toThrow()
+
+    await copyFile(settingsPath, `${settingsPath}.previous`)
+    await copyFile(themePath, `${themePath}.previous`)
+    const primarySettings = await readFile(settingsPath, 'utf8')
+    const primaryTheme = await readFile(themePath, 'utf8')
+    await new ProfileStore(root).initialize()
+    expect(await readFile(settingsPath, 'utf8')).toBe(primarySettings)
+    expect(await readFile(themePath, 'utf8')).toBe(primaryTheme)
+    await expect(stat(`${settingsPath}.previous`)).rejects.toThrow()
+    await expect(stat(`${themePath}.previous`)).rejects.toThrow()
+  })
+
+  it('rolls back an active theme tombstone when the settings commit fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-delete-rollback-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const created = await store.create('不可丢失主题')
+    await store.activate(created.id)
+    const internals = store as unknown as { writeSettings: (settings: unknown) => Promise<void> }
+    internals.writeSettings = vi.fn().mockRejectedValue(new Error('settings write failed'))
+
+    await expect(store.delete(created.id)).rejects.toThrow('settings write failed')
+    await expect(store.get(created.id)).resolves.toMatchObject({ id: created.id })
+    expect((await store.list()).find((theme) => theme.id === created.id)).toMatchObject({ active: true })
+    expect((await readdir(join(root, 'themes'))).some((entry) => entry.startsWith('.theme-delete-'))).toBe(false)
+  })
+
+  it('reconciles deletion tombstones according to committed settings on startup', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-delete-recovery-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const systemTheme = (await store.list()).find((theme) => theme.system)
+    if (!systemTheme) throw new Error('System theme was not initialized.')
+    const created = await store.create('事务主题')
+    await store.activate(created.id)
+    const beforeCommit = join(root, 'themes', `.theme-delete-${created.id}-00000000-0000-4000-8000-000000000000`)
+    await rename(join(root, 'themes', created.id), beforeCommit)
+
+    const restored = new ProfileStore(root)
+    await restored.initialize()
+    await expect(restored.get(created.id)).resolves.toMatchObject({ id: created.id })
+    await expect(stat(beforeCommit)).rejects.toThrow()
+
+    await restored.activate(systemTheme.id)
+    const afterCommit = join(root, 'themes', `.theme-delete-${created.id}-00000000-0000-4000-8000-000000000001`)
+    await rename(join(root, 'themes', created.id), afterCommit)
+    const cleaned = new ProfileStore(root)
+    await cleaned.initialize()
+    await expect(cleaned.get(created.id)).rejects.toThrow()
+    await expect(stat(afterCommit)).rejects.toThrow()
+    expect((await cleaned.list()).find((theme) => theme.active)?.id).toBe(systemTheme.id)
   })
 
   it('migrates legacy settings and keeps the original bundled theme editable but undeletable', async () => {
@@ -520,6 +593,7 @@ describe('ProfileStore', () => {
     const profile = await store.create('视频主题')
     const mp4Source = join(root, 'source-60fps.mp4')
     const webmSource = join(root, 'source-29.97fps.webm')
+    const incompatibleSource = join(root, 'source-mpeg4.mp4')
     await execFileAsync(ffmpegPath, [
       '-hide_banner', '-loglevel', 'error', '-y',
       '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=60',
@@ -531,13 +605,24 @@ describe('ProfileStore', () => {
       '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=30000/1001',
       '-t', '0.5', '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', webmSource
     ])
+    await execFileAsync(ffmpegPath, [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24',
+      '-t', '0.5', '-an', '-c:v', 'mpeg4', incompatibleSource
+    ])
 
     const mp4Inspection = await store.inspectVideoSource(mp4Source)
-    expect(mp4Inspection).toMatchObject({ width: 640, height: 360, hasAudio: true, highLoad: true })
+    expect(mp4Inspection).toMatchObject({ width: 640, height: 360, audioCodec: expect.stringMatching(/AAC/i), hasAudio: true, portable: true, highLoad: true })
     expect(mp4Inspection.frameRate).toBeGreaterThan(59)
     const webmInspection = await store.inspectVideoSource(webmSource)
-    expect(webmInspection).toMatchObject({ width: 320, height: 180, hasAudio: false, highLoad: false })
+    expect(webmInspection).toMatchObject({ width: 320, height: 180, audioCodec: null, hasAudio: false, portable: true, highLoad: false })
     expect(webmInspection.frameRate).toBeCloseTo(29.97, 1)
+    const incompatibleInspection = await store.inspectVideoSource(incompatibleSource)
+    expect(incompatibleInspection).toMatchObject({ width: 320, height: 180, portable: false, highLoad: false })
+    await expect(store.importMediaAsset(profile.id, incompatibleSource, 'windowBackground', 'video')).rejects.toThrow('需要转换')
+    const converted = await store.importMediaAsset(profile.id, incompatibleSource, 'windowBackground', 'video', undefined, true)
+    expect(converted.reference.videoVariants).toBeUndefined()
+    await expect(store.inspectReferencedVideo(profile.id, converted.reference.asset)).resolves.toMatchObject({ portable: true })
 
     const imported = await store.importMediaAsset(profile.id, mp4Source, 'hero', 'video', undefined, true)
     expect(imported.reference.videoVariants?.active).toBe('optimized')
@@ -545,7 +630,7 @@ describe('ProfileStore', () => {
     const optimizedAsset = imported.reference.videoVariants?.optimized.asset
     if (!originalAsset || !optimizedAsset) throw new Error('Optimized video variants are missing.')
     const optimizedInspection = await store.inspectReferencedVideo(profile.id, optimizedAsset)
-    expect(optimizedInspection).toMatchObject({ width: 640, height: 360, hasAudio: true, highLoad: false })
+    expect(optimizedInspection).toMatchObject({ width: 640, height: 360, hasAudio: true, portable: true, highLoad: false })
     expect(optimizedInspection.frameRate).toBeLessThanOrEqual(30.5)
 
     profile.hero.source = imported.reference

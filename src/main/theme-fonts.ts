@@ -41,8 +41,8 @@ async function buildBuiltinFontFace(id: BuiltinFontId, resourcesRoot: string): P
   }
 
   const data = await readFile(absolute)
-  const family = id === 'lxgw-wenkai' ? 'Dream LXGW WenKai' : 'Dream JetBrains Mono'
-  const weight = id === 'jetbrains-mono' ? '100 800' : '500'
+  const family = id === 'lxgw-wenkai' ? 'Dream LXGW WenKai' : id === 'dancing-script' ? 'Dream Dancing Script' : 'Dream JetBrains Mono'
+  const weight = id === 'jetbrains-mono' ? '100 800' : id === 'dancing-script' ? '400 700' : '500'
   return `@font-face { font-family: "${family}"; src: url("data:font/woff2;base64,${data.toString('base64')}") format("woff2"); font-style: normal; font-weight: ${weight}; font-display: swap; }`
 }
 

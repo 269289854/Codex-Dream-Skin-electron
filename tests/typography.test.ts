@@ -4,7 +4,7 @@ import { BUILTIN_FONTS, createDefaultTypography, safeImportedFontFamily, themeTy
 describe('typography model', () => {
   it('provides every requested built-in font and defaults editable copy slots correctly', () => {
     expect(Object.keys(BUILTIN_FONTS)).toEqual([
-      'system-ui', 'segoe-script', 'noto-sans-sc', 'noto-serif-sc', 'lxgw-wenkai', 'jetbrains-mono'
+      'system-ui', 'segoe-script', 'dancing-script', 'noto-sans-sc', 'noto-serif-sc', 'lxgw-wenkai', 'jetbrains-mono'
     ])
     expect(createDefaultTypography()).toEqual({
       slots: {
@@ -13,7 +13,7 @@ describe('typography model', () => {
         homeSubtitle: { kind: 'inherit' },
         brandTitle: { kind: 'inherit' },
         brandSubtitle: { kind: 'inherit' },
-        brandSignature: { kind: 'builtin', id: 'segoe-script' },
+        brandSignature: { kind: 'builtin', id: 'dancing-script' },
         homeHeadingDecoration: { kind: 'inherit' },
         composerMelody: { kind: 'inherit' },
         sidebarProjectsTitle: { kind: 'inherit' },

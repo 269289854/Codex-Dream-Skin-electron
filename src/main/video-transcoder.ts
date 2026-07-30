@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import ffmpegPath from 'ffmpeg-static'
 import type { VideoAssetInspection } from '../shared/contracts'
+import { assertPortableVideoInspection } from './video-compatibility'
 
 const MAX_ERROR_OUTPUT = 64 * 1024
 
@@ -53,7 +54,11 @@ export function assertOptimizedVideoInspection(source: VideoAssetInspection, opt
     throw new Error('优化视频尺寸复检失败。')
   }
   if (optimized.frameRate > maxFrameRate + 0.5) throw new Error('优化视频帧率复检失败。')
-  if (!/avc|h264/i.test(optimized.codec)) throw new Error('优化视频编码复检失败。')
+  try {
+    assertPortableVideoInspection(optimized)
+  } catch {
+    throw new Error('优化视频编码或音轨复检失败。')
+  }
   if (optimized.hasAudio !== source.hasAudio) throw new Error('优化视频音轨复检失败。')
 }
 

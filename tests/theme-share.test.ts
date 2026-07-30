@@ -1,11 +1,24 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { unzipSync, zipSync } from 'fflate'
 import sharp from 'sharp'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
-import { collectThemeAssets, createShareProfile, decodeShareZip, sha256, validateShareContents } from '../src/main/theme-share'
+import {
+  MAX_SHARE_COMPRESSED_BYTES,
+  MAX_SHARE_UNCOMPRESSED_BYTES,
+  MAX_SHARE_VIDEO_BYTES,
+  addShareUncompressedBytes,
+  assertShareCompressedSize,
+  assertShareEntrySize,
+  assertSharePath,
+  collectThemeAssets,
+  createShareProfile,
+  decodeShareZip,
+  sha256,
+  validateShareContents
+} from '../src/main/theme-share'
 import { ensureGifInfiniteLoop } from '../src/shared/gif'
 import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, DEFAULT_THEME_COLORS } from '../src/shared/theme'
@@ -15,20 +28,21 @@ sharp.cache(false)
 const roots: string[] = []
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
 const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
+const CENTRAL_DIRECTORY_SIGNATURE = Buffer.from([0x50, 0x4b, 0x01, 0x02])
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })))
 })
 
 describe('theme share packages', () => {
-  it('keeps both local video variants but strips the inactive variant from shares', () => {
+  it('keeps both local video variants but always shares the portable optimized variant', () => {
     const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111')
     profile.hero.source = {
-      asset: 'assets/hero-optimized.mp4',
+      asset: 'assets/hero.webm',
       kind: 'video',
-      mimeType: 'video/mp4',
+      mimeType: 'video/webm',
       videoVariants: {
-        active: 'optimized',
+        active: 'original',
         original: { asset: 'assets/hero.webm', mimeType: 'video/webm', width: 3840, height: 2160, frameRate: 59.94 },
         optimized: { asset: 'assets/hero-optimized.mp4', mimeType: 'video/mp4', width: 1920, height: 1080, frameRate: 30 }
       }
@@ -39,6 +53,43 @@ describe('theme share packages', () => {
     expect(shared.hero.source).toEqual({ asset: 'assets/hero-optimized.mp4', kind: 'video', mimeType: 'video/mp4' })
     expect(collectThemeAssets(shared)).toContain('assets/hero-optimized.mp4')
     expect(collectThemeAssets(shared)).not.toContain('assets/hero.webm')
+  })
+
+  it('enforces ZIP64-safe compressed, expanded, and per-video byte budgets', () => {
+    expect(MAX_SHARE_COMPRESSED_BYTES).toBe(20 * 1024 ** 3)
+    expect(MAX_SHARE_UNCOMPRESSED_BYTES).toBe(10 * 1024 ** 3)
+    expect(MAX_SHARE_VIDEO_BYTES).toBe(2 * 1024 ** 3)
+    expect(() => assertShareCompressedSize(MAX_SHARE_COMPRESSED_BYTES)).not.toThrow()
+    expect(() => assertShareCompressedSize(MAX_SHARE_COMPRESSED_BYTES + 1)).toThrow('20 GiB')
+    expect(() => assertShareEntrySize('assets/video.mp4', MAX_SHARE_VIDEO_BYTES)).not.toThrow()
+    expect(() => assertShareEntrySize('assets/video.mp4', MAX_SHARE_VIDEO_BYTES + 1)).toThrow('单个条目')
+    expect(addShareUncompressedBytes(4 * 1024 ** 3, 4 * 1024 ** 3)).toBe(8 * 1024 ** 3)
+    expect(addShareUncompressedBytes(MAX_SHARE_UNCOMPRESSED_BYTES - 1, 1)).toBe(MAX_SHARE_UNCOMPRESSED_BYTES)
+    expect(() => addShareUncompressedBytes(MAX_SHARE_UNCOMPRESSED_BYTES, 1)).toThrow('10 GiB')
+    let syntheticZip64Total = 0
+    for (let index = 0; index < 5; index += 1) syntheticZip64Total = addShareUncompressedBytes(syntheticZip64Total, MAX_SHARE_VIDEO_BYTES)
+    expect(syntheticZip64Total).toBe(MAX_SHARE_UNCOMPRESSED_BYTES)
+    expect(() => addShareUncompressedBytes(syntheticZip64Total, 1)).toThrow('10 GiB')
+  })
+
+  it('does not replace an existing share when export budget validation fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-export-budget-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('导出预算')
+    const asset = 'assets/oversized.png'
+    const assetPath = join(store.themesRoot, profile.id, asset)
+    await mkdir(join(store.themesRoot, profile.id, 'assets'), { recursive: true })
+    await writeFile(assetPath, png)
+    await truncate(assetPath, 30 * 1024 * 1024 + 1)
+    profile.hero.source = { asset, kind: 'image', mimeType: 'image/png' }
+    const destination = join(root, 'existing.cdstheme')
+    const original = Buffer.from('existing share')
+    await writeFile(destination, original)
+
+    await expect(store.exportSharePackage(profile, destination)).rejects.toThrow('30 MB')
+    expect(await readFile(destination)).toEqual(original)
   })
 
   it('exports the current draft once per referenced asset, including WebP, and imports it as a new theme', async () => {
@@ -317,11 +368,32 @@ describe('theme share packages', () => {
     expect(await readdir(store.themesRoot)).toEqual(before)
   })
 
+  it('rejects declared and actual ZIP sizes that disagree and cleans temporary extraction', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-size-mismatch-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const archive = zipSync({
+      'manifest.json': Buffer.from('{}'),
+      'theme.json': Buffer.from('{}')
+    })
+    const packagePath = join(root, 'size-mismatch.cdstheme')
+    await writeFile(packagePath, patchCentralUncompressedSize(archive, 'manifest.json', 3))
+
+    await expect(store.importSharePackage(packagePath)).rejects.toThrow()
+    expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
+  })
+
   it('rejects malformed archive paths before parsing theme content', () => {
     expect(() => decodeShareZip(new Uint8Array([1, 2, 3]))).toThrow()
     expect(() => decodeShareZip(zipSync({ '../outside.png': png }))).toThrow('路径无效')
     expect(() => decodeShareZip(zipSync({ 'assets\\windows-path.png': png }))).toThrow('路径无效')
     expect(() => decodeShareZip(zipSync({ 'C:/assets/absolute.png': png }))).toThrow('路径无效')
+    for (const path of ['assets/CON.png', 'assets/nul.webp', 'assets/nested/Com1.mp4', 'assets/LPT9.font.woff2', 'assets/CLOCK$', 'assets/NUL .txt', 'assets/nested/con .png']) {
+      expect(() => assertSharePath(path), path).toThrow('路径无效')
+    }
+    expect(() => assertSharePath('assets/console.png')).not.toThrow()
+    expect(() => assertSharePath('assets/com10.png')).not.toThrow()
     const tooManyEntries = Object.fromEntries(Array.from({ length: 129 }, (_, index) => [`assets/image-${index}.png`, new Uint8Array()]))
     expect(() => decodeShareZip(zipSync(tooManyEntries))).toThrow('条目数量')
   })
@@ -362,3 +434,23 @@ describe('theme share packages', () => {
     expect(await readdir(store.themesRoot)).toEqual(originalDirectories)
   })
 })
+
+function patchCentralUncompressedSize(source: Uint8Array, entryName: string, size: number): Buffer {
+  const archive = Buffer.from(source)
+  let offset = 0
+  while (offset < archive.length) {
+    const entryOffset = archive.indexOf(CENTRAL_DIRECTORY_SIGNATURE, offset)
+    if (entryOffset < 0) break
+    const nameLength = archive.readUInt16LE(entryOffset + 28)
+    const extraLength = archive.readUInt16LE(entryOffset + 30)
+    const commentLength = archive.readUInt16LE(entryOffset + 32)
+    const nameStart = entryOffset + 46
+    const name = archive.toString('utf8', nameStart, nameStart + nameLength)
+    if (name === entryName) {
+      archive.writeUInt32LE(size, entryOffset + 24)
+      return archive
+    }
+    offset = nameStart + nameLength + extraLength + commentLength
+  }
+  throw new Error(`ZIP central directory entry is missing: ${entryName}`)
+}

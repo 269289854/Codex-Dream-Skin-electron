@@ -10,6 +10,14 @@
 }
 
 @font-face {
+  font-family: "Dream Dancing Script";
+  src: url("../../../resources/shared/fonts/dancing-script/dancing-script-latin-wght-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "Dream JetBrains Mono";
   src: url("../../../resources/shared/fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
   font-style: normal;

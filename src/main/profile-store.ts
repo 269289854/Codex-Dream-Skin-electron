@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { copyFile, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createRequire } from 'node:module'
 import sharp from 'sharp'
@@ -19,18 +20,24 @@ import { ensureGifInfiniteLoop } from '../shared/gif'
 import { MAX_ICON_GIF_BYTES } from '../shared/icon-assets'
 import { inspectIconGif, prepareIconGif } from './icon-assets'
 import {
+  addShareUncompressedBytes,
+  assertShareCompressedSize,
+  assertShareEntrySize,
   MAX_SHARE_ENTRIES,
   MAX_SHARE_FONT_BYTES,
   MAX_SHARE_IMAGE_BYTES,
+  MAX_SHARE_METADATA_BYTES,
   assetKind,
   assertSharePath,
   collectThemeAssets,
   createShareProfile,
   encodeJson,
   parseThemeShareManifest,
+  shareEntryLimit,
   shareProfileVersionMatches
 } from './theme-share'
 import { assertOptimizedVideoInspection, transcodeVideo } from './video-transcoder'
+import { assertPortableVideoInspection, isPortableVideo } from './video-compatibility'
 
 interface StudioSettings {
   version: 2
@@ -49,6 +56,13 @@ interface BundledSystemThemeAssets {
   conversationBubbles?: Record<ConversationBubblePresetId, string>
 }
 
+export interface VideoSourcePreflight {
+  sourcePath: string
+  size: number
+  mtimeMs: number
+  inspection: VideoAssetInspection
+}
+
 const MAX_ASSET_BYTES = 30 * 1024 * 1024
 const MAX_FONT_BYTES = 12 * 1024 * 1024
 const BUNDLED_SYSTEM_ASSETS = new Set(['assets/dream-reference.png', 'assets/dream-polaroid.png'])
@@ -62,7 +76,7 @@ const MAX_VIDEO_DIMENSION = 4096
 const MAX_CONVERSATION_BUBBLE_BYTES = 10 * 1024 * 1024
 const MAX_CONVERSATION_BUBBLE_DIMENSION = 2048
 const MAX_CONVERSATION_BUBBLE_GIF_FRAMES = 180
-const MAX_SHARE_METADATA_BYTES = 5 * 1024 * 1024
+const THEME_DELETE_TOMBSTONE_PATTERN = /^\.theme-delete-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-[0-9a-f-]{36}$/i
 
 export class ProfileStore {
   readonly themesRoot: string
@@ -84,6 +98,7 @@ export class ProfileStore {
       await this.writeSettings({ version: 2, activeThemeId: profile.id, systemThemeId: profile.id })
       return
     }
+    await this.reconcileThemeTombstones(settings)
 
     const systemExists = await this.get(settings.systemThemeId).then(() => true).catch(() => false)
     const activeExists = settings.activeThemeId === settings.systemThemeId
@@ -113,8 +128,8 @@ export class ProfileStore {
 
   async get(id: string): Promise<ThemeProfile> {
     this.assertId(id)
-    const content = await readFile(join(this.themeRoot(id), 'theme.json'), 'utf8')
-    const profile = parseThemeProfile(JSON.parse(content) as unknown)
+    const profile = await this.readJsonWithRecovery(join(this.themeRoot(id), 'theme.json'), (content) =>
+      parseThemeProfile(JSON.parse(content) as unknown))
     if (profile.id !== id) throw new Error('Theme directory does not match its profile ID.')
     return profile
   }
@@ -163,24 +178,24 @@ export class ProfileStore {
   async exportSharePackage(input: unknown, destinationPath: unknown, signal?: AbortSignal): Promise<void> {
     const localProfile = parseThemeProfile(input)
     await this.get(localProfile.id)
-    await this.validateProfileMedia(localProfile)
-    await this.validateProfileAssets(localProfile)
     const profile = createShareProfile(localProfile)
+    await this.validateProfileMedia(profile)
+    await this.validateProfileAssets(profile)
     this.throwIfAborted(signal, '主题导出已取消。')
     if (typeof destinationPath !== 'string' || !isAbsolute(destinationPath)) throw new Error('分享包保存路径必须是绝对路径。')
     const sourceAssets = new Map<string, string>()
     const manifestAssets: Array<{ path: string; kind: 'image' | 'video' | 'font'; size: number; sha256: string }> = []
+    let uncompressedSize = 0
     for (const asset of collectThemeAssets(profile)) {
       this.throwIfAborted(signal, '主题导出已取消。')
       const sourcePath = this.resolveAsset(profile.id, asset)
       const sourceStat = await stat(sourcePath)
       if (!sourceStat.isFile()) throw new Error(`主题素材不存在: ${asset}`)
       const kind = assetKind(asset)
-      if (kind === 'image' && sourceStat.size > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
-      if (kind === 'font' && sourceStat.size > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
-      await this.assertDiskSpace(dirname(destinationPath), sourceStat.size)
+      assertShareEntrySize(asset, sourceStat.size)
+      uncompressedSize = addShareUncompressedBytes(uncompressedSize, sourceStat.size)
       sourceAssets.set(asset, sourcePath)
-      manifestAssets.push({ path: asset, kind, size: sourceStat.size, sha256: await hashFile(sourcePath, signal) })
+      manifestAssets.push({ path: asset, kind, size: sourceStat.size, sha256: await hashFile(sourcePath, signal, '主题导出已取消。') })
     }
     const manifest = {
       format: 'codex-dream-skin-theme',
@@ -194,6 +209,9 @@ export class ProfileStore {
     const manifestData = encodeJson(manifest)
     const profileData = encodeJson(profile)
     if (manifestData.byteLength + profileData.byteLength > MAX_SHARE_METADATA_BYTES) throw new Error('分享包元数据过大。')
+    uncompressedSize = addShareUncompressedBytes(uncompressedSize, manifestData.byteLength)
+    uncompressedSize = addShareUncompressedBytes(uncompressedSize, profileData.byteLength)
+    await this.assertDiskSpace(dirname(destinationPath), uncompressedSize)
     await this.writeShareArchiveAtomic(destinationPath, sourceAssets, manifestData, profileData, signal)
   }
 
@@ -202,6 +220,7 @@ export class ProfileStore {
     if (extname(sourcePath).toLowerCase() !== '.cdstheme') throw new Error('请选择 .cdstheme 分享文件。')
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('分享包必须是文件。')
+    assertShareCompressedSize(sourceStat.size)
     const temporaryRoot = await mkdtemp(join(this.themesRoot, '.cdstheme-import-'))
     try {
       this.throwIfAborted(signal, '主题导入已取消。')
@@ -232,8 +251,8 @@ export class ProfileStore {
           const file = await stat(entry.path)
           if (file.size !== entry.size) throw new Error(`素材大小校验失败: ${path}`)
           const manifestAsset = listed.get(path)
-          if (!manifestAsset || manifestAsset.size !== file.size || (await hashFile(entry.path)).toLowerCase() !== manifestAsset.sha256.toLowerCase()) throw new Error(`素材校验失败: ${path}`)
-          await this.validateShareAssetFile(path, entry.path, assetKind(path))
+          if (!manifestAsset || manifestAsset.size !== file.size || (await hashFile(entry.path, signal, '主题导入已取消。')).toLowerCase() !== manifestAsset.sha256.toLowerCase()) throw new Error(`素材校验失败: ${path}`)
+          await this.validateShareAssetFile(path, entry.path, assetKind(path), signal, true)
           if (gifIconAssets.has(path)) {
             const source = await readFile(entry.path)
             await inspectIconGif(source)
@@ -274,12 +293,25 @@ export class ProfileStore {
     if (settings.systemThemeId === id) throw new Error('系统默认主题不能删除。')
     const themes = await this.list()
     if (themes.length <= 1) throw new Error('At least one theme must remain.')
-    await rm(this.themeRoot(id), { recursive: true, force: false })
-    if (settings.activeThemeId === id) {
-      const fallback = themes.find((theme) => theme.id !== id)
-      if (!fallback) throw new Error('No fallback theme is available.')
-      await this.writeSettings({ ...settings, activeThemeId: fallback.id })
+    const fallback = settings.activeThemeId === id ? themes.find((theme) => theme.id !== id) : undefined
+    if (settings.activeThemeId === id && !fallback) throw new Error('No fallback theme is available.')
+    const themeRoot = this.themeRoot(id)
+    const tombstone = join(this.themesRoot, `.theme-delete-${id}-${randomUUID()}`)
+    await rename(themeRoot, tombstone)
+    await this.syncParentDirectory(tombstone)
+    try {
+      if (fallback) await this.writeSettings({ ...settings, activeThemeId: fallback.id })
+    } catch (error) {
+      try {
+        await rename(tombstone, themeRoot)
+        await this.syncParentDirectory(themeRoot)
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], '主题删除设置写入失败，目录将在下次启动时恢复。')
+      }
+      throw error
     }
+    await rm(tombstone, { recursive: true, force: true }).catch(() => undefined)
+    await this.syncParentDirectory(tombstone)
   }
 
   async activate(id: string): Promise<ThemeProfile> {
@@ -407,6 +439,7 @@ export class ProfileStore {
   private collectAssets(profile: ThemeProfile): string[] { return collectThemeAssets(profile) }
 
   private async importOptimizedVideo(themeId: string, sourcePath: string, purpose: VideoMediaRole, inspection: VideoAssetInspection, signal?: AbortSignal): Promise<ImportedMediaAsset> {
+    const preserveOriginal = inspection.portable
     const sourceExtension = extname(sourcePath).toLowerCase()
     const token = randomUUID()
     const originalAsset = `assets/${purpose}-${token}${sourceExtension}`
@@ -417,20 +450,27 @@ export class ProfileStore {
     const optimizedTemporary = `${optimizedPath}.${randomUUID()}.tmp.mp4`
     await mkdir(dirname(originalPath), { recursive: true })
     try {
-      await pipeline(createReadStream(sourcePath), createWriteStreamChecked(originalTemporary), { signal })
+      if (preserveOriginal) await pipeline(createReadStream(sourcePath), createWriteStreamChecked(originalTemporary), { signal })
       await transcodeVideo({ inputPath: sourcePath, outputPath: optimizedTemporary, inspection, signal })
       this.throwIfAborted(signal, '视频优化已取消。')
       const optimizedStat = await stat(optimizedTemporary)
-      const optimizedInspection = await this.inspectVideo(optimizedTemporary, '.mp4', optimizedStat.size)
+      const optimizedInspection = await this.inspectVideo(optimizedTemporary, '.mp4', optimizedStat.size, signal, '视频优化已取消。')
       assertOptimizedVideoInspection(inspection, optimizedInspection)
-      await Promise.all([this.syncFile(originalTemporary), this.syncFile(optimizedTemporary)])
-      await rename(originalTemporary, originalPath)
+      await Promise.all([
+        ...(preserveOriginal ? [this.syncFile(originalTemporary)] : []),
+        this.syncFile(optimizedTemporary)
+      ])
+      if (preserveOriginal) await rename(originalTemporary, originalPath)
       await rename(optimizedTemporary, optimizedPath)
 
-      const original = this.videoVariant(originalAsset, mediaMimeTypeForPath(originalAsset) as 'video/mp4' | 'video/webm', inspection)
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
-      const reference = createVideoVariantReference(original, optimized)
-      this.trackPendingAsset(themeId, originalAsset)
+      const reference = preserveOriginal
+        ? createVideoVariantReference(
+            this.videoVariant(originalAsset, mediaMimeTypeForPath(originalAsset) as 'video/mp4' | 'video/webm', inspection),
+            optimized
+          )
+        : mediaReferenceForPath(optimizedAsset)
+      if (preserveOriginal) this.trackPendingAsset(themeId, originalAsset)
       this.trackPendingAsset(themeId, optimizedAsset)
       return {
         reference,
@@ -508,7 +548,8 @@ export class ProfileStore {
   }
 
   private async readSettings(): Promise<StudioSettings> {
-    const parsed = JSON.parse(await readFile(this.settingsPath, 'utf8')) as Partial<StudioSettings> | Partial<LegacyStudioSettings>
+    const parsed = await this.readJsonWithRecovery(this.settingsPath, (content) =>
+      JSON.parse(content) as Partial<StudioSettings> | Partial<LegacyStudioSettings>)
     if (parsed.version === 2 && parsed.activeThemeId && parsed.systemThemeId) {
       this.assertId(parsed.activeThemeId)
       this.assertId(parsed.systemThemeId)
@@ -521,7 +562,70 @@ export class ProfileStore {
     throw new Error('Studio settings are invalid.')
   }
 
-  async importMediaAsset(themeId: string, sourcePath: string, purpose: MediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal, optimizeVideo = false): Promise<ImportedMediaAsset> {
+  private async readJsonWithRecovery<T>(path: string, parse: (content: string) => T): Promise<T> {
+    let content: string
+    try {
+      content = await readFile(path, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || !(await this.restoreMissingJsonFile(path))) throw error
+      content = await readFile(path, 'utf8')
+    }
+    const value = parse(content)
+    await rm(`${path}.previous`, { force: true }).catch(() => undefined)
+    return value
+  }
+
+  private async restoreMissingJsonFile(path: string): Promise<boolean> {
+    const backup = `${path}.previous`
+    try {
+      await stat(path)
+      await rm(backup, { force: true }).catch(() => undefined)
+      return false
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    try {
+      await rename(backup, path)
+      await this.syncParentDirectory(path)
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+      throw error
+    }
+  }
+
+  private async reconcileThemeTombstones(settings: StudioSettings): Promise<void> {
+    const referenced = new Set([settings.activeThemeId, settings.systemThemeId])
+    const entries = await readdir(this.themesRoot, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const match = THEME_DELETE_TOMBSTONE_PATTERN.exec(entry.name)
+      const id = match?.[1]
+      if (!id) continue
+      const tombstone = join(this.themesRoot, entry.name)
+      const themeRoot = this.themeRoot(id)
+      if (referenced.has(id) && !(await pathExists(themeRoot))) {
+        await rename(tombstone, themeRoot)
+      } else {
+        await rm(tombstone, { recursive: true, force: true }).catch(() => undefined)
+      }
+      await this.syncParentDirectory(tombstone)
+    }
+  }
+
+  private async syncParentDirectory(path: string): Promise<void> {
+    let directory: Awaited<ReturnType<typeof open>> | null = null
+    try {
+      directory = await open(dirname(path), 'r')
+      await directory.sync()
+    } catch {
+      // Directory fsync is unavailable on some supported Windows filesystems.
+    } finally {
+      await directory?.close().catch(() => undefined)
+    }
+  }
+
+  async importMediaAsset(themeId: string, sourcePath: string, purpose: MediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal, optimizeVideo = false, preflight?: VideoSourcePreflight): Promise<ImportedMediaAsset> {
     await this.get(themeId)
     if (!isAbsolute(sourcePath)) throw new Error('所选媒体路径必须是绝对路径。')
     const sourceStat = await stat(sourcePath)
@@ -545,7 +649,12 @@ export class ProfileStore {
     let metadata: { width: number; height: number; pages?: number }
     let videoInspection: VideoAssetInspection | null = null
     if (VIDEO_EXTENSIONS.has(extension)) {
-      videoInspection = await this.inspectVideo(sourcePath, extension, sourceStat.size)
+      videoInspection = preflight
+        && preflight.sourcePath === sourcePath
+        && preflight.size === sourceStat.size
+        && preflight.mtimeMs === sourceStat.mtimeMs
+        ? preflight.inspection
+        : await this.inspectVideo(sourcePath, extension, sourceStat.size, signal, '媒体导入已取消。')
       metadata = videoInspection
     } else if (extension === '.svg') {
       const source = await readFile(sourcePath, 'utf8')
@@ -556,6 +665,9 @@ export class ProfileStore {
     }
     if (conversationBubble) this.assertConversationBubbleInspection(metadata, extension)
     await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
+    if (videoInspection && !videoInspection.portable && !optimizeVideo) {
+      throw new Error('该视频需要转换为跨平台兼容格式后才能导入。')
+    }
     if (videoInspection && optimizeVideo) {
       return this.importOptimizedVideo(themeId, sourcePath, purpose as VideoMediaRole, videoInspection, signal)
     }
@@ -603,13 +715,19 @@ export class ProfileStore {
     }
   }
 
-  async inspectVideoSource(sourcePath: string): Promise<VideoAssetInspection> {
+  async inspectVideoSource(sourcePath: string, signal?: AbortSignal): Promise<VideoAssetInspection> {
+    return (await this.preflightVideoSource(sourcePath, signal)).inspection
+  }
+
+  async preflightVideoSource(sourcePath: string, signal?: AbortSignal): Promise<VideoSourcePreflight> {
+    this.throwIfAborted(signal, '媒体导入已取消。')
     if (!isAbsolute(sourcePath)) throw new Error('所选视频路径必须是绝对路径。')
     const extension = extname(sourcePath).toLowerCase()
     if (!VIDEO_EXTENSIONS.has(extension)) throw new Error('视频只支持 MP4 或 WebM。')
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('所选视频必须是文件。')
-    return this.inspectVideo(sourcePath, extension, sourceStat.size)
+    const inspection = await this.inspectVideo(sourcePath, extension, sourceStat.size, signal, '媒体导入已取消。')
+    return { sourcePath, size: sourceStat.size, mtimeMs: sourceStat.mtimeMs, inspection }
   }
 
   async inspectReferencedVideo(themeId: unknown, asset: unknown): Promise<VideoAssetInspection> {
@@ -638,8 +756,8 @@ export class ProfileStore {
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('视频文件不存在。')
     if (reference.mimeType !== 'video/mp4' && reference.mimeType !== 'video/webm') throw new Error('视频 MIME 类型无效。')
-    const inspection = await this.inspectVideo(sourcePath, extname(sourcePath).toLowerCase(), sourceStat.size)
-    if (!inspection.highLoad) throw new Error('该视频无需优化。')
+    const inspection = await this.inspectVideo(sourcePath, extname(sourcePath).toLowerCase(), sourceStat.size, signal, '视频优化已取消。')
+    if (!inspection.highLoad && inspection.portable) throw new Error('该视频无需优化。')
     await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
 
     const optimizedAsset = `assets/${role}-${randomUUID()}-optimized.mp4`
@@ -650,13 +768,14 @@ export class ProfileStore {
       await transcodeVideo({ inputPath: sourcePath, outputPath: temporary, inspection, signal })
       this.throwIfAborted(signal, '视频优化已取消。')
       const optimizedStat = await stat(temporary)
-      const optimizedInspection = await this.inspectVideo(temporary, '.mp4', optimizedStat.size)
+      const optimizedInspection = await this.inspectVideo(temporary, '.mp4', optimizedStat.size, signal, '视频优化已取消。')
       assertOptimizedVideoInspection(inspection, optimizedInspection)
       await this.syncFile(temporary)
       await rename(temporary, optimizedPath)
-      const original = this.videoVariant(reference.asset, reference.mimeType, inspection)
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
-      const nextReference = createVideoVariantReference(original, optimized)
+      const nextReference = inspection.portable
+        ? createVideoVariantReference(this.videoVariant(reference.asset, reference.mimeType, inspection), optimized)
+        : mediaReferenceForPath(optimizedAsset)
       this.trackPendingAsset(themeId, optimizedAsset)
       return {
         reference: nextReference,
@@ -816,17 +935,31 @@ export class ProfileStore {
     } finally {
       await file.close()
     }
+    try {
+      await this.restoreMissingJsonFile(path)
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => undefined)
+      throw error
+    }
     let hadOriginal = false
     try {
       try { await rename(path, backup); hadOriginal = true } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
+      if (hadOriginal) await this.syncParentDirectory(path)
       await rename(temporary, path)
-      if (hadOriginal) await rm(backup, { force: true })
+      await this.syncParentDirectory(path)
     } catch (error) {
       await rm(temporary, { force: true })
-      if (hadOriginal) await rename(backup, path).catch(() => undefined)
+      if (hadOriginal) {
+        await rename(backup, path).catch(() => undefined)
+        await this.syncParentDirectory(path)
+      }
       throw error
+    }
+    if (hadOriginal) {
+      await rm(backup, { force: true }).catch(() => undefined)
+      await this.syncParentDirectory(path)
     }
   }
 
@@ -886,6 +1019,7 @@ export class ProfileStore {
       await archive.finalize()
       await completion
       this.throwIfAborted(signal, '主题导出已取消。')
+      assertShareCompressedSize((await stat(temporary)).size)
       const file = await open(temporary, 'r+')
       try { await file.sync() } finally { await file.close() }
       const backup = `${path}.previous`
@@ -908,104 +1042,51 @@ export class ProfileStore {
   }
 
   private async extractShareArchive(sourcePath: string, compressedSize: number, temporaryRoot: string, signal?: AbortSignal): Promise<Map<string, { path: string; size: number }>> {
-    await this.assertDiskSpace(temporaryRoot, compressedSize)
+    assertShareCompressedSize(compressedSize)
     this.throwIfAborted(signal, '主题导入已取消。')
-    return await new Promise((resolvePromise, reject) => {
-      yauzl.open(sourcePath, { lazyEntries: true, autoClose: true }, (error, zipFile) => {
-        if (error || !zipFile) { reject(error ?? new Error('分享包 ZIP 无效。')); return }
-        const entries = new Map<string, { path: string; size: number }>()
-        const seen = new Set<string>()
-        let settled = false
-        const fail = (reason: unknown): void => {
-          if (settled) return
-          settled = true
-          zipFile.close()
-          reject(reason instanceof Error ? reason : new Error(String(reason)))
-        }
-        const abortImport = (): void => fail(new Error('主题导入已取消。'))
-        signal?.addEventListener('abort', abortImport, { once: true })
-        zipFile.on('error', fail)
-        zipFile.on('end', () => {
-          signal?.removeEventListener('abort', abortImport)
-          if (!settled) { settled = true; resolvePromise(entries) }
-        })
-        zipFile.on('entry', (entry) => {
-          if (settled) return
-          void (async () => {
+    const zipFile = await openShareZip(sourcePath)
+    const abortImport = (): void => zipFile.close()
+    signal?.addEventListener('abort', abortImport, { once: true })
+    try {
+      const scanned = await scanShareZip(zipFile, signal)
+      await this.assertDiskSpace(temporaryRoot, scanned.totalSize)
+      const extracted = new Map<string, { path: string; size: number }>()
+      let actualTotal = 0
+      for (const entry of scanned.entries) {
+        this.throwIfAborted(signal, '主题导入已取消。')
+        const destination = entry.fileName.startsWith('assets/')
+          ? this.resolveWithinRoot(temporaryRoot, entry.fileName)
+          : join(temporaryRoot, entry.fileName)
+        await mkdir(dirname(destination), { recursive: true })
+        const stream = await openShareEntryStream(zipFile, entry, signal)
+        let actualSize = 0
+        const limiter = new Transform({
+          transform: (chunk: Buffer, _encoding, callback) => {
             try {
-              this.throwIfAborted(signal, '主题导入已取消。')
-              assertSharePath(entry.fileName)
-              const canonical = entry.fileName.toLowerCase()
-              if (seen.has(canonical)) throw new Error('分享包包含重复条目。')
-              seen.add(canonical)
-              if (seen.size > MAX_SHARE_ENTRIES) throw new Error('分享包条目数量超过限制。')
-              const kind = entry.fileName.startsWith('assets/') ? assetKind(entry.fileName) : null
-              const limit = kind === 'image' ? MAX_SHARE_IMAGE_BYTES : kind === 'font' ? MAX_SHARE_FONT_BYTES : kind === 'video' ? Number.MAX_SAFE_INTEGER : MAX_SHARE_METADATA_BYTES
-              if (entry.uncompressedSize > limit) throw new Error('分享包条目超过大小限制。')
-              await this.assertDiskSpace(temporaryRoot, entry.uncompressedSize)
-              const destination = entry.fileName.startsWith('assets/')
-                ? this.resolveWithinRoot(temporaryRoot, entry.fileName)
-                : join(temporaryRoot, entry.fileName)
-              await mkdir(dirname(destination), { recursive: true })
-              await new Promise<void>((resolveStream, rejectStream) => {
-                zipFile.openReadStream(entry, (streamError, stream) => {
-                  if (streamError || !stream) { rejectStream(streamError ?? new Error('分享包条目读取失败。')); return }
-                  void pipeline(stream, createWriteStreamChecked(destination), { signal }).then(() => resolveStream(), rejectStream)
-                })
-              })
-              entries.set(entry.fileName, { path: destination, size: entry.uncompressedSize })
-              zipFile.readEntry()
-            } catch (reason) { fail(reason) }
-          })()
+              actualSize += chunk.byteLength
+              if (actualSize > shareEntryLimit(entry.fileName)) throw new Error('分享包中的单个条目超过大小限制。')
+              actualTotal = addShareUncompressedBytes(actualTotal, chunk.byteLength)
+              callback(null, chunk)
+            } catch (error) {
+              callback(error instanceof Error ? error : new Error('分享包解压大小超过限制。'))
+            }
+          }
         })
-        zipFile.readEntry()
-      })
-    })
+        await pipeline(stream, limiter, createWriteStreamChecked(destination), { signal })
+        if (actualSize !== entry.uncompressedSize) throw new Error('分享包条目大小与 ZIP 目录不一致。')
+        extracted.set(entry.fileName, { path: destination, size: actualSize })
+      }
+      return extracted
+    } catch (error) {
+      if (signal?.aborted) throw new Error('主题导入已取消。')
+      throw error
+    } finally {
+      signal?.removeEventListener('abort', abortImport)
+      zipFile.close()
+    }
   }
 
-  private async readShareEntries(sourcePath: string, compressedSize: number): Promise<Map<string, Buffer>> {
-    await this.assertDiskSpace(this.themesRoot, compressedSize)
-    return await new Promise((resolvePromise, reject) => {
-      yauzl.open(sourcePath, { lazyEntries: true, autoClose: true }, (error, zipFile) => {
-        if (error || !zipFile) { reject(error ?? new Error('分享包 ZIP 无效。')); return }
-        const entries = new Map<string, Buffer>()
-        const seen = new Set<string>()
-        let settled = false
-        const fail = (reason: unknown): void => {
-          if (settled) return
-          settled = true
-          zipFile.close()
-          reject(reason instanceof Error ? reason : new Error(String(reason)))
-        }
-        zipFile.on('error', fail)
-        zipFile.on('end', () => { if (!settled) { settled = true; resolvePromise(entries) } })
-        zipFile.on('entry', (entry) => {
-          if (settled) return
-          try {
-            assertSharePath(entry.fileName)
-            const canonical = entry.fileName.toLowerCase()
-            if (seen.has(canonical)) throw new Error('分享包包含重复条目。')
-            seen.add(canonical)
-            if (seen.size > MAX_SHARE_ENTRIES) throw new Error('分享包条目数量超过限制。')
-            const kind = entry.fileName.startsWith('assets/') ? assetKind(entry.fileName) : null
-            const limit = kind === 'image' ? MAX_SHARE_IMAGE_BYTES : kind === 'font' ? MAX_SHARE_FONT_BYTES : kind === 'video' ? Number.MAX_SAFE_INTEGER : MAX_SHARE_METADATA_BYTES
-            if (entry.uncompressedSize > limit) throw new Error('分享包条目超过大小限制。')
-            zipFile.openReadStream(entry, (streamError, stream) => {
-              if (streamError || !stream) { fail(streamError ?? new Error('分享包条目读取失败。')); return }
-              const chunks: Buffer[] = []
-              let size = 0
-              stream.on('data', (chunk: Buffer) => { size += chunk.length; chunks.push(chunk) })
-              stream.on('error', fail)
-              stream.on('end', () => { entries.set(entry.fileName, Buffer.concat(chunks, size)); zipFile.readEntry() })
-            })
-          } catch (reason) { fail(reason) }
-        })
-        zipFile.readEntry()
-      })
-    })
-  }
-
-  private async validateShareAssetFile(asset: string, path: string, kind: 'image' | 'video' | 'font'): Promise<void> {
+  private async validateShareAssetFile(asset: string, path: string, kind: 'image' | 'video' | 'font', signal?: AbortSignal, requirePortable = false): Promise<void> {
     const file = await stat(path)
     if (kind === 'image') {
       if (file.size > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
@@ -1013,7 +1094,8 @@ export class ProfileStore {
       return
     }
     if (kind === 'video') {
-      await this.inspectVideo(path, extname(asset).toLowerCase(), file.size)
+      const inspection = await this.inspectVideo(path, extname(asset).toLowerCase(), file.size, signal, '主题导入已取消。')
+      if (requirePortable) assertPortableVideoInspection(inspection)
       return
     }
     if (file.size > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
@@ -1039,7 +1121,8 @@ export class ProfileStore {
       const temporary = join(temporaryRoot, `probe${extension}`)
       try {
         await writeFile(temporary, data)
-        await this.inspectVideo(temporary, extension, data.byteLength)
+        const inspection = await this.inspectVideo(temporary, extension, data.byteLength)
+        assertPortableVideoInspection(inspection)
       } finally { await rm(temporaryRoot, { recursive: true, force: true }).catch(() => undefined) }
       return
     }
@@ -1077,8 +1160,10 @@ export class ProfileStore {
         const sourcePath = this.resolveAsset(profile.id, variant.asset)
         const sourceStat = await stat(sourcePath)
         if (!sourceStat.isFile()) throw new Error(`主题媒体不存在: ${variant.asset}`)
-        if (reference.kind === 'video') await this.inspectVideo(sourcePath, extension, sourceStat.size)
-        else {
+        if (reference.kind === 'video') {
+          const inspection = await this.inspectVideo(sourcePath, extension, sourceStat.size)
+          if (variant.asset === reference.asset) assertPortableVideoInspection(inspection)
+        } else {
           if (sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
           await this.inspectImage(sourcePath, extension)
         }
@@ -1132,71 +1217,109 @@ export class ProfileStore {
     }
   }
 
-  private async inspectVideo(sourcePath: string, extension: string, size: number): Promise<VideoAssetInspection> {
+  private async inspectVideo(sourcePath: string, extension: string, size: number, signal?: AbortSignal, cancelledMessage = '视频读取已取消。'): Promise<VideoAssetInspection> {
+    this.throwIfAborted(signal, cancelledMessage)
     const handle = await open(sourcePath, 'r')
     try {
       const header = Buffer.alloc(Math.min(64 * 1024, size))
       const result = await handle.read(header, 0, header.length, 0)
+      this.throwIfAborted(signal, cancelledMessage)
       const bytes = header.subarray(0, result.bytesRead)
       if (extension === '.mp4' && (bytes.length < 12 || bytes.toString('latin1', 4, 8) !== 'ftyp')) throw new Error('MP4 文件头无效。')
       if (extension === '.webm' && !(bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3)) throw new Error('WebM 文件头无效。')
-    } finally { await handle.close() }
 
-    let width = 0
-    let height = 0
-    let frameRate = 0
-    let duration = 0
-    let codec = ''
-    let bitRate: number | null = null
-    let hasAudio = false
-    try {
-      const info = await mediaInfoFactory({ format: 'object' })
+      let width = 0
+      let height = 0
+      let frameRate = 0
+      let duration = 0
+      let codec = ''
+      let videoProfile: string | null = null
+      let bitDepth: number | null = null
+      let chromaSubsampling: string | null = null
+      let audioCodec: string | null = null
+      let audioProfile: string | null = null
+      let bitRate: number | null = null
+      let hasAudio = false
+      let portable = false
       try {
-        const result = await info.analyzeData(size, async (chunkSize, offset) => {
-          const file = await open(sourcePath, 'r')
-          try {
+        this.throwIfAborted(signal, cancelledMessage)
+        const info = await mediaInfoFactory({ format: 'object' })
+        try {
+          this.throwIfAborted(signal, cancelledMessage)
+          const analyzed = await info.analyzeData(size, async (chunkSize, offset) => {
+            this.throwIfAborted(signal, cancelledMessage)
             const chunk = Buffer.alloc(chunkSize)
-            const read = await file.read(chunk, 0, chunkSize, offset)
+            const read = await handle.read(chunk, 0, chunkSize, offset)
+            this.throwIfAborted(signal, cancelledMessage)
             return chunk.subarray(0, read.bytesRead)
-          } finally { await file.close() }
-        })
-        const tracks = result.media?.track ?? []
-        const track = tracks.find((item) => isTrackType(item, 'Video'))
-        const general = tracks.find((item) => isTrackType(item, 'General'))
-        width = numericMediaInfoValue(track?.Width)
-        height = numericMediaInfoValue(track?.Height)
-        frameRate = numericMediaInfoValue(track?.FrameRate) || numericMediaInfoValue(track?.FrameRate_Original)
-        duration = numericMediaInfoValue(track?.Duration) || numericMediaInfoValue(general?.Duration)
-        const parsedBitRate = numericMediaInfoValue(track?.BitRate) || numericMediaInfoValue(general?.OverallBitRate)
-        bitRate = parsedBitRate > 0 ? parsedBitRate : null
-        codec = `${track?.Format ?? ''} ${track?.CodecID ?? ''}`.trim()
-        hasAudio = tracks.some((item) => isTrackType(item, 'Audio'))
-        const normalizedCodec = codec.toLowerCase()
-        const supported = extension === '.mp4'
-          ? /avc|h264|hevc|h265|mpeg-4/.test(normalizedCodec)
-          : /vp8|vp9|av1/.test(normalizedCodec)
-        if (!supported) throw new Error('视频编码不是 Chromium 常见支持格式。')
-      } finally { info.close() }
-    } catch (error) {
-      if (error instanceof Error && error.message === '视频编码不是 Chromium 常见支持格式。') throw error
-      throw new Error('视频元数据无法读取，文件可能损坏或编码不受支持。')
-    }
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error('视频尺寸无效。')
-    if (!Number.isFinite(frameRate) || frameRate <= 0 || frameRate > 240) throw new Error('视频帧率无效。')
-    if (Math.max(width, height) > MAX_VIDEO_DIMENSION) throw new Error('视频最长边不能超过 4096px。')
-    const roundedWidth = Math.round(width)
-    const roundedHeight = Math.round(height)
-    const longEdge = Math.max(roundedWidth, roundedHeight)
-    const shortEdge = Math.min(roundedWidth, roundedHeight)
-    return {
-      width: roundedWidth,
-      height: roundedHeight,
-      frameRate,
-      duration: Math.max(0, duration),
-      codec: codec || 'Unknown',
-      bitRate,
-      hasAudio,
-      highLoad: longEdge > 1920 || shortEdge > 1080 || frameRate > 30.5
+          })
+          this.throwIfAborted(signal, cancelledMessage)
+          const tracks = analyzed.media?.track ?? []
+          const videoTracks = tracks.filter((item) => isTrackType(item, 'Video'))
+          const audioTracks = tracks.filter((item) => isTrackType(item, 'Audio'))
+          const track = videoTracks[0]
+          const general = tracks.find((item) => isTrackType(item, 'General'))
+          width = numericMediaInfoValue(track?.Width)
+          height = numericMediaInfoValue(track?.Height)
+          frameRate = numericMediaInfoValue(track?.FrameRate) || numericMediaInfoValue(track?.FrameRate_Original)
+          duration = numericMediaInfoValue(track?.Duration) || numericMediaInfoValue(general?.Duration)
+          const parsedBitRate = numericMediaInfoValue(track?.BitRate) || numericMediaInfoValue(general?.OverallBitRate)
+          bitRate = parsedBitRate > 0 ? parsedBitRate : null
+          codec = `${track?.Format ?? ''} ${track?.CodecID ?? ''}`.trim()
+          videoProfile = mediaInfoStringValue(track?.Format_Profile)
+          const parsedBitDepth = numericMediaInfoValue(track?.BitDepth)
+          bitDepth = parsedBitDepth > 0 ? parsedBitDepth : null
+          chromaSubsampling = mediaInfoStringValue(track?.ChromaSubsampling)
+          const audioCodecs = audioTracks.map((item) => `${item.Format ?? ''} ${item.CodecID ?? ''}`.trim()).filter(Boolean)
+          audioCodec = audioCodecs.length > 0 ? audioCodecs.join(', ') : null
+          const audioProfiles = audioTracks
+            .map((item) => mediaInfoStringValue(item.Format_AdditionalFeatures) ?? mediaInfoStringValue(item.Format_Profile))
+            .filter((value): value is string => value !== null)
+          audioProfile = audioProfiles.length > 0 ? audioProfiles.join(', ') : null
+          hasAudio = audioTracks.length > 0
+          portable = isPortableVideo({
+            extension,
+            videoCodec: codec,
+            videoProfile,
+            bitDepth,
+            chromaSubsampling,
+            audioCodec,
+            audioProfile,
+            videoTrackCount: videoTracks.length,
+            audioTrackCount: audioTracks.length
+          })
+        } finally {
+          info.close()
+        }
+      } catch {
+        if (signal?.aborted) throw new Error(cancelledMessage)
+        throw new Error('视频元数据无法读取，文件可能损坏或编码不受支持。')
+      }
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error('视频尺寸无效。')
+      if (!Number.isFinite(frameRate) || frameRate <= 0 || frameRate > 240) throw new Error('视频帧率无效。')
+      if (Math.max(width, height) > MAX_VIDEO_DIMENSION) throw new Error('视频最长边不能超过 4096px。')
+      const roundedWidth = Math.round(width)
+      const roundedHeight = Math.round(height)
+      const longEdge = Math.max(roundedWidth, roundedHeight)
+      const shortEdge = Math.min(roundedWidth, roundedHeight)
+      return {
+        width: roundedWidth,
+        height: roundedHeight,
+        frameRate,
+        duration: Math.max(0, duration),
+        codec: codec || 'Unknown',
+        videoProfile,
+        bitDepth,
+        chromaSubsampling,
+        audioCodec,
+        audioProfile,
+        bitRate,
+        hasAudio,
+        portable,
+        highLoad: longEdge > 1920 || shortEdge > 1080 || frameRate > 30.5
+      }
+    } finally {
+      await handle.close()
     }
   }
 
@@ -1264,6 +1387,22 @@ function numericMediaInfoValue(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function mediaInfoStringValue(value: unknown): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') return null
+  const normalized = String(value).trim()
+  return normalized || null
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
+
 function isVideoMediaRole(value: unknown): value is VideoMediaRole {
   return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
 }
@@ -1280,11 +1419,103 @@ function createWriteStreamChecked(path: string): ReturnType<typeof createWriteSt
   return createWriteStream(path, { flags: 'wx' })
 }
 
-async function hashFile(path: string, signal?: AbortSignal): Promise<string> {
+async function openShareZip(path: string): Promise<import('yauzl').ZipFile> {
+  return await new Promise((resolvePromise, reject) => {
+    yauzl.open(path, { lazyEntries: true, autoClose: false, validateEntrySizes: true }, (error, zipFile) => {
+      if (error || !zipFile) reject(error ?? new Error('分享包 ZIP 无效。'))
+      else resolvePromise(zipFile)
+    })
+  })
+}
+
+async function scanShareZip(zipFile: import('yauzl').ZipFile, signal?: AbortSignal): Promise<{ entries: import('yauzl').Entry[]; totalSize: number }> {
+  if (signal?.aborted) throw new Error('主题导入已取消。')
+  return await new Promise((resolvePromise, reject) => {
+    const entries: import('yauzl').Entry[] = []
+    const seen = new Set<string>()
+    let totalSize = 0
+    let settled = false
+    const cleanup = (): void => {
+      zipFile.removeListener('entry', onEntry)
+      zipFile.removeListener('end', onEnd)
+      zipFile.removeListener('error', fail)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const finish = (result: { entries: import('yauzl').Entry[]; totalSize: number }): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolvePromise(result)
+    }
+    const fail = (reason: unknown): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(reason instanceof Error ? reason : new Error(String(reason)))
+    }
+    const onAbort = (): void => fail(new Error('主题导入已取消。'))
+    const onEnd = (): void => finish({ entries, totalSize })
+    const onEntry = (entry: import('yauzl').Entry): void => {
+      try {
+        assertSharePath(entry.fileName)
+        const canonical = entry.fileName.toLowerCase()
+        if (seen.has(canonical)) throw new Error('分享包包含重复条目。')
+        seen.add(canonical)
+        if (seen.size > MAX_SHARE_ENTRIES) throw new Error('分享包条目数量超过限制。')
+        assertShareEntrySize(entry.fileName, entry.uncompressedSize)
+        totalSize = addShareUncompressedBytes(totalSize, entry.uncompressedSize)
+        entries.push(entry)
+        zipFile.readEntry()
+      } catch (error) {
+        fail(error)
+      }
+    }
+    zipFile.on('entry', onEntry)
+    zipFile.once('end', onEnd)
+    zipFile.once('error', fail)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    zipFile.readEntry()
+  })
+}
+
+async function openShareEntryStream(zipFile: import('yauzl').ZipFile, entry: import('yauzl').Entry, signal?: AbortSignal): Promise<NodeJS.ReadableStream> {
+  return await new Promise((resolvePromise, reject) => {
+    let settled = false
+    const cleanup = (): void => signal?.removeEventListener('abort', onAbort)
+    const onAbort = (): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error('主题导入已取消。'))
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    zipFile.openReadStream(entry, (error, stream) => {
+      if (settled) {
+        stream?.destroy()
+        return
+      }
+      settled = true
+      cleanup()
+      if (error || !stream) reject(error ?? new Error('分享包条目读取失败。'))
+      else resolvePromise(stream)
+    })
+  })
+}
+
+export async function hashFile(path: string, signal?: AbortSignal, cancelledMessage = '操作已取消。'): Promise<string> {
   const hash = createHash('sha256')
-  for await (const chunk of createReadStream(path)) {
-    if (signal?.aborted) throw new Error('主题导出已取消。')
-    hash.update(chunk as Buffer)
+  try {
+    for await (const chunk of createReadStream(path, { signal })) {
+      if (signal?.aborted) throw new Error(cancelledMessage)
+      hash.update(chunk as Buffer)
+    }
+    return hash.digest('hex')
+  } catch (error) {
+    if (signal?.aborted) throw new Error(cancelledMessage)
+    throw error
   }
-  return hash.digest('hex')
 }

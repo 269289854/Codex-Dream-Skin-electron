@@ -44,8 +44,14 @@ export interface VideoAssetInspection {
   frameRate: number
   duration: number
   codec: string
+  videoProfile: string | null
+  bitDepth: number | null
+  chromaSubsampling: string | null
+  audioCodec: string | null
+  audioProfile: string | null
   bitRate: number | null
   hasAudio: boolean
+  portable: boolean
   highLoad: boolean
 }
 

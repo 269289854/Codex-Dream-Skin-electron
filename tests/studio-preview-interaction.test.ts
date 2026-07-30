@@ -3,7 +3,7 @@ import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppUpdateStatus, ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
+import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { App } from '../src/renderer/src/App'
@@ -453,6 +453,56 @@ describe('Studio preview editing interaction', () => {
     })
     expect(container.querySelector('.theme-item.active small')?.textContent).toBe('自定义主题 · 当前')
     expect(container.querySelector<HTMLButtonElement>('button[title="删除主题"]')?.disabled).toBe(false)
+  })
+
+  it('prepares a theme before activation and blocks rapid duplicate switching', async () => {
+    const studio = (browserWindow as unknown as { studio: StudioApi }).studio
+    const originalCompile = studio.themes.compile
+    const compiled = await originalCompile(alternateProfile.id)
+    let finishCompile: ((value: CompiledTheme) => void) | undefined
+    studio.themes.compile = vi.fn(async (id: string) => id === alternateProfile.id
+      ? await new Promise<CompiledTheme>((resolve) => { finishCompile = resolve })
+      : await originalCompile(id))
+    activateTheme.mockClear()
+    const alternateButton = [...container.querySelectorAll<HTMLButtonElement>('.theme-item')]
+      .find((item) => item.querySelector('strong')?.textContent === '备用主题')
+    if (!alternateButton) throw new Error('Custom theme fixture is missing.')
+
+    await act(async () => {
+      alternateButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      alternateButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(activateTheme).not.toHaveBeenCalled()
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe(profile.name)
+    expect([...container.querySelectorAll<HTMLButtonElement>('.theme-item')].every((button) => button.disabled)).toBe(true)
+    expect(container.querySelector<HTMLButtonElement>('button[title="导入主题"]')?.disabled).toBe(true)
+
+    await act(async () => {
+      finishCompile?.(compiled)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(activateTheme).toHaveBeenCalledTimes(1)
+    expect(activateTheme).toHaveBeenCalledWith(alternateProfile.id)
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe('备用主题')
+    expect([...container.querySelectorAll<HTMLButtonElement>('.theme-item')].every((button) => !button.disabled)).toBe(true)
+  })
+
+  it('keeps the current UI theme when activation fails after preparation', async () => {
+    activateTheme.mockRejectedValueOnce(new Error('activation failed'))
+    const alternateButton = [...container.querySelectorAll<HTMLButtonElement>('.theme-item')]
+      .find((item) => item.querySelector('strong')?.textContent === '备用主题')
+    if (!alternateButton) throw new Error('Custom theme fixture is missing.')
+
+    await act(async () => {
+      alternateButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe(profile.name)
+    expect(container.querySelector('.error-banner')?.textContent).toContain('activation failed')
+    expect([...container.querySelectorAll<HTMLButtonElement>('.theme-item')].every((button) => !button.disabled)).toBe(true)
   })
 
   it('matches the Codex project and task section order', () => {
@@ -1245,7 +1295,7 @@ describe('Studio preview editing interaction', () => {
   })
 
   it('configures pause policy, inspects high-load video, optimizes it, and switches variants', async () => {
-    const inspection = { width: 3840, height: 2160, frameRate: 59.94, duration: 12.5, codec: 'avc', bitRate: 18_000_000, hasAudio: true, highLoad: true }
+    const inspection = { width: 3840, height: 2160, frameRate: 59.94, duration: 12.5, codec: 'avc', videoProfile: 'High', bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: 'AAC mp4a-40-2', audioProfile: 'LC', bitRate: 18_000_000, hasAudio: true, portable: true, highLoad: true }
     inspectVideo.mockImplementation(async (_themeId: string, asset: string) => asset.includes('optimized')
       ? { ...inspection, width: 1920, height: 1080, frameRate: 30, bitRate: 5_000_000, highLoad: false }
       : inspection)
@@ -1300,6 +1350,25 @@ describe('Studio preview editing interaction', () => {
     })
     expect(savedProfiles.at(-1)?.videoPlayback.pausePolicy).toBe('unfocused')
     expect(savedProfiles.at(-1)?.hero.source?.videoVariants).toMatchObject({ active: 'original' })
+  })
+
+  it('offers conversion for a low-load video that is not portable', async () => {
+    const inspection = { width: 1280, height: 720, frameRate: 24, duration: 8, codec: 'MPEG-4 Visual', videoProfile: null, bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: false, highLoad: false }
+    inspectVideo.mockResolvedValue(inspection)
+    const reference = { asset: 'assets/legacy.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
+    selectMedia.mockResolvedValueOnce({ reference, relativePath: reference.asset, previewUrl: 'studio-media://preview/legacy.mp4', originalName: 'legacy.mp4', width: 1280, height: 720 })
+
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    expect(container.querySelector('.video-load-badge')?.textContent).toContain('需转换')
+    const convert = [...container.querySelectorAll<HTMLButtonElement>('.optimize-video-command')].find((button) => button.textContent?.includes('转换视频'))
+    expect(convert).toBeDefined()
+    expect(convert?.disabled).toBe(false)
   })
 
   it('edits a gradient window background and manages eight ordered mask layers', async () => {

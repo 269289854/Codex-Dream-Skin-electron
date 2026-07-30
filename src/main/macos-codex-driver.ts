@@ -504,7 +504,7 @@ export async function runMacCommand(command: string, argumentsList: string[], ti
     child.stdout.on('data', (chunk: Buffer) => { stdout = append(stdout, chunk) })
     child.stderr.on('data', (chunk: Buffer) => { stderr = append(stderr, chunk) })
     child.once('error', (error) => finish(error))
-    child.once('exit', (code) => finish(undefined, code))
+    child.once('close', (code) => finish(undefined, code))
     const timeout = setTimeout(() => {
       child.kill('SIGKILL')
       finish(new Error('macOS 系统命令执行超时。'))

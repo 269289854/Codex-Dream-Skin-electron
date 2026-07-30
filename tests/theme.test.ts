@@ -609,7 +609,7 @@ describe('theme schema and compiler', () => {
     const migratedFour = parseThemeProfile(versionFour)
     expect(migratedFour.version).toBe(28)
     expect(migratedFour.appearance).toEqual({ colors: {}, paints: {} })
-    expect(migratedFour.typography.slots.brandSignature).toEqual({ kind: 'builtin', id: 'segoe-script' })
+    expect(migratedFour.typography.slots.brandSignature).toEqual({ kind: 'builtin', id: 'dancing-script' })
 
     const versionFive = {
       ...currentWithoutBadge,

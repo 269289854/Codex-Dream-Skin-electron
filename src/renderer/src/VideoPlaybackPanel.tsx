@@ -58,14 +58,15 @@ function VideoRoleRow({ role, label, reference, inspection, optimizing, onOptimi
   const height = inspection?.height ?? activeVariant?.height
   const frameRate = inspection?.frameRate ?? activeVariant?.frameRate
   const highLoad = inspection?.highLoad ?? Boolean(width && height && frameRate && (Math.max(width, height) > 1920 || Math.min(width, height) > 1080 || frameRate > 30.5))
+  const needsConversion = inspection?.portable === false
   const detail = inspection === null
     ? '规格读取失败'
     : width && height && frameRate
-      ? `${width}×${height} · ${formatFrameRate(frameRate)} FPS${inspection ? ` · ${inspection.codec.toUpperCase()} · ${formatDuration(inspection.duration)}${inspection.hasAudio ? ' · 含音频' : ' · 无音频'}` : ''}`
+      ? `${width}×${height} · ${formatFrameRate(frameRate)} FPS${inspection ? ` · ${inspection.codec.toUpperCase()} · ${formatDuration(inspection.duration)}${inspection.audioCodec ? ` · ${inspection.audioCodec.toUpperCase()}` : ' · 无音频'}` : ''}`
       : '正在读取规格'
 
-  return <section className={highLoad ? 'video-role-row is-high-load' : 'video-role-row'}>
-    <header><Video size={14} /><strong>{label}</strong>{highLoad && <span className="video-load-badge"><Gauge size={12} />高负载</span>}</header>
+  return <section className={needsConversion ? 'video-role-row is-incompatible' : highLoad ? 'video-role-row is-high-load' : 'video-role-row'}>
+    <header><Video size={14} /><strong>{label}</strong>{needsConversion ? <span className="video-load-badge"><Zap size={12} />需转换</span> : highLoad && <span className="video-load-badge"><Gauge size={12} />高负载</span>}</header>
     <p>{detail}</p>
     {inspection?.bitRate ? <small>{formatBitRate(inspection.bitRate)}</small> : null}
     {reference.videoVariants
@@ -73,7 +74,7 @@ function VideoRoleRow({ role, label, reference, inspection, optimizing, onOptimi
         <button type="button" className={reference.videoVariants.active === 'original' ? 'active' : ''} aria-pressed={reference.videoVariants.active === 'original'} onClick={() => onActivateVariant(role, 'original')}>原片</button>
         <button type="button" className={reference.videoVariants.active === 'optimized' ? 'active' : ''} aria-pressed={reference.videoVariants.active === 'optimized'} onClick={() => onActivateVariant(role, 'optimized')}>优化版</button>
       </div>
-      : highLoad && <button className="secondary-command optimize-video-command" type="button" disabled={optimizing || !inspection} onClick={() => onOptimize(role)}><Zap size={14} />{optimizing ? '正在优化' : '优化视频'}</button>}
+      : (highLoad || needsConversion) && <button className="secondary-command optimize-video-command" type="button" disabled={optimizing || !inspection} onClick={() => onOptimize(role)}><Zap size={14} />{optimizing ? '正在转换' : needsConversion ? '转换视频' : '优化视频'}</button>}
   </section>
 }
 
