@@ -1,5 +1,12 @@
 import type { CodexDetection, SupportedDesktopPlatform } from '../shared/contracts'
 
+export class CodexInstallationIdentityError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CodexInstallationIdentityError'
+  }
+}
+
 export interface CodexStartResult {
   port: number
   browserId: string

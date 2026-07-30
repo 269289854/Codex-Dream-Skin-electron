@@ -6,6 +6,7 @@ const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 vi.mock('../src/main/powershell', () => ({ runPowerShell: runPowerShellMock }))
 
 import { WindowsCodexDriver } from '../src/main/windows-codex-driver'
+import { CodexInstallationIdentityError } from '../src/main/codex-platform'
 
 const windowsDetection = {
   found: true,
@@ -85,5 +86,14 @@ describe('WindowsCodexDriver', () => {
 
     runPowerShellMock.mockResolvedValueOnce({ port: 9335, browserId: 'browser-2', version: windowsDetection.version })
     await expect(driver.verifySession(9335, 'browser-1', { ...detection, running: true })).rejects.toThrow('identity')
+  })
+
+  it('marks a changed installation as safe for configuration-only restore fallback', async () => {
+    const driver = new WindowsCodexDriver('C:\\Studio', 'C:\\Resources')
+    runPowerShellMock.mockResolvedValueOnce(windowsDetection)
+
+    await expect(driver.restore(true, 'OpenAI.Codex_old')).rejects.toBeInstanceOf(CodexInstallationIdentityError)
+
+    expect(runPowerShellMock).toHaveBeenCalledOnce()
   })
 })

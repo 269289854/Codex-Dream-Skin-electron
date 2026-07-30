@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import type { CodexDetection } from '../shared/contracts'
 import { parseThemeProfile } from '../shared/theme'
 import { isSafeCdpWebSocketUrl, isThemeCdpTargetUrl } from './cdp-watcher'
-import type { CodexPlatformDriver, CodexStartResult } from './codex-platform'
+import { CodexInstallationIdentityError, type CodexPlatformDriver, type CodexStartResult } from './codex-platform'
 import { installMacCodexThemeConfig, restoreMacCodexThemeConfig } from './macos-config'
 
 export const MAC_CODEX_BUNDLE_ID = 'com.openai.codex'
@@ -140,13 +140,18 @@ export class MacCodexDriver implements CodexPlatformDriver {
 
   private async findInstall(expectedInstallationId?: string): Promise<MacCodexInstall> {
     if (expectedInstallationId) {
-      const prefix = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:`
-      if (!expectedInstallationId.startsWith(prefix)) throw new Error('保存的 Codex 会话属于其他安装。')
-      const appBundle = expectedInstallationId.slice(prefix.length)
-      if (!isAbsolute(appBundle) || !appBundle.endsWith('.app')) throw new Error('保存的 Codex 会话属于其他安装。')
-      const install = await this.validateInstallCandidate(appBundle)
-      if (this.installationId(install) !== expectedInstallationId) throw new Error('保存的 Codex 会话属于其他安装。')
-      return install
+      try {
+        const prefix = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:`
+        if (!expectedInstallationId.startsWith(prefix)) throw new CodexInstallationIdentityError('保存的 Codex 会话属于其他安装。')
+        const appBundle = expectedInstallationId.slice(prefix.length)
+        if (!isAbsolute(appBundle) || !appBundle.endsWith('.app')) throw new CodexInstallationIdentityError('保存的 Codex 会话属于其他安装。')
+        const install = await this.validateInstallCandidate(appBundle)
+        if (this.installationId(install) !== expectedInstallationId) throw new CodexInstallationIdentityError('保存的 Codex 会话属于其他安装。')
+        return install
+      } catch (reason) {
+        if (reason instanceof CodexInstallationIdentityError) throw reason
+        throw new CodexInstallationIdentityError('保存的 Codex 安装已移动、不可访问或身份无效。')
+      }
     }
     const candidates = new Set<string>([
       '/Applications/ChatGPT.app',

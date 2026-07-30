@@ -11,6 +11,7 @@ import {
   parseMacProcessList,
   type MacCommandRunner
 } from '../src/main/macos-codex-driver'
+import { CodexInstallationIdentityError } from '../src/main/codex-platform'
 
 const roots: string[] = []
 
@@ -190,7 +191,7 @@ describe('MacCodexDriver', () => {
     const missingApp = join(fixture.root, 'Moved Codex.app')
     const installationId = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${missingApp}`
 
-    await expect(driver.restore(true, installationId)).rejects.toThrow()
+    await expect(driver.restore(true, installationId)).rejects.toBeInstanceOf(CodexInstallationIdentityError)
 
     await expect(readFile(configPath, 'utf8')).resolves.toBe(currentConfig)
     await expect(readFile(backupPath, 'utf8')).resolves.toBe(backupConfig)

@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import type { CodexDetection } from '../shared/contracts'
-import type { CodexPlatformDriver, CodexStartResult } from './codex-platform'
+import { CodexInstallationIdentityError, type CodexPlatformDriver, type CodexStartResult } from './codex-platform'
 import { runPowerShell } from './powershell'
 
 interface WindowsDetectionResult {
@@ -46,7 +46,9 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
 
   async start(preferredPort: number, restartExisting: boolean, expectedInstallationId?: string): Promise<CodexStartResult> {
     const detection = await this.detect()
-    if (expectedInstallationId && expectedInstallationId !== detection.installationId) throw new Error('Saved Codex session belongs to another installation.')
+    if (expectedInstallationId && expectedInstallationId !== detection.installationId) {
+      throw new CodexInstallationIdentityError('Saved Codex session belongs to another installation.')
+    }
     const argumentsList = ['-Port', String(preferredPort)]
     if (restartExisting) argumentsList.push('-RestartExisting')
     const result = await this.bridge<WindowsStartResult>('Start', argumentsList, 65_000)
@@ -65,7 +67,9 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
   async restore(restartCodex: boolean, expectedInstallationId?: string): Promise<void> {
     if (restartCodex && expectedInstallationId) {
       const detection = await this.detect()
-      if (expectedInstallationId !== detection.installationId) throw new Error('Saved Codex session belongs to another installation.')
+      if (expectedInstallationId !== detection.installationId) {
+        throw new CodexInstallationIdentityError('Saved Codex session belongs to another installation.')
+      }
     }
     await this.bridge('Restore', restartCodex ? ['-RestartCodex'] : [], 65_000)
   }

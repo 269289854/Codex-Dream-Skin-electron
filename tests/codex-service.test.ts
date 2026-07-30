@@ -10,7 +10,7 @@ const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
 vi.mock('../src/main/powershell', () => ({ runPowerShell: runPowerShellMock }))
 
-import type { CodexPlatformDriver, CodexStartResult } from '../src/main/codex-platform'
+import { CodexInstallationIdentityError, type CodexPlatformDriver, type CodexStartResult } from '../src/main/codex-platform'
 import { CodexService } from '../src/main/codex-service'
 
 const detection = {
@@ -21,7 +21,7 @@ const detection = {
   executable: 'C:\\WindowsApps\\Codex\\app\\ChatGPT.exe',
   installationId: 'OpenAI.Codex_test',
   running: false,
-  backupAvailable: false
+  backupAvailable: true
 }
 
 function createService(): CodexService {
@@ -667,7 +667,7 @@ describe('CodexService operation queue', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('does not fall back to global app selection when a persisted macOS identity is invalid', async () => {
+  it('restores configuration without restarting when a persisted macOS identity is invalid', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-invalid-installation-'))
     const driver = createDriver('darwin')
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
@@ -681,10 +681,178 @@ describe('CodexService operation queue', () => {
       installationId: 'com.openai.codex:WRONGTEAM:/Applications/Codex.app'
     })}\n`)
 
-    await expect(service.restore(true)).rejects.toThrow('verified installation identity')
+    await expect(service.restore(true)).resolves.toMatchObject({
+      phase: 'stopped',
+      backupAvailable: false,
+      message: expect.stringContaining('未自动重启 Codex')
+    })
 
-    expect(driver.restore).not.toHaveBeenCalled()
-    await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain('WRONGTEAM')
+    expect(driver.restore).toHaveBeenCalledOnce()
+    expect(driver.restore).toHaveBeenCalledWith(false, undefined)
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('restores configuration without restarting when session JSON is damaged', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-damaged-session-'))
+    const driver = createDriver()
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), '{ damaged')
+
+    const status = await service.restore(true)
+
+    expect(driver.restore).toHaveBeenCalledWith(false, undefined)
+    expect(status).toMatchObject({
+      phase: 'stopped',
+      backupAvailable: false,
+      lastError: 'Saved runtime session is invalid.',
+      message: expect.stringContaining('未自动重启 Codex')
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('restores configuration without restarting when session metadata is unreadable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-unreadable-session-'))
+    const driver = createDriver()
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const internals = service as unknown as {
+      readPersistedInstallationId: () => Promise<string | undefined>
+    }
+    internals.readPersistedInstallationId = vi.fn().mockRejectedValue(Object.assign(new Error('access denied'), { code: 'EACCES' }))
+
+    const status = await service.restore(true)
+
+    expect(driver.restore).toHaveBeenCalledWith(false, undefined)
+    expect(status).toMatchObject({
+      phase: 'stopped',
+      lastError: 'access denied',
+      message: expect.stringContaining('未自动重启 Codex')
+    })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('falls back to configuration-only restore when the saved Windows installation changed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-old-windows-installation-'))
+    const driver = createDriver()
+    const oldInstallationId = 'OpenAI.Codex_old'
+    vi.mocked(driver.restore)
+      .mockRejectedValueOnce(new CodexInstallationIdentityError('Saved Codex session belongs to another installation.'))
+      .mockResolvedValueOnce(undefined)
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId: '11111111-1111-4111-8111-111111111111',
+      port: 9335,
+      browserId: 'browser-old',
+      platform: 'win32',
+      installationId: oldInstallationId
+    })}\n`)
+
+    const status = await service.restore(true)
+
+    expect(driver.restore).toHaveBeenNthCalledWith(1, true, oldInstallationId)
+    expect(driver.restore).toHaveBeenNthCalledWith(2, false)
+    expect(status).toMatchObject({
+      phase: 'stopped',
+      backupAvailable: false,
+      message: expect.stringContaining('安装身份已失效')
+    })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('commits platform restore even when session cleanup fails and ignores the residue after restart', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-cleanup-failure-'))
+    const driver = createDriver()
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const installationId = detection.installationId
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const internals = service as unknown as {
+      retirePersistedSession: () => Promise<void>
+    }
+    internals.retirePersistedSession = vi.fn().mockRejectedValue(new Error('session cleanup denied'))
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: 9335,
+      browserId: 'browser-old',
+      platform: 'win32',
+      installationId
+    })}\n`)
+
+    const status = await service.restore(true)
+
+    expect(driver.restore).toHaveBeenCalledOnce()
+    expect(driver.restore).toHaveBeenCalledWith(true, installationId)
+    expect(status).toMatchObject({
+      phase: 'stopped',
+      backupAvailable: false,
+      lastError: 'session cleanup denied',
+      message: expect.stringContaining('运行会话记录清理失败')
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain(themeId)
+    await expect(readFile(join(root, 'runtime', 'session.restore-completed.json'), 'utf8')).resolves.toContain('sha256:')
+
+    const restartedDriver = createDriver()
+    vi.mocked(restartedDriver.detect).mockResolvedValue({ ...detection, running: true, backupAvailable: false })
+    const restartedService = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), restartedDriver, '1.0.9', () => undefined)
+    await restartedService.resume()
+
+    expect(restartedDriver.verifySession).not.toHaveBeenCalled()
+    expect(restartedService.getStatus()).toMatchObject({ phase: 'ready', backupAvailable: false })
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(root, 'runtime', 'session.restore-completed.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('verifies a valid active session even when its configuration backup is missing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-session-without-backup-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const store = {
+      root,
+      themesRoot: join(root, 'themes'),
+      get: vi.fn().mockResolvedValue({ id: themeId })
+    }
+    const driver = createDriver()
+    const activeSession: CodexStartResult = {
+      port: 9335,
+      browserId: 'browser-active',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    vi.mocked(driver.detect).mockResolvedValue({ ...detection, running: true, backupAvailable: false })
+    vi.mocked(driver.verifySession).mockResolvedValue(activeSession)
+    const service = new CodexService(store as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const internals = service as unknown as {
+      buildPayload: () => Promise<{ script: string; version: string }>
+      replaceWatcher: () => Promise<{ connected: boolean; targetCount: number }>
+    }
+    internals.buildPayload = vi.fn().mockResolvedValue({ script: 'true', version: 'studio-0123456789abcdef01234567' })
+    internals.replaceWatcher = vi.fn().mockResolvedValue({ connected: true, targetCount: 1 })
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: activeSession.port,
+      browserId: activeSession.browserId,
+      platform: activeSession.platform,
+      installationId: activeSession.installationId
+    })}\n`)
+
+    await service.resume()
+
+    expect(driver.verifySession).toHaveBeenCalledWith(
+      activeSession.port,
+      activeSession.browserId,
+      expect.objectContaining({ backupAvailable: false }),
+      activeSession.installationId
+    )
+    expect(service.getStatus()).toMatchObject({ phase: 'active', backupAvailable: false })
+    await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain(themeId)
     await rm(root, { recursive: true, force: true })
   })
 

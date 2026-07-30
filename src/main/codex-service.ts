@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus, SupportedDesktopPlatform } from '../shared/contracts'
 import { paintToCss } from '../shared/appearance'
@@ -19,7 +19,7 @@ import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CdpWatcher, type CdpMediaBinding, type CdpSnapshot } from './cdp-watcher'
 import type { ProfileStore } from './profile-store'
 import { buildRuntimeFontCss } from './theme-fonts'
-import type { CodexPlatformDriver, CodexStartResult } from './codex-platform'
+import { CodexInstallationIdentityError, type CodexPlatformDriver, type CodexStartResult } from './codex-platform'
 
 interface RuntimePayload { script: string; version: string }
 interface RuntimeSessionV1 { version: 1; themeId: string; port: number; browserId: string }
@@ -27,6 +27,11 @@ interface RuntimeSessionV2 extends Omit<RuntimeSessionV1, 'version'> {
   version: 2
   platform: SupportedDesktopPlatform
   installationId: string
+}
+interface RestoredRuntimeSessionMarker {
+  version: 1
+  sessionFingerprint: string
+  restoredAt: string
 }
 const LEGACY_MAC_INSTALLATION_ID = 'com.openai.codex:2DC432GLL2'
 const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
@@ -96,19 +101,40 @@ export class CodexService {
       return
     }
 
-    let session: Partial<RuntimeSessionV1 | RuntimeSessionV2>
+    let sessionContent: Buffer
     try {
-      session = JSON.parse(await readFile(this.sessionPath(), 'utf8')) as typeof session
+      sessionContent = await readFile(this.sessionPath())
       if (!this.isCurrentGeneration(generation)) return
     } catch (reason) {
       if (!this.isCurrentGeneration(generation)) return
       if ((reason as NodeJS.ErrnoException).code === 'ENOENT') {
+        await rm(this.restoredSessionMarkerPath(), { force: true }).catch(() => undefined)
         const message = detection.backupAvailable
           ? '检测到可恢复的 Codex 配置备份'
           : detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex'
         this.patch('ready', message)
         return
       }
+      if (await this.hasMatchingRestoredSessionMarker()) {
+        await this.finishRestoredSessionResume(generation)
+        return
+      }
+      this.status.lastError = reason instanceof Error ? reason.message : String(reason)
+      this.patch('ready', '运行会话记录不可用，可重新启动或恢复')
+      return
+    }
+
+    const sessionFingerprint = this.sessionFingerprint(sessionContent)
+    if (await this.hasMatchingRestoredSessionMarker(sessionFingerprint)) {
+      await this.finishRestoredSessionResume(generation)
+      return
+    }
+
+    let session: Partial<RuntimeSessionV1 | RuntimeSessionV2>
+    try {
+      session = JSON.parse(sessionContent.toString('utf8')) as typeof session
+    } catch (reason) {
+      if (!this.isCurrentGeneration(generation)) return
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
       this.patch('ready', '运行会话记录不可用，可重新启动或恢复')
       return
@@ -403,23 +429,70 @@ export class CodexService {
   async restore(restartCodex: boolean): Promise<RuntimeStatus> {
     const activeInstallationId = restartCodex ? this.activeSession?.installationId : undefined
     this.beginSessionIntent()
-    return this.enqueueOperation(async () => {
-      const expectedInstallationId = activeInstallationId ??
-        (restartCodex ? await this.readPersistedInstallationId() : undefined)
-      return this.restoreInternal(restartCodex, expectedInstallationId)
-    })
+    return this.enqueueOperation(() => this.restoreInternal(restartCodex, activeInstallationId))
   }
 
-  private async restoreInternal(restartCodex: boolean, expectedInstallationId?: string): Promise<RuntimeStatus> {
+  private async restoreInternal(requestedRestart: boolean, activeInstallationId?: string): Promise<RuntimeStatus> {
     this.patch('restoring', '正在恢复 Codex 原始配置')
     try {
+      let restartCodex = requestedRestart
+      let expectedInstallationId = activeInstallationId
+      let restartWarning: string | null = null
+      let diagnostic: string | null = null
+      const sessionFingerprint = await this.persistedSessionFingerprint()
+      if (restartCodex && !expectedInstallationId) {
+        try {
+          expectedInstallationId = await this.readPersistedInstallationId()
+        } catch (reason) {
+          restartCodex = false
+          restartWarning = '保存的运行会话不可用，未自动重启 Codex'
+          diagnostic = reason instanceof Error ? reason.message : String(reason)
+        }
+      }
       if (this.watcher) await this.watcher.stop(true)
       this.watcher = null
-      await this.platformDriver.restore(restartCodex, expectedInstallationId)
-      await rm(this.sessionPath(), { force: true })
+      try {
+        await this.platformDriver.restore(restartCodex, expectedInstallationId)
+      } catch (reason) {
+        if (!restartCodex || !expectedInstallationId || !(reason instanceof CodexInstallationIdentityError)) throw reason
+        restartCodex = false
+        restartWarning = '保存的 Codex 安装身份已失效，未自动重启 Codex'
+        diagnostic = reason.message
+        await this.platformDriver.restore(false)
+      }
+      let markerWritten = false
+      let markerError: string | null = null
+      if (sessionFingerprint) {
+        try {
+          await this.writeRestoredSessionMarker(sessionFingerprint)
+          markerWritten = true
+        } catch (reason) {
+          markerError = reason instanceof Error ? reason.message : String(reason)
+        }
+      }
       this.clearActiveSession()
       this.status.backupAvailable = false
-      this.patch('stopped', restartCodex ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置')
+      let cleanupError: string | null = null
+      try {
+        await this.retirePersistedSession()
+      } catch (reason) {
+        cleanupError = reason instanceof Error ? reason.message : String(reason)
+      }
+      const message = [
+        restartCodex ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置',
+        restartWarning,
+        cleanupError
+          ? markerWritten
+            ? '运行会话记录清理失败，下次启动将根据完成标记忽略该记录'
+            : '运行会话记录清理失败，下次启动将重新验证该记录'
+          : null
+      ].filter((part): part is string => part !== null).join('；')
+      const details = [
+        diagnostic,
+        cleanupError ? markerError : null,
+        cleanupError
+      ].filter((part): part is string => part !== null).join('；') || null
+      this.patch('stopped', message, details)
       return this.getStatus()
     } catch (reason) { throw this.fail(reason) }
   }
@@ -684,6 +757,73 @@ export class CodexService {
   }
 
   private sessionPath(): string { return join(this.store.root, 'runtime', 'session.json') }
+  private restoredSessionMarkerPath(): string { return join(this.store.root, 'runtime', 'session.restore-completed.json') }
+  private async retirePersistedSession(): Promise<void> {
+    await rm(this.sessionPath(), { force: true })
+    await rm(this.restoredSessionMarkerPath(), { force: true })
+  }
+  private sessionFingerprint(content: Uint8Array): string {
+    return `sha256:${createHash('sha256').update(content).digest('hex')}`
+  }
+  private async persistedSessionFingerprint(): Promise<string | undefined> {
+    try {
+      return this.sessionFingerprint(await readFile(this.sessionPath()))
+    } catch (reason) {
+      if ((reason as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      try {
+        const metadata = await stat(this.sessionPath())
+        return `metadata:${metadata.size}:${metadata.mtimeMs}:${metadata.ctimeMs}`
+      } catch {
+        return undefined
+      }
+    }
+  }
+  private async hasMatchingRestoredSessionMarker(sessionFingerprint?: string): Promise<boolean> {
+    const fingerprint = sessionFingerprint ?? await this.persistedSessionFingerprint()
+    if (!fingerprint) return false
+    try {
+      const marker = JSON.parse(await readFile(this.restoredSessionMarkerPath(), 'utf8')) as Partial<RestoredRuntimeSessionMarker>
+      return marker.version === 1 && marker.sessionFingerprint === fingerprint
+    } catch {
+      return false
+    }
+  }
+  private async writeRestoredSessionMarker(sessionFingerprint: string): Promise<void> {
+    if (await this.hasMatchingRestoredSessionMarker(sessionFingerprint)) return
+    const path = this.restoredSessionMarkerPath()
+    const temporary = `${path}.tmp`
+    const marker: RestoredRuntimeSessionMarker = {
+      version: 1,
+      sessionFingerprint,
+      restoredAt: new Date().toISOString()
+    }
+    await mkdir(join(this.store.root, 'runtime'), { recursive: true })
+    try {
+      await writeFile(temporary, `${JSON.stringify(marker, null, 2)}\n`, 'utf8')
+      await rm(path, { force: true })
+      await rename(temporary, path)
+    } catch (reason) {
+      await rm(temporary, { force: true }).catch(() => undefined)
+      throw reason
+    }
+  }
+  private async finishRestoredSessionResume(generation: number): Promise<void> {
+    let cleanupError: string | null = null
+    try {
+      await this.retirePersistedSession()
+    } catch (reason) {
+      cleanupError = reason instanceof Error ? reason.message : String(reason)
+    }
+    if (!this.isCurrentGeneration(generation)) return
+    this.clearActiveSession()
+    this.patch(
+      'ready',
+      cleanupError
+        ? '已确认 Codex 配置恢复完成，已忽略无法清理的旧运行会话记录'
+        : '已确认 Codex 配置恢复完成，旧运行会话记录已清理',
+      cleanupError
+    )
+  }
   private async readPersistedInstallationId(): Promise<string | undefined> {
     let content: string
     try {
@@ -727,6 +867,7 @@ export class CodexService {
       installationId: result.installationId
     }
     try {
+      await rm(this.restoredSessionMarkerPath(), { force: true })
       await writeFile(temporary, `${JSON.stringify(session, null, 2)}\n`, 'utf8')
       await rename(temporary, path)
     } catch (reason) {
@@ -764,7 +905,12 @@ export class CodexService {
     this.operationTail = next.then(() => undefined, () => undefined)
     return next
   }
-  private patch(phase: RuntimePhase, message: string): void { this.status.phase = phase; this.status.message = message; if (phase !== 'error') this.status.lastError = null; this.emit() }
+  private patch(phase: RuntimePhase, message: string, diagnostic: string | null = null): void {
+    this.status.phase = phase
+    this.status.message = message
+    if (phase !== 'error') this.status.lastError = diagnostic
+    this.emit()
+  }
   private reportActiveFailure(reason: unknown, message: string): Error {
     const error = reason instanceof Error ? reason : new Error(String(reason))
     this.status.phase = 'active'
