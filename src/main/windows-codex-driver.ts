@@ -52,11 +52,13 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
     return this.toStartResult(result, detection.installationId)
   }
 
-  async verifySession(port: number, browserId: string, detection: CodexDetection): Promise<CodexStartResult> {
-    if (detection.platform !== this.platform || !detection.running) throw new Error('Saved Codex session is no longer running.')
+  async verifySession(port: number, browserId: string, detection: CodexDetection, expectedInstallationId = detection.installationId): Promise<CodexStartResult> {
+    if (detection.platform !== this.platform || expectedInstallationId !== detection.installationId || !detection.running) {
+      throw new Error('Saved Codex session is no longer running.')
+    }
     const result = await this.bridge<WindowsStartResult>('Start', ['-Port', String(port)], 10_000)
     if (result.browserId !== browserId) throw new Error('Saved Codex browser identity no longer matches.')
-    return this.toStartResult(result, detection.installationId)
+    return this.toStartResult(result, expectedInstallationId)
   }
 
   async restore(restartCodex: boolean): Promise<void> {

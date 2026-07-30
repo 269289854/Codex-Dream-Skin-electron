@@ -43,6 +43,17 @@ function quitStudio(): void {
   app.quit()
 }
 
+async function restoreCodexAndQuit(): Promise<void> {
+  try {
+    await codexService.restore(true)
+  } catch {
+    showWindow()
+    return
+  }
+  quitting = true
+  app.quit()
+}
+
 function relaunchForUpdatedVersion(): void {
   if (updatedVersionRelaunching) return
   updatedVersionRelaunching = true
@@ -63,7 +74,7 @@ function updateTray(): void {
       { label: '验证当前主题', click: () => void codexService.verify().catch(() => showWindow()) },
       { type: 'separator' },
       { label: '退出 Studio（保留当前主题）', click: quitStudio },
-      { label: '恢复 Codex 并退出', click: () => void codexService.restore(true).finally(() => { quitting = true; app.quit() }) }
+      { label: '恢复 Codex 并退出', click: () => void restoreCodexAndQuit() }
     ]))
     tray.on('double-click', showWindow)
   } else if (!codexService.isActive()) {

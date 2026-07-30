@@ -33,6 +33,20 @@ describe('Studio application lifecycle contract', () => {
     expect(quitStudio).not.toContain('codexService.restore')
   })
 
+  it('quits after a successful restore and reveals the window when restore fails', async () => {
+    const main = await readFile(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8')
+    const restoreAndQuit = main.match(/async function restoreCodexAndQuit\(\): Promise<void> \{[\s\S]*?\r?\n\}/)?.[0]
+
+    expect(main).toContain("{ label: '恢复 Codex 并退出', click: () => void restoreCodexAndQuit() }")
+    expect(restoreAndQuit).toContain('await codexService.restore(true)')
+    expect(restoreAndQuit).toContain('catch')
+    expect(restoreAndQuit).toContain('showWindow()')
+    expect(restoreAndQuit).toContain('return')
+    expect(restoreAndQuit).toContain('quitting = true')
+    expect(restoreAndQuit).toContain('app.quit()')
+    expect(restoreAndQuit).not.toContain('finally')
+  })
+
   it('relaunches an updated instance without removing the active Codex session', async () => {
     const main = await readFile(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8')
     const relaunch = main.match(/function relaunchForUpdatedVersion\(\): void \{[\s\S]*?\n\}/)?.[0]

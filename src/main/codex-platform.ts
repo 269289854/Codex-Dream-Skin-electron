@@ -13,7 +13,7 @@ export interface CodexPlatformDriver {
   detect: () => Promise<CodexDetection>
   applyConfig: (themePath: string) => Promise<void>
   start: (preferredPort: number, restartExisting: boolean) => Promise<CodexStartResult>
-  verifySession: (port: number, browserId: string, detection: CodexDetection) => Promise<CodexStartResult>
+  verifySession: (port: number, browserId: string, detection: CodexDetection, expectedInstallationId?: string) => Promise<CodexStartResult>
   restore: (restartCodex: boolean) => Promise<void>
 }
 

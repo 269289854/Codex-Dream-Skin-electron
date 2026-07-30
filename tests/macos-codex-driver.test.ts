@@ -38,7 +38,7 @@ describe('MacCodexDriver', () => {
       distribution: 'mac-app-bundle',
       version: '26.721.81911',
       executable: fixture.executable,
-      installationId: `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}`,
+      installationId: `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${fixture.appBundle}`,
       running: false,
       backupAvailable: true
     })
@@ -64,7 +64,7 @@ describe('MacCodexDriver', () => {
       browserId: 'browser-1',
       version: '26.721.81911',
       platform: 'darwin',
-      installationId: `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}`
+      installationId: `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${fixture.appBundle}`
     })
     expect(runCommand).not.toHaveBeenCalledWith('/usr/bin/open', expect.anything(), expect.anything())
   })
@@ -74,6 +74,96 @@ describe('MacCodexDriver', () => {
     const runCommand = createCommandRunner(fixture, MAC_CODEX_TEAM_ID, true, '*:9335')
     const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand, fetchJson: vi.fn() })
     await expect(driver.start(9335, false)).rejects.toThrow('需要重启')
+  })
+
+  it('prefers a verified running install over a newer standard Applications copy', async () => {
+    const fixture = await createSelectionFixture()
+    const standard = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '27.0.0')
+    const running = await createAppBundle(join(fixture.root, 'Volumes', 'Codex Preview', 'ChatGPT.app'), '26.0.0')
+    const runCommand = createSelectionCommandRunner([standard, running], running.executable)
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand })
+
+    await expect(driver.detect()).resolves.toMatchObject({
+      version: running.version,
+      executable: running.executable,
+      installationId: `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${running.appBundle}`,
+      running: true
+    })
+  })
+
+  it('prefers a standard Applications install over a newer mounted copy', async () => {
+    const fixture = await createSelectionFixture()
+    const standard = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '26.0.0')
+    const mounted = await createAppBundle(join(fixture.root, 'Volumes', 'Codex Installer', 'ChatGPT.app'), '27.0.0')
+    const runCommand = createSelectionCommandRunner([standard, mounted])
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand })
+
+    await expect(driver.detect()).resolves.toMatchObject({
+      version: standard.version,
+      executable: standard.executable,
+      installationId: `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${standard.appBundle}`,
+      running: false
+    })
+  })
+
+  it('verifies a saved session against its exact app when multiple official copies are running', async () => {
+    const fixture = await createSelectionFixture()
+    const standard = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '26.0.0')
+    const mounted = await createAppBundle(join(fixture.root, 'Volumes', 'Codex Preview', 'ChatGPT.app'), '27.0.0')
+    const runCommand = createSelectionCommandRunner(
+      [standard, mounted],
+      [standard.executable, mounted.executable],
+      mounted.executable
+    )
+    const fetchJson = vi.fn(async (url: string) => url.endsWith('/json/version')
+      ? { webSocketDebuggerUrl: 'ws://127.0.0.1:9335/devtools/browser/browser-mounted' }
+      : [{ id: 'page-1', type: 'page', url: 'app://-/index.html', webSocketDebuggerUrl: 'ws://127.0.0.1:9335/devtools/page/page-1' }])
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand, fetchJson })
+    const detected = await driver.detect()
+
+    expect(detected.installationId).toBe(`${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${standard.appBundle}`)
+    await expect(driver.verifySession(
+      9335,
+      'browser-mounted',
+      detected,
+      `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${mounted.appBundle}`
+    )).resolves.toEqual({
+      port: 9335,
+      browserId: 'browser-mounted',
+      version: mounted.version,
+      platform: 'darwin',
+      installationId: `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${mounted.appBundle}`
+    })
+  })
+
+  it('ignores only ESRCH when a verified process exits before it is signalled', async () => {
+    const fixture = await createAppFixture()
+    const runCommand = createCommandRunner(fixture, MAC_CODEX_TEAM_ID, true)
+    const install = {
+      appBundle: fixture.appBundle,
+      executable: fixture.executable,
+      version: '26.721.81911',
+      bundleIdentifier: MAC_CODEX_BUNDLE_ID,
+      teamIdentifier: MAC_CODEX_TEAM_ID
+    }
+    const processInfo = { pid: 123, startedAt: 'Wed Jul 29 12:34:56 2026', executable: fixture.executable }
+    const esrch = Object.assign(new Error('process exited'), { code: 'ESRCH' })
+    const esrchDriver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, {
+      runCommand,
+      signalProcess: () => { throw esrch }
+    }) as unknown as {
+      signalVerifiedProcess: (expected: typeof processInfo, selectedInstall: typeof install, signal: NodeJS.Signals) => Promise<void>
+    }
+    await expect(esrchDriver.signalVerifiedProcess(processInfo, install, 'SIGTERM')).resolves.toBeUndefined()
+
+    const eperm = Object.assign(new Error('not permitted'), { code: 'EPERM' })
+    const epermDriver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, {
+      runCommand,
+      signalProcess: () => { throw eperm }
+    }) as unknown as {
+      signalVerifiedProcess: (expected: typeof processInfo, selectedInstall: typeof install, signal: NodeJS.Signals) => Promise<void>
+    }
+    await expect(epermDriver.signalVerifiedProcess(processInfo, install, 'SIGTERM')).rejects.toBe(eperm)
   })
 })
 
@@ -89,6 +179,66 @@ async function createAppFixture(): Promise<{ root: string; studioRoot: string; h
   await writeFile(join(appBundle, 'Contents', 'Info.plist'), 'fixture')
   await writeFile(executable, 'fixture', { mode: 0o755 })
   return { root, studioRoot, homeRoot, appBundle, executable }
+}
+
+interface SelectionAppFixture {
+  appBundle: string
+  executable: string
+  version: string
+}
+
+async function createSelectionFixture(): Promise<{ root: string; studioRoot: string; homeRoot: string }> {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'dream-skin-macos-selection-')))
+  roots.push(root)
+  return { root, studioRoot: join(root, 'studio'), homeRoot: join(root, 'home') }
+}
+
+async function createAppBundle(appBundle: string, version: string): Promise<SelectionAppFixture> {
+  const executable = join(appBundle, 'Contents', 'MacOS', 'ChatGPT')
+  await mkdir(join(appBundle, 'Contents', 'MacOS'), { recursive: true })
+  await writeFile(join(appBundle, 'Contents', 'Info.plist'), 'fixture')
+  await writeFile(executable, 'fixture', { mode: 0o755 })
+  return { appBundle, executable, version }
+}
+
+function createSelectionCommandRunner(
+  apps: SelectionAppFixture[],
+  runningExecutable?: string | string[],
+  listenerExecutable?: string
+): MacCommandRunner & ReturnType<typeof vi.fn> {
+  const runningExecutables = typeof runningExecutable === 'string'
+    ? [runningExecutable]
+    : runningExecutable ?? []
+  return vi.fn(async (command: string, argumentsList: string[]) => {
+    if (command === '/usr/bin/mdfind') return { stdout: `${apps.map((app) => app.appBundle).join('\n')}\n`, stderr: '', exitCode: 0 }
+    if (command === '/usr/bin/codesign' && argumentsList[0] === '--verify') return { stdout: '', stderr: '', exitCode: 0 }
+    if (command === '/usr/bin/codesign' && argumentsList[0] === '-dv') {
+      const path = argumentsList.at(-1)
+      const identifier = apps.some((app) => app.appBundle === path) ? MAC_CODEX_BUNDLE_ID : 'com.openai.codex.helper'
+      return { stdout: '', stderr: `Identifier=${identifier}\nTeamIdentifier=${MAC_CODEX_TEAM_ID}\n`, exitCode: 0 }
+    }
+    if (command === '/usr/bin/plutil') {
+      const key = argumentsList[1]
+      const infoPath = argumentsList.at(-1)
+      const app = apps.find((candidate) => join(candidate.appBundle, 'Contents', 'Info.plist') === infoPath)
+      if (!app) throw new Error(`Unexpected plist: ${infoPath}`)
+      const value = key === 'CFBundleIdentifier' ? MAC_CODEX_BUNDLE_ID : key === 'CFBundleShortVersionString' ? app.version : 'ChatGPT'
+      return { stdout: `${value}\n`, stderr: '', exitCode: 0 }
+    }
+    if (command === '/bin/ps') {
+      const stdout = runningExecutables
+        .map((executable, index) => `${123 + index} Wed Jul 29 12:34:56 2026 ${executable}`)
+        .join('\n')
+      return { stdout: stdout ? `${stdout}\n` : '', stderr: '', exitCode: 0 }
+    }
+    if (command === '/usr/sbin/lsof') {
+      const index = listenerExecutable ? runningExecutables.indexOf(listenerExecutable) : -1
+      if (index < 0) return { stdout: '', stderr: '', exitCode: 1 }
+      const pid = 123 + index
+      return { stdout: `p${pid}\ncChatGPT\nn127.0.0.1:9335\n`, stderr: '', exitCode: 0 }
+    }
+    throw new Error(`Unexpected command: ${command} ${argumentsList.join(' ')}`)
+  }) as MacCommandRunner & ReturnType<typeof vi.fn>
 }
 
 function createCommandRunner(

@@ -117,10 +117,11 @@ export class MacCodexDriver implements CodexPlatformDriver {
     })
   }
 
-  async verifySession(port: number, browserId: string, detection: CodexDetection): Promise<CodexStartResult> {
+  async verifySession(port: number, browserId: string, detection: CodexDetection, expectedInstallationId = detection.installationId): Promise<CodexStartResult> {
     assertPort(port)
-    if (detection.platform !== this.platform || detection.installationId !== this.installationId()) throw new Error('保存的 Codex 会话属于其他安装。')
-    const install = await this.findInstall()
+    if (detection.platform !== this.platform) throw new Error('保存的 Codex 会话属于其他安装。')
+    const install = await this.findInstall(expectedInstallationId)
+    if (expectedInstallationId !== this.installationId(install)) throw new Error('保存的 Codex 会话属于其他安装。')
     const identity = await this.verifyCdpIdentity(port, install)
     if (!identity || identity.browserId !== browserId) throw new Error('保存的 Codex 浏览器身份已失效。')
     return this.toStartResult(install, port, identity.browserId)
@@ -137,7 +138,16 @@ export class MacCodexDriver implements CodexPlatformDriver {
     })
   }
 
-  private async findInstall(): Promise<MacCodexInstall> {
+  private async findInstall(expectedInstallationId?: string): Promise<MacCodexInstall> {
+    if (expectedInstallationId) {
+      const prefix = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:`
+      if (!expectedInstallationId.startsWith(prefix)) throw new Error('保存的 Codex 会话属于其他安装。')
+      const appBundle = expectedInstallationId.slice(prefix.length)
+      if (!isAbsolute(appBundle) || !appBundle.endsWith('.app')) throw new Error('保存的 Codex 会话属于其他安装。')
+      const install = await this.validateInstallCandidate(appBundle)
+      if (this.installationId(install) !== expectedInstallationId) throw new Error('保存的 Codex 会话属于其他安装。')
+      return install
+    }
     const candidates = new Set<string>([
       '/Applications/ChatGPT.app',
       '/Applications/Codex.app',
@@ -153,7 +163,18 @@ export class MacCodexDriver implements CodexPlatformDriver {
       const install = await this.validateInstallCandidate(candidate).catch(() => null)
       if (install) installs.push(install)
     }
-    installs.sort((left, right) => right.version.localeCompare(left.version, undefined, { numeric: true }))
+    if (installs.length === 0) throw new Error('未找到签名身份有效的官方 Codex macOS 应用。')
+    const runningExecutables = new Set<string>()
+    for (const processInfo of await this.processSnapshot()) {
+      const executable = await realpath(processInfo.executable).catch(() => '')
+      if (executable) runningExecutables.add(executable)
+    }
+    installs.sort((left, right) =>
+      Number(runningExecutables.has(right.executable)) - Number(runningExecutables.has(left.executable)) ||
+      Number(this.isStandardApplicationInstall(right.appBundle)) - Number(this.isStandardApplicationInstall(left.appBundle)) ||
+      right.version.localeCompare(left.version, undefined, { numeric: true }) ||
+      left.appBundle.localeCompare(right.appBundle)
+    )
     const install = installs[0]
     if (!install) throw new Error('未找到签名身份有效的官方 Codex macOS 应用。')
     return install
@@ -236,7 +257,11 @@ export class MacCodexDriver implements CodexPlatformDriver {
     if (!current || current.startedAt !== expected.startedAt) return
     const executable = await realpath(current.executable).catch(() => '')
     if (executable !== install.executable) throw new Error('Codex 进程身份在停止前发生变化。')
-    this.signalProcess(expected.pid, signal)
+    try {
+      this.signalProcess(expected.pid, signal)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+    }
   }
 
   private async openApplication(install: MacCodexInstall, argumentsList: string[]): Promise<void> {
@@ -321,17 +346,21 @@ export class MacCodexDriver implements CodexPlatformDriver {
       distribution: 'mac-app-bundle',
       version: install.version,
       executable: install.executable,
-      installationId: this.installationId(),
+      installationId: this.installationId(install),
       running,
       backupAvailable
     }
   }
 
   private toStartResult(install: MacCodexInstall, port: number, browserId: string): CodexStartResult {
-    return { port, browserId, version: install.version, platform: this.platform, installationId: this.installationId() }
+    return { port, browserId, version: install.version, platform: this.platform, installationId: this.installationId(install) }
   }
 
-  private installationId(): string { return `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}` }
+  private isStandardApplicationInstall(appBundle: string): boolean {
+    const parent = dirname(resolve(appBundle))
+    return parent === resolve('/Applications') || parent === resolve(this.homeDirectory, 'Applications')
+  }
+  private installationId(install: MacCodexInstall): string { return `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${install.appBundle}` }
   private configPath(): string { return join(this.homeDirectory, '.codex', 'config.toml') }
   private backupPath(): string { return join(this.studioRoot, 'backups', 'config.before-studio.toml') }
 
