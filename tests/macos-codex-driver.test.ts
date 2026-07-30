@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -173,6 +173,28 @@ describe('MacCodexDriver', () => {
 
     expect(runCommand).toHaveBeenCalledWith('/usr/bin/open', ['-na', mounted.appBundle], 10_000)
     expect(runCommand).not.toHaveBeenCalledWith('/usr/bin/mdfind', expect.anything(), expect.anything())
+  })
+
+  it('does not consume the configuration backup when the saved app is invalid', async () => {
+    const fixture = await createSelectionFixture()
+    const configPath = join(fixture.homeRoot, '.codex', 'config.toml')
+    const backupPath = join(fixture.studioRoot, 'backups', 'config.before-studio.toml')
+    const currentConfig = '[desktop]\nappearanceTheme = "light"\n'
+    const backupConfig = '[desktop]\nappearanceTheme = "system"\n'
+    await mkdir(join(fixture.homeRoot, '.codex'), { recursive: true })
+    await mkdir(join(fixture.studioRoot, 'backups'), { recursive: true })
+    await writeFile(configPath, currentConfig)
+    await writeFile(backupPath, backupConfig)
+    const runCommand = createSelectionCommandRunner([])
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand })
+    const missingApp = join(fixture.root, 'Moved Codex.app')
+    const installationId = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${missingApp}`
+
+    await expect(driver.restore(true, installationId)).rejects.toThrow()
+
+    await expect(readFile(configPath, 'utf8')).resolves.toBe(currentConfig)
+    await expect(readFile(backupPath, 'utf8')).resolves.toBe(backupConfig)
+    expect(runCommand).not.toHaveBeenCalledWith('/usr/bin/open', expect.anything(), expect.anything())
   })
 
   it('ignores only ESRCH when a verified process exits before it is signalled', async () => {

@@ -129,9 +129,9 @@ export class MacCodexDriver implements CodexPlatformDriver {
 
   async restore(restartCodex: boolean, expectedInstallationId?: string): Promise<void> {
     await this.withOperationLock(async () => {
+      const install = restartCodex ? await this.findInstall(expectedInstallationId) : null
       await restoreMacCodexThemeConfig(this.configPath(), this.backupPath())
-      if (!restartCodex) return
-      const install = await this.findInstall(expectedInstallationId)
+      if (!install) return
       const processes = await this.mainProcesses(install)
       if (processes.length > 0) await this.stopVerifiedProcesses(install, processes)
       await this.openApplication(install, [])

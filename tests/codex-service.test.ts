@@ -371,7 +371,7 @@ describe('CodexService operation queue', () => {
     await Promise.all([detectionOperation, recovery, restore])
 
     expect(driver.start).not.toHaveBeenCalled()
-    expect(driver.restore).toHaveBeenCalledWith(false, detection.installationId)
+    expect(driver.restore).toHaveBeenCalledWith(false, undefined)
     await rm(root, { recursive: true, force: true })
   })
 
@@ -591,13 +591,19 @@ describe('CodexService operation queue', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('keeps restoring Codex through the active session installation after a failed attempt', async () => {
+  it('keeps restoring Codex through the persisted session installation after Studio restarts', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-installation-'))
     const driver = createDriver('darwin')
+    const themeId = '11111111-1111-4111-8111-111111111111'
     const installationId = 'com.openai.codex:2DC432GLL2:/Applications/Codex.app'
-    vi.mocked(driver.restore)
-      .mockRejectedValueOnce(new Error('restart failed'))
-      .mockResolvedValueOnce(undefined)
+    const activeSession: CodexStartResult = {
+      port: 9335,
+      browserId: 'browser-old',
+      version: '26.721.81911',
+      platform: 'darwin',
+      installationId
+    }
+    vi.mocked(driver.restore).mockRejectedValueOnce(new Error('restart failed'))
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
     const watcher = { stop: vi.fn().mockResolvedValue({ connected: false, targetCount: 0 }) }
     const internals = service as unknown as {
@@ -608,23 +614,77 @@ describe('CodexService operation queue', () => {
       activeSessionGeneration: number
     }
     internals.watcher = watcher
-    internals.activeThemeId = '11111111-1111-4111-8111-111111111111'
-    internals.activeSession = {
-      port: 9335,
-      browserId: 'browser-old',
-      version: '26.721.81911',
-      platform: 'darwin',
-      installationId
-    }
+    internals.activeThemeId = themeId
+    internals.activeSession = activeSession
     internals.sessionGeneration = 1
     internals.activeSessionGeneration = 1
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: activeSession.port,
+      browserId: activeSession.browserId,
+      platform: activeSession.platform,
+      installationId: activeSession.installationId
+    })}\n`)
 
     await expect(service.restore(true)).rejects.toThrow('restart failed')
-    await service.restore(true)
+    expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({
+      themeId,
+      installationId
+    })
 
     expect(watcher.stop).toHaveBeenCalledWith(true)
-    expect(driver.restore).toHaveBeenNthCalledWith(1, true, installationId)
-    expect(driver.restore).toHaveBeenNthCalledWith(2, true, installationId)
+    expect(driver.restore).toHaveBeenCalledWith(true, installationId)
+
+    const restartedDriver = createDriver('darwin')
+    vi.mocked(restartedDriver.detect).mockResolvedValue({
+      ...detection,
+      platform: 'darwin',
+      distribution: 'mac-app-bundle',
+      executable: '/Applications/Codex.app/Contents/MacOS/Codex',
+      installationId: 'com.openai.codex:2DC432GLL2:/Applications/Codex.app',
+      backupAvailable: true
+    })
+    vi.mocked(restartedDriver.verifySession).mockRejectedValue(new Error('saved app is unavailable'))
+    const restartedStore = {
+      root,
+      themesRoot: join(root, 'themes'),
+      get: vi.fn().mockResolvedValue({ id: themeId })
+    }
+    const restartedService = new CodexService(restartedStore as never, join(process.cwd(), 'resources', 'shared'), restartedDriver, '1.0.9', () => undefined)
+
+    await restartedService.resume()
+
+    expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({
+      themeId,
+      installationId
+    })
+    await restartedService.restore(true)
+
+    expect(restartedDriver.restore).toHaveBeenCalledWith(true, installationId)
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('does not fall back to global app selection when a persisted macOS identity is invalid', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-invalid-installation-'))
+    const driver = createDriver('darwin')
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId: '11111111-1111-4111-8111-111111111111',
+      port: 9335,
+      browserId: 'browser-old',
+      platform: 'darwin',
+      installationId: 'com.openai.codex:WRONGTEAM:/Applications/Codex.app'
+    })}\n`)
+
+    await expect(service.restore(true)).rejects.toThrow('verified installation identity')
+
+    expect(driver.restore).not.toHaveBeenCalled()
+    await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain('WRONGTEAM')
     await rm(root, { recursive: true, force: true })
   })
 

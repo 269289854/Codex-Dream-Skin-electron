@@ -162,7 +162,9 @@ export class CodexService {
         await watcher.stop(true).catch(() => undefined)
         if (this.watcher === watcher) this.watcher = null
       }
-      await rm(this.sessionPath(), { force: true })
+      if (!this.persistedSessionInstallationId(session)) {
+        await rm(this.sessionPath(), { force: true })
+      }
       this.clearActiveSession()
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
       this.patch('ready', detection.backupAvailable ? '上次主题会话已结束，可恢复配置或重新启动' : '上次主题会话已结束，可重新启动')
@@ -399,9 +401,13 @@ export class CodexService {
   }
 
   async restore(restartCodex: boolean): Promise<RuntimeStatus> {
-    const expectedInstallationId = this.activeSession?.installationId
+    const activeInstallationId = restartCodex ? this.activeSession?.installationId : undefined
     this.beginSessionIntent()
-    return this.enqueueOperation(() => this.restoreInternal(restartCodex, expectedInstallationId))
+    return this.enqueueOperation(async () => {
+      const expectedInstallationId = activeInstallationId ??
+        (restartCodex ? await this.readPersistedInstallationId() : undefined)
+      return this.restoreInternal(restartCodex, expectedInstallationId)
+    })
   }
 
   private async restoreInternal(restartCodex: boolean, expectedInstallationId?: string): Promise<RuntimeStatus> {
@@ -409,8 +415,8 @@ export class CodexService {
     try {
       if (this.watcher) await this.watcher.stop(true)
       this.watcher = null
-      await rm(this.sessionPath(), { force: true })
       await this.platformDriver.restore(restartCodex, expectedInstallationId)
+      await rm(this.sessionPath(), { force: true })
       this.clearActiveSession()
       this.status.backupAvailable = false
       this.patch('stopped', restartCodex ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置')
@@ -678,6 +684,36 @@ export class CodexService {
   }
 
   private sessionPath(): string { return join(this.store.root, 'runtime', 'session.json') }
+  private async readPersistedInstallationId(): Promise<string | undefined> {
+    let content: string
+    try {
+      content = await readFile(this.sessionPath(), 'utf8')
+    } catch (reason) {
+      if ((reason as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw reason
+    }
+    let session: Partial<RuntimeSessionV1 | RuntimeSessionV2>
+    try {
+      session = JSON.parse(content) as typeof session
+    } catch {
+      throw new Error('Saved runtime session is invalid.')
+    }
+    if (session.version === 1 && this.platformDriver.platform === 'win32') return undefined
+    const installationId = this.persistedSessionInstallationId(session)
+    if (!installationId) throw new Error('Saved runtime session does not contain a verified installation identity.')
+    return installationId
+  }
+  private persistedSessionInstallationId(session: Partial<RuntimeSessionV1 | RuntimeSessionV2>): string | undefined {
+    if (session.version !== 2 ||
+      session.platform !== this.platformDriver.platform ||
+      !session.themeId ||
+      !session.browserId ||
+      !Number.isInteger(session.port) ||
+      typeof session.installationId !== 'string' ||
+      session.installationId.length === 0) return undefined
+    if (session.platform === 'darwin' && !session.installationId.startsWith(`${LEGACY_MAC_INSTALLATION_ID}:`)) return undefined
+    return session.installationId
+  }
   private async writeSession(themeId: string, result: CodexStartResult): Promise<void> {
     const path = this.sessionPath()
     const temporary = `${path}.tmp`
