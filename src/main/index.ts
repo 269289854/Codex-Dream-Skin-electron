@@ -45,7 +45,11 @@ function quitStudio(): void {
 
 async function restoreCodexAndQuit(): Promise<void> {
   try {
-    await codexService.restore(true)
+    const status = await codexService.restore(true)
+    if (status.lastError) {
+      showWindow()
+      return
+    }
   } catch {
     showWindow()
     return

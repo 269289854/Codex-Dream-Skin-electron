@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -95,5 +96,32 @@ describe('WindowsCodexDriver', () => {
     await expect(driver.restore(true, 'OpenAI.Codex_old')).rejects.toBeInstanceOf(CodexInstallationIdentityError)
 
     expect(runPowerShellMock).toHaveBeenCalledOnce()
+  })
+
+  it('reports configuration restore and restart outcomes independently', async () => {
+    const driver = new WindowsCodexDriver('C:\\Studio', 'C:\\Resources')
+    runPowerShellMock
+      .mockResolvedValueOnce({ restored: false, restarted: false, restartError: null })
+      .mockResolvedValueOnce({ restored: true, restarted: false, restartError: 'Codex launch failed' })
+
+    await expect(driver.restore(false)).resolves.toEqual({
+      configRestored: false,
+      restart: { status: 'not-requested' }
+    })
+    await expect(driver.restore(true)).resolves.toEqual({
+      configRestored: true,
+      restart: { status: 'failed', error: 'Codex launch failed' }
+    })
+  })
+
+  it('keeps restore and restart outcomes separate in the packaged PowerShell bridge', async () => {
+    const bridge = await readFile(join(process.cwd(), 'resources', 'windows', 'studio-bridge.ps1'), 'utf8')
+    const restoreBlock = bridge.slice(bridge.indexOf("if ($Action -eq 'Restore')"))
+
+    expect(restoreBlock).toContain('$restored = $false')
+    expect(restoreBlock).toContain('$restarted = $false')
+    expect(restoreBlock).toContain('$restartError = $null')
+    expect(restoreBlock).toMatch(/catch\s*\{\s*\$restartError = \$_\.Exception\.Message\s*\}/)
+    expect(restoreBlock).toMatch(/restored = \$restored\s+restarted = \$restarted\s+restartError = \$restartError/)
   })
 })

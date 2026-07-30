@@ -38,7 +38,10 @@ function createDriver(platform: CodexPlatformDriver['platform'] = 'win32'): Code
     applyConfig: vi.fn(),
     start: vi.fn(),
     verifySession: vi.fn(),
-    restore: vi.fn()
+    restore: vi.fn(async (restartCodex: boolean) => ({
+      configRestored: true,
+      restart: restartCodex ? { status: 'succeeded' as const } : { status: 'not-requested' as const }
+    }))
   }
 }
 
@@ -603,7 +606,7 @@ describe('CodexService operation queue', () => {
       platform: 'darwin',
       installationId
     }
-    vi.mocked(driver.restore).mockRejectedValueOnce(new Error('restart failed'))
+    vi.mocked(driver.restore).mockRejectedValueOnce(new Error('config restore failed'))
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
     const watcher = { stop: vi.fn().mockResolvedValue({ connected: false, targetCount: 0 }) }
     const internals = service as unknown as {
@@ -628,7 +631,7 @@ describe('CodexService operation queue', () => {
       installationId: activeSession.installationId
     })}\n`)
 
-    await expect(service.restore(true)).rejects.toThrow('restart failed')
+    await expect(service.restore(true)).rejects.toThrow('config restore failed')
     expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({
       themeId,
       installationId
@@ -664,6 +667,69 @@ describe('CodexService operation queue', () => {
 
     expect(restartedDriver.restore).toHaveBeenCalledWith(true, installationId)
     await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('keeps the session when the platform reports that no configuration backup was restored', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-no-backup-'))
+    const driver = createDriver()
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    vi.mocked(driver.restore).mockResolvedValueOnce({
+      configRestored: false,
+      restart: { status: 'succeeded' }
+    })
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: 9335,
+      browserId: 'browser-old',
+      platform: 'win32',
+      installationId: detection.installationId
+    })}\n`)
+
+    await expect(service.restore(true)).rejects.toThrow('未找到可恢复的 Codex 配置备份')
+
+    expect(service.getStatus()).toMatchObject({
+      phase: 'error',
+      backupAvailable: false,
+      lastError: '未找到可恢复的 Codex 配置备份'
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain(themeId)
+    await expect(readFile(join(root, 'runtime', 'session.restore-completed.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('commits configuration restore and retires the session when only the restart fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-restart-failure-'))
+    const driver = createDriver()
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    vi.mocked(driver.restore).mockResolvedValueOnce({
+      configRestored: true,
+      restart: { status: 'failed', error: 'Codex launch failed' }
+    })
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: 9335,
+      browserId: 'browser-old',
+      platform: 'win32',
+      installationId: detection.installationId
+    })}\n`)
+
+    const status = await service.restore(true)
+
+    expect(status).toMatchObject({
+      phase: 'stopped',
+      backupAvailable: false,
+      lastError: 'Codex launch failed',
+      message: '已恢复 Codex 配置；Codex 配置已恢复，但自动重启失败'
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(root, 'runtime', 'session.restore-completed.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     await rm(root, { recursive: true, force: true })
   })
 
@@ -739,7 +805,7 @@ describe('CodexService operation queue', () => {
     const oldInstallationId = 'OpenAI.Codex_old'
     vi.mocked(driver.restore)
       .mockRejectedValueOnce(new CodexInstallationIdentityError('Saved Codex session belongs to another installation.'))
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ configRestored: true, restart: { status: 'not-requested' } })
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
     await mkdir(join(root, 'runtime'), { recursive: true })
     await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({

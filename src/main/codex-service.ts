@@ -19,7 +19,12 @@ import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CdpWatcher, type CdpMediaBinding, type CdpSnapshot } from './cdp-watcher'
 import type { ProfileStore } from './profile-store'
 import { buildRuntimeFontCss } from './theme-fonts'
-import { CodexInstallationIdentityError, type CodexPlatformDriver, type CodexStartResult } from './codex-platform'
+import {
+  CodexInstallationIdentityError,
+  type CodexPlatformDriver,
+  type CodexRestoreResult,
+  type CodexStartResult
+} from './codex-platform'
 
 interface RuntimePayload { script: string; version: string }
 interface RuntimeSessionV1 { version: 1; themeId: string; port: number; browserId: string }
@@ -451,14 +456,26 @@ export class CodexService {
       }
       if (this.watcher) await this.watcher.stop(true)
       this.watcher = null
+      let restoreResult: CodexRestoreResult
       try {
-        await this.platformDriver.restore(restartCodex, expectedInstallationId)
+        restoreResult = await this.platformDriver.restore(restartCodex, expectedInstallationId)
       } catch (reason) {
         if (!restartCodex || !expectedInstallationId || !(reason instanceof CodexInstallationIdentityError)) throw reason
         restartCodex = false
         restartWarning = '保存的 Codex 安装身份已失效，未自动重启 Codex'
         diagnostic = reason.message
-        await this.platformDriver.restore(false)
+        restoreResult = await this.platformDriver.restore(false)
+      }
+      if (!restoreResult.configRestored) {
+        this.status.backupAvailable = false
+        const restartFailure = restoreResult.restart.status === 'failed'
+          ? `；Codex 自动重启也失败: ${restoreResult.restart.error}`
+          : ''
+        throw new Error(`未找到可恢复的 Codex 配置备份${restartFailure}`)
+      }
+      if (restoreResult.restart.status === 'failed') {
+        restartWarning = 'Codex 配置已恢复，但自动重启失败'
+        diagnostic = [diagnostic, restoreResult.restart.error].filter((part): part is string => part !== null).join('；')
       }
       let markerWritten = false
       let markerError: string | null = null
@@ -479,7 +496,7 @@ export class CodexService {
         cleanupError = reason instanceof Error ? reason.message : String(reason)
       }
       const message = [
-        restartCodex ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置',
+        restoreResult.restart.status === 'succeeded' ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置',
         restartWarning,
         cleanupError
           ? markerWritten

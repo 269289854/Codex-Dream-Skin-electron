@@ -148,6 +148,8 @@ try {
 
   if ($Action -eq 'Restore') {
     $restored = $false
+    $restarted = $false
+    $restartError = $null
     if (Test-Path -LiteralPath $paths.Backup) {
       Restore-DreamSkinBaseTheme -ConfigPath $paths.Config -BackupPath $paths.Backup
       $archive = Join-Path (Split-Path -Parent $paths.Backup) ("config.restored-{0}.toml" -f (Get-Date).ToString('yyyyMMdd-HHmmss-fff'))
@@ -155,12 +157,21 @@ try {
       $restored = $true
     }
     if ($RestartCodex) {
-      $codex = Get-DreamSkinCodexInstall
-      $processes = @(Get-DreamSkinCodexProcesses -Codex $codex)
-      if ($processes.Count -gt 0) { Stop-DreamSkinCodex -Codex $codex -AllowForce }
-      Start-DreamSkinCodexProcess -Codex $codex | Out-Null
+      try {
+        $codex = Get-DreamSkinCodexInstall
+        $processes = @(Get-DreamSkinCodexProcesses -Codex $codex)
+        if ($processes.Count -gt 0) { Stop-DreamSkinCodex -Codex $codex -AllowForce }
+        Start-DreamSkinCodexProcess -Codex $codex | Out-Null
+        $restarted = $true
+      } catch {
+        $restartError = $_.Exception.Message
+      }
     }
-    Write-StudioResult ([pscustomobject]@{ restored = $restored; restarted = [bool]$RestartCodex })
+    Write-StudioResult ([pscustomobject]@{
+      restored = $restored
+      restarted = $restarted
+      restartError = $restartError
+    })
   }
 } finally {
   Exit-DreamSkinOperationLock -Mutex $mutex

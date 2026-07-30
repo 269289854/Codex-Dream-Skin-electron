@@ -6,7 +6,12 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import type { CodexDetection } from '../shared/contracts'
 import { parseThemeProfile } from '../shared/theme'
 import { isSafeCdpWebSocketUrl, isThemeCdpTargetUrl } from './cdp-watcher'
-import { CodexInstallationIdentityError, type CodexPlatformDriver, type CodexStartResult } from './codex-platform'
+import {
+  CodexInstallationIdentityError,
+  type CodexPlatformDriver,
+  type CodexRestoreResult,
+  type CodexStartResult
+} from './codex-platform'
 import { installMacCodexThemeConfig, restoreMacCodexThemeConfig } from './macos-config'
 
 export const MAC_CODEX_BUNDLE_ID = 'com.openai.codex'
@@ -127,14 +132,25 @@ export class MacCodexDriver implements CodexPlatformDriver {
     return this.toStartResult(install, port, identity.browserId)
   }
 
-  async restore(restartCodex: boolean, expectedInstallationId?: string): Promise<void> {
-    await this.withOperationLock(async () => {
+  async restore(restartCodex: boolean, expectedInstallationId?: string): Promise<CodexRestoreResult> {
+    return await this.withOperationLock(async () => {
       const install = restartCodex ? await this.findInstall(expectedInstallationId) : null
-      await restoreMacCodexThemeConfig(this.configPath(), this.backupPath())
-      if (!install) return
-      const processes = await this.mainProcesses(install)
-      if (processes.length > 0) await this.stopVerifiedProcesses(install, processes)
-      await this.openApplication(install, [])
+      const configRestored = await restoreMacCodexThemeConfig(this.configPath(), this.backupPath())
+      if (!install) return { configRestored, restart: { status: 'not-requested' } }
+      try {
+        const processes = await this.mainProcesses(install)
+        if (processes.length > 0) await this.stopVerifiedProcesses(install, processes)
+        await this.openApplication(install, [])
+        return { configRestored, restart: { status: 'succeeded' } }
+      } catch (reason) {
+        return {
+          configRestored,
+          restart: {
+            status: 'failed',
+            error: reason instanceof Error ? reason.message : String(reason)
+          }
+        }
+      }
     })
   }
 

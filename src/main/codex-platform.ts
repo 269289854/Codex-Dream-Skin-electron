@@ -15,13 +15,23 @@ export interface CodexStartResult {
   installationId: string
 }
 
+export type CodexRestartOutcome =
+  | { status: 'not-requested' }
+  | { status: 'succeeded' }
+  | { status: 'failed'; error: string }
+
+export interface CodexRestoreResult {
+  configRestored: boolean
+  restart: CodexRestartOutcome
+}
+
 export interface CodexPlatformDriver {
   readonly platform: SupportedDesktopPlatform
   detect: () => Promise<CodexDetection>
   applyConfig: (themePath: string) => Promise<void>
   start: (preferredPort: number, restartExisting: boolean, expectedInstallationId?: string) => Promise<CodexStartResult>
   verifySession: (port: number, browserId: string, detection: CodexDetection, expectedInstallationId?: string) => Promise<CodexStartResult>
-  restore: (restartCodex: boolean, expectedInstallationId?: string) => Promise<void>
+  restore: (restartCodex: boolean, expectedInstallationId?: string) => Promise<CodexRestoreResult>
 }
 
 export function isSupportedDesktopPlatform(platform: NodeJS.Platform): platform is SupportedDesktopPlatform {

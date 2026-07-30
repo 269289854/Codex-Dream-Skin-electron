@@ -39,6 +39,7 @@ describe('Studio application lifecycle contract', () => {
 
     expect(main).toContain("{ label: '恢复 Codex 并退出', click: () => void restoreCodexAndQuit() }")
     expect(restoreAndQuit).toContain('await codexService.restore(true)')
+    expect(restoreAndQuit).toContain('if (status.lastError)')
     expect(restoreAndQuit).toContain('catch')
     expect(restoreAndQuit).toContain('showWindow()')
     expect(restoreAndQuit).toContain('return')

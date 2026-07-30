@@ -166,14 +166,47 @@ describe('MacCodexDriver', () => {
     const fixture = await createSelectionFixture()
     const standard = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '26.0.0')
     const mounted = await createAppBundle(join(fixture.root, 'Volumes', 'Codex Preview', 'ChatGPT.app'), '27.0.0')
+    await mkdir(join(fixture.homeRoot, '.codex'), { recursive: true })
+    await mkdir(join(fixture.studioRoot, 'backups'), { recursive: true })
+    await writeFile(join(fixture.homeRoot, '.codex', 'config.toml'), '[desktop]\nappearanceTheme = "light"\n')
+    await writeFile(join(fixture.studioRoot, 'backups', 'config.before-studio.toml'), '[desktop]\nappearanceTheme = "system"\n')
     const runCommand = createSelectionCommandRunner([standard, mounted])
     const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand })
     const installationId = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${mounted.appBundle}`
 
-    await driver.restore(true, installationId)
+    await expect(driver.restore(true, installationId)).resolves.toEqual({
+      configRestored: true,
+      restart: { status: 'succeeded' }
+    })
 
     expect(runCommand).toHaveBeenCalledWith('/usr/bin/open', ['-na', mounted.appBundle], 10_000)
     expect(runCommand).not.toHaveBeenCalledWith('/usr/bin/mdfind', expect.anything(), expect.anything())
+  })
+
+  it('reports a restart failure after configuration has already been restored', async () => {
+    const fixture = await createSelectionFixture()
+    const app = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '26.0.0')
+    const configPath = join(fixture.homeRoot, '.codex', 'config.toml')
+    const backupPath = join(fixture.studioRoot, 'backups', 'config.before-studio.toml')
+    await mkdir(join(fixture.homeRoot, '.codex'), { recursive: true })
+    await mkdir(join(fixture.studioRoot, 'backups'), { recursive: true })
+    await writeFile(configPath, '[desktop]\nappearanceTheme = "light"\n')
+    await writeFile(backupPath, '[desktop]\nappearanceTheme = "system"\n')
+    const baseRunner = createSelectionCommandRunner([app])
+    const runCommand = vi.fn(async (command: string, argumentsList: string[], timeoutMs?: number) => {
+      if (command === '/usr/bin/open') return { stdout: '', stderr: 'Codex launch failed', exitCode: 1 }
+      return await baseRunner(command, argumentsList, timeoutMs)
+    }) as MacCommandRunner & ReturnType<typeof vi.fn>
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand })
+    const installationId = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${app.appBundle}`
+
+    await expect(driver.restore(true, installationId)).resolves.toEqual({
+      configRestored: true,
+      restart: { status: 'failed', error: 'Codex launch failed' }
+    })
+
+    await expect(readFile(configPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
+    await expect(readFile(backupPath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('does not consume the configuration backup when the saved app is invalid', async () => {
