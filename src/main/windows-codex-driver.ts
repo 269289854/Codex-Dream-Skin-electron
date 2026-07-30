@@ -44,12 +44,13 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
     await this.bridge('ApplyConfig', ['-ThemePath', themePath])
   }
 
-  async start(preferredPort: number, restartExisting: boolean): Promise<CodexStartResult> {
+  async start(preferredPort: number, restartExisting: boolean, expectedInstallationId?: string): Promise<CodexStartResult> {
     const detection = await this.detect()
+    if (expectedInstallationId && expectedInstallationId !== detection.installationId) throw new Error('Saved Codex session belongs to another installation.')
     const argumentsList = ['-Port', String(preferredPort)]
     if (restartExisting) argumentsList.push('-RestartExisting')
     const result = await this.bridge<WindowsStartResult>('Start', argumentsList, 65_000)
-    return this.toStartResult(result, detection.installationId)
+    return this.toStartResult(result, expectedInstallationId ?? detection.installationId)
   }
 
   async verifySession(port: number, browserId: string, detection: CodexDetection, expectedInstallationId = detection.installationId): Promise<CodexStartResult> {
@@ -61,7 +62,11 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
     return this.toStartResult(result, expectedInstallationId)
   }
 
-  async restore(restartCodex: boolean): Promise<void> {
+  async restore(restartCodex: boolean, expectedInstallationId?: string): Promise<void> {
+    if (restartCodex && expectedInstallationId) {
+      const detection = await this.detect()
+      if (expectedInstallationId !== detection.installationId) throw new Error('Saved Codex session belongs to another installation.')
+    }
     await this.bridge('Restore', restartCodex ? ['-RestartCodex'] : [], 65_000)
   }
 

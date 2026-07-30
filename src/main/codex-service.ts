@@ -218,16 +218,45 @@ export class CodexService {
   }
 
   async start(themeId: string, restartExisting: boolean): Promise<RuntimeStatus> {
+    const continueActiveSession = this.hasCurrentActiveSession()
+    const expectedInstallationId = continueActiveSession ? this.activeSession?.installationId : undefined
     const generation = this.beginSessionIntent()
-    return this.enqueueOperation(() => this.startInternal(themeId, restartExisting, generation))
+    if (continueActiveSession) this.activeSessionGeneration = generation
+    return this.enqueueOperation(() => this.startInternal(themeId, restartExisting, generation, expectedInstallationId))
   }
 
-  private async startInternal(themeId: string, restartExisting: boolean, generation: number): Promise<RuntimeStatus> {
+  private async startInternal(
+    themeId: string,
+    restartExisting: boolean,
+    generation: number,
+    expectedInstallationId?: string
+  ): Promise<RuntimeStatus> {
+    if (!this.isCurrentGeneration(generation)) return this.getStatus()
+    const previousThemeId = this.activeThemeId
+    const previousSession = this.activeSession
+    const previousPayload = this.activePayload
+    const previousMediaBindings = this.activeMediaBindings.map((binding) => ({ ...binding }))
+    const previousWatcher = previousThemeId && previousSession && previousPayload &&
+      this.isActiveSession(previousThemeId, generation)
+      ? this.watcher
+      : null
+    let runtimeChanged = false
+    let configChanged = false
     try {
-      const payload = await this.installThemeInternal(themeId)
+      this.patch(previousWatcher ? 'starting' : 'installing', '正在生成并安装主题配置')
+      const payload = await this.buildPayload(themeId)
+      if (!this.isCurrentGeneration(generation)) return this.getStatus()
+      await this.writeRuntimePayload(payload.script)
+      runtimeChanged = true
+      if (!this.isCurrentGeneration(generation)) return this.getStatus()
+      await this.platformDriver.applyConfig(join(this.store.themesRoot, themeId, 'theme.json'))
+      configChanged = true
+      this.status.backupAvailable = true
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
       this.patch('starting', '正在启动 Codex 本地主题会话')
-      const result = await this.platformDriver.start(this.status.port, restartExisting)
+      const result = await this.platformDriver.start(this.status.port, restartExisting, expectedInstallationId)
+      if (!this.isCurrentGeneration(generation)) return this.getStatus()
+      await this.writeSession(themeId, result)
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
       this.status.port = result.port
       this.status.codexVersion = result.version
@@ -236,12 +265,42 @@ export class CodexService {
       this.activeSessionGeneration = generation
       const snapshot = await this.replaceWatcher(result.browserId, payload)
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
-      await this.writeSession(themeId, result)
-      if (!this.isCurrentGeneration(generation)) return this.getStatus()
       this.patch('active', `主题已注入 ${snapshot.targetCount} 个 Codex 页面`)
       return this.getStatus()
     } catch (reason) {
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
+      if (previousWatcher && previousThemeId && previousSession && previousPayload) {
+        if (!configChanged) {
+          if (runtimeChanged) {
+            try {
+              await this.writeRuntimePayload(previousPayload.script)
+            } catch (rollbackReason) {
+              const original = reason instanceof Error ? reason.message : String(reason)
+              const rollback = rollbackReason instanceof Error ? rollbackReason.message : String(rollbackReason)
+              throw this.reportActiveFailure(new Error(`${original}；运行时载荷回滚失败: ${rollback}`), '新主题启动失败，原主题会话仍在运行')
+            }
+          }
+          throw this.reportActiveFailure(reason, '新主题启动失败，原主题会话仍在运行')
+        }
+        try {
+          await this.rollbackStartedSession(
+            previousThemeId,
+            previousSession,
+            previousPayload,
+            previousMediaBindings,
+            generation
+          )
+        } catch (rollbackReason) {
+          if (!this.isCurrentGeneration(generation)) return this.getStatus()
+          await this.discardIncompleteSession()
+          const original = reason instanceof Error ? reason.message : String(reason)
+          const rollback = rollbackReason instanceof Error ? rollbackReason.message : String(rollbackReason)
+          throw this.fail(new Error(`${original}；原主题会话回滚失败: ${rollback}`))
+        }
+        if (!this.isCurrentGeneration(generation)) return this.getStatus()
+        throw this.reportActiveFailure(reason, '新主题启动失败，已恢复原主题会话')
+      }
+      await this.discardIncompleteSession()
       throw this.fail(reason)
     }
   }
@@ -340,26 +399,35 @@ export class CodexService {
   }
 
   async restore(restartCodex: boolean): Promise<RuntimeStatus> {
+    const expectedInstallationId = this.activeSession?.installationId
     this.beginSessionIntent()
-    return this.enqueueOperation(() => this.restoreInternal(restartCodex))
+    return this.enqueueOperation(() => this.restoreInternal(restartCodex, expectedInstallationId))
   }
 
-  private async restoreInternal(restartCodex: boolean): Promise<RuntimeStatus> {
+  private async restoreInternal(restartCodex: boolean, expectedInstallationId?: string): Promise<RuntimeStatus> {
     this.patch('restoring', '正在恢复 Codex 原始配置')
     try {
       if (this.watcher) await this.watcher.stop(true)
       this.watcher = null
-      this.clearActiveSession()
       await rm(this.sessionPath(), { force: true })
-      await this.platformDriver.restore(restartCodex)
+      await this.platformDriver.restore(restartCodex, expectedInstallationId)
+      this.clearActiveSession()
       this.status.backupAvailable = false
       this.patch('stopped', restartCodex ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置')
       return this.getStatus()
     } catch (reason) { throw this.fail(reason) }
   }
 
-  private async replaceWatcher(browserId: string, payload: RuntimePayload): Promise<CdpSnapshot> {
-    if (this.watcher) await this.watcher.stop(true)
+  private async replaceWatcher(
+    browserId: string,
+    payload: RuntimePayload,
+    mediaBindings?: CdpMediaBinding[]
+  ): Promise<CdpSnapshot> {
+    if (this.watcher) {
+      const previousWatcher = this.watcher
+      await previousWatcher.stop(true)
+      if (this.watcher === previousWatcher) this.watcher = null
+    }
     this.patch('injecting', '已连接 Codex，正在注入主题')
     const watcher = new CdpWatcher(this.status.port, browserId,
       (snapshot) => {
@@ -381,11 +449,13 @@ export class CodexService {
     )
     this.watcher = watcher
     watcher.setPayload(payload.script, payload.version)
-    const mediaBindings = this.activeThemeId ? await this.store.getRuntimeMediaBindings(this.activeThemeId) : []
-    watcher.setMediaBindings(mediaBindings)
+    const resolvedMediaBindings = mediaBindings
+      ? mediaBindings.map((binding) => ({ ...binding }))
+      : this.activeThemeId ? await this.store.getRuntimeMediaBindings(this.activeThemeId) : []
+    watcher.setMediaBindings(resolvedMediaBindings)
     const snapshot = await watcher.start()
     this.activePayload = payload
-    this.activeMediaBindings = mediaBindings.map((binding) => ({ ...binding }))
+    this.activeMediaBindings = resolvedMediaBindings.map((binding) => ({ ...binding }))
     return snapshot
   }
 
@@ -514,29 +584,76 @@ export class CodexService {
 
   private async recoverActiveSessionInternal(themeId: string, generation: number): Promise<void> {
     if (!this.isActiveSession(themeId, generation)) return
+    const previousSession = this.activeSession
+    if (!previousSession) return
     try {
       this.patch('starting', '正在恢复 Codex 主题会话')
-      const result = await this.platformDriver.start(this.status.port, true)
+      const result = await this.platformDriver.start(
+        this.status.port,
+        true,
+        previousSession.installationId
+      )
       if (!this.isActiveSession(themeId, generation)) return
-      this.status.port = result.port
-      this.status.codexVersion = result.version
-      this.activeSession = result
       const payload = await this.buildPayload(themeId)
       if (!this.isActiveSession(themeId, generation)) return
       await this.writeRuntimePayload(payload.script)
       if (!this.isActiveSession(themeId, generation)) return
-      await this.replaceWatcher(result.browserId, payload)
-      if (!this.isActiveSession(themeId, generation)) return
       await this.writeSession(themeId, result)
+      if (!this.isActiveSession(themeId, generation)) return
+      this.status.port = result.port
+      this.status.codexVersion = result.version
+      this.activeSession = result
+      await this.replaceWatcher(result.browserId, payload)
       if (!this.isActiveSession(themeId, generation)) return
       this.patch('active', 'Codex 主题会话已自动恢复')
     } catch (reason) {
       if (!this.isActiveSession(themeId, generation)) return
+      await this.discardIncompleteSession()
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
       this.status.phase = 'error'
       this.status.message = '自动恢复失败，请重新启动主题'
       this.emit()
     }
+  }
+
+  private async rollbackStartedSession(
+    themeId: string,
+    session: CodexStartResult,
+    payload: RuntimePayload,
+    mediaBindings: CdpMediaBinding[],
+    generation: number
+  ): Promise<void> {
+    if (this.watcher) {
+      const watcher = this.watcher
+      await watcher.stop(true)
+      if (this.watcher === watcher) this.watcher = null
+    }
+    await this.writeRuntimePayload(payload.script)
+    await this.platformDriver.applyConfig(join(this.store.themesRoot, themeId, 'theme.json'))
+    const restored = await this.platformDriver.start(
+      session.port,
+      true,
+      session.installationId
+    )
+    if (!this.isCurrentGeneration(generation)) return
+    await this.writeSession(themeId, restored)
+    if (!this.isCurrentGeneration(generation)) return
+    this.status.port = restored.port
+    this.status.codexVersion = restored.version
+    this.activeThemeId = themeId
+    this.activeSession = restored
+    this.activeSessionGeneration = generation
+    await this.replaceWatcher(restored.browserId, payload, mediaBindings)
+  }
+
+  private async discardIncompleteSession(): Promise<void> {
+    if (this.watcher) {
+      const watcher = this.watcher
+      await watcher.stop(true).catch(() => undefined)
+      if (this.watcher === watcher) this.watcher = null
+    }
+    this.clearActiveSession()
+    await rm(this.sessionPath(), { force: true })
   }
 
   private async rollbackReinjection(
@@ -587,7 +704,8 @@ export class CodexService {
   }
   private isCurrentGeneration(generation: number): boolean { return this.sessionGeneration === generation }
   private hasCurrentActiveSession(): boolean {
-    return this.activeThemeId !== null &&
+    return this.status.phase !== 'error' &&
+      this.activeThemeId !== null &&
       this.activeSession !== null &&
       this.watcher !== null &&
       this.activeSessionGeneration === this.sessionGeneration

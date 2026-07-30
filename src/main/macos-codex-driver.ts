@@ -93,10 +93,10 @@ export class MacCodexDriver implements CodexPlatformDriver {
     })
   }
 
-  async start(preferredPort: number, restartExisting: boolean): Promise<CodexStartResult> {
+  async start(preferredPort: number, restartExisting: boolean, expectedInstallationId?: string): Promise<CodexStartResult> {
     return await this.withOperationLock(async () => {
       assertPort(preferredPort)
-      const install = await this.findInstall()
+      const install = await this.findInstall(expectedInstallationId)
       const existingIdentity = await this.verifyCdpIdentity(preferredPort, install)
       if (existingIdentity) return this.toStartResult(install, preferredPort, existingIdentity.browserId)
       const processes = await this.mainProcesses(install)
@@ -127,11 +127,11 @@ export class MacCodexDriver implements CodexPlatformDriver {
     return this.toStartResult(install, port, identity.browserId)
   }
 
-  async restore(restartCodex: boolean): Promise<void> {
+  async restore(restartCodex: boolean, expectedInstallationId?: string): Promise<void> {
     await this.withOperationLock(async () => {
       await restoreMacCodexThemeConfig(this.configPath(), this.backupPath())
       if (!restartCodex) return
-      const install = await this.findInstall()
+      const install = await this.findInstall(expectedInstallationId)
       const processes = await this.mainProcesses(install)
       if (processes.length > 0) await this.stopVerifiedProcesses(install, processes)
       await this.openApplication(install, [])

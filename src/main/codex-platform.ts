@@ -12,9 +12,9 @@ export interface CodexPlatformDriver {
   readonly platform: SupportedDesktopPlatform
   detect: () => Promise<CodexDetection>
   applyConfig: (themePath: string) => Promise<void>
-  start: (preferredPort: number, restartExisting: boolean) => Promise<CodexStartResult>
+  start: (preferredPort: number, restartExisting: boolean, expectedInstallationId?: string) => Promise<CodexStartResult>
   verifySession: (port: number, browserId: string, detection: CodexDetection, expectedInstallationId?: string) => Promise<CodexStartResult>
-  restore: (restartCodex: boolean) => Promise<void>
+  restore: (restartCodex: boolean, expectedInstallationId?: string) => Promise<void>
 }
 
 export function isSupportedDesktopPlatform(platform: NodeJS.Platform): platform is SupportedDesktopPlatform {

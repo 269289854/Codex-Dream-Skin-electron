@@ -136,6 +136,45 @@ describe('MacCodexDriver', () => {
     })
   })
 
+  it('starts the exact saved app when multiple official copies are running', async () => {
+    const fixture = await createSelectionFixture()
+    const standard = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '26.0.0')
+    const mounted = await createAppBundle(join(fixture.root, 'Volumes', 'Codex Preview', 'ChatGPT.app'), '27.0.0')
+    const runCommand = createSelectionCommandRunner(
+      [standard, mounted],
+      [standard.executable, mounted.executable],
+      mounted.executable
+    )
+    const fetchJson = vi.fn(async (url: string) => url.endsWith('/json/version')
+      ? { webSocketDebuggerUrl: 'ws://127.0.0.1:9335/devtools/browser/browser-mounted' }
+      : [{ id: 'page-1', type: 'page', url: 'app://-/index.html', webSocketDebuggerUrl: 'ws://127.0.0.1:9335/devtools/page/page-1' }])
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand, fetchJson })
+    const installationId = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${mounted.appBundle}`
+
+    await expect(driver.start(9335, true, installationId)).resolves.toEqual({
+      port: 9335,
+      browserId: 'browser-mounted',
+      version: mounted.version,
+      platform: 'darwin',
+      installationId
+    })
+    expect(runCommand).not.toHaveBeenCalledWith('/usr/bin/mdfind', expect.anything(), expect.anything())
+  })
+
+  it('restarts the exact saved app while restoring configuration', async () => {
+    const fixture = await createSelectionFixture()
+    const standard = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '26.0.0')
+    const mounted = await createAppBundle(join(fixture.root, 'Volumes', 'Codex Preview', 'ChatGPT.app'), '27.0.0')
+    const runCommand = createSelectionCommandRunner([standard, mounted])
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand })
+    const installationId = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${mounted.appBundle}`
+
+    await driver.restore(true, installationId)
+
+    expect(runCommand).toHaveBeenCalledWith('/usr/bin/open', ['-na', mounted.appBundle], 10_000)
+    expect(runCommand).not.toHaveBeenCalledWith('/usr/bin/mdfind', expect.anything(), expect.anything())
+  })
+
   it('ignores only ESRCH when a verified process exits before it is signalled', async () => {
     const fixture = await createAppFixture()
     const runCommand = createCommandRunner(fixture, MAC_CODEX_TEAM_ID, true)
@@ -237,6 +276,7 @@ function createSelectionCommandRunner(
       const pid = 123 + index
       return { stdout: `p${pid}\ncChatGPT\nn127.0.0.1:9335\n`, stderr: '', exitCode: 0 }
     }
+    if (command === '/usr/bin/open') return { stdout: '', stderr: '', exitCode: 0 }
     throw new Error(`Unexpected command: ${command} ${argumentsList.join(' ')}`)
   }) as MacCommandRunner & ReturnType<typeof vi.fn>
 }

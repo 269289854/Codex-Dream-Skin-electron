@@ -268,7 +268,7 @@ describe('CodexService operation queue', () => {
 
     await internals.recoverActiveSessionInternal(themeId, 1)
 
-    expect(driver.start).toHaveBeenCalledWith(9335, true)
+    expect(driver.start).toHaveBeenCalledWith(9335, true, detection.installationId)
     expect(internals.replaceWatcher).toHaveBeenCalledWith('browser-fallback', payload)
     expect(service.getStatus()).toMatchObject({ phase: 'active', port: 9341 })
     expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({
@@ -276,6 +276,61 @@ describe('CodexService operation queue', () => {
       port: 9341,
       browserId: 'browser-fallback'
     })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('discards the active watcher when automatic recovery cannot persist the new session', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-recovery-session-failure-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const driver = createDriver()
+    const recoveredSession: CodexStartResult = {
+      port: 9341,
+      browserId: 'browser-fallback',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    vi.mocked(driver.start).mockResolvedValue(recoveredSession)
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const payload = { script: 'true', version: 'studio-0123456789abcdef01234567' }
+    const watcher = { stop: vi.fn().mockResolvedValue({ connected: false, targetCount: 0 }) }
+    const internals = service as unknown as {
+      watcher: typeof watcher | null
+      activeThemeId: string | null
+      activeSession: CodexStartResult | null
+      activePayload: typeof payload | null
+      sessionGeneration: number
+      activeSessionGeneration: number | null
+      buildPayload: () => Promise<typeof payload>
+      writeRuntimePayload: (script: string) => Promise<void>
+      writeSession: (id: string, session: CodexStartResult) => Promise<void>
+      replaceWatcher: (browserId: string, nextPayload: typeof payload) => Promise<{ connected: boolean; targetCount: number }>
+      recoverActiveSessionInternal: (id: string, generation: number) => Promise<void>
+    }
+    internals.watcher = watcher
+    internals.activeThemeId = themeId
+    internals.activeSession = { ...recoveredSession, port: 9335, browserId: 'browser-old' }
+    internals.activePayload = payload
+    internals.sessionGeneration = 1
+    internals.activeSessionGeneration = 1
+    internals.buildPayload = vi.fn().mockResolvedValue(payload)
+    internals.writeRuntimePayload = vi.fn().mockResolvedValue(undefined)
+    internals.writeSession = vi.fn().mockRejectedValue(new Error('session write failed'))
+    internals.replaceWatcher = vi.fn()
+
+    await internals.recoverActiveSessionInternal(themeId, 1)
+
+    expect(watcher.stop).toHaveBeenCalledWith(true)
+    expect(internals.replaceWatcher).not.toHaveBeenCalled()
+    expect(internals.watcher).toBeNull()
+    expect(internals.activeThemeId).toBeNull()
+    expect(internals.activeSession).toBeNull()
+    expect(service.getStatus()).toMatchObject({
+      phase: 'error',
+      lastError: 'session write failed',
+      message: '自动恢复失败，请重新启动主题'
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     await rm(root, { recursive: true, force: true })
   })
 
@@ -316,7 +371,7 @@ describe('CodexService operation queue', () => {
     await Promise.all([detectionOperation, recovery, restore])
 
     expect(driver.start).not.toHaveBeenCalled()
-    expect(driver.restore).toHaveBeenCalledWith(false)
+    expect(driver.restore).toHaveBeenCalledWith(false, detection.installationId)
     await rm(root, { recursive: true, force: true })
   })
 
@@ -361,7 +416,215 @@ describe('CodexService operation queue', () => {
     await Promise.all([detectionOperation, recovery, start])
 
     expect(driver.start).not.toHaveBeenCalled()
-    expect(startInternal).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222', true, 2)
+    expect(startInternal).toHaveBeenCalledWith(
+      '22222222-2222-4222-8222-222222222222',
+      true,
+      2,
+      detection.installationId
+    )
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('keeps the old watcher current when a new theme fails before changing runtime state', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-start-build-failure-'))
+    const oldThemeId = '11111111-1111-4111-8111-111111111111'
+    const newThemeId = '22222222-2222-4222-8222-222222222222'
+    const payload = { script: 'old', version: 'studio-0123456789abcdef01234567' }
+    const driver = createDriver()
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const watcher = {}
+    const activeSession: CodexStartResult = {
+      port: 9335,
+      browserId: 'browser-old',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    const internals = service as unknown as {
+      watcher: typeof watcher
+      activeThemeId: string
+      activeSession: CodexStartResult
+      activePayload: typeof payload
+      sessionGeneration: number
+      activeSessionGeneration: number
+      buildPayload: () => Promise<never>
+      hasCurrentActiveSession: () => boolean
+    }
+    internals.watcher = watcher
+    internals.activeThemeId = oldThemeId
+    internals.activeSession = activeSession
+    internals.activePayload = payload
+    internals.sessionGeneration = 1
+    internals.activeSessionGeneration = 1
+    internals.buildPayload = vi.fn().mockRejectedValue(new Error('compile failed'))
+
+    await expect(service.start(newThemeId, true)).rejects.toThrow('compile failed')
+
+    expect(internals.watcher).toBe(watcher)
+    expect(internals.activeThemeId).toBe(oldThemeId)
+    expect(internals.activeSession).toBe(activeSession)
+    expect(internals.activeSessionGeneration).toBe(2)
+    expect(internals.hasCurrentActiveSession()).toBe(true)
+    expect(driver.start).not.toHaveBeenCalled()
+    expect(service.getStatus()).toMatchObject({
+      phase: 'active',
+      lastError: 'compile failed',
+      message: '新主题启动失败，原主题会话仍在运行'
+    })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('does not start a watcher when a new session cannot be persisted', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-start-session-failure-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const payload = { script: 'new', version: 'studio-0123456789abcdef01234567' }
+    const startedSession: CodexStartResult = {
+      port: 9341,
+      browserId: 'browser-new',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    const driver = createDriver()
+    vi.mocked(driver.start).mockResolvedValue(startedSession)
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const internals = service as unknown as {
+      watcher: object | null
+      activeThemeId: string | null
+      activeSession: CodexStartResult | null
+      buildPayload: () => Promise<typeof payload>
+      writeRuntimePayload: (script: string) => Promise<void>
+      writeSession: (id: string, session: CodexStartResult) => Promise<void>
+      replaceWatcher: (browserId: string, nextPayload: typeof payload) => Promise<{ connected: boolean; targetCount: number }>
+    }
+    internals.buildPayload = vi.fn().mockResolvedValue(payload)
+    internals.writeRuntimePayload = vi.fn().mockResolvedValue(undefined)
+    internals.writeSession = vi.fn().mockRejectedValue(new Error('session write failed'))
+    internals.replaceWatcher = vi.fn()
+
+    await expect(service.start(themeId, true)).rejects.toThrow('session write failed')
+
+    expect(driver.start).toHaveBeenCalledWith(9335, true, undefined)
+    expect(internals.replaceWatcher).not.toHaveBeenCalled()
+    expect(internals.watcher).toBeNull()
+    expect(internals.activeThemeId).toBeNull()
+    expect(internals.activeSession).toBeNull()
+    expect(service.getStatus()).toMatchObject({ phase: 'error', lastError: 'session write failed' })
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('restores the old theme session when switching themes cannot be committed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-start-rollback-'))
+    const oldThemeId = '11111111-1111-4111-8111-111111111111'
+    const newThemeId = '22222222-2222-4222-8222-222222222222'
+    const oldPayload = { script: 'old', version: 'studio-0123456789abcdef01234567' }
+    const newPayload = { script: 'new', version: 'studio-89abcdef0123456701234567' }
+    const oldBindings = [{ role: 'hero' as const, path: 'C:\\themes\\old.mp4', mimeType: 'video/mp4' }]
+    const driver = createDriver()
+    const activeSession: CodexStartResult = {
+      port: 9335,
+      browserId: 'browser-old',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    const newSession = { ...activeSession, port: 9341, browserId: 'browser-new' }
+    const restoredSession = { ...activeSession, browserId: 'browser-restored' }
+    vi.mocked(driver.start)
+      .mockResolvedValueOnce(newSession)
+      .mockResolvedValueOnce(restoredSession)
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const oldWatcher = { stop: vi.fn().mockResolvedValue({ connected: false, targetCount: 0 }) }
+    const restoredWatcher = {}
+    const internals = service as unknown as {
+      watcher: typeof oldWatcher | typeof restoredWatcher | null
+      activeThemeId: string
+      activeSession: CodexStartResult
+      activePayload: typeof oldPayload
+      activeMediaBindings: typeof oldBindings
+      sessionGeneration: number
+      activeSessionGeneration: number
+      buildPayload: () => Promise<typeof newPayload>
+      writeRuntimePayload: (script: string) => Promise<void>
+      writeSession: (id: string, session: CodexStartResult) => Promise<void>
+      replaceWatcher: (browserId: string, payload: typeof oldPayload, bindings?: typeof oldBindings) => Promise<{ connected: boolean; targetCount: number }>
+    }
+    internals.watcher = oldWatcher
+    internals.activeThemeId = oldThemeId
+    internals.activeSession = activeSession
+    internals.activePayload = oldPayload
+    internals.activeMediaBindings = oldBindings
+    internals.sessionGeneration = 1
+    internals.activeSessionGeneration = 1
+    internals.buildPayload = vi.fn().mockResolvedValue(newPayload)
+    internals.writeRuntimePayload = vi.fn().mockResolvedValue(undefined)
+    internals.writeSession = vi.fn()
+      .mockRejectedValueOnce(new Error('session write failed'))
+      .mockResolvedValueOnce(undefined)
+    internals.replaceWatcher = vi.fn().mockImplementation(async () => {
+      internals.watcher = restoredWatcher
+      internals.activePayload = oldPayload
+      internals.activeMediaBindings = oldBindings
+      return { connected: true, targetCount: 1 }
+    })
+
+    await expect(service.start(newThemeId, true)).rejects.toThrow('session write failed')
+
+    expect(internals.writeRuntimePayload).toHaveBeenNthCalledWith(1, newPayload.script)
+    expect(internals.writeRuntimePayload).toHaveBeenNthCalledWith(2, oldPayload.script)
+    expect(driver.applyConfig).toHaveBeenNthCalledWith(1, join(root, 'themes', newThemeId, 'theme.json'))
+    expect(driver.applyConfig).toHaveBeenNthCalledWith(2, join(root, 'themes', oldThemeId, 'theme.json'))
+    expect(driver.start).toHaveBeenNthCalledWith(1, 9335, true, detection.installationId)
+    expect(driver.start).toHaveBeenNthCalledWith(2, 9335, true, detection.installationId)
+    expect(internals.writeSession).toHaveBeenNthCalledWith(1, newThemeId, newSession)
+    expect(internals.writeSession).toHaveBeenNthCalledWith(2, oldThemeId, restoredSession)
+    expect(internals.replaceWatcher).toHaveBeenCalledWith('browser-restored', oldPayload, oldBindings)
+    expect(internals.watcher).toBe(restoredWatcher)
+    expect(internals.activeThemeId).toBe(oldThemeId)
+    expect(internals.activeSession).toBe(restoredSession)
+    expect(internals.activeSessionGeneration).toBe(2)
+    expect(service.getStatus()).toMatchObject({
+      phase: 'active',
+      message: '新主题启动失败，已恢复原主题会话'
+    })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('keeps restoring Codex through the active session installation after a failed attempt', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-installation-'))
+    const driver = createDriver('darwin')
+    const installationId = 'com.openai.codex:2DC432GLL2:/Applications/Codex.app'
+    vi.mocked(driver.restore)
+      .mockRejectedValueOnce(new Error('restart failed'))
+      .mockResolvedValueOnce(undefined)
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const watcher = { stop: vi.fn().mockResolvedValue({ connected: false, targetCount: 0 }) }
+    const internals = service as unknown as {
+      watcher: typeof watcher
+      activeThemeId: string
+      activeSession: CodexStartResult
+      sessionGeneration: number
+      activeSessionGeneration: number
+    }
+    internals.watcher = watcher
+    internals.activeThemeId = '11111111-1111-4111-8111-111111111111'
+    internals.activeSession = {
+      port: 9335,
+      browserId: 'browser-old',
+      version: '26.721.81911',
+      platform: 'darwin',
+      installationId
+    }
+    internals.sessionGeneration = 1
+    internals.activeSessionGeneration = 1
+
+    await expect(service.restore(true)).rejects.toThrow('restart failed')
+    await service.restore(true)
+
+    expect(watcher.stop).toHaveBeenCalledWith(true)
+    expect(driver.restore).toHaveBeenNthCalledWith(1, true, installationId)
+    expect(driver.restore).toHaveBeenNthCalledWith(2, true, installationId)
     await rm(root, { recursive: true, force: true })
   })
 
