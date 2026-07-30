@@ -262,7 +262,14 @@ async function assertFileUnchanged(path: string, expectedBytes: Uint8Array): Pro
 
 async function syncDirectory(path: string): Promise<void> {
   const handle = await open(path, constants.O_RDONLY)
-  try { await handle.sync() } finally { await handle.close() }
+  try {
+    await handle.sync().catch((error: NodeJS.ErrnoException) => {
+      if (process.platform === 'win32' && (error.code === 'EPERM' || error.code === 'EINVAL')) return
+      throw error
+    })
+  } finally {
+    await handle.close()
+  }
 }
 
 function countMatches(value: string, pattern: RegExp): number {

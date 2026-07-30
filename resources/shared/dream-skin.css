@@ -560,6 +560,7 @@ html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubbl
 html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::before {
   z-index: -1;
   inset: 0;
+  border-width: 0;
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::after,
@@ -605,13 +606,11 @@ html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversation-user-bubble {
-  min-block-size: var(--dream-user-bubble-frame-min-block-size) !important;
   padding-block: max(var(--dream-user-bubble-content-padding), var(--dream-user-bubble-frame-width)) !important;
   padding-inline: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-frame-width) * 2)) !important;
 }
 
 html.codex-dream-skin[data-dream-codex-bubble-frame="nineSlice"] .dream-conversation-codex-bubble {
-  min-block-size: var(--dream-codex-bubble-frame-min-block-size) !important;
   padding-block: max(var(--dream-codex-bubble-content-padding), var(--dream-codex-bubble-frame-width)) !important;
   padding-inline: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-frame-width) * 2)) !important;
 }
@@ -639,7 +638,6 @@ html.codex-dream-skin[data-dream-plan-bubble-frame="nineSlice"] .dream-conversat
 html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversation-user-bubble::before {
   border-style: solid;
   border-color: transparent;
-  border-width: var(--dream-user-bubble-frame-border-widths);
   border-image-source: var(--dream-user-bubble-frame-source);
   border-image-slice: var(--dream-user-bubble-frame-slice);
   border-image-width: var(--dream-user-bubble-frame-border-widths);
@@ -649,7 +647,6 @@ html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversat
 html.codex-dream-skin[data-dream-codex-bubble-frame="nineSlice"] .dream-conversation-codex-bubble::before {
   border-style: solid;
   border-color: transparent;
-  border-width: var(--dream-codex-bubble-frame-border-widths);
   border-image-source: var(--dream-codex-bubble-frame-source);
   border-image-slice: var(--dream-codex-bubble-frame-slice);
   border-image-width: var(--dream-codex-bubble-frame-border-widths);
@@ -659,7 +656,6 @@ html.codex-dream-skin[data-dream-codex-bubble-frame="nineSlice"] .dream-conversa
 html.codex-dream-skin[data-dream-plan-bubble-frame="nineSlice"] .dream-conversation-plan-bubble::before {
   border-style: solid;
   border-color: transparent;
-  border-width: var(--dream-plan-bubble-frame-border-widths);
   border-image-source: var(--dream-plan-bubble-frame-source);
   border-image-slice: var(--dream-plan-bubble-frame-slice);
   border-image-width: var(--dream-plan-bubble-frame-border-widths);

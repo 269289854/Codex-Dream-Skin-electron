@@ -1304,7 +1304,6 @@ function conversationBubblePreviewFrameProps(profile: ThemeProfile, assets: Reco
       '--dream-preview-bubble-frame-slice': frame.sliceInsets.map((value) => `${value}%`).join(' '),
       '--dream-preview-bubble-frame-width': `${frame.frameWidth}px`,
       '--dream-preview-bubble-frame-border-widths': frame.borderWidths.map((value) => `${value}px`).join(' '),
-      '--dream-preview-bubble-frame-min-block-size': `${Math.ceil(frame.borderWidths[0] + frame.borderWidths[2])}px`,
       '--dream-preview-bubble-content-padding': `${frame.contentPadding}px`
     } as React.CSSProperties
   }

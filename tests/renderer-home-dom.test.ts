@@ -1342,7 +1342,7 @@ describe('renderer home DOM adaptation', () => {
     expect(previewParticleEffectsCss).not.toContain('left: 55%')
     const runtimeKeyframes = particleEffectsCss.slice(particleEffectsCss.indexOf('@keyframes'), particleEffectsCss.indexOf('@media'))
     const previewKeyframes = previewParticleEffectsCss.slice(previewParticleEffectsCss.indexOf('@keyframes'), previewParticleEffectsCss.indexOf('@media'))
-    expect(previewKeyframes).toBe(runtimeKeyframes)
+    expect(previewKeyframes.replace(/\r\n/g, '\n')).toBe(runtimeKeyframes.replace(/\r\n/g, '\n'))
     expect(particleEffectsCss).toContain('animation-play-state: paused !important')
     expect(particleEffectsCss).not.toContain('animation: none !important')
     expect(previewParticleEffectsCss).toContain('[data-preview-selected="true"]')

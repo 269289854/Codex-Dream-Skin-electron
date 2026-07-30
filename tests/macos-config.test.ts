@@ -46,7 +46,7 @@ describe('macOS Codex config editing', () => {
 
     await installMacCodexThemeConfig(configPath, backupPath, colors)
     expect(await readFile(backupPath)).toEqual(original)
-    expect((await stat(configPath)).mode & 0o777).toBe(0o640)
+    if (process.platform !== 'win32') expect((await stat(configPath)).mode & 0o777).toBe(0o640)
     const installed = await readFile(configPath, 'utf8')
     expect(installed.charCodeAt(0)).not.toBe(0xfeff)
     await writeFile(configPath, installed.replace('followUpQueueMode = "queue"', 'followUpQueueMode = "steer"'))

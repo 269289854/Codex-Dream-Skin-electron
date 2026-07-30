@@ -201,7 +201,6 @@ describe('conversation bubble frames', () => {
       'border-image-slice:',
       'border-image-width:',
       'frame-border-widths',
-      'frame-min-block-size',
       'border-image-repeat: stretch',
       'background-size: 100% 100%'
     ]) {
@@ -214,6 +213,18 @@ describe('conversation bubble frames', () => {
     expect(runtimeCss).toContain('padding-inline: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-frame-width) * 2)) !important')
     expect(studioCss).toContain('padding-block: max(var(--dream-preview-bubble-content-padding), var(--dream-preview-bubble-frame-width)) !important')
     expect(studioCss).toContain('padding-inline: max(var(--dream-preview-bubble-content-padding), calc(var(--dream-preview-bubble-frame-width) * 2)) !important')
+    expect(runtimeCss).not.toContain('min-block-size: var(--dream-user-bubble-frame-min-block-size)')
+    expect(runtimeCss).not.toContain('min-block-size: var(--dream-codex-bubble-frame-min-block-size)')
+    expect(studioCss).not.toContain('min-block-size: var(--dream-preview-bubble-frame-min-block-size)')
+    expect(runtimeCss).toContain('inset: calc(var(--dream-user-bubble-frame-width) * .6667) calc(var(--dream-user-bubble-frame-width) * .5) !important')
+    expect(runtimeCss).toContain('inset: calc(var(--dream-codex-bubble-frame-width) * .6667) calc(var(--dream-codex-bubble-frame-width) * .5) !important')
+    expect(runtimeCss).toContain('inset: calc(var(--dream-plan-bubble-frame-width) * .6667) calc(var(--dream-plan-bubble-frame-width) * .5) !important')
+    expect(studioCss).toContain('inset: calc(var(--dream-preview-bubble-frame-width) * .6667) calc(var(--dream-preview-bubble-frame-width) * .5) !important')
+    expect(runtimeCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*z-index: -1;\s*inset: 0;\s*border-width: 0;/)
+    expect(runtimeCss).not.toContain('border-width: var(--dream-user-bubble-frame-border-widths)')
+    expect(runtimeCss).not.toContain('border-width: var(--dream-codex-bubble-frame-border-widths)')
+    expect(runtimeCss).not.toContain('border-width: var(--dream-plan-bubble-frame-border-widths)')
+    expect(studioCss).toContain('border-width: 0; border-image-source: var(--dream-preview-bubble-frame-source)')
     expect(runtimeCss).not.toContain('border-image-repeat: round')
     expect(studioCss).not.toContain('border-image-repeat: round')
   })

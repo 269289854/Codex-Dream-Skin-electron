@@ -931,7 +931,7 @@ describe('Studio preview editing interaction', () => {
     expect(moonStarsPreview?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
     expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-frame-slice')).toBe('35% 25% 40% 25%')
     expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-frame-border-widths')).toBe('33.6px 48px 38.4px 48px')
-    expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-frame-min-block-size')).toBe('72px')
+    expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-frame-min-block-size')).toBe('')
     expect(container.querySelector('[data-preview-target="conversation-codex-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('none')
 
     selectMedia.mockResolvedValueOnce(null)
@@ -987,7 +987,7 @@ describe('Studio preview editing interaction', () => {
     const oceanShellPreview = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
     expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-slice')).toBe('46% 25% 48% 25%')
     expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-border-widths')).toBe('44.16px 48px 46.08px 48px')
-    expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-min-block-size')).toBe('91px')
+    expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-min-block-size')).toBe('')
 
     selectMedia.mockResolvedValueOnce({
       reference: { asset: 'assets/plan-bubble.gif', kind: 'image', mimeType: 'image/gif' },
