@@ -33,6 +33,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock(createStudioInstance
 protocol.registerSchemesAsPrivileged([{ scheme: 'studio-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 function showWindow(): void {
+  if (mainWindow?.isMinimized()) mainWindow.restore()
   mainWindow?.show()
   mainWindow?.focus()
 }
@@ -65,8 +66,14 @@ function updateTray(): void {
       { label: '恢复 Codex 并退出', click: () => void codexService.restore(true).finally(() => { quitting = true; app.quit() }) }
     ]))
     tray.on('double-click', showWindow)
-  } else if (!codexService.isActive() && tray) {
-    tray.destroy()
+  } else if (!codexService.isActive()) {
+    const shouldRevealRuntimeError = tray !== null &&
+      codexService.getStatus().phase === 'error' &&
+      !quitting &&
+      mainWindow !== null &&
+      !mainWindow.isVisible()
+    if (shouldRevealRuntimeError) showWindow()
+    tray?.destroy()
     tray = null
   }
 }
@@ -405,6 +412,7 @@ if (!hasSingleInstanceLock) {
     void codexService.resume()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      else showWindow()
     })
   })
 }

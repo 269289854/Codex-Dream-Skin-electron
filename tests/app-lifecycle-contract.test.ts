@@ -46,4 +46,22 @@ describe('Studio application lifecycle contract', () => {
     expect(relaunch).not.toContain('codexService.stop')
     expect(relaunch).not.toContain('codexService.restore')
   })
+
+  it('restores minimized windows from every entry point and reveals hidden runtime errors', async () => {
+    const main = await readFile(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8')
+    const showWindow = main.match(/function showWindow\(\): void \{[\s\S]*?\r?\n\}/)?.[0]
+    const updateTray = main.match(/function updateTray\(\): void \{[\s\S]*?\r?\n\}/)?.[0]
+
+    expect(showWindow).toContain('if (mainWindow?.isMinimized()) mainWindow.restore()')
+    expect(showWindow).toContain('mainWindow?.show()')
+    expect(showWindow).toContain('mainWindow?.focus()')
+    expect(main).toContain("{ label: '显示主题工作台', click: showWindow }")
+    expect(main).toContain("else if (action === 'show') showWindow()")
+    expect(main).toContain('else showWindow()')
+    expect(updateTray).toContain('const shouldRevealRuntimeError = tray !== null')
+    expect(updateTray).toContain("codexService.getStatus().phase === 'error'")
+    expect(updateTray).toContain('!mainWindow.isVisible()')
+    expect(updateTray).toContain('if (shouldRevealRuntimeError) showWindow()')
+    expect(updateTray?.indexOf('if (shouldRevealRuntimeError) showWindow()')).toBeLessThan(updateTray?.indexOf('tray?.destroy()') ?? -1)
+  })
 })

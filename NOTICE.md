@@ -22,14 +22,14 @@ Codex、OpenAI 以及相关产品名称、标识和商标归其各自权利人�
 
 ## 内置字体
 
-安装包随附的字体使用 SIL Open Font License 1.1（OFL-1.1）或其对应的字体项目许可。字体名称、版本、版权归属和完整许可证副本见 [字体许可清单](resources/windows/fonts/THIRD_PARTY_NOTICES.md)。当前随附字体包括：
+安装包随附的字体使用 SIL Open Font License 1.1（OFL-1.1）或其对应的字体项目许可。字体名称、版本、版权归属和完整许可证副本见 [字体许可清单](resources/shared/fonts/THIRD_PARTY_NOTICES.md)。当前随附字体包括：
 
 | 字体 | 来源 | 许可证 |
 | --- | --- | --- |
-| Noto Sans SC（思源黑体） | Google Noto Fonts / Adobe Source Han Sans | [OFL-1.1](resources/windows/fonts/licenses/Noto-Sans-SC-OFL.txt) |
-| Noto Serif SC（思源宋体） | Google Noto Fonts / Adobe Source Han Serif | [OFL-1.1](resources/windows/fonts/licenses/Noto-Serif-SC-OFL.txt) |
-| LXGW WenKai（霞鹜文楷） | LXGW WenKai contributors | [OFL-1.1](resources/windows/fonts/licenses/LXGW-WenKai-OFL.txt) |
-| JetBrains Mono | JetBrains | [OFL-1.1](resources/windows/fonts/licenses/JetBrains-Mono-OFL.txt) |
+| Noto Sans SC（思源黑体） | Google Noto Fonts / Adobe Source Han Sans | [OFL-1.1](resources/shared/fonts/licenses/Noto-Sans-SC-OFL.txt) |
+| Noto Serif SC（思源宋体） | Google Noto Fonts / Adobe Source Han Serif | [OFL-1.1](resources/shared/fonts/licenses/Noto-Serif-SC-OFL.txt) |
+| LXGW WenKai（霞鹜文楷） | LXGW WenKai contributors | [OFL-1.1](resources/shared/fonts/licenses/LXGW-WenKai-OFL.txt) |
+| JetBrains Mono | JetBrains | [OFL-1.1](resources/shared/fonts/licenses/JetBrains-Mono-OFL.txt) |
 
 项目依赖和其他第三方组件可能采用各自的许可证；如需再分发或修改相关组件，请同时遵守其随附的许可证和版权声明。
 

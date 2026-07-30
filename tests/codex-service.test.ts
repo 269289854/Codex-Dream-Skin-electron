@@ -179,6 +179,46 @@ describe('CodexService operation queue', () => {
     expect(watcher.inject).toHaveBeenCalledTimes(1)
   })
 
+  it('uses the driver-selected fallback port during automatic recovery', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-recovery-port-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const store = { root, themesRoot: join(root, 'themes') } as never
+    const driver = createDriver()
+    vi.mocked(driver.start).mockResolvedValue({
+      port: 9341,
+      browserId: 'browser-fallback',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    })
+    const service = new CodexService(store, join(process.cwd(), 'resources', 'shared'), driver, '1.0.8', () => undefined)
+    const payload = { script: 'true', version: 'studio-0123456789abcdef01234567' }
+    const internals = service as unknown as {
+      buildPayload: (id: string) => Promise<typeof payload>
+      writeRuntimePayload: (script: string) => Promise<void>
+      replaceWatcher: (browserId: string, nextPayload: typeof payload) => Promise<{ connected: boolean; targetCount: number }>
+      recoverActiveSessionInternal: (id: string) => Promise<void>
+    }
+    internals.buildPayload = vi.fn().mockResolvedValue(payload)
+    internals.writeRuntimePayload = vi.fn().mockResolvedValue(undefined)
+    internals.replaceWatcher = vi.fn().mockImplementation(async () => {
+      expect(service.getStatus().port).toBe(9341)
+      return { connected: true, targetCount: 1 }
+    })
+
+    await internals.recoverActiveSessionInternal(themeId)
+
+    expect(driver.start).toHaveBeenCalledWith(9335, true)
+    expect(internals.replaceWatcher).toHaveBeenCalledWith('browser-fallback', payload)
+    expect(service.getStatus()).toMatchObject({ phase: 'active', port: 9341 })
+    expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({
+      themeId,
+      port: 9341,
+      browserId: 'browser-fallback'
+    })
+    await rm(root, { recursive: true, force: true })
+  })
+
   it('verifies and migrates a legacy Windows session before reconnecting', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-session-v1-'))
     const themeId = '11111111-1111-4111-8111-111111111111'

@@ -18,4 +18,18 @@ describe('macOS Studio window contract', () => {
     expect(main).toContain('sandbox: true')
     expect(styles).toContain('.studio-shell[data-platform="darwin"] .titlebar')
   })
+
+  it('restores a hidden Studio window when the Dock activates the app', async () => {
+    const main = await readFile(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8')
+    const showWindow = main.match(/function showWindow\(\): void \{[\s\S]*?\r?\n\}/)?.[0]
+    const activate = main.match(/app\.on\('activate', \(\) => \{[\s\S]*?\r?\n\s*\}\)/)?.[0]
+
+    expect(main).toContain('if (codexService.isActive() && !quitting)')
+    expect(main).toContain('mainWindow?.hide()')
+    expect(showWindow).toContain('if (mainWindow?.isMinimized()) mainWindow.restore()')
+    expect(showWindow).toContain('mainWindow?.show()')
+    expect(showWindow).toContain('mainWindow?.focus()')
+    expect(activate).toContain('if (BrowserWindow.getAllWindows().length === 0) createWindow()')
+    expect(activate).toContain('else showWindow()')
+  })
 })

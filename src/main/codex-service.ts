@@ -388,6 +388,7 @@ export class CodexService {
     try {
       this.patch('starting', '正在恢复 Codex 主题会话')
       const result = await this.platformDriver.start(this.status.port, true)
+      this.status.port = result.port
       const payload = await this.buildPayload(themeId)
       await this.writeRuntimePayload(payload.script)
       await this.replaceWatcher(result.browserId, payload)
