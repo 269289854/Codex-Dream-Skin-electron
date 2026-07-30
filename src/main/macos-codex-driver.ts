@@ -12,7 +12,11 @@ import {
   type CodexRestoreResult,
   type CodexStartResult
 } from './codex-platform'
-import { installMacCodexThemeConfig, restoreMacCodexThemeConfig } from './macos-config'
+import {
+  installMacCodexThemeConfig,
+  restoreMacCodexThemeConfig,
+  type MacConfigRestoreResult
+} from './macos-config'
 
 export const MAC_CODEX_BUNDLE_ID = 'com.openai.codex'
 export const MAC_CODEX_TEAM_ID = '2DC432GLL2'
@@ -59,6 +63,7 @@ interface MacCodexDriverDependencies {
   sleep?: (milliseconds: number) => Promise<void>
   signalProcess?: (pid: number, signal: NodeJS.Signals) => void
   processExecutable?: string
+  restoreConfig?: (configPath: string, backupPath: string) => Promise<MacConfigRestoreResult>
 }
 
 export class MacCodexDriver implements CodexPlatformDriver {
@@ -68,6 +73,7 @@ export class MacCodexDriver implements CodexPlatformDriver {
   private readonly sleep: (milliseconds: number) => Promise<void>
   private readonly signalProcess: (pid: number, signal: NodeJS.Signals) => void
   private readonly processExecutable: string
+  private readonly restoreConfig: (configPath: string, backupPath: string) => Promise<MacConfigRestoreResult>
 
   constructor(
     private readonly studioRoot: string,
@@ -79,6 +85,7 @@ export class MacCodexDriver implements CodexPlatformDriver {
     this.sleep = dependencies.sleep ?? ((milliseconds) => new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds)))
     this.signalProcess = dependencies.signalProcess ?? ((pid, signal) => process.kill(pid, signal))
     this.processExecutable = dependencies.processExecutable ?? process.execPath
+    this.restoreConfig = dependencies.restoreConfig ?? restoreMacCodexThemeConfig
   }
 
   async detect(): Promise<CodexDetection> {
@@ -135,16 +142,22 @@ export class MacCodexDriver implements CodexPlatformDriver {
   async restore(restartCodex: boolean, expectedInstallationId?: string): Promise<CodexRestoreResult> {
     return await this.withOperationLock(async () => {
       const install = restartCodex ? await this.findInstall(expectedInstallationId) : null
-      const configRestored = await restoreMacCodexThemeConfig(this.configPath(), this.backupPath())
-      if (!install) return { configRestored, restart: { status: 'not-requested' } }
+      const configResult = await this.restoreConfig(this.configPath(), this.backupPath())
+      const backupArchive = !configResult.restored
+        ? { status: 'not-attempted' as const }
+        : configResult.archiveCompleted
+          ? { status: 'succeeded' as const }
+          : { status: 'failed' as const, error: configResult.archiveError || 'Codex configuration backup archive failed.' }
+      const restored = { configRestored: configResult.restored, backupArchive }
+      if (!install) return { ...restored, restart: { status: 'not-requested' } }
       try {
         const processes = await this.mainProcesses(install)
         if (processes.length > 0) await this.stopVerifiedProcesses(install, processes)
         await this.openApplication(install, [])
-        return { configRestored, restart: { status: 'succeeded' } }
+        return { ...restored, restart: { status: 'succeeded' } }
       } catch (reason) {
         return {
-          configRestored,
+          ...restored,
           restart: {
             status: 'failed',
             error: reason instanceof Error ? reason.message : String(reason)

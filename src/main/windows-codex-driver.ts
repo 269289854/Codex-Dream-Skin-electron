@@ -25,6 +25,8 @@ interface WindowsStartResult {
 
 interface WindowsRestoreResult {
   restored: boolean
+  archiveCompleted: boolean
+  archiveError: string | null
   restarted: boolean
   restartError: string | null
 }
@@ -85,6 +87,11 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
     const result = await this.bridge<WindowsRestoreResult>('Restore', restartCodex ? ['-RestartCodex'] : [], 65_000)
     return {
       configRestored: result.restored,
+      backupArchive: !result.restored
+        ? { status: 'not-attempted' }
+        : result.archiveCompleted
+          ? { status: 'succeeded' }
+          : { status: 'failed', error: result.archiveError || 'Codex configuration backup archive failed.' },
       restart: !restartCodex
         ? { status: 'not-requested' }
         : result.restarted

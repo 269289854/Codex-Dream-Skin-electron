@@ -6,6 +6,16 @@ import type { ThemeProfile } from '../shared/theme'
 
 type MacThemeColors = Pick<ThemeProfile['colors'], 'accent' | 'ink' | 'surface' | 'success' | 'danger' | 'lavender'>
 
+export interface MacConfigRestoreResult {
+  restored: boolean
+  archiveCompleted: boolean
+  archiveError: string | null
+}
+
+interface MacConfigRestoreDependencies {
+  archiveBackup?: (backupPath: string) => Promise<void>
+}
+
 interface DesktopSection {
   body: string
   bodyStart: number
@@ -93,12 +103,18 @@ export async function installMacCodexThemeConfig(configPath: string, backupPath:
   }
 }
 
-export async function restoreMacCodexThemeConfig(configPath: string, backupPath: string): Promise<boolean> {
+export async function restoreMacCodexThemeConfig(
+  configPath: string,
+  backupPath: string,
+  dependencies: MacConfigRestoreDependencies = {}
+): Promise<MacConfigRestoreResult> {
   let backupBytes: Buffer
   try {
     backupBytes = await readFile(backupPath)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { restored: false, archiveCompleted: false, archiveError: null }
+    }
     throw error
   }
   const currentBytes = await readFile(configPath)
@@ -107,10 +123,22 @@ export async function restoreMacCodexThemeConfig(configPath: string, backupPath:
   const restored = restoreMacCodexThemeContent(currentContent, backupContent)
   const mode = (await stat(configPath)).mode & 0o777
   await writeMacBytesAtomically(configPath, Buffer.from(restored, 'utf8'), currentBytes, mode)
+  try {
+    await (dependencies.archiveBackup ?? archiveMacCodexConfigBackup)(backupPath)
+    return { restored: true, archiveCompleted: true, archiveError: null }
+  } catch (reason) {
+    return {
+      restored: true,
+      archiveCompleted: false,
+      archiveError: reason instanceof Error ? reason.message : String(reason)
+    }
+  }
+}
+
+async function archiveMacCodexConfigBackup(backupPath: string): Promise<void> {
   const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 17)
   await rename(backupPath, join(dirname(backupPath), `config.restored-${stamp}-${randomUUID()}.toml`))
   await syncDirectory(dirname(backupPath))
-  return true
 }
 
 function assertDesktopShapeSupported(content: string): void {

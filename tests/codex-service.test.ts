@@ -40,6 +40,7 @@ function createDriver(platform: CodexPlatformDriver['platform'] = 'win32'): Code
     verifySession: vi.fn(),
     restore: vi.fn(async (restartCodex: boolean) => ({
       configRestored: true,
+      backupArchive: { status: 'succeeded' as const },
       restart: restartCodex ? { status: 'succeeded' as const } : { status: 'not-requested' as const }
     }))
   }
@@ -676,6 +677,7 @@ describe('CodexService operation queue', () => {
     const themeId = '11111111-1111-4111-8111-111111111111'
     vi.mocked(driver.restore).mockResolvedValueOnce({
       configRestored: false,
+      backupArchive: { status: 'not-attempted' },
       restart: { status: 'succeeded' }
     })
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
@@ -707,6 +709,7 @@ describe('CodexService operation queue', () => {
     const themeId = '11111111-1111-4111-8111-111111111111'
     vi.mocked(driver.restore).mockResolvedValueOnce({
       configRestored: true,
+      backupArchive: { status: 'succeeded' },
       restart: { status: 'failed', error: 'Codex launch failed' }
     })
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
@@ -727,6 +730,39 @@ describe('CodexService operation queue', () => {
       backupAvailable: false,
       lastError: 'Codex launch failed',
       message: '已恢复 Codex 配置；Codex 配置已恢复，但自动重启失败'
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(root, 'runtime', 'session.restore-completed.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('commits configuration restore and retires the session when only backup archiving fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-archive-failure-'))
+    const driver = createDriver()
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    vi.mocked(driver.restore).mockResolvedValueOnce({
+      configRestored: true,
+      backupArchive: { status: 'failed', error: 'Backup archive failed' },
+      restart: { status: 'succeeded' }
+    })
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: 9335,
+      browserId: 'browser-old',
+      platform: 'win32',
+      installationId: detection.installationId
+    })}\n`)
+
+    const status = await service.restore(true)
+
+    expect(status).toMatchObject({
+      phase: 'stopped',
+      backupAvailable: false,
+      lastError: 'Backup archive failed',
+      message: '已恢复配置并正常重启 Codex；Codex 配置已恢复，但配置备份归档失败'
     })
     await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(readFile(join(root, 'runtime', 'session.restore-completed.json'))).rejects.toMatchObject({ code: 'ENOENT' })
@@ -805,7 +841,11 @@ describe('CodexService operation queue', () => {
     const oldInstallationId = 'OpenAI.Codex_old'
     vi.mocked(driver.restore)
       .mockRejectedValueOnce(new CodexInstallationIdentityError('Saved Codex session belongs to another installation.'))
-      .mockResolvedValueOnce({ configRestored: true, restart: { status: 'not-requested' } })
+      .mockResolvedValueOnce({
+        configRestored: true,
+        backupArchive: { status: 'succeeded' },
+        restart: { status: 'not-requested' }
+      })
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
     await mkdir(join(root, 'runtime'), { recursive: true })
     await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({

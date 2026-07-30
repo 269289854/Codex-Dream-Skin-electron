@@ -176,6 +176,7 @@ describe('MacCodexDriver', () => {
 
     await expect(driver.restore(true, installationId)).resolves.toEqual({
       configRestored: true,
+      backupArchive: { status: 'succeeded' },
       restart: { status: 'succeeded' }
     })
 
@@ -202,11 +203,28 @@ describe('MacCodexDriver', () => {
 
     await expect(driver.restore(true, installationId)).resolves.toEqual({
       configRestored: true,
+      backupArchive: { status: 'succeeded' },
       restart: { status: 'failed', error: 'Codex launch failed' }
     })
 
     await expect(readFile(configPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
     await expect(readFile(backupPath)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('preserves a committed configuration result when backup archiving fails', async () => {
+    const fixture = await createSelectionFixture()
+    const restoreConfig = vi.fn().mockResolvedValue({
+      restored: true,
+      archiveCompleted: false,
+      archiveError: 'archive failed'
+    })
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { restoreConfig })
+
+    await expect(driver.restore(false)).resolves.toEqual({
+      configRestored: true,
+      backupArchive: { status: 'failed', error: 'archive failed' },
+      restart: { status: 'not-requested' }
+    })
   })
 
   it('does not consume the configuration backup when the saved app is invalid', async () => {

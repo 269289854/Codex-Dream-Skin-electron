@@ -442,6 +442,7 @@ export class CodexService {
     try {
       let restartCodex = requestedRestart
       let expectedInstallationId = activeInstallationId
+      let backupArchiveWarning: string | null = null
       let restartWarning: string | null = null
       let diagnostic: string | null = null
       const sessionFingerprint = await this.persistedSessionFingerprint()
@@ -473,6 +474,10 @@ export class CodexService {
           : ''
         throw new Error(`未找到可恢复的 Codex 配置备份${restartFailure}`)
       }
+      if (restoreResult.backupArchive.status === 'failed') {
+        backupArchiveWarning = 'Codex 配置已恢复，但配置备份归档失败'
+        diagnostic = [diagnostic, restoreResult.backupArchive.error].filter((part): part is string => part !== null).join('；')
+      }
       if (restoreResult.restart.status === 'failed') {
         restartWarning = 'Codex 配置已恢复，但自动重启失败'
         diagnostic = [diagnostic, restoreResult.restart.error].filter((part): part is string => part !== null).join('；')
@@ -497,6 +502,7 @@ export class CodexService {
       }
       const message = [
         restoreResult.restart.status === 'succeeded' ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置',
+        backupArchiveWarning,
         restartWarning,
         cleanupError
           ? markerWritten

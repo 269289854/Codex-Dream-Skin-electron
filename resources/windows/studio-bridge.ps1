@@ -148,13 +148,20 @@ try {
 
   if ($Action -eq 'Restore') {
     $restored = $false
+    $archiveCompleted = $false
+    $archiveError = $null
     $restarted = $false
     $restartError = $null
     if (Test-Path -LiteralPath $paths.Backup) {
       Restore-DreamSkinBaseTheme -ConfigPath $paths.Config -BackupPath $paths.Backup
-      $archive = Join-Path (Split-Path -Parent $paths.Backup) ("config.restored-{0}.toml" -f (Get-Date).ToString('yyyyMMdd-HHmmss-fff'))
-      Archive-DreamSkinConfigBackup -BackupPath $paths.Backup -ArchivePath $archive
       $restored = $true
+      try {
+        $archive = Join-Path (Split-Path -Parent $paths.Backup) ("config.restored-{0}.toml" -f (Get-Date).ToString('yyyyMMdd-HHmmss-fff'))
+        Archive-DreamSkinConfigBackup -BackupPath $paths.Backup -ArchivePath $archive
+        $archiveCompleted = $true
+      } catch {
+        $archiveError = $_.Exception.Message
+      }
     }
     if ($RestartCodex) {
       try {
@@ -169,6 +176,8 @@ try {
     }
     Write-StudioResult ([pscustomobject]@{
       restored = $restored
+      archiveCompleted = $archiveCompleted
+      archiveError = $archiveError
       restarted = $restarted
       restartError = $restartError
     })

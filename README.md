@@ -179,6 +179,8 @@ macOS 打包会为 x64/arm64 分别准备锁定版本的 FFmpeg，并同时携�
 
 打包结果位于 `release/`。该目录是生成产物，不应手工修改或提交。
 
+GitHub Actions 的 Windows/macOS 自动构建、版本标签和 Release 发布标准见 [GitHub Actions 双平台构建与发布手册](docs/GITHUB_ACTIONS_RELEASE.md)。
+
 ## 许可证
 
 本项目源代码采用 [MIT License](LICENSE)。许可证、项目来源、内置字体和第三方组件说明见 [开源与第三方声明](NOTICE.md)。

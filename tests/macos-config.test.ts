@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createDefaultTheme } from '../src/shared/theme'
 import {
   decodeStrictUtf8,
@@ -51,12 +51,36 @@ describe('macOS Codex config editing', () => {
     expect(installed.charCodeAt(0)).not.toBe(0xfeff)
     await writeFile(configPath, installed.replace('followUpQueueMode = "queue"', 'followUpQueueMode = "steer"'))
 
-    await expect(restoreMacCodexThemeConfig(configPath, backupPath)).resolves.toBe(true)
+    await expect(restoreMacCodexThemeConfig(configPath, backupPath)).resolves.toEqual({
+      restored: true,
+      archiveCompleted: true,
+      archiveError: null
+    })
     const restored = await readFile(configPath, 'utf8')
     expect(restored).toContain('appearanceTheme = "dark"')
     expect(restored).toContain('followUpQueueMode = "steer"')
     await expect(readFile(backupPath)).rejects.toMatchObject({ code: 'ENOENT' })
     expect((await readdir(join(root, 'studio', 'backups'))).some((name) => /^config\.restored-\d{17}-[0-9a-f-]+\.toml$/.test(name))).toBe(true)
+  })
+
+  it('reports a committed restore when backup archiving fails afterward', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-macos-archive-failure-'))
+    roots.push(root)
+    const configPath = join(root, '.codex', 'config.toml')
+    const backupPath = join(root, 'studio', 'backups', 'config.before-studio.toml')
+    await writeMacBytesAtomically(configPath, Buffer.from('[desktop]\nappearanceTheme = "light"\n'), null)
+    await writeMacBytesAtomically(backupPath, Buffer.from('[desktop]\nappearanceTheme = "system"\n'), null)
+    const archiveBackup = vi.fn().mockRejectedValue(new Error('archive directory sync failed'))
+
+    await expect(restoreMacCodexThemeConfig(configPath, backupPath, { archiveBackup })).resolves.toEqual({
+      restored: true,
+      archiveCompleted: false,
+      archiveError: 'archive directory sync failed'
+    })
+
+    expect(archiveBackup).toHaveBeenCalledWith(backupPath)
+    await expect(readFile(configPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
+    await expect(readFile(backupPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
   })
 
   it('rejects invalid encodings, unsafe TOML shapes, and removes a newly created backup on failure', async () => {

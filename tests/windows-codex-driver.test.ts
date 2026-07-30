@@ -101,15 +101,29 @@ describe('WindowsCodexDriver', () => {
   it('reports configuration restore and restart outcomes independently', async () => {
     const driver = new WindowsCodexDriver('C:\\Studio', 'C:\\Resources')
     runPowerShellMock
-      .mockResolvedValueOnce({ restored: false, restarted: false, restartError: null })
-      .mockResolvedValueOnce({ restored: true, restarted: false, restartError: 'Codex launch failed' })
+      .mockResolvedValueOnce({
+        restored: false,
+        archiveCompleted: false,
+        archiveError: null,
+        restarted: false,
+        restartError: null
+      })
+      .mockResolvedValueOnce({
+        restored: true,
+        archiveCompleted: false,
+        archiveError: 'Backup archive failed',
+        restarted: false,
+        restartError: 'Codex launch failed'
+      })
 
     await expect(driver.restore(false)).resolves.toEqual({
       configRestored: false,
+      backupArchive: { status: 'not-attempted' },
       restart: { status: 'not-requested' }
     })
     await expect(driver.restore(true)).resolves.toEqual({
       configRestored: true,
+      backupArchive: { status: 'failed', error: 'Backup archive failed' },
       restart: { status: 'failed', error: 'Codex launch failed' }
     })
   })
@@ -117,11 +131,16 @@ describe('WindowsCodexDriver', () => {
   it('keeps restore and restart outcomes separate in the packaged PowerShell bridge', async () => {
     const bridge = await readFile(join(process.cwd(), 'resources', 'windows', 'studio-bridge.ps1'), 'utf8')
     const restoreBlock = bridge.slice(bridge.indexOf("if ($Action -eq 'Restore')"))
+    const configBlock = restoreBlock.slice(0, restoreBlock.indexOf('if ($RestartCodex)'))
 
     expect(restoreBlock).toContain('$restored = $false')
+    expect(restoreBlock).toContain('$archiveCompleted = $false')
+    expect(restoreBlock).toContain('$archiveError = $null')
     expect(restoreBlock).toContain('$restarted = $false')
     expect(restoreBlock).toContain('$restartError = $null')
+    expect(configBlock.indexOf('$restored = $true')).toBeLessThan(configBlock.indexOf('Archive-DreamSkinConfigBackup'))
+    expect(configBlock).toMatch(/try\s*\{[\s\S]*Archive-DreamSkinConfigBackup[\s\S]*\$archiveCompleted = \$true[\s\S]*\}\s*catch\s*\{\s*\$archiveError = \$_\.Exception\.Message\s*\}/)
     expect(restoreBlock).toMatch(/catch\s*\{\s*\$restartError = \$_\.Exception\.Message\s*\}/)
-    expect(restoreBlock).toMatch(/restored = \$restored\s+restarted = \$restarted\s+restartError = \$restartError/)
+    expect(restoreBlock).toMatch(/restored = \$restored\s+archiveCompleted = \$archiveCompleted\s+archiveError = \$archiveError\s+restarted = \$restarted\s+restartError = \$restartError/)
   })
 })
