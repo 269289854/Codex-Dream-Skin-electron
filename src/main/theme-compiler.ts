@@ -1,16 +1,11 @@
 import { Buffer } from 'node:buffer'
 import type { CompiledTheme } from '../shared/contracts'
-import type { Fence } from '../shared/geometry'
-import { ACCOUNT_MENU_ITEMS } from '../shared/account-menu'
-import { HOME_ACTIONS } from '../shared/home-layout'
-import { SIDEBAR_NAV_ITEMS } from '../shared/sidebar-layout'
-import { mediaFlipCssTransform } from '../shared/media'
-import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
-import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
-import { CONVERSATION_BUBBLE_PRESETS, type ConversationBubblePresetId, type MediaReference, type ThemeProfile } from '../shared/theme'
-import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey, resolveConversationBubbles } from '../shared/conversation-bubbles'
+import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey } from '../shared/conversation-bubbles'
 import { ensureGifInfiniteLoop } from '../shared/gif'
 import { iconGifPosterAssetKey } from '../shared/icon-assets'
+import { CONVERSATION_BUBBLE_PRESETS, type ConversationBubblePresetId, type ThemeProfile } from '../shared/theme'
+import { selectedImportedFonts } from '../shared/typography'
+import { budgetDataUrls } from './embedded-assets'
 import { prepareIconGifDataUrl } from './icon-assets'
 
 export async function compileTheme(
@@ -18,6 +13,36 @@ export async function compileTheme(
   readAsset: (asset: string) => Promise<string>,
   readConversationBubblePreset?: (presetId: ConversationBubblePresetId) => Promise<string>
 ): Promise<CompiledTheme> {
+  const assetNames = compiledAssetNames(profile)
+  const assets: Record<string, string> = {}
+  for (const asset of assetNames) assets[asset] = await readAsset(asset)
+
+  const gifIconAssets = new Set(Object.values(profile.icons)
+    .filter((icon) => icon.kind === 'asset' && icon.asset.toLowerCase().endsWith('.gif'))
+    .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
+  for (const asset of gifIconAssets) {
+    const prepared = await prepareIconGifDataUrl(assets[asset] ?? '')
+    assets[asset] = prepared.dataUrl
+    assets[iconGifPosterAssetKey(asset)] = prepared.posterDataUrl
+  }
+
+  const brandSignatureGifAsset = profile.brandSignature.source?.mimeType === 'image/gif'
+    ? profile.brandSignature.source.asset
+    : null
+  if (brandSignatureGifAsset && assets[brandSignatureGifAsset]) {
+    assets[brandSignatureGifAsset] = ensureInfiniteLoopingGifDataUrl(assets[brandSignatureGifAsset])
+  }
+  if (readConversationBubblePreset) {
+    for (const preset of CONVERSATION_BUBBLE_PRESETS) {
+      assets[conversationBubblePresetAssetKey(preset.id)] = await readConversationBubblePreset(preset.id)
+    }
+  }
+
+  budgetDataUrls(assets)
+  return { assets }
+}
+
+export function compiledAssetNames(profile: ThemeProfile): Set<string> {
   const assetNames = new Set<string>()
   if (profile.hero.source?.kind === 'image') assetNames.add(profile.hero.source.asset)
   else if (!profile.hero.source && profile.hero.sourceImage) assetNames.add(profile.hero.sourceImage)
@@ -30,86 +55,9 @@ export async function compileTheme(
   if (profile.decorations.composerMelody.source) assetNames.add(profile.decorations.composerMelody.source.asset)
   for (const reference of conversationBubbleMediaReferences(profile)) assetNames.add(reference.asset)
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
-  for (const font of profile.typography.importedFonts) assetNames.add(font.asset)
-
-  const assets: Record<string, string> = {}
-  for (const asset of assetNames) assets[asset] = await readAsset(asset)
-  const gifIconAssets = new Set(Object.values(profile.icons)
-    .filter((icon) => icon.kind === 'asset' && icon.asset.toLowerCase().endsWith('.gif'))
-    .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
-  for (const asset of gifIconAssets) {
-    const prepared = await prepareIconGifDataUrl(assets[asset] ?? '')
-    assets[asset] = prepared.dataUrl
-    assets[iconGifPosterAssetKey(asset)] = prepared.posterDataUrl
-  }
-  const brandSignatureGifAsset = profile.brandSignature.source?.mimeType === 'image/gif'
-    ? profile.brandSignature.source.asset
-    : null
-  if (brandSignatureGifAsset && assets[brandSignatureGifAsset]) {
-    assets[brandSignatureGifAsset] = ensureInfiniteLoopingGifDataUrl(assets[brandSignatureGifAsset])
-  }
-  if (readConversationBubblePreset) {
-    for (const preset of CONVERSATION_BUBBLE_PRESETS) {
-      assets[conversationBubblePresetAssetKey(preset.id)] = await readConversationBubblePreset(preset.id)
-    }
-  }
-  const hero = profile.hero.source
-    ? profile.hero.source.kind === 'image' ? assets[profile.hero.source.asset] : null
-    : profile.hero.sourceImage ? assets[profile.hero.sourceImage] : null
-  const polaroid = profile.polaroid.source
-    ? profile.polaroid.source.kind === 'image' ? assets[profile.polaroid.source.asset] : null
-    : profile.polaroid.sourceImage ? assets[profile.polaroid.sourceImage] : null
-  const conversationBackground = profile.conversationBackground.source?.kind === 'image'
-    ? assets[profile.conversationBackground.source.asset]
-    : null
-  const windowBackground = profile.windowBackground.source?.kind === 'image'
-    ? assets[profile.windowBackground.source.asset]
-    : null
-  const accountMenuBackground = profile.accountMenuBackground.source?.kind === 'image'
-    ? assets[profile.accountMenuBackground.source.asset]
-    : null
-  const polaroidLayout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, profile.polaroid.fence as Fence) : null
-  const showPolaroid = profile.polaroid.visible && Boolean(polaroid && polaroidLayout)
-  const polaroidStyle = profile.polaroid.style
-  const runtimeProfile = createRuntimeProfile(profile)
-  const conversationBubbles = resolveConversationBubbles(profile.conversationBubbles, assets)
-  const conversationBubbleAssets = new Set(conversationBubbleMediaReferences(profile).map((reference) => reference.asset))
-  const css = `:root { ${buildThemeVariableDeclarations(profile)} }\n` +
-    `html.codex-dream-skin body { position: relative; color: var(--dream-global-text); background: var(--dream-canvas);${hero ? ' background-image: none;' : ''} font-family: var(--dream-font-ui); }\n` +
-    (hero ? `html.codex-dream-skin body::before { content: ""; position: absolute; z-index: 0; inset: 0; pointer-events: none; background-image: url("${escapeCssUrl(hero)}"); background-repeat: no-repeat; background-position: ${percent(profile.hero.position.x)} ${percent(profile.hero.position.y)}; background-size: ${Math.round(profile.hero.scale * 100)}% auto; transform: ${mediaFlipCssTransform(profile.hero.mediaTransform)}; transform-origin: center; }\n` : '') +
-    `.dream-polaroid { position: fixed; right: auto; left: ${percent(profile.polaroid.placement.x)}; top: ${percent(profile.polaroid.placement.y)}; width: ${percent(profile.polaroid.placement.width)}; height: auto; opacity: ${polaroidStyle.opacity}; transform: rotate(${profile.polaroid.placement.rotation}deg);${polaroid && polaroidLayout ? ` aspect-ratio: ${polaroidLayout.aspectRatio};` : ''}${showPolaroid ? '' : ' display: none !important;'} }\n` +
-    `.dream-polaroid-shadow { filter: ${polaroidShadowFilter(polaroidStyle)}; }\n` +
-    `.dream-polaroid-surface {${polaroid && polaroidLayout ? ` background-image: none; background-size: ${polaroidLayout.backgroundSize}; background-position: ${polaroidLayout.backgroundPosition}; clip-path: ${polaroidLayout.clipPath ?? 'none'};` : ''} }\n` +
-    (polaroid && polaroidLayout ? `.dream-polaroid-surface::before { content: ""; position: absolute; inset: 0; background-image: url("${escapeCssUrl(polaroid)}"); background-repeat: no-repeat; background-size: ${polaroidLayout.backgroundSize}; background-position: ${polaroidLayout.backgroundPosition}; transform: ${mediaFlipCssTransform(profile.polaroid.mediaTransform)}; transform-origin: center; }\n` : '') +
-    `@media (max-width: ${profile.polaroid.placement.hideBelowWidth}px) { .dream-polaroid { display: none !important; } }\n`
-
-  return {
-    css,
-    rendererPayload: JSON.stringify({ version: profile.version, profile: runtimeProfile, sidebarNavigation: SIDEBAR_NAV_ITEMS, accountMenu: ACCOUNT_MENU_ITEMS, home: { actions: HOME_ACTIONS }, assets: Object.fromEntries(Object.entries(assets).filter(([key]) => !key.startsWith('builtin/conversation-bubbles/') && !conversationBubbleAssets.has(key))), conversationBackground, windowBackground, accountMenuBackground, conversationBubbles, toolActivityBubbles: { visible: profile.toolActivityBubbles.visible } }).replace(/</g, '\\u003c'),
-    assets
-  }
+  for (const font of selectedImportedFonts(profile.typography)) assetNames.add(font.asset)
+  return assetNames
 }
-
-function createRuntimeProfile(profile: ThemeProfile): ThemeProfile {
-  const runtimeProfile = structuredClone(profile)
-  const references: Array<MediaReference | null> = [
-    runtimeProfile.hero.source,
-    runtimeProfile.polaroid.source,
-    runtimeProfile.conversationBackground.source,
-    runtimeProfile.windowBackground.source,
-    runtimeProfile.accountMenuBackground.source,
-    runtimeProfile.brandSignature.source,
-    runtimeProfile.decorations.composerMelody.source,
-    ...conversationBubbleMediaReferences(runtimeProfile)
-  ]
-  for (const reference of references) {
-    if (reference?.videoVariants) delete reference.videoVariants
-  }
-  return runtimeProfile
-}
-
-function percent(value: number): string { return `${(value * 100).toFixed(3).replace(/\.0+$|(?<=\.[0-9]*?)0+$/g, '')}%` }
-function escapeCssUrl(value: string): string { return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n\f]/g, '') }
 
 function ensureInfiniteLoopingGifDataUrl(dataUrl: string): string {
   const prefix = 'data:image/gif;base64,'

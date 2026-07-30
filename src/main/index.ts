@@ -429,7 +429,8 @@ if (!hasSingleInstanceLock) {
     store = new ProfileStore(studioRoot, {
       hero: join(sharedResourcesRoot, 'dream-reference.png'),
       polaroid: join(sharedResourcesRoot, 'dream-polaroid.png'),
-      conversationBubbles: Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [preset.id, join(sharedResourcesRoot, 'conversation-bubbles', preset.fileName)])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>
+      conversationBubbles: Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [preset.id, join(sharedResourcesRoot, 'conversation-bubbles', preset.fileName)])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>,
+      resourcesRoot: sharedResourcesRoot
     })
     await store.initialize()
     protocol.handle('studio-media', async (request) => handleStudioMediaRequest(request))

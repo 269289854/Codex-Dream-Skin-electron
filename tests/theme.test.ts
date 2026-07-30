@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTIONS, PROJECT_PLACEHOLDER, splitHeadingTemplate } from '../src/shared/home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, PROJECT_PLACEHOLDER, splitHeadingTemplate } from '../src/shared/home-layout'
 import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
 import { BRAND_SIGNATURE_MODES, CONVERSATION_BUBBLE_PRESETS, createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, THEME_COLOR_PRESETS, VIDEO_PAUSE_POLICIES } from '../src/shared/theme'
 import { compileTheme } from '../src/main/theme-compiler'
@@ -107,10 +107,7 @@ describe('theme schema and compiler', () => {
 
     profile.brandSignature = { mode: 'gif', source: gifSource, mediaWidth: 144 }
     const compiled = await compileTheme(profile, async (asset) => asset === gifSource.asset ? 'data:image/gif;base64,AA==' : 'data:image/png;base64,AA==')
-    const payload = JSON.parse(compiled.rendererPayload)
     expect(compiled.assets[gifSource.asset]).toBe('data:image/gif;base64,AA==')
-    expect(payload.profile.brandSignature).toEqual(profile.brandSignature)
-    expect(payload.assets[gifSource.asset]).toBe('data:image/gif;base64,AA==')
   })
 
   it('provides validated creation palettes and clones default colors per theme', () => {
@@ -731,14 +728,12 @@ describe('theme schema and compiler', () => {
     expect(fullCss).toContain('drop-shadow(0px 8px 10px rgba(24, 48, 54, 0.24))')
     expect(fullCss).toContain('background-size: 100% 100% !important')
     expect(fullCss).toContain('clip-path: none !important')
-    expect((await compileTheme(profile, async () => dataUrl)).css).toContain('clip-path: none')
 
     profile.polaroid.mode = 'fence'
     const fenceCss = buildDynamicThemeCss(profile, { 'assets/polaroid.png': dataUrl })
     expect(fenceCss).toContain('aspect-ratio: 2')
     expect(fenceCss).toMatch(/background-size: 125% 166\.6+[^ ]*% !important/)
     expect(fenceCss).toContain('clip-path: polygon(')
-    expect((await compileTheme(profile, async () => dataUrl)).css).toContain('clip-path: polygon(')
   })
 
   it('migrates version nine polaroids without changing their mode and validates appearance ranges', () => {
@@ -754,30 +749,32 @@ describe('theme schema and compiler', () => {
     expect(() => parseThemeProfile({ ...profile, polaroid: { ...profile.polaroid, style: { ...profile.polaroid.style, shadow: { ...profile.polaroid.style.shadow, offsetX: 41 } } } })).toThrow()
   })
 
-  it('compiles deterministic CSS and escapes payload markup', async () => {
+  it('compiles deterministic assets without duplicating them into serialized fields', async () => {
     const profile = createDefaultTheme(id)
     profile.hero.sourceImage = 'assets/hero.png'
     profile.copy.headingTemplate = '<b>{project}</b>'
     const compiled = await compileTheme(profile, async () => 'data:image/png;base64,PHNjcmlwdD4=')
-    expect(compiled.css).toContain('--dream-accent: #20BCC3')
-    expect(compiled.css).toContain('background-image: url("data:image/png;base64,PHNjcmlwdD4=")')
-    expect(compiled.rendererPayload).not.toContain('<')
-    expect(compiled.rendererPayload).toContain('headingTemplate')
-    const rendererPayload = JSON.parse(compiled.rendererPayload)
-    expect(rendererPayload.version).toBe(28)
-    expect(rendererPayload.profile.icons.composerAdd).toEqual({ kind: 'builtin', name: 'plus' })
-    expect(rendererPayload.profile.icons.composerMicrophone).toEqual({ kind: 'builtin', name: 'mic' })
-    expect(rendererPayload.accountMenu).toEqual(ACCOUNT_MENU_ITEMS)
-    expect(rendererPayload.conversationBubbles).toEqual({
-      visible: true,
-      user: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 },
-      codex: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 },
-      plan: { mode: 'none', dataUrl: null, slice: 25, sliceInsets: [25, 25, 25, 25], frameWidth: 24, borderWidths: [24, 48, 24, 48], contentPadding: 20 }
-    })
-    expect(rendererPayload.toolActivityBubbles).toEqual({ visible: true })
-    expect(compiled.rendererPayload).toContain('\\u003cb>')
-    expect(compiled.rendererPayload).toContain(JSON.stringify(HOME_ACTIONS[0].label).slice(1, -1))
+    expect(compiled).toEqual({ assets: { 'assets/hero.png': 'data:image/png;base64,PHNjcmlwdD4=' } })
+    expect(Object.keys(compiled)).toEqual(['assets'])
     expect(await compileTheme(profile, async () => 'data:image/png;base64,PHNjcmlwdD4=')).toEqual(compiled)
+  })
+
+  it('only reads imported fonts selected by a typography slot', async () => {
+    const profile = createDefaultTheme(id)
+    profile.typography.importedFonts = [
+      { id: 'selected-font', family: 'Selected', asset: 'assets/selected.woff2', originalName: 'selected.woff2', format: 'woff2' },
+      { id: 'library-font', family: 'Library only', asset: 'assets/library.woff2', originalName: 'library.woff2', format: 'woff2' }
+    ]
+    profile.typography.slots.brandTitle = { kind: 'imported', id: 'selected-font' }
+    const reads: string[] = []
+
+    const compiled = await compileTheme(profile, async (asset) => {
+      reads.push(asset)
+      return 'data:font/woff2;base64,AA=='
+    })
+
+    expect(reads).toEqual(['assets/selected.woff2'])
+    expect(compiled.assets).toEqual({ 'assets/selected.woff2': 'data:font/woff2;base64,AA==' })
   })
 
   it('does not read video media into the base64 image payload', async () => {
@@ -800,16 +797,6 @@ describe('theme schema and compiler', () => {
       throw new Error('video assets must not be loaded as data URLs')
     })
     expect(compiled.assets).toEqual({})
-    expect(compiled.css).not.toContain('background-image: url')
-    const payload = JSON.parse(compiled.rendererPayload)
-    expect(payload.profile.videoPlayback.pausePolicy).toBe('hidden')
-    expect(payload.profile.hero.source).toEqual({
-      asset: 'assets/hero-optimized.mp4',
-      kind: 'video',
-      mimeType: 'video/mp4'
-    })
-    expect(compiled.rendererPayload).not.toContain('videoVariants')
-    expect(compiled.rendererPayload).not.toContain('assets/hero-original.webm')
   })
 
   it('keeps media flips on the media layers instead of the layout containers', () => {
@@ -837,7 +824,6 @@ describe('theme schema and compiler', () => {
     const dataUrl = 'data:image/png;base64,AAECAwQ='
 
     const compiled = await compileTheme(profile, async () => dataUrl)
-    expect(compiled.css).toMatch(/\.dream-polaroid[^}]+display: none !important/)
     expect(compiled.assets['assets/polaroid.png']).toBe(dataUrl)
     expect(buildDynamicThemeCss(profile, compiled.assets)).toContain('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
   })

@@ -169,24 +169,14 @@ describe('conversation bubble frames', () => {
 
     const compiled = await compileTheme(
       profile,
-      async (asset) => `data:image/gif;base64,${asset}`,
-      async (presetId) => `data:image/png;base64,${presetId}`
+      async (asset) => `data:image/gif;base64,${Buffer.from(asset).toString('base64')}`,
+      async (presetId) => `data:image/png;base64,${Buffer.from(presetId).toString('base64')}`
     )
-    const payload = JSON.parse(compiled.rendererPayload) as {
-      assets: Record<string, string>
-      conversationBubbles: {
-        user: { dataUrl: string }
-        codex: { dataUrl: string }
-        plan: { dataUrl: string }
-      }
-    }
 
     expect(Object.keys(compiled.assets).filter((asset) => asset.startsWith('builtin/conversation-bubbles/'))).toHaveLength(8)
-    expect(payload.assets).not.toHaveProperty('assets/codex-bubble.gif')
-    expect(Object.keys(payload.assets).some((asset) => asset.startsWith('builtin/conversation-bubbles/'))).toBe(false)
-    expect(payload.conversationBubbles.user.dataUrl).toBe('data:image/png;base64,daisy-heart')
-    expect(payload.conversationBubbles.codex.dataUrl).toBe('data:image/gif;base64,assets/codex-bubble.gif')
-    expect(payload.conversationBubbles.plan.dataUrl).toBe('data:image/png;base64,rainbow-candy')
+    expect(compiled.assets['assets/codex-bubble.gif']).toBe(`data:image/gif;base64,${Buffer.from('assets/codex-bubble.gif').toString('base64')}`)
+    expect(compiled.assets[conversationBubblePresetAssetKey('daisy-heart')]).toBe(`data:image/png;base64,${Buffer.from('daisy-heart').toString('base64')}`)
+    expect(compiled.assets[conversationBubblePresetAssetKey('rainbow-candy')]).toBe(`data:image/png;base64,${Buffer.from('rainbow-candy').toString('base64')}`)
   })
 
   it('keeps Studio and runtime CSS on the same undistorted frame and inner-fill primitives', async () => {

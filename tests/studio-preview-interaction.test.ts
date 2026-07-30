@@ -3,7 +3,7 @@ import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, RuntimeStatus, StudioApi } from '../src/shared/contracts'
+import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, ImportedMediaAsset, OperationProgress, RuntimeStatus, StudioApi } from '../src/shared/contracts'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { App } from '../src/renderer/src/App'
@@ -60,6 +60,8 @@ describe('Studio preview editing interaction', () => {
   let quitStudio: ReturnType<typeof vi.fn>
   let stopTheme: ReturnType<typeof vi.fn>
   let restoreCodex: ReturnType<typeof vi.fn>
+  let cancelOperation: ReturnType<typeof vi.fn>
+  let operationProgressListener: ((progress: OperationProgress) => void) | null
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
@@ -120,6 +122,8 @@ describe('Studio preview editing interaction', () => {
     quitStudio = vi.fn()
     stopTheme = vi.fn(async () => runtimeStatus)
     restoreCodex = vi.fn(async () => runtimeStatus)
+    cancelOperation = vi.fn(async () => undefined)
+    operationProgressListener = null
     createTheme = vi.fn(async (input: CreateThemeInput) => {
       const created = { ...createDefaultTheme('00000000-0000-4000-8000-000000000002', input.name), colors: { ...input.colors } }
       themeProfiles.push(created)
@@ -160,8 +164,6 @@ describe('Studio preview editing interaction', () => {
             ? selected.brandSignature.source.asset
             : null
           return {
-            css: '',
-            rendererPayload: '',
             assets: {
               'assets/polaroid.png': 'data:image/png;base64,AA==',
               ...(signatureGif ? { [signatureGif]: 'data:image/gif;base64,COMPILED' } : {}),
@@ -188,7 +190,13 @@ describe('Studio preview editing interaction', () => {
         importThemePath
       },
       files: { getPathForFile },
-      operations: { cancel: async () => undefined, subscribeProgress: () => () => undefined },
+      operations: {
+        cancel: cancelOperation,
+        subscribeProgress: (listener) => {
+          operationProgressListener = listener
+          return () => { operationProgressListener = null }
+        }
+      },
       codex: {
         detect: async () => ({ found: true, platform: 'win32', distribution: 'windows-store', version: 'test', executable: '', installationId: 'OpenAI.Codex_test', running: false, backupAvailable: false }),
         installTheme,
@@ -487,6 +495,101 @@ describe('Studio preview editing interaction', () => {
     expect(activateTheme).toHaveBeenCalledWith(alternateProfile.id)
     expect(container.querySelector('.theme-item.active strong')?.textContent).toBe('备用主题')
     expect([...container.querySelectorAll<HTMLButtonElement>('.theme-item')].every((button) => !button.disabled)).toBe(true)
+  })
+
+  it('serializes saving with theme switches and does not reactivate the saved theme', async () => {
+    const studio = (browserWindow as unknown as { studio: StudioApi }).studio
+    let finishUpdate: ((value: ThemeProfile) => void) | undefined
+    const updateTheme = vi.fn(async (next: ThemeProfile) => await new Promise<ThemeProfile>((resolve) => {
+      finishUpdate = resolve
+    }))
+    studio.themes.update = updateTheme
+    activateTheme.mockClear()
+    const saveButton = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    const alternateButton = [...container.querySelectorAll<HTMLButtonElement>('.theme-item')]
+      .find((item) => item.querySelector('strong')?.textContent === '备用主题')
+    if (!saveButton || !alternateButton) throw new Error('Theme operation controls are missing.')
+
+    await act(async () => {
+      saveButton.click()
+      saveButton.click()
+      alternateButton.click()
+      await Promise.resolve()
+    })
+
+    expect(updateTheme).toHaveBeenCalledTimes(1)
+    expect(activateTheme).not.toHaveBeenCalled()
+    expect([...container.querySelectorAll<HTMLButtonElement>('.theme-item')].every((button) => button.disabled)).toBe(true)
+    expect(container.querySelector('.preview-panel')?.hasAttribute('inert')).toBe(true)
+    expect(container.querySelector('.inspector')?.hasAttribute('inert')).toBe(true)
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe(profile.name)
+
+    act(() => {
+      operationProgressListener?.({
+        id: 'save-operation',
+        kind: 'media-import',
+        phase: 'validating',
+        processedBytes: 1,
+        totalBytes: 2,
+        message: '正在验证素材'
+      })
+    })
+    const cancelButton = container.querySelector<HTMLButtonElement>('.operation-progress button')
+    expect(cancelButton?.disabled).toBe(false)
+    act(() => cancelButton?.click())
+    expect(cancelOperation).toHaveBeenCalledWith('save-operation')
+
+    await act(async () => {
+      finishUpdate?.(structuredClone(profile))
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+
+    expect(activateTheme).not.toHaveBeenCalled()
+    expect(container.querySelector('.preview-panel')?.hasAttribute('inert')).toBe(false)
+    expect([...container.querySelectorAll<HTMLButtonElement>('.theme-item')].every((button) => !button.disabled)).toBe(true)
+  })
+
+  it('keeps delayed media imports bound to their source theme while switching is disabled', async () => {
+    let finishMedia: ((value: ImportedMediaAsset | null) => void) | undefined
+    selectMedia.mockImplementationOnce(async () => await new Promise((resolve) => {
+      finishMedia = resolve
+    }))
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.asset-picker')]
+      .find((button) => button.textContent?.includes('选择主视觉媒体'))
+    const alternateButton = [...container.querySelectorAll<HTMLButtonElement>('.theme-item')]
+      .find((item) => item.querySelector('strong')?.textContent === '备用主题')
+    if (!heroPicker || !alternateButton) throw new Error('Media operation controls are missing.')
+
+    await act(async () => {
+      heroPicker.click()
+      alternateButton.click()
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe(profile.name)
+    expect(alternateButton.disabled).toBe(true)
+
+    await act(async () => {
+      finishMedia?.({
+        reference: { asset: 'assets/delayed.png', kind: 'image', mimeType: 'image/png' },
+        relativePath: 'assets/delayed.png',
+        previewUrl: 'data:image/png;base64,AQ==',
+        originalName: 'delayed.png',
+        width: 1,
+        height: 1
+      })
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(container.querySelector<HTMLImageElement>('img[alt="主视觉"]')?.src).toContain('data:image/png;base64,AQ==')
+
+    await act(async () => {
+      alternateButton.click()
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(container.querySelector('.theme-item.active strong')?.textContent).toBe('备用主题')
+    expect(container.querySelector<HTMLImageElement>('img[alt="主视觉"]')).toBeNull()
   })
 
   it('keeps the current UI theme when activation fails after preparation', async () => {

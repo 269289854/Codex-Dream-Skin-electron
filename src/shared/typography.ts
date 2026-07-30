@@ -70,7 +70,15 @@ export const importedFontRecordSchema = z.object({
   asset: assetPathSchema,
   originalName: z.string().trim().min(1).max(180),
   format: z.enum(['ttf', 'otf', 'woff', 'woff2'])
-}).strict()
+}).strict().superRefine((font, context) => {
+  if (importedFontFormatForAsset(font.asset) !== font.format) {
+    context.addIssue({
+      code: 'custom',
+      path: ['format'],
+      message: 'Imported font format must match the asset extension.'
+    })
+  }
+})
 
 const importedFontsSchema = z.array(importedFontRecordSchema).max(64)
 
@@ -158,4 +166,19 @@ export function createDefaultTypography(): ThemeTypography {
 
 export function safeImportedFontFamily(id: string): string {
   return `Dream Imported ${id.replace(/[^a-z0-9-]/gi, '')}`
+}
+
+export function selectedImportedFonts(typography: ThemeTypography): ImportedFontRecord[] {
+  const selected = new Set(Object.values(typography.slots)
+    .filter((selection) => selection.kind === 'imported')
+    .map((selection) => selection.kind === 'imported' ? selection.id : ''))
+  return typography.importedFonts.filter((font) => selected.has(font.id))
+}
+
+export function importedFontFormatForAsset(asset: string): ImportedFontFormat | null {
+  const match = /\.([A-Za-z0-9]+)$/.exec(asset)
+  const extension = match?.[1]?.toLowerCase()
+  return extension === 'ttf' || extension === 'otf' || extension === 'woff' || extension === 'woff2'
+    ? extension
+    : null
 }

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { copyFile, mkdtemp, readFile, readdir, rename, rm, stat, truncate, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -15,9 +15,10 @@ import { CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS } from '../src/shared
 
 const roots: string[] = []
 const execFileAsync = promisify(execFile)
-const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
+const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64')
 const TEST_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 const ANIMATED_GIF_FRAME = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==', 'base64')
+const TEST_FONT = join(process.cwd(), 'resources', 'shared', 'fonts', 'dancing-script', 'dancing-script-latin-wght-normal.woff2')
 
 async function writeBundledSystemAssets(root: string): Promise<{ hero: string; polaroid: string }> {
   const assets = { hero: join(root, 'bundled-hero.png'), polaroid: join(root, 'bundled-polaroid.png') }
@@ -220,6 +221,57 @@ describe('ProfileStore', () => {
     expect((await cleaned.list()).find((theme) => theme.active)?.id).toBe(systemTheme.id)
   })
 
+  it('cleans controlled crash artifacts and only removes orphans from valid themes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-startup-cleanup-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('清理测试')
+    const imageSource = join(root, 'referenced.png')
+    await writeFile(imageSource, TEST_PNG)
+    const imported = await store.importAsset(profile.id, imageSource, 'hero')
+    profile.hero.source = { asset: imported.relativePath, kind: 'image', mimeType: 'image/png' }
+    await store.update(profile)
+
+    const assetsRoot = join(store.themesRoot, profile.id, 'assets')
+    const operationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    const rootJsonTemporary = join(root, `settings.json.${operationId}.tmp`)
+    const assetTemporary = join(assetsRoot, `hero.${operationId}.tmp`)
+    const videoTemporary = join(assetsRoot, `hero.${operationId}.tmp.mp4`)
+    const orphan = join(assetsRoot, 'orphan.png')
+    await Promise.all([
+      writeFile(rootJsonTemporary, 'temporary'),
+      writeFile(assetTemporary, 'temporary'),
+      writeFile(videoTemporary, 'temporary'),
+      writeFile(orphan, TEST_PNG),
+      mkdir(join(store.themesRoot, '.cdstheme-import-crash'), { recursive: true }),
+      mkdir(join(store.themesRoot, '.media-validate-crash'), { recursive: true })
+    ])
+
+    const corruptThemeId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    const corruptAssetsRoot = join(store.themesRoot, corruptThemeId, 'assets')
+    await mkdir(corruptAssetsRoot, { recursive: true })
+    const corruptOrdinaryAsset = join(corruptAssetsRoot, 'keep.png')
+    const corruptTemporary = join(corruptAssetsRoot, `font.${operationId}.tmp`)
+    await Promise.all([
+      writeFile(join(store.themesRoot, corruptThemeId, 'theme.json'), '{invalid'),
+      writeFile(corruptOrdinaryAsset, TEST_PNG),
+      writeFile(corruptTemporary, 'temporary')
+    ])
+
+    await new ProfileStore(root).initialize()
+
+    await expect(stat(join(store.themesRoot, profile.id, imported.relativePath))).resolves.toMatchObject({ size: TEST_PNG.byteLength })
+    await expect(stat(orphan)).rejects.toThrow()
+    await expect(stat(rootJsonTemporary)).rejects.toThrow()
+    await expect(stat(assetTemporary)).rejects.toThrow()
+    await expect(stat(videoTemporary)).rejects.toThrow()
+    await expect(stat(join(store.themesRoot, '.cdstheme-import-crash'))).rejects.toThrow()
+    await expect(stat(join(store.themesRoot, '.media-validate-crash'))).rejects.toThrow()
+    await expect(stat(corruptOrdinaryAsset)).resolves.toMatchObject({ size: TEST_PNG.byteLength })
+    await expect(stat(corruptTemporary)).rejects.toThrow()
+  })
+
   it('migrates legacy settings and keeps the original bundled theme editable but undeletable', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-system-theme-'))
     roots.push(root)
@@ -382,11 +434,11 @@ describe('ProfileStore', () => {
     await store.initialize()
     const profile = await store.create('字体主题')
     const source = join(root, 'my-font.woff2')
-    await writeFile(source, Buffer.from('wOF2'))
+    await copyFile(TEST_FONT, source)
 
     const imported = await store.importFontAsset(profile.id, source)
     expect(imported).toMatchObject({ family: 'my-font', format: 'woff2', mediaType: 'font/woff2', originalName: 'my-font.woff2' })
-    expect(imported.dataUrl).toBe('data:font/woff2;base64,d09GMg==')
+    expect(imported.dataUrl).toBe(`data:font/woff2;base64,${(await readFile(TEST_FONT)).toString('base64')}`)
     profile.typography.importedFonts.push({
       id: imported.id,
       family: imported.family,
@@ -468,7 +520,7 @@ describe('ProfileStore', () => {
     await expect(store.importAsset(profile.id, oversized, 'icon')).rejects.toThrow('5 MB')
     await expect(store.importAsset(profile.id, overDimension, 'icon')).rejects.toThrow('512px')
     await expect(store.importAsset(profile.id, overFrames, 'icon')).rejects.toThrow('180 帧')
-    await expect(store.importAsset(profile.id, wrongHeader, 'icon')).rejects.toThrow('文件头')
+    await expect(store.importAsset(profile.id, wrongHeader, 'icon')).rejects.toThrow('扩展名')
     expect((await readdir(join(store.themesRoot, profile.id, 'assets'))).some((entry) => entry.endsWith('.tmp'))).toBe(false)
   })
 
@@ -530,16 +582,9 @@ describe('ProfileStore', () => {
     await store.update(profile)
 
     const compiled = await store.compile(profile.id)
-    const payload = JSON.parse(compiled.rendererPayload) as {
-      assets: Record<string, string>
-      conversationBubbles: { user: { dataUrl: string }; codex: { dataUrl: string }; plan: { dataUrl: string } }
-    }
-    expect(payload.assets).not.toHaveProperty(user.relativePath)
-    expect(payload.assets).not.toHaveProperty(codex.relativePath)
-    expect(payload.assets).not.toHaveProperty(plan.relativePath)
-    expect(payload.conversationBubbles.user.dataUrl).toMatch(/^data:image\/png;base64,/)
-    expect(payload.conversationBubbles.codex.dataUrl).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
-    expect(payload.conversationBubbles.plan.dataUrl).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+    expect(compiled.assets[user.relativePath]).toMatch(/^data:image\/png;base64,/)
+    expect(compiled.assets[codex.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect(compiled.assets[plan.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
 
     const duplicate = await store.duplicate(profile, '自定义气泡副本')
     expect(duplicate.conversationBubbles).toEqual(profile.conversationBubbles)
@@ -842,7 +887,7 @@ describe('ProfileStore', () => {
     const imageSource = join(root, 'art.png')
     const fontSource = join(root, 'title.woff2')
     await writeFile(imageSource, TEST_PNG)
-    await writeFile(fontSource, Buffer.from('wOF2'))
+    await copyFile(TEST_FONT, fontSource)
     const image = await store.importAsset(profile.id, imageSource, 'hero')
     const font = await store.importFontAsset(profile.id, fontSource)
 
@@ -903,11 +948,15 @@ describe('ProfileStore', () => {
     const profile = await store.create('字体校验')
 
     const mismatched = join(root, 'mismatch.woff2')
-    await writeFile(mismatched, Buffer.from('OTTO'))
-    await expect(store.importFontAsset(profile.id, mismatched)).rejects.toThrow('header')
+    const mismatchedBytes = Buffer.alloc(12)
+    mismatchedBytes.write('OTTO')
+    await writeFile(mismatched, mismatchedBytes)
+    await expect(store.importFontAsset(profile.id, mismatched)).rejects.toThrow('扩展名')
     const collection = join(root, 'collection.ttf')
-    await writeFile(collection, Buffer.from('ttcf'))
-    await expect(store.importFontAsset(profile.id, collection)).rejects.toThrow('collection')
+    const collectionBytes = Buffer.alloc(12)
+    collectionBytes.write('ttcf')
+    await writeFile(collection, collectionBytes)
+    await expect(store.importFontAsset(profile.id, collection)).rejects.toThrow('集合')
     const unsupported = join(root, 'collection.ttc')
     await writeFile(unsupported, Buffer.from('ttcf'))
     await expect(store.importFontAsset(profile.id, unsupported)).rejects.toThrow('Unsupported')

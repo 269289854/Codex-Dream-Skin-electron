@@ -55,11 +55,8 @@ describe('GIF loop normalization', () => {
 
     const compiled = await compileTheme(profile, async () => `data:image/gif;base64,${finite.toString('base64')}`)
     const compiledBytes = Buffer.from(compiled.assets[asset]?.split(',')[1] ?? '', 'base64')
-    const runtimePayload = JSON.parse(compiled.rendererPayload) as { assets: Record<string, string> }
-    const runtimeBytes = Buffer.from(runtimePayload.assets[asset]?.split(',')[1] ?? '', 'base64')
 
     expect(readLoopCount(compiledBytes)).toBe(0)
-    expect(runtimeBytes).toEqual(compiledBytes)
   })
 
   it('normalizes finite and missing icon loops while generating a PNG first frame', async () => {

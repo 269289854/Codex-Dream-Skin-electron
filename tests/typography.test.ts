@@ -44,6 +44,10 @@ describe('typography model', () => {
     expect(() => themeTypographySchema.parse({ ...typography, slots: { ...typography.slots, homeHeading: { kind: 'imported', id: 'missing' } } })).toThrow()
     expect(() => themeTypographySchema.parse({ ...typography, slots: { ...typography.slots, ui: { kind: 'inherit' } } })).toThrow()
     expect(() => themeTypographySchema.parse({ ...typography, importedFonts: [...typography.importedFonts, typography.importedFonts[0]] })).toThrow()
+    expect(() => themeTypographySchema.parse({
+      ...typography,
+      importedFonts: [{ ...typography.importedFonts[0], asset: 'assets/font-123.ttf' }]
+    })).toThrow()
     expect(safeImportedFontFamily('font-123<script>')).toBe('Dream Imported font-123script')
   })
 })

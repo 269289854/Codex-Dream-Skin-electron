@@ -6,7 +6,7 @@ import {
   resolveAppearancePaint
 } from './appearance'
 import type { ThemeProfile } from './theme'
-import { BUILTIN_FONTS, safeImportedFontFamily, type FontSelection } from './typography'
+import { BUILTIN_FONTS, safeImportedFontFamily, selectedImportedFonts, type FontSelection } from './typography'
 
 export type ThemeStyleVariables = Record<`--dream-${string}`, string>
 
@@ -69,8 +69,7 @@ export function resolveFontFamily(profile: ThemeProfile, selection: FontSelectio
 }
 
 export function buildPreviewImportedFontCss(profile: ThemeProfile, assets: Record<string, string>): string {
-  const selected = new Set(Object.values(profile.typography.slots).filter((slot) => slot.kind === 'imported').map((slot) => slot.kind === 'imported' ? slot.id : ''))
-  return profile.typography.importedFonts.filter((font) => selected.has(font.id) && assets[font.asset]).map((font) => {
+  return selectedImportedFonts(profile.typography).filter((font) => assets[font.asset]).map((font) => {
     const format = font.format === 'ttf' ? 'truetype' : font.format === 'otf' ? 'opentype' : font.format
     return `@font-face { font-family: "${safeImportedFontFamily(font.id)}"; src: url("${assets[font.asset]}") format("${format}"); font-style: normal; font-weight: 100 900; font-display: swap; }`
   }).join('\n')

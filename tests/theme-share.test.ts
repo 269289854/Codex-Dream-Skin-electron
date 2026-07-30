@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, truncate, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { unzipSync, zipSync } from 'fflate'
@@ -26,7 +26,8 @@ import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, crea
 sharp.cache(false)
 
 const roots: string[] = []
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69R9WQAAAABJRU5ErkJggg==', 'base64')
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64')
+const testFont = join(process.cwd(), 'resources', 'shared', 'fonts', 'dancing-script', 'dancing-script-latin-wght-normal.woff2')
 const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 const CENTRAL_DIRECTORY_SIGNATURE = Buffer.from([0x50, 0x4b, 0x01, 0x02])
 
@@ -113,7 +114,7 @@ describe('theme share packages', () => {
     await writeFile(source, png)
     await sharp({ create: { width: 2, height: 2, channels: 4, background: '#7651d6' } }).webp().toFile(polaroidSource)
     await writeFile(gifSource, gif)
-    await writeFile(fontSource, Buffer.from('wOF2'))
+    await copyFile(testFont, fontSource)
     const image = await store.importAsset(original.id, source, 'hero')
     const polaroidImage = await store.importAsset(original.id, polaroidSource, 'polaroid')
     const windowReference = { asset: image.relativePath, kind: 'image' as const, mimeType: 'image/png' as const }

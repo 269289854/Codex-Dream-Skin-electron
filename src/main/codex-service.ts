@@ -19,6 +19,7 @@ import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CdpWatcher, type CdpMediaBinding, type CdpSnapshot } from './cdp-watcher'
 import type { ProfileStore } from './profile-store'
 import { buildRuntimeFontCss } from './theme-fonts'
+import { budgetDataUrls } from './embedded-assets'
 import {
   CodexInstallationIdentityError,
   type CodexPlatformDriver,
@@ -573,7 +574,7 @@ export class CodexService {
     const hero = profile.hero.source
       ? profile.hero.source.kind === 'image' ? compiled.assets[profile.hero.source.asset] : TRANSPARENT_PNG
       : profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
-    const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot)
+    const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot, budgetDataUrls(compiled.assets))
     const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
       source.kind === 'asset'

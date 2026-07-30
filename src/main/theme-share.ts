@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { parseThemeProfile, type MediaReference, type ThemeProfile } from '../shared/theme'
 import { conversationBubbleMediaReferences } from '../shared/conversation-bubbles'
 import { mediaMimeTypeForPath, mediaReferenceAssets } from '../shared/media'
-import type { ImportedFontFormat } from '../shared/typography'
+import { importedFontFormatForAsset, type ImportedFontFormat } from '../shared/typography'
 
 export const THEME_SHARE_FORMAT = 'codex-dream-skin-theme' as const
 export const THEME_SHARE_VERSION = 2 as const
@@ -82,7 +82,11 @@ export function validateThemeAssetReferences(profile: ThemeProfile): void {
     }
   }
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset' && assetKind(icon.asset) !== 'image') throw new Error('定制图标只能使用图片素材。')
-  for (const font of profile.typography.importedFonts) if (assetKind(font.asset) !== 'font') throw new Error('导入字体素材类型无效。')
+  for (const font of profile.typography.importedFonts) {
+    if (assetKind(font.asset) !== 'font' || importedFontFormatForAsset(font.asset) !== font.format) {
+      throw new Error('导入字体格式与素材扩展名不匹配。')
+    }
+  }
 }
 
 export function assetKind(path: string): 'image' | 'video' | 'font' {

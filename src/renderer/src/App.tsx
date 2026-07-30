@@ -61,6 +61,12 @@ interface PreparedTheme {
   assets: Record<string, string>
 }
 
+interface ThemeOperationToken {
+  sequence: number
+  themeId: string | null
+  generation: number
+}
+
 export function App(): React.JSX.Element {
   const [themes, setThemes] = useState<ThemeSummary[]>([])
   const [draft, setDraft] = useState<ThemeProfile | null>(null)
@@ -77,7 +83,7 @@ export function App(): React.JSX.Element {
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
   const [mediaBusy, setMediaBusy] = useState(false)
-  const [themeSwitchBusy, setThemeSwitchBusy] = useState(false)
+  const [themeOperationBusy, setThemeOperationBusy] = useState(false)
   const [optimizingVideoRole, setOptimizingVideoRole] = useState<VideoMediaRole | null>(null)
   const [videoInspections, setVideoInspections] = useState<Record<string, VideoAssetInspection | null>>({})
   const [operationProgress, setOperationProgress] = useState<OperationProgress | null>(null)
@@ -102,14 +108,45 @@ export function App(): React.JSX.Element {
   const popoverRef = useRef<HTMLDivElement>(null)
   const inspectorRef = useRef<HTMLElement>(null)
   const duplicateInputRef = useRef<HTMLInputElement>(null)
-  const shareBusyRef = useRef(false)
-  const mediaBusyRef = useRef(false)
-  const themeSwitchBusyRef = useRef(false)
+  const themeOperationBusyRef = useRef(false)
+  const themeOperationSequenceRef = useRef(0)
+  const activeThemeOperationRef = useRef<ThemeOperationToken | null>(null)
   const themeRequestGenerationRef = useRef(0)
   const historyRef = useRef<ThemeProfile[]>([])
   const historyGroupRef = useRef<string | null>(null)
   const dragCounterRef = useRef(0)
   const loadedThemeIdRef = useRef<string | null>(null)
+
+  const beginThemeOperation = useCallback((themeId: string | null): ThemeOperationToken | null => {
+    if (themeOperationBusyRef.current) return null
+    const token = {
+      sequence: ++themeOperationSequenceRef.current,
+      themeId,
+      generation: themeRequestGenerationRef.current
+    }
+    themeOperationBusyRef.current = true
+    activeThemeOperationRef.current = token
+    setThemeOperationBusy(true)
+    return token
+  }, [])
+
+  const isThemeOperationActive = useCallback((token: ThemeOperationToken): boolean =>
+    activeThemeOperationRef.current?.sequence === token.sequence, [])
+
+  const matchesThemeOperationContext = useCallback((token: ThemeOperationToken): boolean =>
+    token.generation === themeRequestGenerationRef.current &&
+    token.themeId !== null &&
+    token.themeId === loadedThemeIdRef.current, [])
+
+  const isThemeOperationCurrent = useCallback((token: ThemeOperationToken): boolean =>
+    isThemeOperationActive(token) && matchesThemeOperationContext(token), [isThemeOperationActive, matchesThemeOperationContext])
+
+  const finishThemeOperation = useCallback((token: ThemeOperationToken): void => {
+    if (!isThemeOperationActive(token)) return
+    activeThemeOperationRef.current = null
+    themeOperationBusyRef.current = false
+    setThemeOperationBusy(false)
+  }, [isThemeOperationActive])
 
   useEffect(() => {
     let active = true
@@ -162,31 +199,41 @@ export function App(): React.JSX.Element {
     return true
   }, [])
 
-  const loadTheme = useCallback(async (id: string, knownProfile?: ThemeProfile, activate = true): Promise<boolean> => {
-    if (themeSwitchBusyRef.current) return false
-    themeSwitchBusyRef.current = true
-    setThemeSwitchBusy(true)
+  const switchThemeWithinOperation = useCallback(async (
+    token: ThemeOperationToken,
+    id: string,
+    knownProfile?: ThemeProfile,
+    activate = true,
+    summaries?: ThemeSummary[]
+  ): Promise<boolean> => {
+    if (!isThemeOperationActive(token)) return false
     const generation = ++themeRequestGenerationRef.current
+    token.themeId = id
+    token.generation = generation
+    const prepared = await prepareTheme(id, knownProfile)
+    if (!isThemeOperationActive(token) || generation !== themeRequestGenerationRef.current) return false
+    if (activate) await window.studio.themes.activate(id)
+    if (!isThemeOperationActive(token) || generation !== themeRequestGenerationRef.current) return false
+    return commitPreparedTheme(prepared, generation, summaries)
+  }, [commitPreparedTheme, isThemeOperationActive, prepareTheme])
+
+  const loadTheme = useCallback(async (id: string, knownProfile?: ThemeProfile, activate = true): Promise<boolean> => {
+    const token = beginThemeOperation(loadedThemeIdRef.current)
+    if (!token) return false
     setError(null)
     try {
-      const prepared = await prepareTheme(id, knownProfile)
-      if (generation !== themeRequestGenerationRef.current) return false
-      if (activate) await window.studio.themes.activate(id)
-      if (!commitPreparedTheme(prepared, generation)) return false
-      void refreshThemes(generation).catch((reason) => {
-        if (generation === themeRequestGenerationRef.current) setError(messageOf(reason))
+      if (!await switchThemeWithinOperation(token, id, knownProfile, activate)) return false
+      void refreshThemes(token.generation).catch((reason) => {
+        if (isThemeOperationCurrent(token)) setError(messageOf(reason))
       })
       return true
     } catch (reason) {
-      if (generation === themeRequestGenerationRef.current) setError(messageOf(reason))
+      if (isThemeOperationActive(token)) setError(messageOf(reason))
       throw reason
     } finally {
-      if (generation === themeRequestGenerationRef.current) {
-        themeSwitchBusyRef.current = false
-        setThemeSwitchBusy(false)
-      }
+      finishThemeOperation(token)
     }
-  }, [commitPreparedTheme, prepareTheme, refreshThemes])
+  }, [beginThemeOperation, finishThemeOperation, isThemeOperationActive, isThemeOperationCurrent, refreshThemes, switchThemeWithinOperation])
 
   useEffect(() => {
     void refreshThemes().then((items) => {
@@ -360,6 +407,7 @@ export function App(): React.JSX.Element {
   }, [draft?.copy.headingTemplate, draft?.copy.subtitle, draft?.decorations.homeHeading.visible, draft?.decorations.homeHeading.text, draft?.decorations.homeHeading.fontSize, draft?.typography.slots.homeHeading, draft?.typography.slots.homeSubtitle, draft?.typography.slots.homeHeadingDecoration, previewMode, previewScale])
 
   const change = (mutator: (profile: ThemeProfile) => void, historyGroup?: string): void => {
+    if (themeOperationBusyRef.current) return
     setDraft((current) => {
       if (!current) return current
       if (!historyGroup || historyGroupRef.current !== historyGroup) {
@@ -373,43 +421,82 @@ export function App(): React.JSX.Element {
     })
   }
 
+  const changeForThemeOperation = (token: ThemeOperationToken, mutator: (profile: ThemeProfile) => void, historyGroup?: string): void => {
+    if (!isThemeOperationCurrent(token)) return
+    setDraft((current) => {
+      if (!current || current.id !== token.themeId || !matchesThemeOperationContext(token)) return current
+      if (!historyGroup || historyGroupRef.current !== historyGroup) {
+        historyRef.current.push(structuredClone(current))
+        if (historyRef.current.length > 60) historyRef.current.shift()
+      }
+      historyGroupRef.current = historyGroup ?? null
+      const next = structuredClone(current)
+      mutator(next)
+      return next
+    })
+  }
+
+  const mergeAssetsForThemeOperation = (token: ThemeOperationToken, additions: Record<string, string>): void => {
+    if (!isThemeOperationCurrent(token)) return
+    setAssets((current) => matchesThemeOperationContext(token) ? { ...current, ...additions } : current)
+  }
+
   const endHistoryGroup = (): void => { historyGroupRef.current = null }
 
-  const save = async (): Promise<boolean> => {
-    if (!draft) return false
-    const copyError = headingTemplateError(draft.copy.headingTemplate) ??
-      (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null) ??
-      brandCopyError(draft.copy)
+  const saveWithinOperation = async (token: ThemeOperationToken, profile: ThemeProfile): Promise<boolean> => {
+    if (!isThemeOperationCurrent(token) || profile.id !== token.themeId) return false
+    const copyError = headingTemplateError(profile.copy.headingTemplate) ??
+      (profile.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null) ??
+      brandCopyError(profile.copy)
     if (copyError) {
-      setError(copyError)
+      if (isThemeOperationCurrent(token)) setError(copyError)
       return false
     }
     setSaving(true)
     setError(null)
     try {
-      const saved = await window.studio.themes.update(draft)
-      await window.studio.themes.activate(saved.id)
-      setDraft(saved)
+      const saved = await window.studio.themes.update(profile)
+      if (!isThemeOperationCurrent(token) || saved.id !== token.themeId) return false
+      setDraft((current) => current?.id === token.themeId && matchesThemeOperationContext(token) ? saved : current)
       historyRef.current = []
       historyGroupRef.current = null
-      await refreshThemes()
-      return true
+      await refreshThemes(token.generation)
+      return isThemeOperationCurrent(token)
     } catch (reason) {
-      setError(messageOf(reason))
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
       return false
-    } finally { setSaving(false) }
+    } finally {
+      if (isThemeOperationActive(token)) setSaving(false)
+    }
+  }
+
+  const save = async (): Promise<boolean> => {
+    if (!draft) return false
+    const token = beginThemeOperation(draft.id)
+    if (!token) return false
+    try {
+      return await saveWithinOperation(token, structuredClone(draft))
+    } finally {
+      finishThemeOperation(token)
+    }
   }
 
   const createTheme = async (input: CreateThemeInput): Promise<void> => {
-    const profile = await window.studio.themes.create(input)
-    const loaded = await loadTheme(profile.id, profile)
-    if (!loaded) throw new Error('主题切换正在进行，请稍后重试。')
-    setCreateDialogOpen(false)
-    setNotice(`已创建主题“${profile.name}”`)
+    const token = beginThemeOperation(loadedThemeIdRef.current)
+    if (!token) throw new Error('另一项主题操作正在进行，请稍后重试。')
+    try {
+      const profile = await window.studio.themes.create(input)
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+      if (!isThemeOperationCurrent(token)) return
+      setCreateDialogOpen(false)
+      setNotice(`已创建主题“${profile.name}”`)
+    } finally {
+      finishThemeOperation(token)
+    }
   }
 
   const openDuplicateDialog = (): void => {
-    if (!draft || duplicateBusy || themeSwitchBusyRef.current) return
+    if (!draft || duplicateBusy || themeOperationBusyRef.current) return
     const suffix = ' 副本'
     setDuplicateName(`${draft.name.slice(0, 80 - suffix.length)}${suffix}`)
     setDuplicateError(null)
@@ -421,32 +508,36 @@ export function App(): React.JSX.Element {
   const restoreDefault = async (): Promise<void> => {
     if (!draft || resetting) return
     const themeId = draft.id
+    const token = beginThemeOperation(themeId)
+    if (!token) return
     setResetting(true)
     setError(null)
     setNotice(null)
     try {
       const profile = await window.studio.themes.getDefault(themeId)
+      if (!isThemeOperationCurrent(token)) return
       const restoredAssets: Record<string, string> = {}
       for (const source of [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source, profile.accountMenuBackground.source, profile.brandSignature.source, profile.decorations.composerMelody.source, ...conversationBubbleMediaReferences(profile)]) {
         if (!source) continue
         restoredAssets[source.asset] = await window.studio.assets.getPreviewUrl(themeId, source.asset)
+        if (!isThemeOperationCurrent(token)) return
       }
-      if (loadedThemeIdRef.current !== themeId) return
       setDraft((current) => {
-        if (!current || current.id !== themeId) return current
+        if (!current || current.id !== themeId || !matchesThemeOperationContext(token)) return current
         historyRef.current.push(structuredClone(current))
         if (historyRef.current.length > 60) historyRef.current.shift()
         historyGroupRef.current = null
         return profile
       })
-      setAssets((current) => ({ ...current, ...restoredAssets }))
+      mergeAssetsForThemeOperation(token, restoredAssets)
       setPreviewSelection(null)
       setInspectorAnchor(null)
       setNotice('已恢复默认预设，保存主题后生效。')
     } catch (reason) {
-      setError(messageOf(reason))
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
-      setResetting(false)
+      if (isThemeOperationActive(token)) setResetting(false)
+      finishThemeOperation(token)
     }
   }
 
@@ -464,64 +555,67 @@ export function App(): React.JSX.Element {
       setDuplicateError(nameError)
       return
     }
+    const source = structuredClone(draft)
+    const token = beginThemeOperation(source.id)
+    if (!token) return
     setDuplicateBusy(true)
     setDuplicateError(null)
     try {
-      const profile = await window.studio.themes.duplicate(draft, name)
-      const loaded = await loadTheme(profile.id, profile)
-      if (!loaded) throw new Error('主题切换正在进行，请稍后重试。')
+      const profile = await window.studio.themes.duplicate(source, name)
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+      if (!isThemeOperationCurrent(token)) return
       setDuplicateDialogOpen(false)
       setNotice(`已创建主题“${profile.name}”`)
     } catch (reason) {
-      setDuplicateError(messageOf(reason))
+      if (isThemeOperationActive(token)) setDuplicateError(messageOf(reason))
     } finally {
-      setDuplicateBusy(false)
+      if (isThemeOperationActive(token)) setDuplicateBusy(false)
+      finishThemeOperation(token)
     }
   }
 
-  const activateImportedTheme = async (profile: ThemeProfile): Promise<void> => {
-    const loaded = await loadTheme(profile.id, profile)
-    if (!loaded) throw new Error('主题切换正在进行，请稍后重试。')
-    setNotice(`已导入主题“${profile.name}”`)
-  }
-
   const exportTheme = async (): Promise<void> => {
-    if (!draft || shareBusyRef.current || themeSwitchBusyRef.current) return
+    if (!draft) return
     if (!window.studio.share) {
       setError('当前版本不支持主题分享。')
       return
     }
-    shareBusyRef.current = true
+    const profile = structuredClone(draft)
+    const token = beginThemeOperation(profile.id)
+    if (!token) return
     setShareBusy(true)
     setError(null)
     try {
-      const result = await window.studio.share.exportTheme(draft)
-      if (result) setNotice(`主题已导出为“${result.filePath.split(/[\\/]/).pop() ?? '分享文件'}”`)
+      const result = await window.studio.share.exportTheme(profile)
+      if (result && isThemeOperationCurrent(token)) setNotice(`主题已导出为“${result.filePath.split(/[\\/]/).pop() ?? '分享文件'}”`)
     } catch (reason) {
-      setError(messageOf(reason))
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
-      shareBusyRef.current = false
-      setShareBusy(false)
+      if (isThemeOperationActive(token)) setShareBusy(false)
+      finishThemeOperation(token)
     }
   }
 
   const importTheme = async (): Promise<void> => {
-    if (shareBusyRef.current || themeSwitchBusyRef.current) return
     if (!window.studio.share) {
       setError('当前版本不支持主题分享。')
       return
     }
-    shareBusyRef.current = true
+    const token = beginThemeOperation(loadedThemeIdRef.current)
+    if (!token) return
     setShareBusy(true)
     setError(null)
     try {
       const profile = await window.studio.share.importTheme()
-      if (profile) await activateImportedTheme(profile)
+      if (profile) {
+        if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+        if (isThemeOperationCurrent(token)) setNotice(`已导入主题“${profile.name}”`)
+      }
     } catch (reason) {
-      setError(messageOf(reason))
+      if (isThemeOperationActive(token)) setError(messageOf(reason))
     } finally {
-      shareBusyRef.current = false
-      setShareBusy(false)
+      if (isThemeOperationActive(token)) setShareBusy(false)
+      finishThemeOperation(token)
     }
   }
 
@@ -529,73 +623,75 @@ export function App(): React.JSX.Element {
     event.preventDefault()
     dragCounterRef.current = 0
     setShareDropActive(false)
-    if (shareBusyRef.current || themeSwitchBusyRef.current) return
     const file = event.dataTransfer.files[0]
     if (!file) return
     if (!window.studio.share || !window.studio.files) {
       setError('当前版本不支持主题分享。')
       return
     }
-    shareBusyRef.current = true
+    const token = beginThemeOperation(loadedThemeIdRef.current)
+    if (!token) return
     setShareBusy(true)
     setError(null)
     try {
       const path = window.studio.files.getPathForFile(file)
       const profile = await window.studio.share.importThemePath(path)
-      await activateImportedTheme(profile)
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+      if (isThemeOperationCurrent(token)) setNotice(`已导入主题“${profile.name}”`)
     } catch (reason) {
-      setError(messageOf(reason))
+      if (isThemeOperationActive(token)) setError(messageOf(reason))
     } finally {
-      shareBusyRef.current = false
-      setShareBusy(false)
+      if (isThemeOperationActive(token)) setShareBusy(false)
+      finishThemeOperation(token)
     }
   }
 
   const deleteTheme = async (): Promise<void> => {
-    if (!draft || themeSwitchBusyRef.current) return
+    if (!draft) return
     if (themes.find((theme) => theme.id === draft.id)?.system) {
       setError('系统默认主题不能删除。')
       return
     }
     if (!window.confirm(`删除主题“${draft.name}”？`)) return
-    themeSwitchBusyRef.current = true
-    setThemeSwitchBusy(true)
-    const generation = ++themeRequestGenerationRef.current
+    const themeId = draft.id
+    const token = beginThemeOperation(themeId)
+    if (!token) return
     setError(null)
     try {
-      await window.studio.themes.delete(draft.id)
+      await window.studio.themes.delete(themeId)
+      if (!isThemeOperationCurrent(token)) return
       const remaining = await window.studio.themes.list()
+      if (!isThemeOperationCurrent(token)) return
       const next = remaining.find((theme) => theme.active) ?? remaining[0]
       if (next) {
-        const prepared = await prepareTheme(next.id)
-        commitPreparedTheme(prepared, generation, remaining)
-      } else if (generation === themeRequestGenerationRef.current) {
+        await switchThemeWithinOperation(token, next.id, undefined, false, remaining)
+      } else if (isThemeOperationCurrent(token)) {
         setThemes([])
       }
     } catch (reason) {
-      if (generation === themeRequestGenerationRef.current) setError(messageOf(reason))
+      if (isThemeOperationActive(token)) setError(messageOf(reason))
     } finally {
-      if (generation === themeRequestGenerationRef.current) {
-        themeSwitchBusyRef.current = false
-        setThemeSwitchBusy(false)
-      }
+      finishThemeOperation(token)
     }
   }
 
   const selectImage = async (purpose: MediaAssetPurpose, requestedKind?: MediaSelectionKind): Promise<void> => {
-    if (!draft || mediaBusyRef.current || themeSwitchBusyRef.current) return
-    mediaBusyRef.current = true
+    if (!draft) return
+    const themeId = draft.id
+    const token = beginThemeOperation(themeId)
+    if (!token) return
     setMediaBusy(true)
+    setError(null)
     try {
       const imported = window.studio.assets.selectMedia
-        ? await window.studio.assets.selectMedia(draft.id, purpose, requestedKind)
-        : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble' ? null : await window.studio.assets.selectImage(draft.id, purpose).then((legacy) => legacy ? {
+        ? await window.studio.assets.selectMedia(themeId, purpose, requestedKind)
+        : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble' ? null : await window.studio.assets.selectImage(themeId, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
-      if (!imported) return
-      setAssets((current) => ({ ...current, [imported.relativePath]: imported.previewUrl }))
-      change((profile) => {
+      if (!imported || !isThemeOperationCurrent(token)) return
+      mergeAssetsForThemeOperation(token, { [imported.relativePath]: imported.previewUrl })
+      changeForThemeOperation(token, (profile) => {
         if (purpose === 'hero') {
           profile.hero.source = imported.reference
           if (imported.reference.kind === 'video') profile.hero.playback = { ...profile.hero.playback, sound: false }
@@ -629,32 +725,38 @@ export function App(): React.JSX.Element {
           profile.decorations.composerMelody.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
         }
       })
-    } catch (reason) { setError(messageOf(reason)) }
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    }
     finally {
-      mediaBusyRef.current = false
-      setMediaBusy(false)
+      if (isThemeOperationActive(token)) setMediaBusy(false)
+      finishThemeOperation(token)
     }
   }
 
   const optimizeVideo = async (role: VideoMediaRole): Promise<void> => {
-    if (!draft || mediaBusyRef.current) return
+    if (!draft) return
     const source = videoReferenceForRole(draft, role)
     if (source?.kind !== 'video' || source.videoVariants) return
-    mediaBusyRef.current = true
+    const token = beginThemeOperation(draft.id)
+    if (!token) return
     setMediaBusy(true)
     setOptimizingVideoRole(role)
     setError(null)
     try {
       const optimized = await window.studio.assets.optimizeVideo(draft.id, role, source.asset)
-      setAssets((current) => ({ ...current, [optimized.relativePath]: optimized.previewUrl }))
-      change((profile) => setVideoReferenceForRole(profile, role, optimized.reference, { width: optimized.width, height: optimized.height }))
+      if (!isThemeOperationCurrent(token)) return
+      mergeAssetsForThemeOperation(token, { [optimized.relativePath]: optimized.previewUrl })
+      changeForThemeOperation(token, (profile) => setVideoReferenceForRole(profile, role, optimized.reference, { width: optimized.width, height: optimized.height }))
       setNotice(`${videoRoleLabel(role)}已生成优化版，可随时切回原片。`)
     } catch (reason) {
-      setError(messageOf(reason))
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
-      mediaBusyRef.current = false
-      setMediaBusy(false)
-      setOptimizingVideoRole(null)
+      if (isThemeOperationActive(token)) {
+        setMediaBusy(false)
+        setOptimizingVideoRole(null)
+      }
+      finishThemeOperation(token)
     }
   }
 
@@ -663,42 +765,58 @@ export function App(): React.JSX.Element {
     const source = videoReferenceForRole(draft, role)
     if (source?.kind !== 'video' || !source.videoVariants || source.videoVariants.active === active) return
     const selected = source.videoVariants[active]
+    const token = beginThemeOperation(draft.id)
+    if (!token) return
     try {
       if (!assets[selected.asset]) {
         const previewUrl = await window.studio.assets.getPreviewUrl(draft.id, selected.asset)
-        setAssets((current) => ({ ...current, [selected.asset]: previewUrl }))
+        if (!isThemeOperationCurrent(token)) return
+        mergeAssetsForThemeOperation(token, { [selected.asset]: previewUrl })
       }
-      change((profile) => setVideoReferenceForRole(profile, role, activateVideoVariant(source, active), { width: selected.width, height: selected.height }))
+      changeForThemeOperation(token, (profile) => setVideoReferenceForRole(profile, role, activateVideoVariant(source, active), { width: selected.width, height: selected.height }))
     } catch (reason) {
-      setError(messageOf(reason))
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      finishThemeOperation(token)
     }
   }
 
   const importIcon = async (slot: IconSlot): Promise<void> => {
     if (!draft) return
+    const token = beginThemeOperation(draft.id)
+    if (!token) return
     try {
       const imported = await window.studio.assets.selectIcon(draft.id)
-      if (!imported) return
-      setAssets((current) => ({
-        ...current,
+      if (!imported || !isThemeOperationCurrent(token)) return
+      mergeAssetsForThemeOperation(token, {
         [imported.relativePath]: imported.dataUrl,
         ...(imported.gifPosterDataUrl ? { [iconGifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
-      }))
-      change((profile) => { profile.icons[slot] = { kind: 'asset', asset: imported.relativePath } })
-    } catch (reason) { setError(messageOf(reason)) }
+      })
+      changeForThemeOperation(token, (profile) => { profile.icons[slot] = { kind: 'asset', asset: imported.relativePath } })
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      finishThemeOperation(token)
+    }
   }
 
   const importFont = async (slot: TypographySlot): Promise<void> => {
     if (!draft) return
+    const token = beginThemeOperation(draft.id)
+    if (!token) return
     try {
       const imported = await window.studio.assets.selectFont(draft.id)
-      if (!imported) return
-      setAssets((current) => ({ ...current, [imported.relativePath]: imported.dataUrl }))
-      change((profile) => {
+      if (!imported || !isThemeOperationCurrent(token)) return
+      mergeAssetsForThemeOperation(token, { [imported.relativePath]: imported.dataUrl })
+      changeForThemeOperation(token, (profile) => {
         profile.typography.importedFonts.push({ id: imported.id, family: imported.family, asset: imported.relativePath, originalName: imported.originalName, format: imported.format })
         assignFontSlot(profile, slot, { kind: 'imported', id: imported.id })
       })
-    } catch (reason) { setError(messageOf(reason)) }
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      finishThemeOperation(token)
+    }
   }
 
   const removeImportedFont = (fontId: string): void => change((profile) => {
@@ -712,6 +830,7 @@ export function App(): React.JSX.Element {
   })
 
   const undo = (): void => {
+    if (themeOperationBusyRef.current) return
     endHistoryGroup()
     const previous = historyRef.current.pop()
     if (previous) setDraft(previous)
@@ -768,33 +887,62 @@ export function App(): React.JSX.Element {
   }
 
   const runRuntime = async (operation: () => Promise<RuntimeStatus>): Promise<void> => {
+    if (!draft) return
+    const token = beginThemeOperation(draft.id)
+    if (!token) return
     setRuntimeBusy(true)
     setError(null)
-    try { setRuntime(await operation()) } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
+    try {
+      const status = await operation()
+      if (isThemeOperationCurrent(token)) setRuntime(status)
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      if (isThemeOperationActive(token)) setRuntimeBusy(false)
+      finishThemeOperation(token)
+    }
   }
 
   const runSavedRuntime = async (operation: (themeId: string) => Promise<RuntimeStatus>): Promise<void> => {
     if (!draft) return
+    const profile = structuredClone(draft)
+    const token = beginThemeOperation(profile.id)
+    if (!token) return
     setRuntimeBusy(true)
     setError(null)
     try {
-      const themeId = draft.id
-      if (!(await save())) return
-      setRuntime(await operation(themeId))
-    } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
+      if (!await saveWithinOperation(token, profile)) return
+      const status = await operation(profile.id)
+      if (isThemeOperationCurrent(token)) setRuntime(status)
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      if (isThemeOperationActive(token)) setRuntimeBusy(false)
+      finishThemeOperation(token)
+    }
   }
 
   const startTheme = async (): Promise<void> => {
     if (!draft) return
+    const profile = structuredClone(draft)
+    const token = beginThemeOperation(profile.id)
+    if (!token) return
     setRuntimeBusy(true)
     setError(null)
     try {
-      if (!(await save())) return
+      if (!await saveWithinOperation(token, profile)) return
       const detection = await window.studio.codex.detect()
+      if (!isThemeOperationCurrent(token)) return
       const restart = detection.running && window.confirm('Codex 需要重启一次以启用本地主题端口。未提交的输入可能丢失，继续吗？')
       if (detection.running && !restart) return
-      setRuntime(await window.studio.codex.start(draft.id, restart))
-    } catch (reason) { setError(messageOf(reason)) } finally { setRuntimeBusy(false) }
+      const status = await window.studio.codex.start(profile.id, restart)
+      if (isThemeOperationCurrent(token)) setRuntime(status)
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      if (isThemeOperationActive(token)) setRuntimeBusy(false)
+      finishThemeOperation(token)
+    }
   }
 
   const runAppUpdate = async (): Promise<void> => {
@@ -822,14 +970,14 @@ export function App(): React.JSX.Element {
   }
 
   const beginPlacementDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (!draft) return
+    if (!draft || themeOperationBusyRef.current) return
     historyRef.current.push(structuredClone(draft))
     setDraggingPlacement(true)
     event.currentTarget.setPointerCapture(event.pointerId)
   }
 
   const movePlacement = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (!draggingPlacement || !previewRef.current) return
+    if (!draggingPlacement || themeOperationBusyRef.current || !previewRef.current) return
     const current = draft?.polaroid
     const layout = current?.sourceSize ? getPolaroidLayout(current.mode, current.sourceSize, current.fence as Fence) : null
     if (!current || !layout) return
@@ -910,7 +1058,7 @@ export function App(): React.JSX.Element {
       className="studio-shell"
       data-platform={appInfo?.platform ?? 'unknown'}
       onDragEnter={(event) => {
-        if (!event.dataTransfer.types.includes('Files')) return
+        if (themeOperationBusyRef.current || !event.dataTransfer.types.includes('Files')) return
         event.preventDefault()
         dragCounterRef.current += 1
         setShareDropActive(true)
@@ -955,11 +1103,11 @@ export function App(): React.JSX.Element {
       </div>}
       <section className="workspace">
         <aside className="theme-sidebar">
-          <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>我的主题</h2></div><button className="icon-button" title="新建主题" disabled={themeSwitchBusy} onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
+          <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>我的主题</h2></div><button className="icon-button" title="新建主题" disabled={themeOperationBusy} onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
           <div className="theme-list">
-            {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} disabled={themeSwitchBusy} onClick={() => { if (theme.id !== draft.id) void loadTheme(theme.id).catch(() => undefined) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题'}</small></span></button>)}
+            {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} disabled={themeOperationBusy} onClick={() => { if (theme.id !== draft.id) void loadTheme(theme.id).catch(() => undefined) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题'}</small></span></button>)}
           </div>
-          <div className="theme-actions"><button type="button" title="导出主题" disabled={shareBusy || themeSwitchBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title="导入主题" disabled={shareBusy || themeSwitchBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title="复制主题" disabled={duplicateBusy || shareBusy || themeSwitchBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={systemThemeSelected ? '系统主题不能删除' : '删除主题'} disabled={shareBusy || themeSwitchBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
+          <div className="theme-actions"><button type="button" title="导出主题" disabled={themeOperationBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title="导入主题" disabled={themeOperationBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title="复制主题" disabled={themeOperationBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={systemThemeSelected ? '系统主题不能删除' : '删除主题'} disabled={themeOperationBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
           {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title="关闭提示" onClick={() => setNotice(null)}><X size={13} /></button></div>}
           {operationProgress && <div className="operation-progress" role="status"><span>{operationProgress.message}</span>{operationProgress.totalBytes ? <small>{Math.round(operationProgress.processedBytes / operationProgress.totalBytes * 100)}%</small> : <small>处理中</small>}<button type="button" title="取消操作" onClick={() => void window.studio.operations?.cancel(operationProgress.id)}>取消</button></div>}
           <nav className="sidebar-nav">
@@ -970,8 +1118,8 @@ export function App(): React.JSX.Element {
           <div className="sidebar-footer"><CircleHelp size={15} />本地配置 · 可随时恢复</div>
         </aside>
 
-        <section className="preview-panel">
-          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><div className="preview-view-switch segmented-control" aria-label="预览页面"><button type="button" className={previewMode === 'home' ? 'active' : ''} title="首页预览" onClick={() => { setPreviewMode('home'); setPreviewSelection(null) }}><Home size={14} /></button><button type="button" className={previewMode === 'conversation' ? 'active' : ''} title="会话预览" onClick={() => { setPreviewMode('conversation'); setPreviewSelection(null) }}><MessageSquare size={14} /></button></div><button className="tool-button" title="撤销" disabled={themeSwitchBusy} onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" disabled={resetting || themeSwitchBusy} onClick={() => void restoreDefault()}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving || resetting || themeSwitchBusy} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
+        <section className="preview-panel" inert={themeOperationBusy ? true : undefined} aria-busy={themeOperationBusy}>
+          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><div className="preview-view-switch segmented-control" aria-label="预览页面"><button type="button" className={previewMode === 'home' ? 'active' : ''} title="首页预览" onClick={() => { setPreviewMode('home'); setPreviewSelection(null) }}><Home size={14} /></button><button type="button" className={previewMode === 'conversation' ? 'active' : ''} title="会话预览" onClick={() => { setPreviewMode('conversation'); setPreviewSelection(null) }}><MessageSquare size={14} /></button></div><button className="tool-button" title="撤销" disabled={themeOperationBusy} onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" disabled={resetting || themeOperationBusy} onClick={() => void restoreDefault()}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving || resetting || themeOperationBusy} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
           <div className="preview-stage" ref={previewStageRef}>
             <div className="preview-frame" style={{ width: HOME_PREVIEW_VIEWPORT.width * previewScale, height: HOME_PREVIEW_VIEWPORT.height * previewScale }}>
               <div
@@ -1052,8 +1200,8 @@ export function App(): React.JSX.Element {
           </div>
         </section>
 
-        <aside className="inspector" ref={inspectorRef}>
-          <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div><ChevronDown size={16} /></div>
+        <aside className="inspector" ref={inspectorRef} inert={themeOperationBusy ? true : undefined} aria-busy={themeOperationBusy}>
+          <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => { const name = event.currentTarget.value; change((profile) => { profile.name = name }) }} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
             <Property title="视频播放" anchor="visual-video-playback" highlighted={inspectorAnchor === 'visual-video-playback'}><VideoPlaybackPanel profile={draft} inspections={videoInspections} optimizingRole={optimizingVideoRole} onChange={change} onOptimize={(role) => { void optimizeVideo(role) }} onActivateVariant={(role, variant) => { void activateVideoVariantForRole(role, variant) }} /></Property>
             <Property title="整个窗口背景" anchor="visual-window-background" highlighted={inspectorAnchor === 'visual-window-background'}><WindowBackgroundControls profile={draft} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('windowBackground', kind) }} /></Property>

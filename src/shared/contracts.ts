@@ -66,8 +66,6 @@ export interface ImportedFontAsset {
 }
 
 export interface CompiledTheme {
-  css: string
-  rendererPayload: string
   assets: Record<string, string>
 }
 

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, open, readFile, readdir, rename, rm, rmdir, stat, statfs, writeFile } from 'node:fs/promises'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { Transform } from 'node:stream'
@@ -12,12 +12,12 @@ const archiver = nodeRequire('archiver') as typeof import('archiver')
 const yauzl = nodeRequire('yauzl') as typeof import('yauzl')
 import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type ConversationBubblePresetId, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoAssetVariant } from '../shared/theme'
 import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
-import type { ImportedFontFormat } from '../shared/typography'
-import { compileTheme } from './theme-compiler'
+import { importedFontFormatForAsset, type ImportedFontFormat } from '../shared/typography'
+import { compileTheme, compiledAssetNames } from './theme-compiler'
 import { createVideoVariantReference, mediaMimeTypeForPath, mediaReferenceAssets, mediaReferenceForPath } from '../shared/media'
 import { conversationBubbleMediaReferences } from '../shared/conversation-bubbles'
 import { ensureGifInfiniteLoop } from '../shared/gif'
-import { MAX_ICON_GIF_BYTES } from '../shared/icon-assets'
+import { iconGifPosterAssetKey, MAX_ICON_GIF_BYTES } from '../shared/icon-assets'
 import { inspectIconGif, prepareIconGif } from './icon-assets'
 import {
   addShareUncompressedBytes,
@@ -38,6 +38,9 @@ import {
 } from './theme-share'
 import { assertOptimizedVideoInspection, transcodeVideo } from './video-transcoder'
 import { assertPortableVideoInspection, isPortableVideo } from './video-compatibility'
+import { inspectImageBytes, validateFontBytes } from './asset-validation'
+import { dataUrlByteLength, EmbeddedAssetBudget } from './embedded-assets'
+import { budgetSelectedBuiltinFonts } from './theme-fonts'
 
 interface StudioSettings {
   version: 2
@@ -54,6 +57,7 @@ interface BundledSystemThemeAssets {
   hero: string
   polaroid: string
   conversationBubbles?: Record<ConversationBubblePresetId, string>
+  resourcesRoot?: string
 }
 
 export interface VideoSourcePreflight {
@@ -77,6 +81,9 @@ const MAX_CONVERSATION_BUBBLE_BYTES = 10 * 1024 * 1024
 const MAX_CONVERSATION_BUBBLE_DIMENSION = 2048
 const MAX_CONVERSATION_BUBBLE_GIF_FRAMES = 180
 const THEME_DELETE_TOMBSTONE_PATTERN = /^\.theme-delete-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-[0-9a-f-]{36}$/i
+const THEME_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const CONTROLLED_TEMP_DIRECTORY_PATTERN = /^\.(?:cdstheme-import|media-validate)-/
+const CONTROLLED_TEMP_FILE_PATTERN = /\.[0-9a-f]{8}-[0-9a-f-]{27}\.tmp(?:\.mp4)?$/i
 
 export class ProfileStore {
   readonly themesRoot: string
@@ -90,12 +97,14 @@ export class ProfileStore {
 
   async initialize(): Promise<void> {
     await mkdir(this.themesRoot, { recursive: true })
+    await this.cleanupStartupArtifacts()
     let settings: StudioSettings
     try {
       settings = await this.readSettings()
     } catch {
       const profile = await this.createSystemTheme()
       await this.writeSettings({ version: 2, activeThemeId: profile.id, systemThemeId: profile.id })
+      await this.cleanupOrphanedAssets()
       return
     }
     await this.reconcileThemeTombstones(settings)
@@ -104,14 +113,15 @@ export class ProfileStore {
     const activeExists = settings.activeThemeId === settings.systemThemeId
       ? systemExists
       : await this.get(settings.activeThemeId).then(() => true).catch(() => false)
-    if (systemExists && activeExists) return
-
-    const systemThemeId = systemExists ? settings.systemThemeId : (await this.createSystemTheme()).id
-    await this.writeSettings({
-      version: 2,
-      activeThemeId: activeExists ? settings.activeThemeId : systemThemeId,
-      systemThemeId
-    })
+    if (!systemExists || !activeExists) {
+      const systemThemeId = systemExists ? settings.systemThemeId : (await this.createSystemTheme()).id
+      await this.writeSettings({
+        version: 2,
+        activeThemeId: activeExists ? settings.activeThemeId : systemThemeId,
+        systemThemeId
+      })
+    }
+    await this.cleanupOrphanedAssets()
   }
 
   async list(): Promise<ThemeSummary[]> {
@@ -154,6 +164,7 @@ export class ProfileStore {
     await this.get(source.id)
     await this.validateProfileMedia(source)
     await this.validateProfileAssets(source)
+    await this.assertProfileEmbeddedBudget(source)
     const duplicate = { ...structuredClone(source), id: randomUUID(), name: this.cleanName(name), updatedAt: new Date().toISOString() }
     const duplicateRoot = this.themeRoot(duplicate.id)
     try {
@@ -181,6 +192,7 @@ export class ProfileStore {
     const profile = createShareProfile(localProfile)
     await this.validateProfileMedia(profile)
     await this.validateProfileAssets(profile)
+    await this.assertProfileEmbeddedBudget(profile, undefined, signal, '主题导出已取消。')
     this.throwIfAborted(signal, '主题导出已取消。')
     if (typeof destinationPath !== 'string' || !isAbsolute(destinationPath)) throw new Error('分享包保存路径必须是绝对路径。')
     const sourceAssets = new Map<string, string>()
@@ -262,6 +274,7 @@ export class ProfileStore {
         }
       }
       for (const asset of manifest.assets) if (!entries.has(asset.path)) throw new Error(`分享包缺少素材: ${asset.path}`)
+      await this.assertProfileEmbeddedBudget(source, (asset) => this.resolveWithinRoot(temporaryRoot, asset), signal, '主题导入已取消。')
 
       const imported = parseThemeProfile({ ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString(), resetColors: { ...source.colors } })
       const importedRoot = this.themeRoot(imported.id)
@@ -280,6 +293,7 @@ export class ProfileStore {
     const previous = await this.get(profile.id)
     await this.validateProfileMedia(profile)
     await this.validateProfileAssets(profile)
+    await this.assertProfileEmbeddedBudget(profile)
     const next = { ...profile, name: this.cleanName(profile.name), updatedAt: new Date().toISOString() }
     for (const asset of this.collectAssets(next)) this.resolveAsset(next.id, asset)
     await this.writeProfile(next)
@@ -331,6 +345,7 @@ export class ProfileStore {
     const extension = extname(sourcePath).toLowerCase()
     if (extension !== '.svg' && !RASTER_EXTENSIONS.has(extension)) throw new Error('Unsupported image format.')
     if (extension === '.gif' && purpose !== 'icon') throw new Error('GIF 仅支持作为自定义图标导入。')
+    if (extension === '.gif' && sourceStat.size > MAX_ICON_GIF_BYTES) throw new Error('GIF 图标不能超过 5 MB。')
     const outputExtension = extension === '.svg' ? '.png' : extension
     const relativePath = `assets/${purpose}-${randomUUID()}${outputExtension}`
     const destination = this.resolveAsset(themeId, relativePath)
@@ -343,9 +358,13 @@ export class ProfileStore {
       if (extension === '.svg') {
         const source = await readFile(sourcePath, 'utf8')
         this.assertSafeSvg(source)
+        await this.inspectImage(Buffer.from(source), extension)
         await sharp(Buffer.from(source)).png().toFile(temporary)
+        importedMetadata = await this.inspectImage(temporary, '.png')
       } else if (extension === '.gif') {
-        const prepared = await prepareIconGif(await readFile(sourcePath))
+        const source = await readFile(sourcePath)
+        await this.inspectImage(source, extension)
+        const prepared = await prepareIconGif(source)
         await writeFile(temporary, prepared.bytes)
         gifPosterDataUrl = prepared.posterDataUrl
         importedMetadata = prepared
@@ -385,37 +404,52 @@ export class ProfileStore {
 
     const extension = extname(sourcePath).toLowerCase().slice(1) as ImportedFontFormat
     if (!FONT_EXTENSIONS.has(extension)) throw new Error('Unsupported font format.')
-    const header = await readFile(sourcePath).then((data) => data.subarray(0, 4))
-    this.assertFontHeader(extension, header)
+    const data = await readFile(sourcePath)
+    if (data.byteLength !== sourceStat.size || data.byteLength > MAX_FONT_BYTES) throw new Error('字体文件在读取期间发生变化。')
+    await validateFontBytes(data, extension)
 
     const relativePath = `assets/font-${randomUUID()}.${extension}`
     const destination = this.resolveAsset(themeId, relativePath)
+    const temporary = `${destination}.${randomUUID()}.tmp`
     await mkdir(dirname(destination), { recursive: true })
-    await copyFile(sourcePath, destination)
-    const originalName = basename(sourcePath)
-    const family = basename(sourcePath, extname(sourcePath)).trim().slice(0, 80) || 'Imported font'
-    return {
-      id: `font-${randomUUID()}`,
-      relativePath,
-      dataUrl: await this.readAssetDataUrl(themeId, relativePath),
-      mediaType: this.fontMediaType(extension),
-      originalName,
-      family,
-      format: extension
+    try {
+      await writeFile(temporary, data, { flag: 'wx' })
+      await this.syncFile(temporary)
+      await rename(temporary, destination)
+      this.trackPendingAsset(themeId, relativePath)
+      const originalName = basename(sourcePath)
+      const family = basename(sourcePath, extname(sourcePath)).trim().slice(0, 80) || 'Imported font'
+      return {
+        id: `font-${randomUUID()}`,
+        relativePath,
+        dataUrl: await this.readAssetDataUrl(themeId, relativePath),
+        mediaType: this.fontMediaType(extension),
+        originalName,
+        family,
+        format: extension
+      }
+    } catch (error) {
+      await Promise.all([
+        rm(temporary, { force: true }).catch(() => undefined),
+        rm(destination, { force: true }).catch(() => undefined)
+      ])
+      throw error
     }
   }
 
   async compile(id: string): Promise<CompiledTheme> {
     const profile = await this.get(id)
+    await this.assertProfileEmbeddedBudget(profile)
+    const budget = new EmbeddedAssetBudget()
     const readPreset = this.bundledSystemAssets?.conversationBubbles
       ? async (presetId: ConversationBubblePresetId): Promise<string> => {
         const path = this.bundledSystemAssets?.conversationBubbles?.[presetId]
         if (!path) throw new Error(`内置聊天气泡预设缺失: ${presetId}`)
-        const data = await readFile(path).catch(() => { throw new Error(`内置聊天气泡预设无法读取: ${presetId}`) })
+        const data = await this.readEmbeddedFile(path, `builtin/conversation-bubbles/${presetId}`, budget)
         return `data:image/png;base64,${data.toString('base64')}`
       }
       : undefined
-    return compileTheme(profile, (asset) => this.readAssetDataUrl(id, asset), readPreset)
+    return compileTheme(profile, (asset) => this.readAssetDataUrl(id, asset, budget), readPreset)
   }
 
   resolveAsset(themeId: string, asset: string): string {
@@ -430,13 +464,64 @@ export class ProfileStore {
     return candidate
   }
 
-  private async readAssetDataUrl(themeId: string, asset: string): Promise<string> {
+  private async readAssetDataUrl(themeId: string, asset: string, budget?: EmbeddedAssetBudget): Promise<string> {
     const path = this.resolveAsset(themeId, asset)
-    const data = await readFile(path)
+    const data = await this.readEmbeddedFile(path, asset, budget)
     return `data:${this.mediaType(extname(path).toLowerCase())};base64,${data.toString('base64')}`
   }
 
   private collectAssets(profile: ThemeProfile): string[] { return collectThemeAssets(profile) }
+
+  private async readEmbeddedFile(path: string, key: string, budget?: EmbeddedAssetBudget): Promise<Buffer> {
+    const handle = await open(path, 'r')
+    try {
+      const before = await handle.stat()
+      if (!before.isFile()) throw new Error(`主题素材不是普通文件: ${key}`)
+      budget?.set(key, before.size)
+      const data = await handle.readFile()
+      const after = await handle.stat()
+      if (after.size !== before.size || data.byteLength !== before.size) throw new Error(`主题素材在读取期间发生变化: ${key}`)
+      return data
+    } finally {
+      await handle.close()
+    }
+  }
+
+  private async assertProfileEmbeddedBudget(
+    profile: ThemeProfile,
+    resolveAssetPath: (asset: string) => string = (asset) => this.resolveAsset(profile.id, asset),
+    signal?: AbortSignal,
+    cancelledMessage = '主题操作已取消。'
+  ): Promise<void> {
+    const budget = new EmbeddedAssetBudget()
+    const gifIconAssets = new Set(Object.values(profile.icons)
+      .filter((icon) => icon.kind === 'asset' && extname(icon.asset).toLowerCase() === '.gif')
+      .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
+    const brandSignatureGifAsset = profile.brandSignature.source?.mimeType === 'image/gif'
+      ? profile.brandSignature.source.asset
+      : null
+    for (const asset of compiledAssetNames(profile)) {
+      this.throwIfAborted(signal, cancelledMessage)
+      const source = resolveAssetPath(asset)
+      const data = await this.readEmbeddedFile(source, asset, budget)
+      if (gifIconAssets.has(asset)) {
+        const prepared = await prepareIconGif(data)
+        budget.set(asset, prepared.bytes.byteLength)
+        budget.set(iconGifPosterAssetKey(asset), dataUrlByteLength(prepared.posterDataUrl))
+      } else if (asset === brandSignatureGifAsset) {
+        budget.set(asset, ensureGifInfiniteLoop(data).byteLength)
+      }
+    }
+    if (this.bundledSystemAssets?.conversationBubbles) {
+      for (const [presetId, path] of Object.entries(this.bundledSystemAssets.conversationBubbles)) {
+        this.throwIfAborted(signal, cancelledMessage)
+        await this.readEmbeddedFile(path, `builtin/conversation-bubbles/${presetId}`, budget)
+      }
+    }
+    if (this.bundledSystemAssets?.resourcesRoot) {
+      await budgetSelectedBuiltinFonts(profile, this.bundledSystemAssets.resourcesRoot, budget)
+    }
+  }
 
   private async importOptimizedVideo(themeId: string, sourcePath: string, purpose: VideoMediaRole, inspection: VideoAssetInspection, signal?: AbortSignal): Promise<ImportedMediaAsset> {
     const preserveOriginal = inspection.portable
@@ -613,6 +698,59 @@ export class ProfileStore {
     }
   }
 
+  private async cleanupStartupArtifacts(): Promise<void> {
+    const rootEntries = await readdir(this.root, { withFileTypes: true }).catch(() => [])
+    await Promise.all(rootEntries
+      .filter((entry) => !entry.isDirectory() && CONTROLLED_TEMP_FILE_PATTERN.test(entry.name))
+      .map((entry) => rm(join(this.root, entry.name), { force: true }).catch(() => undefined)))
+
+    const themeEntries = await readdir(this.themesRoot, { withFileTypes: true })
+    for (const entry of themeEntries) {
+      const entryPath = join(this.themesRoot, entry.name)
+      if (entry.isDirectory() && CONTROLLED_TEMP_DIRECTORY_PATTERN.test(entry.name)) {
+        await rm(entryPath, { recursive: true, force: true })
+        continue
+      }
+      if (entry.isDirectory() && THEME_ID_PATTERN.test(entry.name)) await this.cleanupControlledTempFiles(entryPath)
+      else if (!entry.isDirectory() && CONTROLLED_TEMP_FILE_PATTERN.test(entry.name)) await rm(entryPath, { force: true })
+    }
+  }
+
+  private async cleanupControlledTempFiles(directory: string): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      const entryPath = join(directory, entry.name)
+      if (entry.isDirectory()) await this.cleanupControlledTempFiles(entryPath)
+      else if (CONTROLLED_TEMP_FILE_PATTERN.test(entry.name)) await rm(entryPath, { force: true }).catch(() => undefined)
+    }
+  }
+
+  private async cleanupOrphanedAssets(): Promise<void> {
+    const entries = await readdir(this.themesRoot, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !THEME_ID_PATTERN.test(entry.name)) continue
+      const profile = await this.get(entry.name).catch(() => null)
+      if (!profile) continue
+      const retained = new Set(this.collectAssets(profile))
+      const themeRoot = this.themeRoot(profile.id)
+      await this.cleanupOrphanedAssetDirectory(this.assetRoot(profile.id), themeRoot, retained)
+    }
+  }
+
+  private async cleanupOrphanedAssetDirectory(directory: string, themeRoot: string, retained: Set<string>): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      const entryPath = join(directory, entry.name)
+      if (entry.isDirectory()) {
+        await this.cleanupOrphanedAssetDirectory(entryPath, themeRoot, retained)
+        await rmdir(entryPath).catch(() => undefined)
+        continue
+      }
+      const asset = relative(themeRoot, entryPath).split(requireSeparator()).join('/')
+      if (!retained.has(asset)) await rm(entryPath, { force: true }).catch(() => undefined)
+    }
+  }
+
   private async syncParentDirectory(path: string): Promise<void> {
     let directory: Awaited<ReturnType<typeof open>> | null = null
     try {
@@ -659,9 +797,9 @@ export class ProfileStore {
     } else if (extension === '.svg') {
       const source = await readFile(sourcePath, 'utf8')
       this.assertSafeSvg(source)
-      metadata = await this.inspectImage(sourcePath, extension)
+      metadata = await this.inspectImage(Buffer.from(source), extension, signal, '媒体导入已取消。')
     } else {
-      metadata = await this.inspectImage(sourcePath, extension)
+      metadata = await this.inspectImage(sourcePath, extension, signal, '媒体导入已取消。')
     }
     if (conversationBubble) this.assertConversationBubbleInspection(metadata, extension)
     await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
@@ -683,6 +821,7 @@ export class ProfileStore {
         this.assertSafeSvg(source)
         await sharp(Buffer.from(source)).png().toFile(temporary)
         this.throwIfAborted(signal, '媒体导入已取消。')
+        metadata = await this.inspectImage(temporary, '.png', signal, '媒体导入已取消。')
       } else if (purpose === 'brandSignature' && extension === '.gif') {
         const normalized = ensureGifInfiniteLoop(await readFile(sourcePath, { signal }))
         if (normalized.byteLength > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
@@ -1090,7 +1229,7 @@ export class ProfileStore {
     const file = await stat(path)
     if (kind === 'image') {
       if (file.size > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
-      await this.inspectImage(await readFile(path), extname(asset).toLowerCase())
+      await this.inspectImage(path, extname(asset).toLowerCase(), signal, '主题导入已取消。')
       return
     }
     if (kind === 'video') {
@@ -1099,18 +1238,16 @@ export class ProfileStore {
       return
     }
     if (file.size > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
-    const header = await readFile(path).then((data) => data.subarray(0, 4))
-    this.assertFontHeader(extname(asset).toLowerCase().slice(1) as ImportedFontFormat, header)
+    const format = extname(asset).toLowerCase().slice(1) as ImportedFontFormat
+    const data = await readFile(path, { signal })
+    if (data.byteLength !== file.size) throw new Error('字体素材在读取期间发生变化。')
+    await validateFontBytes(data, format, signal, '主题导入已取消。')
   }
 
   private async validateShareAsset(asset: string, data: Buffer, kind: 'image' | 'video' | 'font'): Promise<void> {
     if (kind === 'image') {
       if (data.byteLength > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
-      const metadata = await sharp(data).metadata()
-      if (!metadata.width || !metadata.height) throw new Error(`图片素材无效: ${asset}`)
-      const imageExtension = extname(asset).toLowerCase()
-      const expectedFormat = imageExtension === '.jpg' || imageExtension === '.jpeg' ? 'jpeg' : imageExtension.slice(1)
-      if (metadata.format !== expectedFormat) throw new Error(`图片素材扩展名与内容不匹配: ${asset}`)
+      await this.inspectImage(data, extname(asset).toLowerCase())
       return
     }
     if (kind === 'video') {
@@ -1128,15 +1265,23 @@ export class ProfileStore {
     }
     if (data.byteLength > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
     const extension = extname(asset).toLowerCase().slice(1) as ImportedFontFormat
-    this.assertFontHeader(extension, data.subarray(0, 4))
+    await validateFontBytes(data, extension)
   }
 
-  private async inspectImage(source: string | Buffer, extension: string): Promise<{ width: number; height: number; pages: number }> {
-    const metadata = await sharp(source, { animated: extension === '.gif' }).metadata().catch(() => null)
-    if (!metadata?.width || !metadata.height) throw new Error('媒体图片无效或无法读取尺寸。')
-    const expectedFormat = extension === '.jpg' || extension === '.jpeg' ? 'jpeg' : extension.slice(1)
-    if (metadata.format !== expectedFormat) throw new Error('媒体图片内容与扩展名不匹配。')
-    return { width: metadata.width, height: metadata.pageHeight ?? metadata.height, pages: metadata.pages ?? 1 }
+  private async inspectImage(
+    source: string | Buffer,
+    extension: string,
+    signal?: AbortSignal,
+    cancelledMessage = '图片读取已取消。'
+  ): Promise<{ width: number; height: number; pages: number }> {
+    let bytes: Buffer
+    try {
+      bytes = typeof source === 'string' ? await readFile(source, { signal }) : source
+    } catch (error) {
+      if (signal?.aborted) throw new Error(cancelledMessage)
+      throw error
+    }
+    return inspectImageBytes(bytes, extension, signal, cancelledMessage)
   }
 
   private assertConversationBubbleInspection(metadata: { width: number; height: number; pages?: number }, extension: string): void {
@@ -1213,7 +1358,9 @@ export class ProfileStore {
       if (icon.kind === 'asset' && assetKind(icon.asset) !== 'image') throw new Error('定制图标只能使用图片素材。')
     }
     for (const font of profile.typography.importedFonts) {
-      if (assetKind(font.asset) !== 'font') throw new Error('导入字体素材类型无效。')
+      if (assetKind(font.asset) !== 'font' || importedFontFormatForAsset(font.asset) !== font.format) {
+        throw new Error('导入字体格式与素材扩展名不匹配。')
+      }
     }
   }
 
@@ -1351,7 +1498,7 @@ export class ProfileStore {
 
   private themeRoot(id: string): string { this.assertId(id); return join(this.themesRoot, id) }
   private assetRoot(id: string): string { return join(this.themeRoot(id), 'assets') }
-  private assertId(id: string): void { if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)) throw new Error('Theme ID is invalid.') }
+  private assertId(id: string): void { if (!THEME_ID_PATTERN.test(id)) throw new Error('Theme ID is invalid.') }
   private cleanName(name: unknown): string { if (typeof name !== 'string') throw new Error('Theme name must be 1-80 characters.'); const result = name.trim(); if (!result || result.length > 80) throw new Error('Theme name must be 1-80 characters.'); return result }
   private mediaType(extension: string): string {
     if (extension === '.png') return 'image/png'
@@ -1364,17 +1511,6 @@ export class ProfileStore {
     return 'image/jpeg'
   }
   private fontMediaType(format: ImportedFontFormat): string { return this.mediaType(`.${format}`) }
-  private assertFontHeader(format: ImportedFontFormat, header: Buffer): void {
-    const signature = header.toString('latin1')
-    const valid = format === 'ttf'
-      ? header.equals(Buffer.from([0x00, 0x01, 0x00, 0x00])) || signature === 'true'
-      : format === 'otf'
-        ? signature === 'OTTO'
-        : format === 'woff'
-          ? signature === 'wOFF'
-          : signature === 'wOF2'
-    if (!valid || signature === 'ttcf') throw new Error('Font file header does not match its extension or is a font collection.')
-  }
   private assertSafeSvg(source: string): void {
     if (source.length > 2_000_000 || /<(?:script|foreignObject|iframe|object|embed)\b|<!DOCTYPE|<!ENTITY|(?:href|src)\s*=\s*["']\s*(?:https?:|file:|javascript:)/i.test(source)) {
       throw new Error('SVG contains unsupported or external content.')
