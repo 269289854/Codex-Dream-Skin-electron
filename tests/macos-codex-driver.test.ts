@@ -211,6 +211,23 @@ describe('MacCodexDriver', () => {
     await expect(readFile(backupPath)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
+  it('does not restart Codex when no configuration backup was restored', async () => {
+    const fixture = await createSelectionFixture()
+    const app = await createAppBundle(join(fixture.homeRoot, 'Applications', 'ChatGPT.app'), '26.0.0')
+    const runCommand = createSelectionCommandRunner([app])
+    const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { runCommand })
+    const installationId = `${MAC_CODEX_BUNDLE_ID}:${MAC_CODEX_TEAM_ID}:${app.appBundle}`
+
+    await expect(driver.restore(true, installationId)).resolves.toEqual({
+      configRestored: false,
+      backupArchive: { status: 'not-attempted' },
+      restart: { status: 'not-requested' }
+    })
+
+    expect(runCommand).not.toHaveBeenCalledWith('/bin/ps', expect.anything(), expect.anything())
+    expect(runCommand).not.toHaveBeenCalledWith('/usr/bin/open', expect.anything(), expect.anything())
+  })
+
   it('preserves a committed configuration result when backup archiving fails', async () => {
     const fixture = await createSelectionFixture()
     const restoreConfig = vi.fn().mockResolvedValue({

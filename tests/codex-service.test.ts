@@ -678,7 +678,7 @@ describe('CodexService operation queue', () => {
     vi.mocked(driver.restore).mockResolvedValueOnce({
       configRestored: false,
       backupArchive: { status: 'not-attempted' },
-      restart: { status: 'succeeded' }
+      restart: { status: 'not-requested' }
     })
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
     await mkdir(join(root, 'runtime'), { recursive: true })

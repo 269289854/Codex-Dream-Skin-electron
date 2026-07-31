@@ -118,7 +118,7 @@ describe('WindowsCodexDriver', () => {
         restartError: 'Codex launch failed'
       })
 
-    await expect(driver.restore(false)).resolves.toEqual({
+    await expect(driver.restore(true)).resolves.toEqual({
       configRestored: false,
       backupArchive: { status: 'not-attempted' },
       restart: { status: 'not-requested' }
@@ -133,7 +133,8 @@ describe('WindowsCodexDriver', () => {
   it('keeps restore and restart outcomes separate in the packaged PowerShell bridge', async () => {
     const bridge = await readFile(join(process.cwd(), 'resources', 'windows', 'studio-bridge.ps1'), 'utf8')
     const restoreBlock = bridge.slice(bridge.indexOf("if ($Action -eq 'Restore')"))
-    const configBlock = restoreBlock.slice(0, restoreBlock.indexOf('if ($RestartCodex)'))
+    const restartGuard = 'if ($RestartCodex -and $restored)'
+    const configBlock = restoreBlock.slice(0, restoreBlock.indexOf(restartGuard))
 
     expect(restoreBlock).toContain('$restored = $false')
     expect(restoreBlock).toContain('$archiveCompleted = $false')
@@ -144,6 +145,7 @@ describe('WindowsCodexDriver', () => {
     expect(configBlock.indexOf('$restored = $true')).toBeLessThan(configBlock.indexOf('Archive-DreamSkinConfigBackup'))
     expect(configBlock).toMatch(/try\s*\{[\s\S]*Archive-DreamSkinConfigBackup[\s\S]*\$archiveCompleted = \$true[\s\S]*\}\s*catch\s*\{\s*\$archiveError = \$_\.Exception\.Message/)
     expect(configBlock).toContain('Test-Path -LiteralPath $paths.Backup -PathType Leaf -ErrorAction Stop')
+    expect(restoreBlock).toContain(restartGuard)
     expect(restoreBlock).toMatch(/catch\s*\{\s*\$restartError = \$_\.Exception\.Message\s*\}/)
     expect(restoreBlock).toMatch(/restored = \$restored\s+archiveCompleted = \$archiveCompleted\s+archiveError = \$archiveError\s+backupAvailable = \$backupAvailable\s+restarted = \$restarted\s+restartError = \$restartError/)
   })

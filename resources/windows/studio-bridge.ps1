@@ -170,7 +170,7 @@ try {
         }
       }
     }
-    if ($RestartCodex) {
+    if ($RestartCodex -and $restored) {
       try {
         $codex = Get-DreamSkinCodexInstall
         $processes = @(Get-DreamSkinCodexProcesses -Codex $codex)

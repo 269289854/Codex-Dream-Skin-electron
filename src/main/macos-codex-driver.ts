@@ -153,7 +153,7 @@ export class MacCodexDriver implements CodexPlatformDriver {
               backupAvailable: configResult.backupAvailable
             }
       const restored = { configRestored: configResult.restored, backupArchive }
-      if (!install) return { ...restored, restart: { status: 'not-requested' } }
+      if (!install || !configResult.restored) return { ...restored, restart: { status: 'not-requested' } }
       try {
         const processes = await this.mainProcesses(install)
         if (processes.length > 0) await this.stopVerifiedProcesses(install, processes)

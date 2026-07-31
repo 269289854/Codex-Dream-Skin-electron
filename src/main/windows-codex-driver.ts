@@ -97,7 +97,7 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
               error: result.archiveError || 'Codex configuration backup archive failed.',
               backupAvailable: result.backupAvailable
             },
-      restart: !restartCodex
+      restart: !restartCodex || !result.restored
         ? { status: 'not-requested' }
         : result.restarted
           ? { status: 'succeeded' }
