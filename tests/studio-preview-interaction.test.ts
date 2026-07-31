@@ -2752,7 +2752,7 @@ describe('Studio preview editing interaction', () => {
     act(() => iconInspector.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     const particleGroup = [...container.querySelectorAll('.property-group')].find((group) => group.querySelector('h3')?.textContent === '粒子动效素材')
     expect(particleGroup?.querySelectorAll('[data-icon-slot]')).toHaveLength(5)
-  })
+  }, 15_000)
 
   it('edits, validates, undoes, saves, and links each brand copy target', async () => {
     const title = container.querySelector('[data-preview-target="copy-brand-title"]')

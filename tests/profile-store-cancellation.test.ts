@@ -24,7 +24,8 @@ vi.mock('../src/main/gif-assets', async (importOriginal) => {
   return { ...actual, prepareGif: gifAssets.prepareGif }
 })
 
-import { finalizeShareArchive, hashFile, ProfileStore, type ShareArchiveWriter } from '../src/main/profile-store'
+import { finalizeShareArchive, hashFile, type ShareArchiveWriter } from '../src/main/profile-store'
+import { ProfileStore } from './test-profile-store'
 
 const roots: string[] = []
 

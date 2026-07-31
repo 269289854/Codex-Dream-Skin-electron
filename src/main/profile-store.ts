@@ -56,11 +56,20 @@ interface LegacyStudioSettings {
   activeThemeId: string
 }
 
-interface BundledSystemThemeAssets {
+export interface BundledSystemThemeAssets {
   hero: string
   polaroid: string
   conversationBubbles?: Record<ConversationBubblePresetId, string>
   resourcesRoot?: string
+}
+
+interface DiskSpaceUsage {
+  available: number
+  total: number
+}
+
+export interface ProfileStoreDependencies {
+  readDiskSpace?: (targetRoot: string) => Promise<DiskSpaceUsage>
 }
 
 export interface ShareArchiveWriter {
@@ -168,12 +177,24 @@ export async function finalizeShareArchive(
 export class ProfileStore {
   readonly themesRoot: string
   private readonly settingsPath: string
+  private readonly readDiskSpace: NonNullable<ProfileStoreDependencies['readDiskSpace']>
   private readonly pendingAssets = new Map<string, Set<string>>()
   private readonly pendingVideoRoles = new Map<string, Map<string, VideoMediaRole>>()
 
-  constructor(readonly root: string, private readonly bundledSystemAssets?: BundledSystemThemeAssets) {
+  constructor(
+    readonly root: string,
+    private readonly bundledSystemAssets?: BundledSystemThemeAssets,
+    dependencies: ProfileStoreDependencies = {}
+  ) {
     this.themesRoot = join(root, 'themes')
     this.settingsPath = join(root, 'settings.json')
+    this.readDiskSpace = dependencies.readDiskSpace ?? (async (targetRoot) => {
+      const usage = await statfs(targetRoot)
+      return {
+        available: Number(usage.bavail) * Number(usage.bsize),
+        total: Number(usage.blocks) * Number(usage.bsize)
+      }
+    })
   }
 
   async initialize(): Promise<void> {
@@ -1556,12 +1577,10 @@ export class ProfileStore {
   }
 
   private async assertDiskSpace(targetRoot: string, incomingBytes: number): Promise<void> {
-    const usage = await statfs(targetRoot).catch(() => null)
+    const usage = await this.readDiskSpace(targetRoot).catch(() => null)
     if (!usage) return
-    const available = Number(usage.bavail) * Number(usage.bsize)
-    const total = Number(usage.blocks) * Number(usage.bsize)
-    const minimum = Math.max(MIN_FREE_BYTES, total * MIN_FREE_RATIO)
-    if (available - incomingBytes < minimum) throw new Error('磁盘空间不足，需要至少保留 10 GB 或 15% 的可用空间。')
+    const minimum = Math.max(MIN_FREE_BYTES, usage.total * MIN_FREE_RATIO)
+    if (usage.available - incomingBytes < minimum) throw new Error('磁盘空间不足，需要至少保留 10 GB 或 15% 的可用空间。')
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string): void {

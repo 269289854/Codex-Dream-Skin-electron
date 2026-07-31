@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { unzipSync, zipSync } from 'fflate'
 import sharp from 'sharp'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ProfileStore } from '../src/main/profile-store'
+import { ProfileStore } from './test-profile-store'
 import {
   MAX_SHARE_COMPRESSED_BYTES,
   MAX_SHARE_UNCOMPRESSED_BYTES,
