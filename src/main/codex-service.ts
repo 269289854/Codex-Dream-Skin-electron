@@ -593,6 +593,7 @@ export class CodexService {
   }
 
   private async buildPayload(themeId: string): Promise<RuntimePayload> {
+    await this.store.assertRuntimeVideoCompatibility(themeId)
     const [profile, compiled, baseCss, homeLayoutCss, particleEffectsCss, renderer] = await Promise.all([
       this.store.get(themeId), this.store.compile(themeId),
       readFile(join(this.resourcesRoot, 'dream-skin.css'), 'utf8'),

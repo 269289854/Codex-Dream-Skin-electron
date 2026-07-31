@@ -1,7 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, Menu, Tray, nativeImage, protocol, type BrowserWindowConstructorOptions, type MenuItemConstructorOptions, type NativeImage, type OpenDialogOptions } from 'electron'
-import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
-import { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import { basename, extname, join } from 'node:path'
 import electronUpdater from 'electron-updater'
@@ -13,6 +10,7 @@ import { isSupportedDesktopPlatform } from './codex-platform'
 import { MacCodexDriver } from './macos-codex-driver'
 import { WindowsCodexDriver } from './windows-codex-driver'
 import { PendingVideoSelectionRegistry } from './pending-video-selections'
+import { StudioMediaProtocol, toThemeDeleteError } from './studio-media-protocol'
 import { captureIpcResult } from '../shared/ipc-result'
 import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole, VideoSourceSelection } from '../shared/contracts'
 import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
@@ -22,6 +20,7 @@ const { autoUpdater } = electronUpdater
 
 let mainWindow: BrowserWindow | null = null
 let store: ProfileStore
+let studioMediaProtocol: StudioMediaProtocol
 let codexService: CodexService
 let appUpdateService: AppUpdateService
 let tray: Tray | null = null
@@ -154,7 +153,14 @@ function registerIpc(): void {
   ipcMain.handle('themes:get-default', (_event, id: string) => store.getDefault(id))
   ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => store.duplicate(profile, name))
   ipcMain.handle('themes:update', (_event, profile: unknown) => store.update(profile))
-  ipcMain.handle('themes:delete', (_event, id: string) => store.delete(id))
+  ipcMain.handle('themes:delete', (_event, id: unknown) => captureIpcResult(async () => {
+    if (typeof id !== 'string') throw new Error('主题 ID 无效。')
+    try {
+      await studioMediaProtocol.withThemeSuspended(id, () => store.delete(id))
+    } catch (reason) {
+      throw toThemeDeleteError(reason)
+    }
+  }))
   ipcMain.handle('themes:activate', (_event, id: string) => store.activate(id))
   ipcMain.handle('themes:compile', (_event, id: string) => store.compile(id))
   ipcMain.handle('assets:select', async (_event, themeId: unknown, purpose: unknown) => {
@@ -336,7 +342,7 @@ function registerIpc(): void {
       operationControllers.delete(id)
     }
   })
-  ipcMain.handle('share:import', async () => {
+  ipcMain.handle('share:import', () => captureIpcResult(async () => {
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, { title: '导入主题', properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
       : await dialog.showOpenDialog({ title: '导入主题', properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
@@ -355,8 +361,8 @@ function registerIpc(): void {
     } finally {
       operationControllers.delete(id)
     }
-  })
-  ipcMain.handle('share:import-path', async (_event, path: unknown) => {
+  }))
+  ipcMain.handle('share:import-path', (_event, path: unknown) => captureIpcResult(async () => {
     const id = randomUUID()
     emitProgress({ id, kind: 'share-import', phase: 'started', processedBytes: 0, totalBytes: null, message: '正在导入主题' })
     const controller = new AbortController()
@@ -371,7 +377,7 @@ function registerIpc(): void {
     } finally {
       operationControllers.delete(id)
     }
-  })
+  }))
   ipcMain.handle('codex:detect', () => captureIpcResult(() => codexService.detect()))
   ipcMain.handle('codex:install-theme', (_event, themeId: string) =>
     captureIpcResult(() => codexService.installTheme(themeId)))
@@ -465,7 +471,8 @@ if (!hasSingleInstanceLock) {
       resourcesRoot: sharedResourcesRoot
     })
     await store.initialize()
-    protocol.handle('studio-media', async (request) => handleStudioMediaRequest(request))
+    studioMediaProtocol = new StudioMediaProtocol((themeId, asset) => store.resolveReferencedMedia(themeId, asset))
+    protocol.handle('studio-media', async (request) => studioMediaProtocol.handleRequest(request))
     const platformDriver = process.platform === 'win32'
       ? new WindowsCodexDriver(store.root, platformResourcesRoot)
       : new MacCodexDriver(store.root, app.getPath('home'))
@@ -513,39 +520,6 @@ function formatFrameRate(value: number): string {
 
 function isVideoMediaRole(value: unknown): value is VideoMediaRole {
   return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
-}
-
-async function handleStudioMediaRequest(request: Request): Promise<Response> {
-  try {
-    if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 })
-    const url = new URL(request.url)
-    const themeId = decodeURIComponent(url.hostname)
-    const asset = url.pathname.replace(/^\//, '').split('/').map((part) => decodeURIComponent(part)).join('/')
-    const resolved = await store.resolveReferencedMedia(themeId, asset)
-    const range = request.headers.get('range') ?? url.searchParams.get('range')
-    const fileStat = await stat(resolved.path)
-    let start = 0
-    let end = fileStat.size - 1
-    let status = 200
-    const headers = new Headers({ 'Content-Type': resolved.mimeType, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' })
-    if (range) {
-      const match = /^bytes=(\d*)-(\d*)$/.exec(range)
-      if (!match) return new Response('Invalid range', { status: 416 })
-      if (match[1]) start = Number(match[1])
-      if (match[2]) end = Number(match[2])
-      if (!match[1] && match[2]) { const length = Number(match[2]); start = Math.max(0, fileStat.size - length); end = fileStat.size - 1 }
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= fileStat.size) return new Response('Range not satisfiable', { status: 416 })
-      end = Math.min(end, fileStat.size - 1)
-      status = 206
-      headers.set('Content-Range', `bytes ${start}-${end}/${fileStat.size}`)
-    }
-    headers.set('Content-Length', String(end - start + 1))
-    if (request.method === 'HEAD') return new Response(null, { status, headers })
-    const stream = createReadStream(resolved.path, { start, end })
-    return new Response(Readable.toWeb(stream) as ReadableStream, { status, headers })
-  } catch {
-    return new Response('Not found', { status: 404 })
-  }
 }
 
 app.on('window-all-closed', () => { if (!codexService?.isActive()) app.quit() })

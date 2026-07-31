@@ -984,6 +984,53 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector('.theme-item.active strong')?.textContent).toBe('分享主题')
   })
 
+  it('imports themes with nonportable videos, warns after import, and keeps conversion manual', async () => {
+    const importButton = container.querySelector<HTMLButtonElement>('button[title="导入主题"]')
+    if (!importButton) throw new Error('Share import command is missing.')
+    const imported = createDefaultTheme('00000000-0000-4000-8000-000000000003', '待转换分享主题')
+    imported.hero.source = { asset: 'assets/shared-hero.mp4', kind: 'video', mimeType: 'video/mp4' }
+    themeProfiles.push(imported)
+    importTheme.mockResolvedValueOnce(imported)
+    inspectVideo.mockResolvedValue({
+      width: 1280,
+      height: 720,
+      frameRate: 24,
+      duration: 8,
+      codec: 'MPEG-4 Visual',
+      videoProfile: null,
+      bitDepth: 8,
+      chromaSubsampling: '4:2:0',
+      audioCodec: null,
+      audioProfile: null,
+      bitRate: 2_000_000,
+      hasAudio: false,
+      portable: false,
+      highLoad: false
+    })
+
+    await act(async () => {
+      importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+
+    expect(activateTheme).toHaveBeenCalledWith(imported.id)
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('已导入主题“待转换分享主题”；1 个视频需转换后才能应用到 Codex。')
+    const videoPanel = container.querySelector('[data-inspector-anchor="visual-video-playback"]')
+    expect(videoPanel?.classList.contains('inspector-highlight')).toBe(true)
+    expect(videoPanel?.textContent).toContain('需转换')
+    expect(videoPanel?.textContent).toContain('转换视频')
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
+
+    const convert = videoPanel?.querySelector<HTMLButtonElement>('.optimize-video-command')
+    if (!convert) throw new Error('Video conversion command is missing.')
+    await act(async () => {
+      convert.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain('源视频不兼容，必须转换后使用')
+  })
+
   it('converts dropped files through preload and imports through the validated path API', async () => {
     const shell = container.querySelector('main')
     if (!shell) throw new Error('Studio shell is missing.')

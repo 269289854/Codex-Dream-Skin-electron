@@ -118,6 +118,7 @@ describe('CodexService operation queue', () => {
     const store = {
       root,
       themesRoot: join(root, 'themes'),
+      assertRuntimeVideoCompatibility: vi.fn().mockResolvedValue(undefined),
       get: vi.fn().mockResolvedValue(profile),
       compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', [composerPosterKey]: 'data:image/png;base64,BA==', 'assets/window.png': 'data:image/png;base64,AA==', 'assets/account-menu.gif': 'data:image/gif;base64,AQ==', [accountMenuPosterKey]: 'data:image/png;base64,BQ==', 'assets/search.gif': 'data:image/gif;base64,Ag==', [searchPosterKey]: 'data:image/png;base64,Aw==' } })
     }
@@ -166,6 +167,67 @@ describe('CodexService operation queue', () => {
     expect(first.script).toContain('"sparklePolicy":{"mode":"balanced"')
     expect(first.script).toContain('"sparkleCyclePositionPolicy":{"x":{"min":5,"max":95,"minDelta":12},"y":{"min":5,"max":91,"minDelta":12}}')
     expect(third.script).toContain('"sparklePolicy":{"mode":"performance"')
+  })
+
+  it('blocks install, start, and reinjection before mutating runtime state when videos need conversion', async () => {
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const oldThemeId = '22222222-2222-4222-8222-222222222222'
+    const message = '主题中有 1 个视频需要转换，转换完成后才能应用到 Codex。'
+    const createBlockedService = () => {
+      const root = join(tmpdir(), `codex-dream-skin-incompatible-${Date.now()}-${Math.random()}`)
+      const store = {
+        root,
+        themesRoot: join(root, 'themes'),
+        assertRuntimeVideoCompatibility: vi.fn().mockRejectedValue(new Error(message)),
+        get: vi.fn(),
+        compile: vi.fn(),
+        getRuntimeMediaBindings: vi.fn()
+      }
+      const driver = createDriver()
+      const service = new CodexService(store as never, join(process.cwd(), 'resources', 'shared'), driver, '1.1.0', () => undefined)
+      const writeRuntimePayload = vi.fn()
+      ;(service as unknown as { writeRuntimePayload: typeof writeRuntimePayload }).writeRuntimePayload = writeRuntimePayload
+      return { service, store, driver, writeRuntimePayload }
+    }
+
+    const install = createBlockedService()
+    await expect(install.service.installTheme(themeId)).rejects.toThrow(message)
+    expect(install.writeRuntimePayload).not.toHaveBeenCalled()
+    expect(install.driver.applyConfig).not.toHaveBeenCalled()
+
+    const start = createBlockedService()
+    await expect(start.service.start(themeId, false)).rejects.toThrow(message)
+    expect(start.writeRuntimePayload).not.toHaveBeenCalled()
+    expect(start.driver.applyConfig).not.toHaveBeenCalled()
+    expect(start.driver.start).not.toHaveBeenCalled()
+
+    const reinject = createBlockedService()
+    const activeSession: CodexStartResult = {
+      port: 9335,
+      browserId: 'browser-active',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    const reinjectInternals = reinject.service as unknown as {
+      watcher: object
+      activeThemeId: string
+      activeSession: CodexStartResult
+      activePayload: { script: string; version: string }
+      sessionGeneration: number
+      activeSessionGeneration: number
+      status: { phase: string }
+    }
+    reinjectInternals.watcher = {}
+    reinjectInternals.activeThemeId = oldThemeId
+    reinjectInternals.activeSession = activeSession
+    reinjectInternals.activePayload = { script: 'old', version: 'studio-0123456789abcdef01234567' }
+    reinjectInternals.sessionGeneration = 1
+    reinjectInternals.activeSessionGeneration = 1
+    reinjectInternals.status.phase = 'active'
+    await expect(reinject.service.reinject(themeId)).rejects.toThrow(message)
+    expect(reinject.writeRuntimePayload).not.toHaveBeenCalled()
+    expect(reinject.store.getRuntimeMediaBindings).not.toHaveBeenCalled()
   })
 
   it('repairs a stale runtime during manual verification', async () => {

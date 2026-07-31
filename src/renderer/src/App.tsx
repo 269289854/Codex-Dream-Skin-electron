@@ -297,14 +297,9 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (!draft) return
     let active = true
-    const videoAssets = [...new Set(videoReferences(draft).filter((source): source is MediaReference => source?.kind === 'video').map((source) => source.asset))]
-    for (const asset of videoAssets) {
-      void window.studio.assets.inspectVideo(draft.id, asset).then((inspection) => {
-        if (active) setVideoInspections((current) => ({ ...current, [asset]: inspection }))
-      }).catch(() => {
-        if (active) setVideoInspections((current) => ({ ...current, [asset]: null }))
-      })
-    }
+    void inspectThemeVideos(draft).then((inspections) => {
+      if (active) setVideoInspections(inspections)
+    })
     return () => { active = false }
   }, [draft?.id, draft?.hero.source?.asset, draft?.polaroid.source?.asset, draft?.conversationBackground.source?.asset, draft?.windowBackground.source?.asset])
 
@@ -620,6 +615,20 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const finishThemeImport = async (token: ThemeOperationToken, profile: ThemeProfile): Promise<void> => {
+    const inspections = await inspectThemeVideos(profile)
+    if (!isThemeOperationCurrent(token)) return
+    setVideoInspections(inspections)
+    const incompatibleCount = Object.values(inspections).filter((inspection) => inspection?.portable === false).length
+    if (incompatibleCount > 0) {
+      setActiveInspector('visual')
+      setInspectorAnchor('visual-video-playback')
+      setNotice(`已导入主题“${profile.name}”；${incompatibleCount} 个视频需转换后才能应用到 Codex。`)
+      return
+    }
+    setNotice(`已导入主题“${profile.name}”`)
+  }
+
   const importTheme = async (): Promise<void> => {
     if (!window.studio.share) {
       setError('当前版本不支持主题分享。')
@@ -633,7 +642,7 @@ export function App(): React.JSX.Element {
       const profile = await window.studio.share.importTheme()
       if (profile) {
         if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
-        if (isThemeOperationCurrent(token)) setNotice(`已导入主题“${profile.name}”`)
+        await finishThemeImport(token, profile)
       }
     } catch (reason) {
       if (isThemeOperationActive(token)) setError(messageOf(reason))
@@ -661,7 +670,7 @@ export function App(): React.JSX.Element {
       const path = window.studio.files.getPathForFile(file)
       const profile = await window.studio.share.importThemePath(path)
       if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
-      if (isThemeOperationCurrent(token)) setNotice(`已导入主题“${profile.name}”`)
+      await finishThemeImport(token, profile)
     } catch (reason) {
       if (isThemeOperationActive(token)) setError(messageOf(reason))
     } finally {
@@ -1409,6 +1418,17 @@ const appearanceGroupLabels: Record<AppearanceGroup, string> = {
 
 function videoReferences(profile: ThemeProfile): Array<MediaReference | null> {
   return [profile.hero.source, profile.polaroid.source, profile.conversationBackground.source, profile.windowBackground.source]
+}
+
+async function inspectThemeVideos(profile: ThemeProfile): Promise<Record<string, VideoAssetInspection | null>> {
+  const assets = [...new Set(videoReferences(profile)
+    .filter((source): source is MediaReference => source?.kind === 'video')
+    .map((source) => source.asset))]
+  const inspections: Record<string, VideoAssetInspection | null> = {}
+  await Promise.all(assets.map(async (asset) => {
+    inspections[asset] = await window.studio.assets.inspectVideo(profile.id, asset).catch(() => null)
+  }))
+  return inspections
 }
 
 function videoReferenceForRole(profile: ThemeProfile, role: VideoMediaRole): MediaReference | null {

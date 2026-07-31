@@ -28,7 +28,7 @@ const api: StudioApi = {
     getDefault: (id) => ipcRenderer.invoke('themes:get-default', id),
     duplicate: (profile, name) => ipcRenderer.invoke('themes:duplicate', profile, name),
     update: (profile) => ipcRenderer.invoke('themes:update', profile),
-    delete: (id) => ipcRenderer.invoke('themes:delete', id),
+    delete: (id) => invokeIpcResult('themes:delete', id),
     activate: (id) => ipcRenderer.invoke('themes:activate', id),
     compile: (id) => ipcRenderer.invoke('themes:compile', id)
   },
@@ -45,8 +45,8 @@ const api: StudioApi = {
   },
   share: {
     exportTheme: (profile) => ipcRenderer.invoke('share:export', profile),
-    importTheme: () => ipcRenderer.invoke('share:import'),
-    importThemePath: (path) => ipcRenderer.invoke('share:import-path', path)
+    importTheme: () => invokeIpcResult('share:import'),
+    importThemePath: (path) => invokeIpcResult('share:import-path', path)
   },
   files: {
     getPathForFile: (file) => webUtils.getPathForFile(file as Parameters<typeof webUtils.getPathForFile>[0])

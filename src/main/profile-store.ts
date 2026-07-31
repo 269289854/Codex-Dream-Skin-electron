@@ -292,7 +292,7 @@ export class ProfileStore {
     const localProfile = parseThemeProfile(input)
     await this.get(localProfile.id)
     const profile = createShareProfile(localProfile)
-    await this.validateProfileMedia(profile)
+    await this.validateProfileMedia(profile, true)
     await this.validateProfileAssets(profile)
     await this.assertProfileEmbeddedBudget(profile, undefined, signal, '主题导出已取消。')
     this.throwIfAborted(signal, '主题导出已取消。')
@@ -366,7 +366,7 @@ export class ProfileStore {
           if (file.size !== entry.size) throw new Error(`素材大小校验失败: ${path}`)
           const manifestAsset = listed.get(path)
           if (!manifestAsset || manifestAsset.size !== file.size || (await hashFile(entry.path, signal, '主题导入已取消。')).toLowerCase() !== manifestAsset.sha256.toLowerCase()) throw new Error(`素材校验失败: ${path}`)
-          await this.validateShareAssetFile(path, entry.path, assetKind(path), signal, true)
+          await this.validateShareAssetFile(path, entry.path, assetKind(path), signal)
           if (gifIconAssets.has(path)) {
             const source = await readFile(entry.path)
             await inspectIconGif(source)
@@ -1096,6 +1096,26 @@ export class ProfileStore {
     return bindings
   }
 
+  async assertRuntimeVideoCompatibility(themeId: unknown): Promise<void> {
+    if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
+    const profile = await this.get(themeId)
+    const videoAssets = [...new Set((['hero', 'polaroid', 'conversationBackground', 'windowBackground'] as const)
+      .map((role) => this.mediaReferenceForRole(profile, role))
+      .filter((reference): reference is MediaReference => reference?.kind === 'video')
+      .map((reference) => reference.asset))]
+    let incompatibleCount = 0
+    for (const asset of videoAssets) {
+      const sourcePath = this.resolveAsset(profile.id, asset)
+      const sourceStat = await stat(sourcePath)
+      if (!sourceStat.isFile()) throw new Error('主题视频不存在。')
+      const inspection = await this.inspectVideo(sourcePath, extname(asset).toLowerCase(), sourceStat.size)
+      if (!inspection.portable) incompatibleCount += 1
+    }
+    if (incompatibleCount > 0) {
+      throw new Error(`主题中有 ${incompatibleCount} 个视频需要转换，转换完成后才能应用到 Codex。`)
+    }
+  }
+
   private async migrateLegacySettings(activeThemeId: string): Promise<StudioSettings> {
     const entries = await readdir(this.themesRoot, { withFileTypes: true })
     const candidates = (await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
@@ -1331,7 +1351,7 @@ export class ProfileStore {
     }
   }
 
-  private async validateShareAssetFile(asset: string, path: string, kind: 'image' | 'video' | 'font', signal?: AbortSignal, requirePortable = false): Promise<void> {
+  private async validateShareAssetFile(asset: string, path: string, kind: 'image' | 'video' | 'font', signal?: AbortSignal): Promise<void> {
     const file = await stat(path)
     if (kind === 'image') {
       if (file.size > MAX_SHARE_IMAGE_BYTES) throw new Error('图片素材超过 30 MB 限制。')
@@ -1339,8 +1359,7 @@ export class ProfileStore {
       return
     }
     if (kind === 'video') {
-      const inspection = await this.inspectVideo(path, extname(asset).toLowerCase(), file.size, signal, '主题导入已取消。')
-      if (requirePortable) assertPortableVideoInspection(inspection)
+      await this.inspectVideo(path, extname(asset).toLowerCase(), file.size, signal, '主题导入已取消。')
       return
     }
     if (file.size > MAX_SHARE_FONT_BYTES) throw new Error('字体素材超过 12 MB 限制。')
@@ -1399,7 +1418,7 @@ export class ProfileStore {
     }
   }
 
-  private async validateProfileMedia(profile: ThemeProfile): Promise<void> {
+  private async validateProfileMedia(profile: ThemeProfile, requirePortableVideos = false): Promise<void> {
     this.validateProfileAssetReferences(profile)
     for (const reference of this.mediaReferences(profile)) {
       if (!reference) continue
@@ -1413,7 +1432,7 @@ export class ProfileStore {
         if (!sourceStat.isFile()) throw new Error(`主题媒体不存在: ${variant.asset}`)
         if (reference.kind === 'video') {
           const inspection = await this.inspectVideo(sourcePath, extension, sourceStat.size)
-          if (variant.asset === reference.asset) assertPortableVideoInspection(inspection)
+          if (requirePortableVideos && variant.asset === reference.asset) assertPortableVideoInspection(inspection)
         } else {
           if (sourceStat.size > MAX_ASSET_BYTES) throw new Error('图片和 GIF 文件不能超过 30 MB。')
           await this.inspectImage(sourcePath, extension)

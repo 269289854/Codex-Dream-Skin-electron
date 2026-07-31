@@ -1,6 +1,9 @@
+import { execFile } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
+import ffmpegPath from 'ffmpeg-static'
 import { unzipSync, zipSync } from 'fflate'
 import sharp from 'sharp'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -26,6 +29,7 @@ import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, crea
 sharp.cache(false)
 
 const roots: string[] = []
+const execFileAsync = promisify(execFile)
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64')
 const testFont = join(process.cwd(), 'resources', 'shared', 'fonts', 'dancing-script', 'dancing-script-latin-wght-normal.woff2')
 const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
@@ -240,6 +244,48 @@ describe('theme share packages', () => {
     expect(compiled.assets[composerGif.relativePath]).toBe(`data:image/gif;base64,${Buffer.from(ensureGifInfiniteLoop(gif)).toString('base64')}`)
     expect(compiled.assets[iconGifPosterAssetKey(composerGif.relativePath)]).toMatch(/^data:image\/png;base64,/)
     expect(compiled.assets[polaroidImage.relativePath]).toMatch(/^data:image\/webp;base64,/)
+    expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
+  })
+
+  it('imports valid nonportable videos for later conversion but blocks export and runtime use', async () => {
+    if (!ffmpegPath) throw new Error('Bundled FFmpeg is unavailable.')
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-share-nonportable-video-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const original = await store.create('待转换视频分享')
+    const packagePath = join(root, 'nonportable.cdstheme')
+    await store.exportSharePackage(original, packagePath)
+
+    const sourcePath = join(root, 'nonportable.mp4')
+    await execFileAsync(ffmpegPath, [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=24',
+      '-t', '0.5', '-an', '-c:v', 'mpeg4', sourcePath
+    ])
+    const video = await readFile(sourcePath)
+    const asset = 'assets/shared-window.mp4'
+    const archive = unzipSync(await readFile(packagePath))
+    const sharedProfile = JSON.parse(Buffer.from(archive['theme.json']!).toString('utf8')) as ReturnType<typeof createDefaultTheme>
+    sharedProfile.windowBackground.visible = true
+    sharedProfile.windowBackground.mode = 'video'
+    sharedProfile.windowBackground.source = { asset, kind: 'video', mimeType: 'video/mp4' }
+    const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as {
+      assets: Array<{ path: string; kind: 'image' | 'video' | 'font'; size: number; sha256: string }>
+    }
+    manifest.assets.push({ path: asset, kind: 'video', size: video.byteLength, sha256: sha256(video) })
+    archive[asset] = video
+    archive['theme.json'] = Buffer.from(`${JSON.stringify(sharedProfile, null, 2)}\n`)
+    archive['manifest.json'] = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`)
+    await writeFile(packagePath, zipSync(archive))
+
+    const imported = await store.importSharePackage(packagePath)
+    expect(imported.windowBackground.source).toEqual({ asset, kind: 'video', mimeType: 'video/mp4' })
+    await expect(store.inspectReferencedVideo(imported.id, asset)).resolves.toMatchObject({ portable: false })
+    await expect(store.update(imported)).resolves.toMatchObject({ id: imported.id })
+    await expect(store.duplicate(imported, '待转换视频副本')).resolves.toMatchObject({ windowBackground: { source: { asset } } })
+    await expect(store.exportSharePackage(imported, join(root, 'blocked-export.cdstheme'))).rejects.toThrow('请先转换视频')
+    await expect(store.assertRuntimeVideoCompatibility(imported.id)).rejects.toThrow('1 个视频需要转换')
     expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
   })
 
