@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 - 2026-07-31
+
+- Hardened cross-platform session recovery with installation identity validation, multi-instance safety, rollback handling, and detailed restore and restart outcomes.
+- Added backup archive and availability reporting across the Windows and macOS platform drivers.
+- Added cancellable, race-safe theme operations with video compatibility preflight and rollback-safe media imports.
+- Added a video transcoding dialog with source inspection, output controls, progress reporting, cancellation, and pending-selection cleanup.
+- Added GIF poster frames and reduced-motion previews while improving CDP cleanup and reinjection recovery.
+- Fixed conversation bubble rendering, shared preview asset handling, and cancelled image, GIF, video, icon, and font imports.
+- Added the tested GitHub Actions contract for unified Windows and macOS release publishing.
+
 ## 1.0.9 - 2026-07-29
 
 - Added macOS 12+ support with Universal DMG and ZIP packages for Apple Silicon and Intel Macs.
