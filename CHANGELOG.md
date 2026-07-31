@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.1 - 2026-08-01
+
+- Added complete Simplified Chinese and English localization across the Studio interface, previews, status messages, errors, Codex operations, and update flows.
+- Added typed, language-aware IPC messages so localized state and failures remain consistent across the main, preload, and renderer processes.
+- Added theme video compatibility checks during import, export, installation, and launch, with actionable warnings before incompatible media reaches Codex.
+- Added a managed Studio media protocol for safe theme-video preview streaming and coordinated media cleanup.
+- Fixed video variant creation, preservation, switching, and share-package validation for original and optimized media.
+- Fixed localized notification and error handling throughout asynchronous Studio operations.
+
 ## 1.1.0 - 2026-07-31
 
 - Hardened cross-platform session recovery with installation identity validation, multi-instance safety, rollback handling, and detailed restore and restart outcomes.
