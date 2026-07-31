@@ -33,6 +33,7 @@ export interface ImportedMediaAsset {
   reference: MediaReference
   relativePath: string
   previewUrl: string
+  gifPosterDataUrl?: string
   originalName: string
   width: number
   height: number

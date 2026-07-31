@@ -10,7 +10,7 @@ import { ACCOUNT_MENU_ITEMS, buildAccountMenuBackgroundStyle } from '../../share
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../../shared/conversation-overlay'
-import { iconGifPosterAssetKey } from '../../shared/icon-assets'
+import { gifPosterAssetKey } from '../../shared/gif'
 import { PARTICLE_EFFECT_IDS, createParticleCyclePosition, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy, type ParticleCyclePosition } from '../../shared/particle-effects'
 import type { Fence } from '../../shared/geometry'
 import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
@@ -100,6 +100,7 @@ export function App(): React.JSX.Element {
   const [previewMode, setPreviewMode] = useState<'home' | 'conversation'>('home')
   const [conversationBubbleRole, setConversationBubbleRole] = useState<ConversationBubbleRole>('user')
   const [previewComponentState, setPreviewComponentState] = useState<AppearanceState>('normal')
+  const prefersReducedMotion = usePrefersReducedMotion()
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null)
   const [inspectorAnchor, setInspectorAnchor] = useState<string | null>(null)
   const previewStageRef = useRef<HTMLDivElement>(null)
@@ -687,10 +688,13 @@ export function App(): React.JSX.Element {
         ? await window.studio.assets.selectMedia(themeId, purpose, requestedKind)
         : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble' ? null : await window.studio.assets.selectImage(themeId, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
-          relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
+          relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, gifPosterDataUrl: legacy.gifPosterDataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
       if (!imported || !isThemeOperationCurrent(token)) return
-      mergeAssetsForThemeOperation(token, { [imported.relativePath]: imported.previewUrl })
+      mergeAssetsForThemeOperation(token, {
+        [imported.relativePath]: imported.previewUrl,
+        ...(imported.gifPosterDataUrl ? { [gifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
+      })
       changeForThemeOperation(token, (profile) => {
         if (purpose === 'hero') {
           profile.hero.source = imported.reference
@@ -790,7 +794,7 @@ export function App(): React.JSX.Element {
       if (!imported || !isThemeOperationCurrent(token)) return
       mergeAssetsForThemeOperation(token, {
         [imported.relativePath]: imported.dataUrl,
-        ...(imported.gifPosterDataUrl ? { [iconGifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
+        ...(imported.gifPosterDataUrl ? { [gifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
       })
       changeForThemeOperation(token, (profile) => { profile.icons[slot] = { kind: 'asset', asset: imported.relativePath } })
     } catch (reason) {
@@ -992,11 +996,12 @@ export function App(): React.JSX.Element {
   }
 
   if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? '正在打开主题工作台'}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>重新加载</button>}</div>
-  const heroUrl = draft.hero.source ? assets[draft.hero.source.asset] : draft.hero.sourceImage ? assets[draft.hero.sourceImage] : undefined
-  const polaroidUrl = draft.polaroid.source ? assets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? assets[draft.polaroid.sourceImage] : undefined
-  const conversationBackgroundUrl = draft.conversationBackground.source ? assets[draft.conversationBackground.source.asset] : undefined
-  const windowBackgroundUrl = draft.windowBackground.source ? assets[draft.windowBackground.source.asset] : undefined
-  const accountMenuBackgroundUrl = draft.accountMenuBackground.source ? assets[draft.accountMenuBackground.source.asset] : undefined
+  const previewAssets = reducedMotionPreviewAssets(draft, assets, prefersReducedMotion)
+  const heroUrl = draft.hero.source ? previewAssets[draft.hero.source.asset] : draft.hero.sourceImage ? previewAssets[draft.hero.sourceImage] : undefined
+  const polaroidUrl = draft.polaroid.source ? previewAssets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? previewAssets[draft.polaroid.sourceImage] : undefined
+  const conversationBackgroundUrl = draft.conversationBackground.source ? previewAssets[draft.conversationBackground.source.asset] : undefined
+  const windowBackgroundUrl = draft.windowBackground.source ? previewAssets[draft.windowBackground.source.asset] : undefined
+  const accountMenuBackgroundUrl = draft.accountMenuBackground.source ? previewAssets[draft.accountMenuBackground.source.asset] : undefined
   const windowBackgroundVisible = draft.windowBackground.visible && (draft.windowBackground.mode === 'color' || Boolean(windowBackgroundUrl))
   const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
   const homeHeadingVisible = draft.decorations.homeHeading.visible && draft.decorations.homeHeading.text.length > 0
@@ -1135,10 +1140,10 @@ export function App(): React.JSX.Element {
                 >
                   {previewFontCss && <style>{previewFontCss}</style>}
                   <WindowBackgroundPreview profile={draft} backgroundUrl={windowBackgroundUrl} />
-                  <CodexSidebarPreview profile={draft} assets={assets} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />
+                  <CodexSidebarPreview profile={draft} assets={previewAssets} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />
                 <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
-                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={assets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><PreviewBrandSignature profile={draft} assets={assets} /></header>
-                  <PreviewSparkles profile={draft} assets={assets} />
+                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={previewAssets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><PreviewBrandSignature profile={draft} assets={previewAssets} /></header>
+                  <PreviewSparkles profile={draft} assets={previewAssets} />
                   {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
                       {heroImage
@@ -1158,28 +1163,28 @@ export function App(): React.JSX.Element {
                         </h1>
                       </div>
                       <div className="dream-action-grid">
-                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={`编辑${action.label}卡片样式`}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={assets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label" data-preview-target="action-card-text">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={assets} injected /></span></button>)}
+                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={`编辑${action.label}卡片样式`}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={previewAssets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label" data-preview-target="action-card-text">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={previewAssets} injected /></span></button>)}
                       </div>
                     </section>
                     <div className="preview-lower-region">
                       <div className="dream-project-bar preview-project-bar" data-preview-target="palette-project-bar">
                         <div className="preview-project-chips">
-                          <button type="button" data-preview-target="project-chip" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={assets} /></span><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={previewAssets} /></span><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
                           <button type="button" data-preview-target="project-chip" data-preview-context="environment"><Laptop size={15} /><span>{PREVIEW_HOME_CONTEXT.environment}</span></button>
                           <button type="button" data-preview-target="project-chip" data-preview-context="branch"><GitBranch size={15} /><span>{PREVIEW_HOME_CONTEXT.branch}</span></button>
                         </div>
                       </div>
-                      <PreviewComposer profile={draft} assets={assets} />
+                      <PreviewComposer profile={draft} assets={previewAssets} />
                     </div>
-                  </div> : <ConversationPreview profile={draft} assets={assets} />}
-                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKey={draft.polaroid.source?.asset ?? polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} pausePolicy={draft.videoPlayback.pausePolicy} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={assets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
+                  </div> : <ConversationPreview profile={draft} assets={previewAssets} />}
+                  {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKey={draft.polaroid.source?.asset ?? polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} pausePolicy={draft.videoPlayback.pausePolicy} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={previewAssets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
             </div>
             {selectedTarget && <PreviewQuickEditor
               target={selectedTarget}
               profile={draft}
-              assets={assets}
+              assets={previewAssets}
               heroUrl={heroUrl}
               polaroidUrl={polaroidUrl}
               conversationBackgroundUrl={conversationBackgroundUrl}
@@ -1626,6 +1631,56 @@ function assignFontSlot(profile: ThemeProfile, slot: TypographySlot, selection: 
   if (slot === 'ui' && selection.kind === 'inherit') return
   if (slot === 'ui') profile.typography.slots.ui = selection as ThemeProfile['typography']['slots']['ui']
   else profile.typography.slots[slot] = selection
+}
+
+function usePrefersReducedMotion(): boolean {
+  const media = '(prefers-reduced-motion: reduce)'
+  const [reduced, setReduced] = useState(() => window.matchMedia?.(media).matches ?? false)
+  useEffect(() => {
+    const query = window.matchMedia?.(media)
+    if (!query) return
+    const update = (): void => setReduced(query.matches)
+    update()
+    if (query.addEventListener) query.addEventListener('change', update)
+    else query.addListener(update)
+    return () => {
+      if (query.removeEventListener) query.removeEventListener('change', update)
+      else query.removeListener(update)
+    }
+  }, [])
+  return reduced
+}
+
+function reducedMotionPreviewAssets(
+  profile: ThemeProfile,
+  assets: Record<string, string>,
+  reduced: boolean
+): Record<string, string> {
+  if (!reduced) return assets
+  const assetNames = new Set<string>()
+  const addSource = (source?: MediaReference | null): void => {
+    if (source) assetNames.add(source.asset)
+  }
+  addSource(profile.hero.source)
+  addSource(profile.polaroid.source)
+  addSource(profile.conversationBackground.source)
+  addSource(profile.windowBackground.source)
+  addSource(profile.accountMenuBackground.source)
+  addSource(profile.brandSignature.source)
+  addSource(profile.decorations.composerMelody.source)
+  for (const source of conversationBubbleMediaReferences(profile)) addSource(source)
+  if (profile.hero.sourceImage) assetNames.add(profile.hero.sourceImage)
+  if (profile.polaroid.sourceImage) assetNames.add(profile.polaroid.sourceImage)
+  for (const icon of Object.values(profile.icons)) {
+    if (icon.kind === 'asset') assetNames.add(icon.asset)
+  }
+
+  const result = { ...assets }
+  for (const asset of assetNames) {
+    const poster = assets[gifPosterAssetKey(asset)]
+    if (poster) result[asset] = poster
+  }
+  return result
 }
 
 function messageOf(reason: unknown): string {

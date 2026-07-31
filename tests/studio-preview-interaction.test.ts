@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, ImportedMediaAsset, OperationProgress, RuntimeStatus, StudioApi } from '../src/shared/contracts'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
+import { gifPosterAssetKey } from '../src/shared/gif'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { App } from '../src/renderer/src/App'
 import { ICON_PREVIEW_TARGETS, PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
@@ -62,9 +63,36 @@ describe('Studio preview editing interaction', () => {
   let restoreCodex: ReturnType<typeof vi.fn>
   let cancelOperation: ReturnType<typeof vi.fn>
   let operationProgressListener: ((progress: OperationProgress) => void) | null
+  let emitReducedMotion: (matches: boolean) => void
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
+    let reducedMotionMatches = false
+    const reducedMotionListeners = new Set<() => void>()
+    const addReducedMotionListener = (listener: EventListenerOrEventListenerObject | ((event: MediaQueryListEvent) => void)): void => {
+      if (typeof listener === 'function') reducedMotionListeners.add(listener as () => void)
+    }
+    const removeReducedMotionListener = (listener: EventListenerOrEventListenerObject | ((event: MediaQueryListEvent) => void)): void => {
+      if (typeof listener === 'function') reducedMotionListeners.delete(listener as () => void)
+    }
+    const reducedMotionQuery = {
+      get matches() { return reducedMotionMatches },
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => addReducedMotionListener(listener),
+      removeEventListener: (_type: string, listener: EventListenerOrEventListenerObject) => removeReducedMotionListener(listener),
+      addListener: (listener: (event: MediaQueryListEvent) => void) => addReducedMotionListener(listener),
+      removeListener: (listener: (event: MediaQueryListEvent) => void) => removeReducedMotionListener(listener),
+      dispatchEvent: () => true
+    } as unknown as MediaQueryList
+    Object.defineProperty(browserWindow, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => reducedMotionQuery)
+    })
+    emitReducedMotion = (matches) => {
+      reducedMotionMatches = matches
+      for (const listener of [...reducedMotionListeners]) listener()
+    }
     previous = new Map(GLOBAL_KEYS.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
     profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     alternateProfile = createDefaultTheme('00000000-0000-4000-8000-000000000001', '备用主题')
@@ -461,6 +489,101 @@ describe('Studio preview editing interaction', () => {
     })
     expect(container.querySelector('.theme-item.active small')?.textContent).toBe('自定义主题 · 当前')
     expect(container.querySelector<HTMLButtonElement>('button[title="删除主题"]')?.disabled).toBe(false)
+  })
+
+  it('switches every GIF preview surface when reduced motion changes', async () => {
+    const animatedUrl = 'data:image/gif;base64,QU5JTUFURUQ='
+    const posterUrl = 'data:image/png;base64,UE9TVEVS'
+    const gifAssets = {
+      hero: 'assets/reduced-hero.gif',
+      polaroid: 'assets/reduced-polaroid.gif',
+      conversation: 'assets/reduced-conversation.gif',
+      window: 'assets/reduced-window.gif',
+      account: 'assets/reduced-account.gif',
+      signature: 'assets/reduced-signature.gif',
+      composer: 'assets/reduced-composer.gif',
+      bubble: 'assets/reduced-bubble.gif',
+      icon: 'assets/reduced-icon.gif'
+    }
+    const reference = (asset: string) => ({ asset, kind: 'image' as const, mimeType: 'image/gif' as const })
+    alternateProfile.hero.source = reference(gifAssets.hero)
+    alternateProfile.polaroid.visible = true
+    alternateProfile.polaroid.source = reference(gifAssets.polaroid)
+    alternateProfile.polaroid.sourceSize = { width: 1000, height: 800 }
+    alternateProfile.conversationBackground.visible = true
+    alternateProfile.conversationBackground.mode = 'gif'
+    alternateProfile.conversationBackground.source = reference(gifAssets.conversation)
+    alternateProfile.windowBackground.visible = true
+    alternateProfile.windowBackground.mode = 'gif'
+    alternateProfile.windowBackground.source = reference(gifAssets.window)
+    alternateProfile.accountMenuBackground.mode = 'gif'
+    alternateProfile.accountMenuBackground.source = reference(gifAssets.account)
+    alternateProfile.brandSignature.mode = 'gif'
+    alternateProfile.brandSignature.source = reference(gifAssets.signature)
+    alternateProfile.decorations.composerMelody.visible = true
+    alternateProfile.decorations.composerMelody.mode = 'gif'
+    alternateProfile.decorations.composerMelody.source = reference(gifAssets.composer)
+    alternateProfile.conversationBubbles.visible = true
+    alternateProfile.conversationBubbles.user = {
+      ...createDefaultConversationBubbleStyle(),
+      fit: 'stretch',
+      source: { kind: 'custom', reference: reference(gifAssets.bubble) }
+    }
+    alternateProfile.icons.sidebarSearch = { kind: 'asset', asset: gifAssets.icon }
+
+    const studio = (browserWindow as unknown as { studio: StudioApi }).studio
+    const originalCompile = studio.themes.compile
+    const assetNames = Object.values(gifAssets)
+    studio.themes.compile = vi.fn(async (id: string) => id === alternateProfile.id
+      ? {
+          assets: Object.fromEntries(assetNames.flatMap((asset) => [
+            [asset, animatedUrl],
+            [gifPosterAssetKey(asset), posterUrl]
+          ]))
+        }
+      : await originalCompile(id))
+    studio.assets.getPreviewUrl = vi.fn(async (_themeId, asset) =>
+      assetNames.includes(asset) ? animatedUrl : `data:image/png;base64,${asset}`)
+
+    const alternateButton = [...container.querySelectorAll<HTMLButtonElement>('.theme-item')]
+      .find((item) => item.querySelector('strong')?.textContent === '备用主题')
+    if (!alternateButton) throw new Error('Custom theme fixture is missing.')
+    await act(async () => {
+      alternateButton.click()
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+
+    const homePreviewSources = (): Array<string | null | undefined> => [
+      container.querySelector<HTMLImageElement>('.preview-hero-art')?.getAttribute('src'),
+      container.querySelector<HTMLImageElement>('.preview-polaroid-media')?.getAttribute('src'),
+      container.querySelector<HTMLImageElement>('.preview-window-background-media')?.getAttribute('src'),
+      container.querySelector<HTMLImageElement>('.codex-account-menu-background-media')?.getAttribute('src'),
+      container.querySelector<HTMLImageElement>('[data-preview-target="copy-brand-signature"] img')?.getAttribute('src'),
+      container.querySelector<HTMLImageElement>('[data-preview-target="composer-melody"] img')?.getAttribute('src'),
+      container.querySelector<HTMLImageElement>('.codex-sidebar-icon-button img.custom-icon')?.getAttribute('src')
+    ]
+    expect(homePreviewSources()).toEqual(Array(7).fill(animatedUrl))
+
+    await act(async () => {
+      emitReducedMotion(true)
+      await Promise.resolve()
+    })
+    expect(homePreviewSources()).toEqual(Array(7).fill(posterUrl))
+
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.click())
+    expect(container.querySelector<HTMLImageElement>('.preview-conversation-background-media')?.getAttribute('src')).toBe(posterUrl)
+    expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-frame-source')).toContain(posterUrl)
+    expect(container.querySelector<HTMLImageElement>('[data-preview-target="composer-melody"] img')?.getAttribute('src')).toBe(posterUrl)
+
+    await act(async () => {
+      emitReducedMotion(false)
+      await Promise.resolve()
+    })
+    expect(container.querySelector<HTMLImageElement>('.preview-conversation-background-media')?.getAttribute('src')).toBe(animatedUrl)
+    expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-frame-source')).toContain(animatedUrl)
   })
 
   it('prepares a theme before activation and blocks rapid duplicate switching', async () => {

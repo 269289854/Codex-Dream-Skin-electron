@@ -47,6 +47,68 @@ describe('CDP theme target selection', () => {
 })
 
 describe('CDP cleanup', () => {
+  it('waits for an in-flight reinjection before removing the theme', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    let finishInjection!: (snapshot: { connected: boolean; targetCount: number }) => void
+    const injection = new Promise<{ connected: boolean; targetCount: number }>((resolve) => { finishInjection = resolve })
+    const order: string[] = []
+    const internals = watcher as unknown as {
+      startTimer: () => void
+      tick: () => Promise<void>
+      verify: () => Promise<{ connected: boolean; targetCount: number }>
+      inject: () => Promise<{ connected: boolean; targetCount: number }>
+      cleanupTargets: () => Promise<void>
+    }
+    internals.verify = vi.fn().mockResolvedValue({ connected: false, targetCount: 1 })
+    internals.inject = vi.fn(async () => {
+      order.push('inject-started')
+      const snapshot = await injection
+      order.push('inject-finished')
+      return snapshot
+    })
+    internals.cleanupTargets = vi.fn(async () => { order.push('cleanup') })
+    internals.startTimer()
+
+    const tick = internals.tick()
+    await vi.waitFor(() => expect(internals.inject).toHaveBeenCalledTimes(1))
+    const stop = watcher.stop(true)
+    await Promise.resolve()
+    expect(internals.cleanupTargets).not.toHaveBeenCalled()
+
+    finishInjection({ connected: true, targetCount: 1 })
+    await Promise.all([tick, stop])
+
+    expect(order).toEqual(['inject-started', 'inject-finished', 'cleanup'])
+    await watcher.stop(false)
+  })
+
+  it('invalidates a pending tick before it can reinject', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    let finishVerification!: (snapshot: { connected: boolean; targetCount: number }) => void
+    const verification = new Promise<{ connected: boolean; targetCount: number }>((resolve) => { finishVerification = resolve })
+    const internals = watcher as unknown as {
+      startTimer: () => void
+      tick: () => Promise<void>
+      verify: () => Promise<{ connected: boolean; targetCount: number }>
+      inject: () => Promise<{ connected: boolean; targetCount: number }>
+      cleanupTargets: () => Promise<void>
+    }
+    internals.verify = vi.fn(() => verification)
+    internals.inject = vi.fn().mockResolvedValue({ connected: true, targetCount: 1 })
+    internals.cleanupTargets = vi.fn().mockResolvedValue(undefined)
+    internals.startTimer()
+
+    const tick = internals.tick()
+    await vi.waitFor(() => expect(internals.verify).toHaveBeenCalledTimes(1))
+    const stop = watcher.stop(true)
+    finishVerification({ connected: false, targetCount: 1 })
+    await Promise.all([tick, stop])
+
+    expect(internals.inject).not.toHaveBeenCalled()
+    expect(internals.cleanupTargets).toHaveBeenCalledTimes(1)
+    await watcher.stop(false)
+  })
+
   it('ignores closed page targets but propagates unconfirmed cleanup and resumes watching', async () => {
     const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
     const internals = watcher as unknown as {

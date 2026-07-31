@@ -891,6 +891,7 @@ export class ProfileStore {
     const relativePath = `assets/${purpose}-${randomUUID()}${outputExtension}`
     const destination = this.resolveAsset(themeId, relativePath)
     const temporary = `${destination}.${randomUUID()}.tmp`
+    let gifPosterDataUrl: string | undefined
     await mkdir(dirname(destination), { recursive: true })
     try {
       if (extension === '.svg') {
@@ -905,6 +906,9 @@ export class ProfileStore {
         await writeFile(temporary, normalized, { signal })
       } else {
         await pipeline(createReadStream(sourcePath), createWriteStreamChecked(temporary), { signal })
+      }
+      if (extension === '.gif') {
+        gifPosterDataUrl = (await prepareGif(await readFile(temporary, { signal }))).posterDataUrl
       }
       const temporaryFile = await open(temporary, 'r+')
       try { await temporaryFile.sync() } finally { await temporaryFile.close() }
@@ -925,6 +929,7 @@ export class ProfileStore {
       reference,
       relativePath,
       previewUrl: this.mediaPreviewUrl(themeId, relativePath),
+      gifPosterDataUrl,
       originalName: basename(sourcePath),
       width: metadata.width,
       height: metadata.height

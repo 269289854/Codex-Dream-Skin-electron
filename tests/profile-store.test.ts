@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
 import { resolveAppearanceColor } from '../src/shared/appearance'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
-import { ensureGifInfiniteLoop } from '../src/shared/gif'
+import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../src/shared/gif'
 import { iconGifPosterAssetKey, MAX_ICON_GIF_BYTES } from '../src/shared/icon-assets'
 import { CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
@@ -706,7 +706,10 @@ describe('ProfileStore', () => {
 
     expect((await store.get(profile.id)).windowBackground.source).toEqual(imported.reference)
     await expect(store.getMediaPreviewUrl(profile.id, imported.relativePath)).resolves.toContain('studio-media://')
-    expect((await store.compile(profile.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
+    expect(imported.gifPosterDataUrl).toMatch(/^data:image\/png;base64,/)
+    const compiled = await store.compile(profile.id)
+    expect(compiled.assets[imported.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
+    expect(compiled.assets[gifPosterAssetKey(imported.relativePath)]).toBe(imported.gifPosterDataUrl)
     const duplicate = await store.duplicate(profile, '窗口背景副本')
     expect(duplicate.windowBackground.source).toEqual(imported.reference)
     expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)

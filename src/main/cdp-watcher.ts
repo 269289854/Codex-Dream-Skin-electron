@@ -72,7 +72,8 @@ export class CdpWatcher {
   private payload = ''
   private expectedVersion = ''
   private mediaBindings: CdpMediaBinding[] = []
-  private busy = false
+  private watchGeneration = 0
+  private activeTick: Promise<void> | null = null
 
   constructor(
     readonly port: number,
@@ -129,8 +130,10 @@ export class CdpWatcher {
 
   async stop(removeTheme: boolean): Promise<CdpSnapshot> {
     const wasWatching = this.timer !== null
+    this.watchGeneration += 1
     if (this.timer) clearInterval(this.timer)
     this.timer = null
+    if (this.activeTick) await this.activeTick
     if (removeTheme) {
       try {
         await this.cleanupTargets()
@@ -145,7 +148,9 @@ export class CdpWatcher {
   }
 
   private startTimer(): void {
-    if (!this.timer) this.timer = setInterval(() => void this.tick(), 2500)
+    if (this.timer) return
+    const generation = ++this.watchGeneration
+    this.timer = setInterval(() => void this.tick(generation), 2500)
   }
 
   private async cleanupTargets(): Promise<void> {
@@ -172,15 +177,27 @@ export class CdpWatcher {
     }
   }
 
-  private async tick(): Promise<void> {
-    if (this.busy) return
-    this.busy = true
+  private tick(generation = this.watchGeneration): Promise<void> {
+    if (generation !== this.watchGeneration) return Promise.resolve()
+    if (this.activeTick) return this.activeTick
+    const operation = this.performTick(generation)
+    this.activeTick = operation
+    void operation.finally(() => {
+      if (this.activeTick === operation) this.activeTick = null
+    }).catch(() => undefined)
+    return operation
+  }
+
+  private async performTick(generation: number): Promise<void> {
     try {
       const verified = await this.verify()
+      if (generation !== this.watchGeneration) return
       if (!verified.connected) await this.inject()
     } catch (reason) {
-      this.onError(reason instanceof Error ? reason : new Error(String(reason)))
-    } finally { this.busy = false }
+      if (generation === this.watchGeneration) {
+        this.onError(reason instanceof Error ? reason : new Error(String(reason)))
+      }
+    }
   }
 
   private async cleanupExcludedTargets(): Promise<void> {
