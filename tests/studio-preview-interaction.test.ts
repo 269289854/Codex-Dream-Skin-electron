@@ -7,6 +7,7 @@ import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, ImportedMediaAs
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { gifPosterAssetKey } from '../src/shared/gif'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
+import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../src/shared/video-transcode'
 import { App } from '../src/renderer/src/App'
 import { ICON_PREVIEW_TARGETS, PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
 
@@ -40,6 +41,8 @@ describe('Studio preview editing interaction', () => {
   let selectedFontAsset: ImportedFontAsset | null
   let selectIcon: ReturnType<typeof vi.fn>
   let selectMedia: ReturnType<typeof vi.fn>
+  let commitVideoSelection: ReturnType<typeof vi.fn>
+  let discardVideoSelection: ReturnType<typeof vi.fn>
   let inspectVideo: ReturnType<typeof vi.fn>
   let optimizeVideo: ReturnType<typeof vi.fn>
   let getDefaultTheme: ReturnType<typeof vi.fn>
@@ -104,6 +107,10 @@ describe('Studio preview editing interaction', () => {
     selectedFontAsset = null
     selectIcon = vi.fn(async () => null)
     selectMedia = vi.fn(async () => null)
+    commitVideoSelection = vi.fn(async () => {
+      throw new Error('No video import configured.')
+    })
+    discardVideoSelection = vi.fn(async () => undefined)
     inspectVideo = vi.fn(async () => {
       throw new Error('No video inspection configured.')
     })
@@ -206,6 +213,8 @@ describe('Studio preview editing interaction', () => {
     assets: {
       selectImage: async () => null,
       selectMedia,
+      commitVideoSelection,
+      discardVideoSelection,
       inspectVideo,
       optimizeVideo,
       getPreviewUrl: async (_themeId, asset) => `data:image/png;base64,${asset}`,
@@ -1554,8 +1563,18 @@ describe('Studio preview editing interaction', () => {
         optimized: { asset: 'assets/hero-optimized.mp4', mimeType: 'video/mp4' as const, width: 1920, height: 1080, frameRate: 30 }
       }
     }
+    const regeneratedReference = {
+      ...optimizedReference,
+      asset: 'assets/hero-regenerated.mp4',
+      videoVariants: {
+        ...optimizedReference.videoVariants,
+        optimized: { ...optimizedReference.videoVariants.optimized, asset: 'assets/hero-regenerated.mp4' }
+      }
+    }
     selectMedia.mockResolvedValueOnce({ reference: originalReference, relativePath: originalReference.asset, previewUrl: 'studio-media://preview/hero-original.mp4', originalName: 'hero-original.mp4', width: 3840, height: 2160 })
-    optimizeVideo.mockResolvedValueOnce({ reference: optimizedReference, relativePath: optimizedReference.asset, previewUrl: 'studio-media://preview/hero-optimized.mp4', originalName: 'hero-original.mp4', width: 1920, height: 1080 })
+    optimizeVideo
+      .mockResolvedValueOnce({ reference: optimizedReference, relativePath: optimizedReference.asset, previewUrl: 'studio-media://preview/hero-optimized.mp4', originalName: 'hero-original.mp4', width: 1920, height: 1080 })
+      .mockResolvedValueOnce({ reference: regeneratedReference, relativePath: regeneratedReference.asset, previewUrl: 'studio-media://preview/hero-regenerated.mp4', originalName: 'hero-original.mp4', width: 1920, height: 1080 })
 
     const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
     if (!heroPicker) throw new Error('Hero media picker is missing.')
@@ -1575,8 +1594,39 @@ describe('Studio preview editing interaction', () => {
       optimize.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
-    expect(optimizeVideo).toHaveBeenCalledWith(profile.id, 'hero', originalReference.asset)
+    const transcode = [...container.querySelectorAll<HTMLButtonElement>('.video-transcode-dialog .primary-button')].find((button) => button.textContent?.includes('生成优化版'))
+    if (!transcode) throw new Error('Video transcode dialog is missing.')
+    expect(container.querySelector('.video-output-summary')?.textContent).toContain('1920×1080 · 30 FPS · 自动码率')
+    await act(async () => {
+      transcode.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(optimizeVideo).toHaveBeenCalledWith(profile.id, 'hero', originalReference.asset, {
+      maxWidth: 1920,
+      maxHeight: 1080,
+      frameRate: 30,
+      videoBitRate: null
+    })
     expect(container.querySelector('.video-variant-switch button.active')?.textContent).toBe('优化版')
+
+    const regenerate = [...container.querySelectorAll<HTMLButtonElement>('.optimize-video-command')].find((button) => button.textContent?.includes('重新生成优化版'))
+    if (!regenerate) throw new Error('Regenerate optimized video command is missing.')
+    await act(async () => {
+      regenerate.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    const regenerateSubmit = container.querySelector<HTMLButtonElement>('.video-transcode-dialog .primary-button')
+    if (!regenerateSubmit) throw new Error('Regenerate video dialog is missing.')
+    await act(async () => {
+      regenerateSubmit.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(optimizeVideo).toHaveBeenNthCalledWith(2, profile.id, 'hero', originalReference.asset, {
+      maxWidth: 1920,
+      maxHeight: 1080,
+      frameRate: 30,
+      videoBitRate: null
+    })
 
     const original = [...container.querySelectorAll<HTMLButtonElement>('.video-variant-switch button')].find((button) => button.textContent === '原片')
     if (!original) throw new Error('Original video variant control is missing.')
@@ -1594,13 +1644,80 @@ describe('Studio preview editing interaction', () => {
     })
     expect(savedProfiles.at(-1)?.videoPlayback.pausePolicy).toBe('unfocused')
     expect(savedProfiles.at(-1)?.hero.source?.videoVariants).toMatchObject({ active: 'original' })
+    expect(savedProfiles.at(-1)?.hero.source?.videoVariants?.optimized.asset).toBe(regeneratedReference.asset)
   })
 
-  it('offers conversion for a low-load video that is not portable', async () => {
-    const inspection = { width: 1280, height: 720, frameRate: 24, duration: 8, codec: 'MPEG-4 Visual', videoProfile: null, bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: false, highLoad: false }
+  it('keeps low-load video conversion available but requires a meaningful reduction', async () => {
+    const inspection = { width: 640, height: 360, frameRate: 24, duration: 8, codec: 'AVC avc1', videoProfile: 'High', bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: true, highLoad: false }
     inspectVideo.mockResolvedValue(inspection)
-    const reference = { asset: 'assets/legacy.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
-    selectMedia.mockResolvedValueOnce({ reference, relativePath: reference.asset, previewUrl: 'studio-media://preview/legacy.mp4', originalName: 'legacy.mp4', width: 1280, height: 720 })
+    const reference = { asset: 'assets/low-load.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
+    selectMedia.mockResolvedValueOnce({ reference, relativePath: reference.asset, previewUrl: 'studio-media://preview/low-load.mp4', originalName: 'low-load.mp4', width: 640, height: 360 })
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    const optimize = [...container.querySelectorAll<HTMLButtonElement>('.optimize-video-command')].find((button) => button.textContent?.includes('生成优化版'))
+    if (!optimize) throw new Error('Low-load video conversion command is missing.')
+    await act(async () => {
+      optimize.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    const dialog = container.querySelector<HTMLElement>('.video-transcode-dialog')
+    const submit = dialog?.querySelector<HTMLButtonElement>('.primary-button')
+    if (!dialog || !submit) throw new Error('Low-load video conversion dialog is missing.')
+    expect(submit.disabled).toBe(true)
+    expect(dialog.querySelector('.theme-dialog-error')?.textContent).toContain('请降低')
+
+    const bitRate = dialog.querySelectorAll<HTMLSelectElement>('.video-transcode-fields select')[2]
+    if (!bitRate) throw new Error('Video bitrate control is missing.')
+    await act(async () => {
+      bitRate.value = 'custom'
+      bitRate.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const customBitRate = dialog.querySelector<HTMLInputElement>('.video-custom-value input')
+    if (!customBitRate) throw new Error('Custom bitrate control is missing.')
+    await act(async () => {
+      setInputValue(customBitRate, '1')
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(submit.disabled).toBe(false)
+  })
+
+  it('defaults a portable low-load selection to the original and discards it on cancel', async () => {
+    const inspection = { width: 640, height: 360, frameRate: 24, duration: 8, codec: 'AVC avc1', videoProfile: 'High', bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: true, highLoad: false }
+    selectMedia.mockResolvedValueOnce({ kind: 'video-source', selectionId: 'video-selection-cancel', originalName: 'portable.mp4', inspection })
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.focus()
+      heroPicker.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    const dialog = container.querySelector<HTMLElement>('.video-transcode-dialog')
+    const originalMode = [...container.querySelectorAll<HTMLButtonElement>('.video-import-modes button')].find((button) => button.textContent === '原样使用')
+    if (!dialog || !originalMode) throw new Error('Video import dialog is missing.')
+    expect(originalMode.classList.contains('active')).toBe(true)
+    expect(browserWindow.document.activeElement).toBe(dialog)
+    await act(async () => {
+      dialog.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }) as unknown as KeyboardEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(discardVideoSelection).toHaveBeenCalledWith(profile.id, 'video-selection-cancel')
+    expect(commitVideoSelection).not.toHaveBeenCalled()
+    expect(container.querySelector('.video-transcode-dialog')).toBeNull()
+    expect(browserWindow.document.activeElement).toBe(heroPicker)
+  })
+
+  it('requires conversion for an incompatible selection and submits custom video settings', async () => {
+    const inspection = { width: 1280, height: 720, frameRate: 24, duration: 8, codec: 'MPEG-4 Visual', videoProfile: null, bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: false, highLoad: false }
+    const reference = { asset: 'assets/legacy-converted.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
+    selectMedia.mockResolvedValueOnce({ kind: 'video-source', selectionId: 'video-selection-1', originalName: 'legacy.mp4', inspection })
+    commitVideoSelection.mockResolvedValueOnce({ reference, relativePath: reference.asset, previewUrl: 'studio-media://preview/legacy-converted.mp4', originalName: 'legacy.mp4', width: 640, height: 360 })
 
     const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
     if (!heroPicker) throw new Error('Hero media picker is missing.')
@@ -1609,10 +1726,209 @@ describe('Studio preview editing interaction', () => {
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
 
-    expect(container.querySelector('.video-load-badge')?.textContent).toContain('需转换')
-    const convert = [...container.querySelectorAll<HTMLButtonElement>('.optimize-video-command')].find((button) => button.textContent?.includes('转换视频'))
-    expect(convert).toBeDefined()
-    expect(convert?.disabled).toBe(false)
+    const dialog = container.querySelector<HTMLElement>('.video-transcode-dialog')
+    if (!dialog) throw new Error('Video transcode dialog is missing.')
+    expect(dialog.textContent).toContain('源视频不兼容，必须转换后使用')
+    expect(dialog.querySelector('.video-import-modes')).toBeNull()
+
+    const selects = dialog.querySelectorAll<HTMLSelectElement>('.video-transcode-fields select')
+    await act(async () => {
+      selects[0]!.value = 'custom'
+      selects[0]!.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      selects[1]!.value = 'custom'
+      selects[1]!.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      selects[2]!.value = 'custom'
+      selects[2]!.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const customWidth = dialog.querySelector<HTMLInputElement>('.video-custom-resolution input')
+    const customValues = dialog.querySelectorAll<HTMLInputElement>('.video-custom-value input')
+    const customFrameRate = customValues[0]
+    const customBitRate = customValues[1]
+    if (!customWidth || !customFrameRate || !customBitRate) throw new Error('Custom video controls are missing.')
+    await act(async () => {
+      setInputValue(customWidth, '501')
+      setInputValue(customFrameRate, '23.5')
+      setInputValue(customBitRate, '2.25')
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(dialog.querySelector('.video-output-summary')?.textContent).toContain('23.5 FPS · 2.25 Mbps')
+
+    const convert = dialog.querySelector<HTMLButtonElement>('.primary-button')
+    const form = dialog.querySelector<HTMLFormElement>('form')
+    if (!convert || !form) throw new Error('Video conversion command is missing.')
+    expect(form.noValidate).toBe(true)
+    expect(customWidth.step).toBe('any')
+    expect(customFrameRate.step).toBe('any')
+    expect(customBitRate.step).toBe('any')
+    expect(convert.disabled).toBe(false)
+    await act(async () => {
+      convert.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(commitVideoSelection).toHaveBeenCalledWith(profile.id, 'video-selection-1', {
+      mode: 'transcode',
+      settings: { maxWidth: 500, maxHeight: 280, frameRate: 23.5, videoBitRate: 2_250_000 }
+    })
+    expect(container.querySelector('.video-transcode-dialog')).toBeNull()
+  })
+
+  it('imports a portable low-load video in original mode', async () => {
+    const inspection = { width: 640, height: 360, frameRate: 24, duration: 8, codec: 'AVC avc1', videoProfile: 'High', bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: true, highLoad: false }
+    const reference = { asset: 'assets/original-video.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
+    selectMedia.mockResolvedValueOnce({ kind: 'video-source', selectionId: 'video-selection-original', originalName: 'portable.mp4', inspection })
+    commitVideoSelection.mockResolvedValueOnce({ reference, relativePath: reference.asset, previewUrl: 'studio-media://preview/original-video.mp4', originalName: 'portable.mp4', width: 640, height: 360 })
+
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    const submit = container.querySelector<HTMLButtonElement>('.video-transcode-dialog .primary-button')
+    if (!submit) throw new Error('Original video import command is missing.')
+    expect(submit.textContent).toContain('原样导入')
+    await act(async () => {
+      submit.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    expect(commitVideoSelection).toHaveBeenCalledWith(profile.id, 'video-selection-original', { mode: 'original' })
+    expect(container.querySelector('.video-transcode-dialog')).toBeNull()
+    expect(container.querySelector<HTMLVideoElement>('video.preview-hero-art')).not.toBeNull()
+  })
+
+  it('discards a pending video selection when switching themes', async () => {
+    const inspection = { width: 640, height: 360, frameRate: 24, duration: 8, codec: 'AVC avc1', videoProfile: 'High', bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: true, highLoad: false }
+    selectMedia.mockResolvedValueOnce({ kind: 'video-source', selectionId: 'video-selection-switch', originalName: 'portable.mp4', inspection })
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    const alternate = [...container.querySelectorAll<HTMLButtonElement>('.theme-item')].find((button) => button.textContent?.includes(alternateProfile.name))
+    if (!alternate) throw new Error('Alternate theme command is missing.')
+    await act(async () => {
+      alternate.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 30))
+    })
+
+    expect(container.querySelector('.video-transcode-dialog')).toBeNull()
+    expect(discardVideoSelection).toHaveBeenCalledWith(profile.id, 'video-selection-switch')
+  })
+
+  it.each([
+    ['expired', VIDEO_SELECTION_EXPIRED_MESSAGE],
+    ['cancelled', VIDEO_IMPORT_CANCELLED_MESSAGE]
+  ])('closes a terminal %s video selection dialog instead of allowing retries', async (state, terminalMessage) => {
+    const inspection = { width: 1280, height: 720, frameRate: 24, duration: 8, codec: 'MPEG-4 Visual', videoProfile: null, bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: false, highLoad: false }
+    selectMedia.mockResolvedValueOnce({ kind: 'video-source', selectionId: `video-selection-${state}`, originalName: `${state}.mp4`, inspection })
+    commitVideoSelection.mockRejectedValueOnce(new Error(terminalMessage))
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    const submit = container.querySelector<HTMLButtonElement>('.video-transcode-dialog .primary-button')
+    if (!submit) throw new Error('Video import command is missing.')
+    await act(async () => {
+      submit.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(container.querySelector('.video-transcode-dialog')).toBeNull()
+    expect(container.querySelector('.error-banner')?.textContent).toContain(terminalMessage)
+  })
+
+  it('disables the video dialog while an import is in progress', async () => {
+    const inspection = { width: 1280, height: 720, frameRate: 24, duration: 8, codec: 'MPEG-4 Visual', videoProfile: null, bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: false, highLoad: false }
+    const reference = { asset: 'assets/busy-video.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
+    let resolveImport: ((value: ImportedMediaAsset) => void) | null = null
+    selectMedia.mockResolvedValueOnce({ kind: 'video-source', selectionId: 'video-selection-busy', originalName: 'busy.mp4', inspection })
+    commitVideoSelection.mockImplementationOnce(() => new Promise<ImportedMediaAsset>((resolve) => { resolveImport = resolve }))
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    const submit = container.querySelector<HTMLButtonElement>('.video-transcode-dialog .primary-button')
+    if (!submit) throw new Error('Video import command is missing.')
+    await act(async () => {
+      submit.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const dialog = container.querySelector<HTMLElement>('.video-transcode-dialog')
+    expect(dialog?.querySelector<HTMLButtonElement>('.primary-button')?.disabled).toBe(true)
+    expect(dialog?.querySelector<HTMLButtonElement>('.secondary-command')?.disabled).toBe(true)
+    expect(dialog?.textContent).toContain('处理中')
+
+    await act(async () => {
+      resolveImport?.({ reference, relativePath: reference.asset, previewUrl: 'studio-media://preview/busy-video.mp4', originalName: 'busy.mp4', width: 1280, height: 720 })
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(container.querySelector('.video-transcode-dialog')).toBeNull()
+  })
+
+  it('keeps video settings after a failed import and allows retrying with adjusted parameters', async () => {
+    const inspection = { width: 1280, height: 720, frameRate: 24, duration: 8, codec: 'MPEG-4 Visual', videoProfile: null, bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: false, highLoad: false }
+    const reference = { asset: 'assets/retried-video.mp4', kind: 'video' as const, mimeType: 'video/mp4' as const }
+    selectMedia.mockResolvedValueOnce({ kind: 'video-source', selectionId: 'video-selection-retry', originalName: 'retry.mp4', inspection })
+    commitVideoSelection
+      .mockRejectedValueOnce(new Error('磁盘空间不足'))
+      .mockResolvedValueOnce({ reference, relativePath: reference.asset, previewUrl: 'studio-media://preview/retried-video.mp4', originalName: 'retry.mp4', width: 1280, height: 720 })
+
+    const heroPicker = [...container.querySelectorAll<HTMLButtonElement>('.property-group .asset-picker')].find((button) => button.textContent?.includes('选择主视觉媒体'))
+    if (!heroPicker) throw new Error('Hero media picker is missing.')
+    await act(async () => {
+      heroPicker.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    const dialog = container.querySelector<HTMLElement>('.video-transcode-dialog')
+    const bitRateSelect = dialog?.querySelectorAll<HTMLSelectElement>('.video-transcode-fields select')[2]
+    if (!dialog || !bitRateSelect) throw new Error('Video bitrate controls are missing.')
+    await act(async () => {
+      bitRateSelect.value = 'custom'
+      bitRateSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    const customBitRate = dialog.querySelector<HTMLInputElement>('.video-custom-value input')
+    const form = dialog.querySelector<HTMLFormElement>('form')
+    if (!customBitRate || !form) throw new Error('Custom video bitrate input is missing.')
+    await act(async () => {
+      setInputValue(customBitRate, '3.5')
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      form.dispatchEvent(new browserWindow.Event('submit', { bubbles: true, cancelable: true }) as unknown as SubmitEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+
+    expect(container.querySelector('.video-transcode-dialog')).toBe(dialog)
+    expect(customBitRate.value).toBe('3.5')
+    expect(dialog.querySelector('.theme-dialog-error')?.textContent).toContain('磁盘空间不足')
+    expect(commitVideoSelection).toHaveBeenNthCalledWith(1, profile.id, 'video-selection-retry', {
+      mode: 'transcode',
+      settings: { maxWidth: 1280, maxHeight: 720, frameRate: 24, videoBitRate: 3_500_000 }
+    })
+
+    await act(async () => {
+      setInputValue(customBitRate, '4')
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      form.dispatchEvent(new browserWindow.Event('submit', { bubbles: true, cancelable: true }) as unknown as SubmitEvent)
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    expect(commitVideoSelection).toHaveBeenNthCalledWith(2, profile.id, 'video-selection-retry', {
+      mode: 'transcode',
+      settings: { maxWidth: 1280, maxHeight: 720, frameRate: 24, videoBitRate: 4_000_000 }
+    })
+    expect(container.querySelector('.video-transcode-dialog')).toBeNull()
   })
 
   it('edits a gradient window background and manages eight ordered mask layers', async () => {

@@ -678,15 +678,46 @@ describe('ProfileStore', () => {
     const optimizedInspection = await store.inspectReferencedVideo(profile.id, optimizedAsset)
     expect(optimizedInspection).toMatchObject({ width: 640, height: 360, hasAudio: true, portable: true, highLoad: false })
     expect(optimizedInspection.frameRate).toBeLessThanOrEqual(30.5)
-
     profile.hero.source = imported.reference
+    await store.update(profile)
+
+    await expect(store.optimizeReferencedVideo(profile.id, 'windowBackground', originalAsset, {
+      maxWidth: 320,
+      maxHeight: 180,
+      frameRate: 24,
+      videoBitRate: 1_000_000
+    })).rejects.toThrow('视频与主题位置不匹配')
+
+    const regenerated = await store.optimizeReferencedVideo(profile.id, 'hero', originalAsset, {
+      maxWidth: 320,
+      maxHeight: 180,
+      frameRate: 24,
+      videoBitRate: 1_000_000
+    })
+    expect(regenerated.reference.videoVariants?.original.asset).toBe(originalAsset)
+    const regeneratedAsset = regenerated.reference.videoVariants?.optimized.asset
+    if (!regeneratedAsset) throw new Error('Regenerated optimized video is missing.')
+    expect(regeneratedAsset).not.toBe(optimizedAsset)
+    await expect(store.inspectReferencedVideo(profile.id, regeneratedAsset)).resolves.toMatchObject({ width: 320, height: 180, portable: true })
+
+    profile.hero.source = regenerated.reference
+    const lowLoad = await store.importMediaAsset(profile.id, webmSource, 'polaroid', 'video')
+    profile.polaroid.source = lowLoad.reference
     const saved = await store.update(profile)
+    await expect(store.optimizeReferencedVideo(profile.id, 'polaroid', lowLoad.reference.asset, {
+      maxWidth: 320,
+      maxHeight: 180,
+      frameRate: webmInspection.frameRate,
+      videoBitRate: null
+    })).rejects.toThrow('负载较低')
+
     await expect(readFile(join(store.themesRoot, profile.id, originalAsset))).resolves.toBeInstanceOf(Buffer)
-    await expect(readFile(join(store.themesRoot, profile.id, optimizedAsset))).resolves.toBeInstanceOf(Buffer)
+    await expect(readFile(join(store.themesRoot, profile.id, optimizedAsset))).rejects.toThrow()
+    await expect(readFile(join(store.themesRoot, profile.id, regeneratedAsset))).resolves.toBeInstanceOf(Buffer)
     saved.hero.source = null
     await store.update(saved)
     await expect(readFile(join(store.themesRoot, profile.id, originalAsset))).rejects.toThrow()
-    await expect(readFile(join(store.themesRoot, profile.id, optimizedAsset))).rejects.toThrow()
+    await expect(readFile(join(store.themesRoot, profile.id, regeneratedAsset))).rejects.toThrow()
   })
 
   it('persists, compiles, previews, and duplicates a window GIF background', async () => {

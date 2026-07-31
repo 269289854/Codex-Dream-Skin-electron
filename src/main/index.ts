@@ -3,18 +3,20 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
-import { extname, join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import electronUpdater from 'electron-updater'
-import { ProfileStore, type VideoSourcePreflight } from './profile-store'
+import { ProfileStore } from './profile-store'
 import { CodexService } from './codex-service'
 import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
 import { createStudioInstanceData, resolveStudioInstanceAction } from './app-lifecycle'
 import { isSupportedDesktopPlatform } from './codex-platform'
 import { MacCodexDriver } from './macos-codex-driver'
 import { WindowsCodexDriver } from './windows-codex-driver'
+import { PendingVideoSelectionRegistry } from './pending-video-selections'
 import { captureIpcResult } from '../shared/ipc-result'
-import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
+import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole, VideoSourceSelection } from '../shared/contracts'
 import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
+import { VIDEO_IMPORT_CANCELLED_MESSAGE, assertVideoImportDecisionCompatible, resolveVideoOutputSize, videoImportDecisionSchema, videoTranscodeSettingsSchema, type VideoTranscodeSettings } from '../shared/video-transcode'
 
 const { autoUpdater } = electronUpdater
 
@@ -28,6 +30,7 @@ let appIconPath = ''
 let quitting = false
 let updatedVersionRelaunching = false
 const operationControllers = new Map<string, AbortController>()
+const pendingVideoSelections = new PendingVideoSelectionRegistry()
 const appVersion = app.getVersion()
 const hasSingleInstanceLock = app.requestSingleInstanceLock(createStudioInstanceData(appVersion))
 protocol.registerSchemesAsPrivileged([{ scheme: 'studio-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
@@ -203,52 +206,28 @@ function registerIpc(): void {
     const videoSelected = sourceExtension === '.mp4' || sourceExtension === '.webm'
     emitProgress({ id, kind: 'media-import', phase: videoSelected ? 'validating' : 'started', processedBytes: 0, totalBytes: null, message: videoSelected ? '正在检查视频' : '正在导入媒体' })
     try {
-      let optimizeVideo = false
-      let preflight: VideoSourcePreflight | undefined
       if (videoSelected) {
-        preflight = await store.preflightVideoSource(sourcePath, controller.signal)
-        const inspection = preflight.inspection
-        if (inspection.portable === false) {
-          const messageOptions = {
-            type: 'warning' as const,
-            title: '转换视频以确保兼容',
-            message: '该视频无法保证在 Windows 与 macOS 的 Codex 中播放，需要先转换为 H.264 / AAC。',
-            detail: videoOptimizationDetail(inspection),
-            buttons: ['转换后导入', '取消'],
-            defaultId: 0,
-            cancelId: 1,
-            noLink: true
-          }
-          const decision = mainWindow ? await dialog.showMessageBox(mainWindow, messageOptions) : await dialog.showMessageBox(messageOptions)
-          if (controller.signal.aborted) throw new Error('媒体导入已取消。')
-          if (decision.response === 1) {
-            controller.abort()
-            throw new Error('媒体导入已取消。')
-          }
-          optimizeVideo = true
-        } else if (inspection.highLoad) {
-          const messageOptions = {
-            type: 'question' as const,
-            title: '优化视频主题性能',
-            message: '该视频的解码负载较高，是否生成适合主题播放的优化版本？',
-            detail: videoOptimizationDetail(inspection),
-            buttons: ['优化后导入', '保留原视频', '取消'],
-            defaultId: 0,
-            cancelId: 2,
-            noLink: true
-          }
-          const decision = mainWindow ? await dialog.showMessageBox(mainWindow, messageOptions) : await dialog.showMessageBox(messageOptions)
-          if (controller.signal.aborted) throw new Error('媒体导入已取消。')
-          if (decision.response === 2) {
-            controller.abort()
-            throw new Error('媒体导入已取消。')
-          }
-          optimizeVideo = decision.response === 0
+        if (!isVideoMediaRole(purpose)) throw new Error('该位置不支持视频。')
+        const preflight = await store.preflightVideoSource(sourcePath, controller.signal)
+        const selectionId = randomUUID()
+        pendingVideoSelections.add(selectionId, {
+          themeId,
+          purpose,
+          sourcePath,
+          originalName: basename(sourcePath),
+          preflight
+        })
+        const selection: VideoSourceSelection = {
+          kind: 'video-source',
+          selectionId,
+          originalName: basename(sourcePath),
+          inspection: preflight.inspection
         }
+        emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '视频规格读取完成' })
+        return selection
       }
-      if (optimizeVideo) emitProgress({ id, kind: 'media-import', phase: 'optimizing', processedBytes: 0, totalBytes: null, message: '正在生成 1080p / 30 FPS 优化视频' })
-      else emitProgress({ id, kind: 'media-import', phase: 'copying', processedBytes: 0, totalBytes: null, message: '正在导入媒体' })
-      const imported = await store.importMediaAsset(themeId, sourcePath, purpose, kind, controller.signal, optimizeVideo, preflight)
+      emitProgress({ id, kind: 'media-import', phase: 'copying', processedBytes: 0, totalBytes: null, message: '正在导入媒体' })
+      const imported = await store.importMediaAsset(themeId, sourcePath, purpose, kind, controller.signal)
       emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '媒体导入完成' })
       return imported
     } catch (error) {
@@ -259,16 +238,69 @@ function registerIpc(): void {
       operationControllers.delete(id)
     }
   })
+  ipcMain.handle('assets:commit-video-selection', async (_event, themeId: unknown, selectionId: unknown, decisionInput: unknown) => {
+    if (typeof themeId !== 'string' || typeof selectionId !== 'string') throw new Error('视频选择参数无效。')
+    const parsedDecision = videoImportDecisionSchema.safeParse(decisionInput)
+    if (!parsedDecision.success) throw new Error('视频导入参数无效。')
+    const selection = pendingVideoSelections.begin(themeId, selectionId)
+    try {
+      assertVideoImportDecisionCompatible(parsedDecision.data, selection.preflight.inspection)
+    } catch (error) {
+      pendingVideoSelections.restore(selectionId, selection)
+      throw error
+    }
+    const id = randomUUID()
+    const controller = new AbortController()
+    operationControllers.set(id, controller)
+    const settings = parsedDecision.data.mode === 'transcode' ? parsedDecision.data.settings : undefined
+    emitProgress({
+      id,
+      kind: 'media-import',
+      phase: settings ? 'optimizing' : 'copying',
+      processedBytes: 0,
+      totalBytes: null,
+      message: settings ? videoTranscodeProgressMessage(selection.preflight.inspection, settings) : '正在导入原视频'
+    })
+    try {
+      const imported = await store.importMediaAsset(
+        themeId,
+        selection.sourcePath,
+        selection.purpose,
+        'video',
+        controller.signal,
+        Boolean(settings),
+        selection.preflight,
+        settings
+      )
+      pendingVideoSelections.complete(selectionId, selection)
+      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '视频导入完成' })
+      return imported
+    } catch (error) {
+      if (controller.signal.aborted) pendingVideoSelections.cancel(selectionId, selection)
+      else pendingVideoSelections.restore(selectionId, selection)
+      const failure = controller.signal.aborted ? new Error(VIDEO_IMPORT_CANCELLED_MESSAGE) : error
+      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: failure instanceof Error ? failure.message : '视频导入失败' })
+      throw failure
+    } finally {
+      operationControllers.delete(id)
+    }
+  })
+  ipcMain.handle('assets:discard-video-selection', (_event, themeId: unknown, selectionId: unknown) => {
+    if (typeof themeId !== 'string' || typeof selectionId !== 'string') throw new Error('视频选择参数无效。')
+    pendingVideoSelections.discard(themeId, selectionId)
+  })
   ipcMain.handle('assets:get-preview-url', (_event, themeId: unknown, asset: unknown) => store.getMediaPreviewUrl(themeId, asset))
   ipcMain.handle('assets:inspect-video', (_event, themeId: unknown, asset: unknown) => store.inspectReferencedVideo(themeId, asset))
-  ipcMain.handle('assets:optimize-video', async (_event, themeId: unknown, role: unknown, asset: unknown) => {
+  ipcMain.handle('assets:optimize-video', async (_event, themeId: unknown, role: unknown, asset: unknown, settingsInput: unknown) => {
     if (!isVideoMediaRole(role)) throw new Error('视频位置无效。')
+    const parsedSettings = videoTranscodeSettingsSchema.safeParse(settingsInput)
+    if (!parsedSettings.success) throw new Error('视频转换参数无效。')
     const id = randomUUID()
     const controller = new AbortController()
     operationControllers.set(id, controller)
     emitProgress({ id, kind: 'media-import', phase: 'optimizing', processedBytes: 0, totalBytes: null, message: '正在优化当前视频' })
     try {
-      const optimized = await store.optimizeReferencedVideo(themeId, role, asset, controller.signal)
+      const optimized = await store.optimizeReferencedVideo(themeId, role, asset, parsedSettings.data, controller.signal)
       emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: '视频优化完成' })
       return optimized
     } catch (error) {
@@ -465,13 +497,18 @@ function emitProgress(progress: OperationProgress): void {
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('operations:progress', progress)
 }
 
-function videoOptimizationDetail(inspection: VideoAssetInspection): string {
-  const landscape = inspection.width >= inspection.height
-  const target = landscape ? '1920×1080' : '1080×1920'
-  const result = `转换版本：H.264 / AAC，不超过 ${target}，最高 30 FPS。`
-  return inspection.portable
-    ? `当前视频：${inspection.width}×${inspection.height}，${inspection.frameRate.toFixed(2)} FPS。\n${result} 原片会保留，可随时切回。`
-    : `当前视频：${inspection.codec}${inspection.videoProfile ? ` (${inspection.videoProfile})` : ''}${inspection.audioCodec ? ` / ${inspection.audioCodec}${inspection.audioProfile ? ` (${inspection.audioProfile})` : ''}` : ''}，${inspection.width}×${inspection.height}。\n${result} 不兼容原片不会加入主题。`
+function videoTranscodeProgressMessage(inspection: VideoAssetInspection, settings: VideoTranscodeSettings): string {
+  const output = resolveVideoOutputSize(inspection, settings)
+  const bitRate = settings.videoBitRate === null ? '自动码率' : `${formatMbps(settings.videoBitRate)} Mbps`
+  return `正在生成 ${output.width}×${output.height} / ${formatFrameRate(settings.frameRate)} FPS / ${bitRate} 视频`
+}
+
+function formatMbps(value: number): string {
+  return (value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)
+}
+
+function formatFrameRate(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
 
 function isVideoMediaRole(value: unknown): value is VideoMediaRole {

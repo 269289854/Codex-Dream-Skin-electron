@@ -5,7 +5,7 @@ import {
   GitBranch, Home, Image, Laptop, LogOut, MessageSquare, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
-import type { AppInfo, AppUpdateStatus, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
+import type { AppInfo, AppUpdateStatus, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoImportDecision, VideoMediaRole, VideoSourceSelection } from '../../shared/contracts'
 import { ACCOUNT_MENU_ITEMS, buildAccountMenuBackgroundStyle } from '../../shared/account-menu'
 import { APPEARANCE_COLOR_TOKENS, APPEARANCE_PAINT_TOKENS, paintToCss, resolveAppearanceColor, resolveAppearancePaint, type AppearanceColorToken, type AppearanceGroup, type AppearancePaintToken } from '../../shared/appearance'
 import type { AppearanceState } from '../../shared/appearance'
@@ -34,11 +34,13 @@ import { PreviewVideo } from './PreviewVideo'
 import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_ACCOUNT_MENU_LABELS, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import { VideoPlaybackPanel } from './VideoPlaybackPanel'
+import { VideoTranscodeDialog } from './VideoTranscodeDialog'
 import { VideoThumbnail } from './VideoThumbnail'
 import { WindowBackgroundControls } from './WindowBackgroundControls'
 import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
 import { BrandSignatureControls } from './BrandSignatureControls'
 import { appUpdateDisabledMessage, studioPlatformLabel } from './platform-ui'
+import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../../shared/video-transcode'
 import {
   ICON_PREVIEW_TARGETS,
   findPreviewTarget,
@@ -67,6 +69,17 @@ interface ThemeOperationToken {
   generation: number
 }
 
+interface VideoTranscodeDialogState {
+  kind: 'import' | 'optimize'
+  themeId: string
+  role: VideoMediaRole
+  originalName: string
+  inspection: VideoAssetInspection
+  selectionId?: string
+  sourceAsset?: string
+  defaultMode: VideoImportDecision['mode']
+}
+
 export function App(): React.JSX.Element {
   const [themes, setThemes] = useState<ThemeSummary[]>([])
   const [draft, setDraft] = useState<ThemeProfile | null>(null)
@@ -86,6 +99,7 @@ export function App(): React.JSX.Element {
   const [themeOperationBusy, setThemeOperationBusy] = useState(false)
   const [optimizingVideoRole, setOptimizingVideoRole] = useState<VideoMediaRole | null>(null)
   const [videoInspections, setVideoInspections] = useState<Record<string, VideoAssetInspection | null>>({})
+  const [videoTranscodeDialog, setVideoTranscodeDialog] = useState<VideoTranscodeDialogState | null>(null)
   const [operationProgress, setOperationProgress] = useState<OperationProgress | null>(null)
   const [shareDropActive, setShareDropActive] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
@@ -270,6 +284,15 @@ export function App(): React.JSX.Element {
     if (!subscribe) return
     return subscribe((progress) => setOperationProgress(progress.phase === 'completed' || progress.phase === 'failed' || progress.phase === 'cancelled' ? null : progress))
   }, [])
+
+  useEffect(() => {
+    if (!videoTranscodeDialog || videoTranscodeDialog.themeId === draft?.id) return
+    const closing = videoTranscodeDialog
+    setVideoTranscodeDialog(null)
+    if (closing.kind === 'import' && closing.selectionId) {
+      void window.studio.assets.discardVideoSelection(closing.themeId, closing.selectionId).catch(() => undefined)
+    }
+  }, [draft?.id, videoTranscodeDialog])
 
   useEffect(() => {
     if (!draft) return
@@ -676,6 +699,46 @@ export function App(): React.JSX.Element {
     }
   }
 
+  const applyImportedMedia = (token: ThemeOperationToken, purpose: MediaAssetPurpose, imported: ImportedMediaAsset): void => {
+    mergeAssetsForThemeOperation(token, {
+      [imported.relativePath]: imported.previewUrl,
+      ...(imported.gifPosterDataUrl ? { [gifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
+    })
+    changeForThemeOperation(token, (profile) => {
+      if (purpose === 'hero') {
+        profile.hero.source = imported.reference
+        if (imported.reference.kind === 'video') profile.hero.playback = { ...profile.hero.playback, sound: false }
+      } else if (purpose === 'polaroid') {
+        profile.polaroid.source = imported.reference
+        profile.polaroid.sourceSize = { width: imported.width, height: imported.height }
+        if (imported.reference.kind === 'video') profile.polaroid.playback = { ...profile.polaroid.playback, sound: false }
+      } else if (purpose === 'conversationBackground') {
+        const mode = imported.reference.mimeType === 'image/gif' ? 'gif' : imported.reference.kind === 'video' ? 'video' : 'image'
+        profile.conversationBackground.visible = true
+        profile.conversationBackground.mode = mode
+        profile.conversationBackground.source = imported.reference
+      } else if (purpose === 'windowBackground') {
+        const mode = imported.reference.mimeType === 'image/gif' ? 'gif' : imported.reference.kind === 'video' ? 'video' : 'image'
+        profile.windowBackground.visible = true
+        profile.windowBackground.mode = mode
+        profile.windowBackground.source = imported.reference
+      } else if (purpose === 'accountMenuBackground') {
+        profile.accountMenuBackground.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
+        profile.accountMenuBackground.source = imported.reference
+      } else if (purpose === 'brandSignature') {
+        profile.brandSignature.source = imported.reference
+        profile.brandSignature.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
+      } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble') {
+        const role = purpose === 'conversationUserBubble' ? 'user' : purpose === 'conversationCodexBubble' ? 'codex' : 'plan'
+        profile.conversationBubbles.visible = true
+        profile.conversationBubbles[role].source = { kind: 'custom', reference: imported.reference }
+      } else {
+        profile.decorations.composerMelody.source = imported.reference
+        profile.decorations.composerMelody.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
+      }
+    })
+  }
+
   const selectImage = async (purpose: MediaAssetPurpose, requestedKind?: MediaSelectionKind): Promise<void> => {
     if (!draft) return
     const themeId = draft.id
@@ -684,77 +747,116 @@ export function App(): React.JSX.Element {
     setMediaBusy(true)
     setError(null)
     try {
-      const imported = window.studio.assets.selectMedia
+      const selected = window.studio.assets.selectMedia
         ? await window.studio.assets.selectMedia(themeId, purpose, requestedKind)
         : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble' ? null : await window.studio.assets.selectImage(themeId, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, gifPosterDataUrl: legacy.gifPosterDataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
-      if (!imported || !isThemeOperationCurrent(token)) return
-      mergeAssetsForThemeOperation(token, {
-        [imported.relativePath]: imported.previewUrl,
-        ...(imported.gifPosterDataUrl ? { [gifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
-      })
-      changeForThemeOperation(token, (profile) => {
-        if (purpose === 'hero') {
-          profile.hero.source = imported.reference
-          if (imported.reference.kind === 'video') profile.hero.playback = { ...profile.hero.playback, sound: false }
+      if (!selected || !isThemeOperationCurrent(token)) return
+      if (isVideoSourceSelection(selected)) {
+        if (!isVideoMediaRole(purpose)) {
+          await window.studio.assets.discardVideoSelection(themeId, selected.selectionId)
+          throw new Error('该位置不支持视频。')
         }
-        else if (purpose === 'polaroid') {
-          profile.polaroid.source = imported.reference
-          profile.polaroid.sourceSize = { width: imported.width, height: imported.height }
-          if (imported.reference.kind === 'video') profile.polaroid.playback = { ...profile.polaroid.playback, sound: false }
-        } else if (purpose === 'conversationBackground') {
-          const mode = imported.reference.mimeType === 'image/gif' ? 'gif' : imported.reference.kind === 'video' ? 'video' : 'image'
-          profile.conversationBackground.visible = true
-          profile.conversationBackground.mode = mode
-          profile.conversationBackground.source = imported.reference
-        } else if (purpose === 'windowBackground') {
-          const mode = imported.reference.mimeType === 'image/gif' ? 'gif' : imported.reference.kind === 'video' ? 'video' : 'image'
-          profile.windowBackground.visible = true
-          profile.windowBackground.mode = mode
-          profile.windowBackground.source = imported.reference
-        } else if (purpose === 'accountMenuBackground') {
-          profile.accountMenuBackground.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
-          profile.accountMenuBackground.source = imported.reference
-        } else if (purpose === 'brandSignature') {
-          profile.brandSignature.source = imported.reference
-          profile.brandSignature.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
-        } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble') {
-          const role = purpose === 'conversationUserBubble' ? 'user' : purpose === 'conversationCodexBubble' ? 'codex' : 'plan'
-          profile.conversationBubbles.visible = true
-          profile.conversationBubbles[role].source = { kind: 'custom', reference: imported.reference }
-        } else {
-          profile.decorations.composerMelody.source = imported.reference
-          profile.decorations.composerMelody.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
-        }
-      })
+        setPreviewSelection(null)
+        setVideoTranscodeDialog({
+          kind: 'import',
+          themeId,
+          role: purpose,
+          originalName: selected.originalName,
+          inspection: selected.inspection,
+          selectionId: selected.selectionId,
+          defaultMode: selected.inspection.highLoad || !selected.inspection.portable ? 'transcode' : 'original'
+        })
+        return
+      }
+      applyImportedMedia(token, purpose, selected)
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
-    }
-    finally {
+    } finally {
       if (isThemeOperationActive(token)) setMediaBusy(false)
       finishThemeOperation(token)
     }
   }
 
-  const optimizeVideo = async (role: VideoMediaRole): Promise<void> => {
+  const openVideoTranscodeDialog = async (role: VideoMediaRole): Promise<void> => {
     if (!draft) return
-    const source = videoReferenceForRole(draft, role)
-    if (source?.kind !== 'video' || source.videoVariants) return
+    const reference = videoReferenceForRole(draft, role)
+    if (reference?.kind !== 'video') return
+    const sourceAsset = reference.videoVariants?.original.asset ?? reference.asset
     const token = beginThemeOperation(draft.id)
     if (!token) return
     setMediaBusy(true)
-    setOptimizingVideoRole(role)
     setError(null)
     try {
-      const optimized = await window.studio.assets.optimizeVideo(draft.id, role, source.asset)
+      const inspection = videoInspections[sourceAsset] ?? await window.studio.assets.inspectVideo(draft.id, sourceAsset)
       if (!isThemeOperationCurrent(token)) return
-      mergeAssetsForThemeOperation(token, { [optimized.relativePath]: optimized.previewUrl })
-      changeForThemeOperation(token, (profile) => setVideoReferenceForRole(profile, role, optimized.reference, { width: optimized.width, height: optimized.height }))
-      setNotice(`${videoRoleLabel(role)}已生成优化版，可随时切回原片。`)
+      setVideoInspections((current) => ({ ...current, [sourceAsset]: inspection }))
+      setPreviewSelection(null)
+      setVideoTranscodeDialog({
+        kind: 'optimize',
+        themeId: draft.id,
+        role,
+        originalName: sourceAsset.split('/').at(-1) ?? sourceAsset,
+        inspection,
+        sourceAsset,
+        defaultMode: 'transcode'
+      })
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      if (isThemeOperationActive(token)) setMediaBusy(false)
+      finishThemeOperation(token)
+    }
+  }
+
+  const closeVideoTranscodeDialog = (): void => {
+    if (!videoTranscodeDialog || mediaBusy) return
+    const closing = videoTranscodeDialog
+    setVideoTranscodeDialog(null)
+    if (closing.kind === 'import' && closing.selectionId) {
+      void window.studio.assets.discardVideoSelection(closing.themeId, closing.selectionId).catch(() => undefined)
+    }
+  }
+
+  const submitVideoTranscode = async (decision: VideoImportDecision): Promise<void> => {
+    if (!draft || !videoTranscodeDialog || draft.id !== videoTranscodeDialog.themeId) return
+    const dialogState = videoTranscodeDialog
+    if (dialogState.kind === 'optimize' && decision.mode !== 'transcode') return
+    const token = beginThemeOperation(dialogState.themeId)
+    if (!token) return
+    setMediaBusy(true)
+    if (dialogState.kind === 'optimize') setOptimizingVideoRole(dialogState.role)
+    setError(null)
+    try {
+      let imported: ImportedMediaAsset
+      if (dialogState.kind === 'import') {
+        imported = await window.studio.assets.commitVideoSelection(dialogState.themeId, dialogState.selectionId!, decision)
+      } else {
+        if (decision.mode !== 'transcode') return
+        imported = await window.studio.assets.optimizeVideo(dialogState.themeId, dialogState.role, dialogState.sourceAsset!, decision.settings)
+      }
+      if (!isThemeOperationCurrent(token)) return
+      if (dialogState.kind === 'import') {
+        applyImportedMedia(token, dialogState.role, imported)
+      } else {
+        mergeAssetsForThemeOperation(token, { [imported.relativePath]: imported.previewUrl })
+        changeForThemeOperation(token, (profile) => setVideoReferenceForRole(profile, dialogState.role, imported.reference, { width: imported.width, height: imported.height }))
+        setNotice(`${videoRoleLabel(dialogState.role)}已${videoReferenceForRole(draft, dialogState.role)?.videoVariants ? '重新' : ''}生成优化版。`)
+      }
+      setVideoTranscodeDialog(null)
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) {
+        const message = messageOf(reason)
+        setError(message)
+        if (dialogState.kind === 'import' && (
+          message.includes(VIDEO_IMPORT_CANCELLED_MESSAGE) ||
+          message.includes(VIDEO_SELECTION_EXPIRED_MESSAGE)
+        )) {
+          setVideoTranscodeDialog(null)
+        }
+      }
     } finally {
       if (isThemeOperationActive(token)) {
         setMediaBusy(false)
@@ -1096,6 +1198,19 @@ export function App(): React.JSX.Element {
       {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
       {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>释放 .cdstheme 文件以导入主题</strong><span>将创建新的本地主题，不会覆盖现有主题</span></div>}
       {createDialogOpen && <CreateThemeDialog onClose={() => setCreateDialogOpen(false)} onCreate={createTheme} />}
+      {videoTranscodeDialog && <VideoTranscodeDialog
+        key={`${videoTranscodeDialog.kind}:${videoTranscodeDialog.selectionId ?? videoTranscodeDialog.sourceAsset}`}
+        title={videoTranscodeDialog.kind === 'import' ? `${videoRoleLabel(videoTranscodeDialog.role)}视频` : `优化${videoRoleLabel(videoTranscodeDialog.role)}视频`}
+        originalName={videoTranscodeDialog.originalName}
+        inspection={videoTranscodeDialog.inspection}
+        purpose={videoTranscodeDialog.kind}
+        allowOriginal={videoTranscodeDialog.kind === 'import' && videoTranscodeDialog.inspection.portable}
+        defaultMode={videoTranscodeDialog.defaultMode}
+        busy={mediaBusy}
+        error={error}
+        onCancel={closeVideoTranscodeDialog}
+        onSubmit={(decision) => { void submitVideoTranscode(decision) }}
+      />}
       {duplicateDialogOpen && <div className="theme-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDuplicateDialog() }}>
         <section className="theme-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-theme-title">
           <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">复制主题</h2><button type="button" title="关闭" disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
@@ -1208,7 +1323,7 @@ export function App(): React.JSX.Element {
         <aside className="inspector" ref={inspectorRef} inert={themeOperationBusy ? true : undefined} aria-busy={themeOperationBusy}>
           <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => { const name = event.currentTarget.value; change((profile) => { profile.name = name }) }} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
-            <Property title="视频播放" anchor="visual-video-playback" highlighted={inspectorAnchor === 'visual-video-playback'}><VideoPlaybackPanel profile={draft} inspections={videoInspections} optimizingRole={optimizingVideoRole} onChange={change} onOptimize={(role) => { void optimizeVideo(role) }} onActivateVariant={(role, variant) => { void activateVideoVariantForRole(role, variant) }} /></Property>
+            <Property title="视频播放" anchor="visual-video-playback" highlighted={inspectorAnchor === 'visual-video-playback'}><VideoPlaybackPanel profile={draft} inspections={videoInspections} optimizingRole={optimizingVideoRole} onChange={change} onOptimize={(role) => { void openVideoTranscodeDialog(role) }} onActivateVariant={(role, variant) => { void activateVideoVariantForRole(role, variant) }} /></Property>
             <Property title="整个窗口背景" anchor="visual-window-background" highlighted={inspectorAnchor === 'visual-window-background'}><WindowBackgroundControls profile={draft} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('windowBackground', kind) }} /></Property>
             <Property title="账号菜单背景" anchor="visual-account-menu-background" highlighted={inspectorAnchor === 'visual-account-menu-background'}><AccountMenuBackgroundControls profile={draft} backgroundUrl={accountMenuBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('accountMenuBackground', kind) }} /></Property>
             <Property title="侧栏固定文案" anchor="visual-sidebar-copy" highlighted={inspectorAnchor === 'visual-sidebar-copy'}>
@@ -1301,6 +1416,14 @@ function videoReferenceForRole(profile: ThemeProfile, role: VideoMediaRole): Med
   if (role === 'polaroid') return profile.polaroid.source
   if (role === 'conversationBackground') return profile.conversationBackground.source
   return profile.windowBackground.source
+}
+
+function isVideoMediaRole(value: MediaAssetPurpose): value is VideoMediaRole {
+  return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
+}
+
+function isVideoSourceSelection(value: unknown): value is VideoSourceSelection {
+  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'video-source'
 }
 
 function setVideoReferenceForRole(profile: ThemeProfile, role: VideoMediaRole, reference: MediaReference, sourceSize?: { width: number; height: number }): void {

@@ -35,9 +35,11 @@ const api: StudioApi = {
   assets: {
     selectImage: (themeId, purpose) => ipcRenderer.invoke('assets:select', themeId, purpose),
     selectMedia: (themeId, purpose, kind) => ipcRenderer.invoke('assets:select-media', themeId, purpose, kind),
+    commitVideoSelection: (themeId, selectionId, decision) => ipcRenderer.invoke('assets:commit-video-selection', themeId, selectionId, decision),
+    discardVideoSelection: (themeId, selectionId) => ipcRenderer.invoke('assets:discard-video-selection', themeId, selectionId),
     getPreviewUrl: (themeId, asset) => ipcRenderer.invoke('assets:get-preview-url', themeId, asset),
     inspectVideo: (themeId, asset) => ipcRenderer.invoke('assets:inspect-video', themeId, asset),
-    optimizeVideo: (themeId, role, asset) => ipcRenderer.invoke('assets:optimize-video', themeId, role, asset),
+    optimizeVideo: (themeId, role, sourceAsset, settings) => ipcRenderer.invoke('assets:optimize-video', themeId, role, sourceAsset, settings),
     selectIcon: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'icon'),
     selectFont: (themeId) => ipcRenderer.invoke('assets:select', themeId, 'font')
   },

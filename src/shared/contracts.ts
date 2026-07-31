@@ -1,5 +1,7 @@
 import type { CreateThemeInput, MediaReference, ThemeProfile, ThemeSummary } from './theme'
 import type { ImportedFontFormat } from './typography'
+import type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
+export type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
 
 export interface AppInfo {
   version: string
@@ -55,6 +57,15 @@ export interface VideoAssetInspection {
   portable: boolean
   highLoad: boolean
 }
+
+export interface VideoSourceSelection {
+  kind: 'video-source'
+  selectionId: string
+  originalName: string
+  inspection: VideoAssetInspection
+}
+
+export type MediaSelectionResult = ImportedMediaAsset | VideoSourceSelection
 
 export interface ImportedFontAsset {
   id: string
@@ -131,10 +142,12 @@ export interface StudioApi {
   }
   assets: {
     selectImage: (themeId: string, purpose: Exclude<MediaAssetPurpose, 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble'>) => Promise<ImportedAsset | null>
-    selectMedia: (themeId: string, purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => Promise<ImportedMediaAsset | null>
+    selectMedia: (themeId: string, purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => Promise<MediaSelectionResult | null>
+    commitVideoSelection: (themeId: string, selectionId: string, decision: VideoImportDecision) => Promise<ImportedMediaAsset>
+    discardVideoSelection: (themeId: string, selectionId: string) => Promise<void>
     getPreviewUrl: (themeId: string, asset: string) => Promise<string>
     inspectVideo: (themeId: string, asset: string) => Promise<VideoAssetInspection>
-    optimizeVideo: (themeId: string, role: VideoMediaRole, asset: string) => Promise<ImportedMediaAsset>
+    optimizeVideo: (themeId: string, role: VideoMediaRole, sourceAsset: string, settings: VideoTranscodeSettings) => Promise<ImportedMediaAsset>
     selectIcon: (themeId: string) => Promise<ImportedAsset | null>
     selectFont: (themeId: string) => Promise<ImportedFontAsset | null>
   }

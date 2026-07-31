@@ -38,10 +38,12 @@ import {
   shareProfileVersionMatches
 } from './theme-share'
 import { assertOptimizedVideoInspection, transcodeVideo } from './video-transcoder'
+import { commitVideoOutputs } from './video-output-commit'
 import { assertPortableVideoInspection, isPortableVideo } from './video-compatibility'
 import { inspectImageBytes, validateFontBytes } from './asset-validation'
 import { dataUrlByteLength, EmbeddedAssetBudget } from './embedded-assets'
 import { budgetSelectedBuiltinFonts } from './theme-fonts'
+import { VIDEO_OPTIMIZATION_NO_CHANGE_MESSAGE, createDefaultVideoTranscodeSettings, estimateVideoTranscodeStorageBytes, isMeaningfulVideoOptimization, parseVideoTranscodeSettings, type VideoTranscodeSettings } from '../shared/video-transcode'
 
 interface StudioSettings {
   version: 2
@@ -167,6 +169,7 @@ export class ProfileStore {
   readonly themesRoot: string
   private readonly settingsPath: string
   private readonly pendingAssets = new Map<string, Set<string>>()
+  private readonly pendingVideoRoles = new Map<string, Map<string, VideoMediaRole>>()
 
   constructor(readonly root: string, private readonly bundledSystemAssets?: BundledSystemThemeAssets) {
     this.themesRoot = join(root, 'themes')
@@ -600,7 +603,7 @@ export class ProfileStore {
     }
   }
 
-  private async importOptimizedVideo(themeId: string, sourcePath: string, purpose: VideoMediaRole, inspection: VideoAssetInspection, signal?: AbortSignal): Promise<ImportedMediaAsset> {
+  private async importOptimizedVideo(themeId: string, sourcePath: string, purpose: VideoMediaRole, inspection: VideoAssetInspection, settings: VideoTranscodeSettings, signal?: AbortSignal): Promise<ImportedMediaAsset> {
     const preserveOriginal = inspection.portable
     const sourceExtension = extname(sourcePath).toLowerCase()
     const token = randomUUID()
@@ -611,20 +614,18 @@ export class ProfileStore {
     const originalTemporary = `${originalPath}.${randomUUID()}.tmp`
     const optimizedTemporary = `${optimizedPath}.${randomUUID()}.tmp.mp4`
     await mkdir(dirname(originalPath), { recursive: true })
+    let imported: ImportedMediaAsset | null = null
     try {
       if (preserveOriginal) await pipeline(createReadStream(sourcePath), createWriteStreamChecked(originalTemporary), { signal })
-      await transcodeVideo({ inputPath: sourcePath, outputPath: optimizedTemporary, inspection, signal })
+      await transcodeVideo({ inputPath: sourcePath, outputPath: optimizedTemporary, inspection, settings, signal })
       this.throwIfAborted(signal, '视频优化已取消。')
       const optimizedStat = await stat(optimizedTemporary)
       const optimizedInspection = await this.inspectVideo(optimizedTemporary, '.mp4', optimizedStat.size, signal, '视频优化已取消。')
-      assertOptimizedVideoInspection(inspection, optimizedInspection)
+      assertOptimizedVideoInspection(inspection, optimizedInspection, settings)
       await Promise.all([
         ...(preserveOriginal ? [this.syncFile(originalTemporary)] : []),
         this.syncFile(optimizedTemporary)
       ])
-      if (preserveOriginal) await rename(originalTemporary, originalPath)
-      await rename(optimizedTemporary, optimizedPath)
-
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
       const reference = preserveOriginal
         ? createVideoVariantReference(
@@ -632,9 +633,7 @@ export class ProfileStore {
             optimized
           )
         : mediaReferenceForPath(optimizedAsset)
-      if (preserveOriginal) this.trackPendingAsset(themeId, originalAsset)
-      this.trackPendingAsset(themeId, optimizedAsset)
-      return {
+      imported = {
         reference,
         relativePath: optimizedAsset,
         previewUrl: this.mediaPreviewUrl(themeId, optimizedAsset),
@@ -642,16 +641,22 @@ export class ProfileStore {
         width: optimized.width,
         height: optimized.height
       }
+      await commitVideoOutputs({
+        optimizedTemporary,
+        optimizedPath,
+        ...(preserveOriginal ? { originalTemporary, originalPath } : {})
+      })
     } catch (error) {
       await Promise.all([
         rm(originalTemporary, { force: true }).catch(() => undefined),
-        rm(optimizedTemporary, { force: true }).catch(() => undefined),
-        rm(originalPath, { force: true }).catch(() => undefined),
-        rm(optimizedPath, { force: true }).catch(() => undefined)
+        rm(optimizedTemporary, { force: true }).catch(() => undefined)
       ])
       if (signal?.aborted) throw new Error('视频优化已取消。')
       throw error
     }
+    if (preserveOriginal) this.trackPendingVideoAsset(themeId, originalAsset, purpose)
+    this.trackPendingVideoAsset(themeId, optimizedAsset, purpose)
+    return imported
   }
 
   private videoVariant(asset: string, mimeType: 'video/mp4' | 'video/webm', inspection: VideoAssetInspection): VideoAssetVariant {
@@ -668,6 +673,13 @@ export class ProfileStore {
     const pending = this.pendingAssets.get(themeId) ?? new Set<string>()
     pending.add(asset)
     this.pendingAssets.set(themeId, pending)
+  }
+
+  private trackPendingVideoAsset(themeId: string, asset: string, role: VideoMediaRole): void {
+    this.trackPendingAsset(themeId, asset)
+    const roles = this.pendingVideoRoles.get(themeId) ?? new Map<string, VideoMediaRole>()
+    roles.set(asset, role)
+    this.pendingVideoRoles.set(themeId, roles)
   }
 
   private mediaReferences(profile: ThemeProfile): Array<MediaReference | null> {
@@ -702,6 +714,7 @@ export class ProfileStore {
       .filter((asset) => !retained.has(asset))
       .map((asset) => rm(this.resolveAsset(next.id, asset), { force: true }).catch(() => undefined)))
     this.pendingAssets.delete(next.id)
+    this.pendingVideoRoles.delete(next.id)
   }
 
   private async writeProfile(profile: ThemeProfile): Promise<void> {
@@ -840,7 +853,7 @@ export class ProfileStore {
     }
   }
 
-  async importMediaAsset(themeId: string, sourcePath: string, purpose: MediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal, optimizeVideo = false, preflight?: VideoSourcePreflight): Promise<ImportedMediaAsset> {
+  async importMediaAsset(themeId: string, sourcePath: string, purpose: MediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal, optimizeVideo = false, preflight?: VideoSourcePreflight, transcodeSettings?: VideoTranscodeSettings): Promise<ImportedMediaAsset> {
     await this.get(themeId)
     if (!isAbsolute(sourcePath)) throw new Error('所选媒体路径必须是绝对路径。')
     const sourceStat = await stat(sourcePath)
@@ -879,13 +892,16 @@ export class ProfileStore {
       metadata = await this.inspectImage(sourcePath, extension, signal, '媒体导入已取消。')
     }
     if (conversationBubble) this.assertConversationBubbleInspection(metadata, extension)
-    await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
     if (videoInspection && !videoInspection.portable && !optimizeVideo) {
       throw new Error('该视频需要转换为跨平台兼容格式后才能导入。')
     }
     if (videoInspection && optimizeVideo) {
-      return this.importOptimizedVideo(themeId, sourcePath, purpose as VideoMediaRole, videoInspection, signal)
+      const settings = parseVideoTranscodeSettings(transcodeSettings ?? createDefaultVideoTranscodeSettings(videoInspection), videoInspection)
+      const reservedBytes = estimateVideoTranscodeStorageBytes(sourceStat.size, videoInspection, settings, videoInspection.portable)
+      await this.assertDiskSpace(this.assetRoot(themeId), reservedBytes)
+      return this.importOptimizedVideo(themeId, sourcePath, purpose as VideoMediaRole, videoInspection, settings, signal)
     }
+    await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
 
     const outputExtension = extension === '.svg' ? '.png' : extension
     const relativePath = `assets/${purpose}-${randomUUID()}${outputExtension}`
@@ -925,7 +941,8 @@ export class ProfileStore {
     }
 
     const reference = mediaReferenceForPath(relativePath)
-    this.trackPendingAsset(themeId, relativePath)
+    if (videoInspection) this.trackPendingVideoAsset(themeId, relativePath, purpose as VideoMediaRole)
+    else this.trackPendingAsset(themeId, relativePath)
     return {
       reference,
       relativePath,
@@ -965,45 +982,48 @@ export class ProfileStore {
     return this.inspectVideo(path, extname(asset).toLowerCase(), file.size)
   }
 
-  async optimizeReferencedVideo(themeId: unknown, role: unknown, asset: unknown, signal?: AbortSignal): Promise<ImportedMediaAsset> {
+  async optimizeReferencedVideo(themeId: unknown, role: unknown, asset: unknown, settingsInput: unknown, signal?: AbortSignal): Promise<ImportedMediaAsset> {
     if (typeof themeId !== 'string' || !isVideoMediaRole(role) || typeof asset !== 'string') throw new Error('视频优化参数无效。')
     const profile = await this.get(themeId)
     const savedReference = this.mediaReferenceForRole(profile, role)
-    const reference = savedReference?.kind === 'video' && savedReference.asset === asset
-      ? savedReference
-      : this.pendingAssets.get(themeId)?.has(asset) ? mediaReferenceForPath(asset) : null
-    if (reference?.kind !== 'video') throw new Error('视频与主题位置不匹配。')
-    if (reference.videoVariants) throw new Error('该视频已经包含优化版本。')
-    const sourcePath = this.resolveAsset(themeId, reference.asset)
+    const savedVariant = savedReference?.kind === 'video'
+      ? mediaReferenceAssets(savedReference).find((candidate) => candidate.asset === asset)
+      : undefined
+    const pendingRole = this.pendingVideoRoles.get(themeId)?.get(asset)
+    if (!savedVariant && pendingRole !== role) throw new Error('视频与主题位置不匹配。')
+    const sourcePath = this.resolveAsset(themeId, asset)
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('视频文件不存在。')
-    if (reference.mimeType !== 'video/mp4' && reference.mimeType !== 'video/webm') throw new Error('视频 MIME 类型无效。')
+    const sourceMimeType = savedVariant?.mimeType ?? mediaMimeTypeForPath(asset)
+    if (sourceMimeType !== 'video/mp4' && sourceMimeType !== 'video/webm') throw new Error('视频 MIME 类型无效。')
     const inspection = await this.inspectVideo(sourcePath, extname(sourcePath).toLowerCase(), sourceStat.size, signal, '视频优化已取消。')
-    if (!inspection.highLoad && inspection.portable) throw new Error('该视频无需优化。')
-    await this.assertDiskSpace(this.assetRoot(themeId), sourceStat.size)
+    const settings = parseVideoTranscodeSettings(settingsInput, inspection)
+    if (!isMeaningfulVideoOptimization(inspection, settings)) throw new Error(VIDEO_OPTIMIZATION_NO_CHANGE_MESSAGE)
+    const reservedBytes = estimateVideoTranscodeStorageBytes(sourceStat.size, inspection, settings, false)
+    await this.assertDiskSpace(this.assetRoot(themeId), reservedBytes)
 
     const optimizedAsset = `assets/${role}-${randomUUID()}-optimized.mp4`
     const optimizedPath = this.resolveAsset(themeId, optimizedAsset)
     const temporary = `${optimizedPath}.${randomUUID()}.tmp.mp4`
     await mkdir(dirname(optimizedPath), { recursive: true })
     try {
-      await transcodeVideo({ inputPath: sourcePath, outputPath: temporary, inspection, signal })
+      await transcodeVideo({ inputPath: sourcePath, outputPath: temporary, inspection, settings, signal })
       this.throwIfAborted(signal, '视频优化已取消。')
       const optimizedStat = await stat(temporary)
       const optimizedInspection = await this.inspectVideo(temporary, '.mp4', optimizedStat.size, signal, '视频优化已取消。')
-      assertOptimizedVideoInspection(inspection, optimizedInspection)
+      assertOptimizedVideoInspection(inspection, optimizedInspection, settings)
       await this.syncFile(temporary)
       await rename(temporary, optimizedPath)
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
       const nextReference = inspection.portable
-        ? createVideoVariantReference(this.videoVariant(reference.asset, reference.mimeType, inspection), optimized)
+        ? createVideoVariantReference(this.videoVariant(asset, sourceMimeType, inspection), optimized)
         : mediaReferenceForPath(optimizedAsset)
-      this.trackPendingAsset(themeId, optimizedAsset)
+      this.trackPendingVideoAsset(themeId, optimizedAsset, role)
       return {
         reference: nextReference,
         relativePath: optimizedAsset,
         previewUrl: this.mediaPreviewUrl(themeId, optimizedAsset),
-        originalName: basename(reference.asset),
+        originalName: basename(asset),
         width: optimized.width,
         height: optimized.height
       }

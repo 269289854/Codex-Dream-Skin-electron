@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import ffmpegPath from 'ffmpeg-static'
 import type { VideoAssetInspection } from '../shared/contracts'
+import { VIDEO_TRANSCODE_AUDIO_BIT_RATE, resolveVideoOutputSize, type VideoTranscodeSettings } from '../shared/video-transcode'
 import { assertPortableVideoInspection } from './video-compatibility'
 
 const MAX_ERROR_OUTPUT = 64 * 1024
@@ -9,18 +10,26 @@ export interface VideoTranscodeRequest {
   inputPath: string
   outputPath: string
   inspection: VideoAssetInspection
+  settings: VideoTranscodeSettings
   signal?: AbortSignal
 }
 
 export function buildVideoTranscodeArgs(request: VideoTranscodeRequest): string[] {
-  const landscape = request.inspection.width >= request.inspection.height
-  const maxWidth = landscape ? 1920 : 1080
-  const maxHeight = landscape ? 1080 : 1920
+  const outputSize = resolveVideoOutputSize(request.inspection, request.settings)
   const filters: string[] = []
-  if (request.inspection.width > maxWidth || request.inspection.height > maxHeight) {
-    filters.push(`scale=w=${maxWidth}:h=${maxHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2`)
+  if (outputSize.width !== request.inspection.width || outputSize.height !== request.inspection.height) {
+    filters.push(`scale=w=${outputSize.width}:h=${outputSize.height}:flags=lanczos`)
   }
-  if (request.inspection.frameRate > 30.5) filters.push('fps=30')
+  if (Math.abs(request.settings.frameRate - request.inspection.frameRate) > 0.001) {
+    filters.push(`fps=${formatFfmpegNumber(request.settings.frameRate)}`)
+  }
+  const qualityArgs = request.settings.videoBitRate === null
+    ? ['-crf', '23']
+    : [
+        '-b:v', String(request.settings.videoBitRate),
+        '-maxrate', String(request.settings.videoBitRate),
+        '-bufsize', String(request.settings.videoBitRate * 2)
+      ]
 
   return [
     '-hide_banner',
@@ -35,25 +44,22 @@ export function buildVideoTranscodeArgs(request: VideoTranscodeRequest): string[
     ...(filters.length > 0 ? ['-vf', filters.join(',')] : []),
     '-c:v', 'libx264',
     '-preset', 'medium',
-    '-crf', '23',
+    ...qualityArgs,
     '-pix_fmt', 'yuv420p',
     '-movflags', '+faststart',
     '-c:a', 'aac',
-    '-b:a', '128k',
+    '-b:a', `${VIDEO_TRANSCODE_AUDIO_BIT_RATE / 1000}k`,
     '-ac', '2',
     request.outputPath
   ]
 }
 
-export function assertOptimizedVideoInspection(source: VideoAssetInspection, optimized: VideoAssetInspection): void {
-  const landscape = source.width >= source.height
-  const maxWidth = landscape ? 1920 : 1080
-  const maxHeight = landscape ? 1080 : 1920
-  const maxFrameRate = Math.min(source.frameRate, 30)
-  if (optimized.width > maxWidth || optimized.height > maxHeight || optimized.width > source.width || optimized.height > source.height) {
+export function assertOptimizedVideoInspection(source: VideoAssetInspection, optimized: VideoAssetInspection, settings: VideoTranscodeSettings): void {
+  const outputSize = resolveVideoOutputSize(source, settings)
+  if (optimized.width > outputSize.width || optimized.height > outputSize.height || optimized.width > source.width || optimized.height > source.height) {
     throw new Error('优化视频尺寸复检失败。')
   }
-  if (optimized.frameRate > maxFrameRate + 0.5) throw new Error('优化视频帧率复检失败。')
+  if (optimized.frameRate > Math.min(source.frameRate, settings.frameRate) + 0.5) throw new Error('优化视频帧率复检失败。')
   try {
     assertPortableVideoInspection(optimized)
   } catch {
@@ -108,4 +114,8 @@ export async function transcodeVideo(request: VideoTranscodeRequest): Promise<vo
 export function resolveFfmpegPath(value: string | null): string {
   if (!value) throw new Error('内置视频优化器不可用。')
   return value.replace(/([\\/])app\.asar([\\/])/i, '$1app.asar.unpacked$2')
+}
+
+function formatFfmpegNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
 }
