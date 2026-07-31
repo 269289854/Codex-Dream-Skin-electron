@@ -1,4 +1,5 @@
 import type { CreateThemeInput, MediaReference, ThemeProfile, ThemeSummary } from './theme'
+import type { SupportedLocale } from './i18n'
 import type { ImportedFontFormat } from './typography'
 import type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
 export type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
@@ -122,6 +123,8 @@ export interface RuntimeStatus {
 export interface StudioApi {
   app: {
     getInfo: () => Promise<AppInfo>
+    getLocale: () => Promise<SupportedLocale>
+    setLocale: (locale: SupportedLocale) => Promise<SupportedLocale>
     quit: () => void
     getUpdateStatus: () => Promise<AppUpdateStatus>
     checkForUpdates: () => Promise<AppUpdateStatus>

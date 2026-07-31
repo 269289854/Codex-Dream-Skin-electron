@@ -39,6 +39,57 @@ afterEach(async () => {
 })
 
 describe('ProfileStore', () => {
+  it('persists the Studio locale and repairs invalid version three locale values', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-locale-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    expect(await store.getLocale()).toBe('zh-CN')
+    await expect(store.setLocale('en-US')).resolves.toBe('en-US')
+
+    const settingsPath = join(root, 'settings.json')
+    const persisted = JSON.parse(await readFile(settingsPath, 'utf8')) as {
+      version: number
+      activeThemeId: string
+      systemThemeId: string
+      locale: string
+    }
+    expect(persisted.locale).toBe('en-US')
+    await expect(new ProfileStore(root).getLocale()).resolves.toBe('en-US')
+
+    await writeFile(settingsPath, `${JSON.stringify({ ...persisted, locale: 'unsupported' }, null, 2)}\n`, 'utf8')
+    const repaired = new ProfileStore(root)
+    await repaired.initialize()
+    expect(await repaired.getLocale()).toBe('zh-CN')
+    expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toEqual({
+      ...persisted,
+      locale: 'zh-CN'
+    })
+  })
+
+  it('migrates version two settings with the Chinese default locale', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-locale-v2-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const settingsPath = join(root, 'settings.json')
+    const current = JSON.parse(await readFile(settingsPath, 'utf8')) as {
+      activeThemeId: string
+      systemThemeId: string
+    }
+    await writeFile(settingsPath, `${JSON.stringify({ version: 2, activeThemeId: current.activeThemeId, systemThemeId: current.systemThemeId }, null, 2)}\n`, 'utf8')
+
+    const reopened = new ProfileStore(root)
+    await reopened.initialize()
+    expect(await reopened.getLocale()).toBe('zh-CN')
+    expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toEqual({
+      version: 3,
+      activeThemeId: current.activeThemeId,
+      systemThemeId: current.systemThemeId,
+      locale: 'zh-CN'
+    })
+  })
+
   it('creates a clean theme with validated custom colors', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-create-input-'))
     roots.push(root)
@@ -61,11 +112,11 @@ describe('ProfileStore', () => {
 
     created.colors.accent = '#123456'
     created.colors.ink = '#345678'
-    created.copy.sidebarNavSites = '自定义站点'
+    created.copy['zh-CN'].sidebarNavSites = '自定义站点'
     created.toolActivityBubbles.visible = false
     await store.update(created)
     const reset = await store.getDefault(created.id)
-    expect(reset).toMatchObject({ id: created.id, name: '海盐主题', colors, resetColors: colors, copy: { sidebarNavSites: '站点' } })
+    expect(reset).toMatchObject({ id: created.id, name: '海盐主题', colors, resetColors: colors, copy: { 'zh-CN': { sidebarNavSites: '站点' } } })
     expect(reset.colors).not.toBe(reset.resetColors)
     const edited = await store.get(created.id)
     expect(resolveAppearanceColor(edited.appearance, edited.colors, 'sidebarProjectsTitleText')).toBe('#345678')
@@ -86,7 +137,7 @@ describe('ProfileStore', () => {
     await store.initialize()
     const colors = { ...DEFAULT_THEME_COLORS, accent: '#B94F7B', pink: '#E478A4' }
     const created = await store.create({ name: '旧版主题', colors })
-    const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...legacy } = created
+    const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...legacy } = { ...created, copy: created.copy['zh-CN'] }
     const { overlay, ...legacyConversationBackground } = created.conversationBackground
     await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({
       ...legacy,
@@ -99,7 +150,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 28, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 29, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -120,7 +171,7 @@ describe('ProfileStore', () => {
     expect((await store.list()).find((item) => item.id === created.id)?.active).toBe(true)
     const originalPlacement = activated.polaroid.placement
     activated.polaroid.placement = { ...originalPlacement, x: 0.24, y: 0.68 }
-    activated.copy.sidebarProjectsTitle = '作品集'
+    activated.copy['zh-CN'].sidebarProjectsTitle = '作品集'
     activated.typography.slots.sidebarProjectsTitle = { kind: 'builtin', id: 'jetbrains-mono' }
     activated.appearance.colors.sidebarProjectsTitleText = '#123456'
     activated.appearance.colors.sidebarProjectsTitleHoverText = '#654321'
@@ -130,7 +181,7 @@ describe('ProfileStore', () => {
     expect(moved.polaroid.placement).toEqual({ ...originalPlacement, x: 0.24, y: 0.68 })
     expect(moved.name).toBe('中文主题')
     expect(await store.get(created.id)).toMatchObject({
-      copy: { sidebarProjectsTitle: '作品集', sidebarTasksTitle: '任务' },
+      copy: { 'zh-CN': { sidebarProjectsTitle: '作品集', sidebarTasksTitle: '任务' } },
       typography: { slots: { sidebarProjectsTitle: { kind: 'builtin', id: 'jetbrains-mono' }, sidebarTasksTitle: { kind: 'inherit' } } },
       appearance: {
         colors: { sidebarProjectsTitleText: '#123456', sidebarProjectsTitleHoverText: '#654321' },
@@ -283,7 +334,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 28,
+      version: 29,
       videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
@@ -315,7 +366,7 @@ describe('ProfileStore', () => {
     const migrated = await reopened.list()
     expect(migrated.find((theme) => theme.id === systemTheme.id)).toMatchObject({ system: true, active: false })
     expect(migrated.find((theme) => theme.id === customTheme.id)).toMatchObject({ system: false, active: true })
-    expect(JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'))).toEqual({ version: 2, activeThemeId: customTheme.id, systemThemeId: systemTheme.id })
+    expect(JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'))).toEqual({ version: 3, activeThemeId: customTheme.id, systemThemeId: systemTheme.id, locale: 'zh-CN' })
 
     const editableSystem = await reopened.get(systemTheme.id)
     editableSystem.name = '修改后的系统主题'
@@ -828,7 +879,7 @@ describe('ProfileStore', () => {
     await store.initialize()
     const created = await store.create({ name: '版本十六主题', colors: { ...DEFAULT_THEME_COLORS, ink: '#214537' } })
     const generatedColor = '#556677'
-    const { videoPlayback: _videoPlayback, ...versionSixteen } = created
+    const { videoPlayback: _videoPlayback, ...versionSixteen } = { ...created, copy: created.copy['zh-CN'] }
     await writeFile(join(store.themesRoot, created.id, 'theme.json'), `${JSON.stringify({
       ...versionSixteen,
       version: 16,
@@ -844,7 +895,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(28)
+    expect(migrated.version).toBe(29)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'
@@ -957,7 +1008,7 @@ describe('ProfileStore', () => {
     const image = await store.importAsset(profile.id, imageSource, 'hero')
     const font = await store.importFontAsset(profile.id, fontSource)
 
-    profile.copy.brandTitle = '尚未保存的标题'
+    profile.copy['zh-CN'].brandTitle = '尚未保存的标题'
     profile.decorations.sparkles.performanceMode = 'performance'
     profile.colors.accent = '#123456'
     profile.hero.sourceImage = image.relativePath
@@ -974,14 +1025,14 @@ describe('ProfileStore', () => {
     profile.toolActivityBubbles.visible = false
 
     const duplicate = await store.duplicate(profile, ' 当前设计副本 ')
-    expect(duplicate).toMatchObject({ name: '当前设计副本', copy: { brandTitle: '尚未保存的标题' } })
+    expect(duplicate).toMatchObject({ name: '当前设计副本', copy: { 'zh-CN': { brandTitle: '尚未保存的标题' } } })
     expect(duplicate.colors.accent).toBe('#123456')
     expect(duplicate.resetColors).toEqual(resetColors)
     expect(duplicate.toolActivityBubbles).toEqual({ visible: false })
     expect(duplicate.decorations.sparkles.performanceMode).toBe('performance')
     expect(duplicate.id).not.toBe(profile.id)
     expect(Date.parse(duplicate.updatedAt)).toBeGreaterThanOrEqual(Date.parse(profile.updatedAt))
-    expect((await store.get(profile.id)).copy.brandTitle).not.toBe('尚未保存的标题')
+    expect((await store.get(profile.id)).copy['zh-CN'].brandTitle).not.toBe('尚未保存的标题')
     expect((await store.get(profile.id)).hero.sourceImage).toBeNull()
     const compiled = await store.compile(duplicate.id)
     expect(compiled.assets[image.relativePath]).toBe(image.dataUrl)

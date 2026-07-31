@@ -1,8 +1,8 @@
 import type { AppearanceColorToken, AppearanceGroup, AppearancePaintToken } from '../../shared/appearance'
-import type { ConversationBubbleRole, IconSlot, ThemeProfile } from '../../shared/theme'
+import type { ConversationBubbleRole, IconSlot, ThemeCopy, ThemeProfile } from '../../shared/theme'
 
 export type InspectorTab = 'visual' | 'icons'
-export type PreviewCopyField = keyof ThemeProfile['copy']
+export type PreviewCopyField = keyof ThemeCopy
 export type TypographySlot = keyof ThemeProfile['typography']['slots']
 export type PreviewVisibilityField = 'composerBadge' | 'conversationBubbles' | 'toolActivityBubbles'
 export type PreviewDecorationEditor = 'sparkles' | 'homeHeading' | 'composerMelody'

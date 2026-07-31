@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { createEmptyAppearance, cssColorSchema, themeAppearanceSchema, themePaintSchema, type ThemeAppearance } from './appearance'
 import { ACCOUNT_MENU_ITEMS } from './account-menu'
-import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_BRAND_COPY_EN, DEFAULT_HOME_COPY, DEFAULT_HOME_COPY_EN, DEFAULT_HOME_HEADING_DECORATION, splitHeadingTemplate } from './home-layout'
 import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES } from './particle-effects'
 import { createDefaultTypography, legacyThemeTypographySchema, themeTypographySchema } from './typography'
-import { DEFAULT_SIDEBAR_COPY, DEFAULT_SIDEBAR_NAV_COPY, SIDEBAR_NAV_ITEMS } from './sidebar-layout'
+import { DEFAULT_SIDEBAR_COPY, DEFAULT_SIDEBAR_COPY_EN, DEFAULT_SIDEBAR_NAV_COPY, DEFAULT_SIDEBAR_NAV_COPY_EN, SIDEBAR_NAV_ITEMS } from './sidebar-layout'
+import type { SupportedLocale } from './i18n'
 
 const normalized = z.number().finite().min(0).max(1)
 
@@ -154,6 +155,12 @@ const sidebarCopyFields = {
   sidebarNavPlugins: z.string().trim().min(1).max(80)
 }
 const currentThemeCopySchema = themeCopySchema.extend(sidebarCopyFields).strict()
+export type ThemeCopy = z.infer<typeof currentThemeCopySchema>
+
+const localizedThemeCopySchema = z.object({
+  'zh-CN': currentThemeCopySchema,
+  'en-US': currentThemeCopySchema
+}).strict()
 
 export type ThemeColors = z.infer<typeof themeColorsSchema>
 
@@ -899,9 +906,29 @@ const versionTwentySevenThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionTwentyEightThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(28),
+  icons: currentComposerToolIconsSchema,
+  videoPlayback: globalVideoPlaybackSchema,
+  brandSignature: brandSignatureSchema,
+  decorations: decorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  accountMenuBackground: accountMenuBackgroundSchema.default(createDefaultAccountMenuBackground()),
+  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(29),
+  copy: localizedThemeCopySchema,
   icons: currentComposerToolIconsSchema,
   videoPlayback: globalVideoPlaybackSchema,
   brandSignature: brandSignatureSchema,
@@ -1012,6 +1039,10 @@ export type ThemeProfile = CurrentThemeProfile & {
 export type IconSlotMap = ThemeProfile['icons']
 export type IconSlot = keyof IconSlotMap
 
+export function resolveThemeCopy(profile: ThemeProfile, locale: SupportedLocale): ThemeCopy {
+  return profile.copy[locale]
+}
+
 export interface ThemeSummary {
   id: string
   name: string
@@ -1025,11 +1056,14 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 28,
+    version: 29,
     updatedAt: new Date().toISOString(),
     videoPlayback: { pausePolicy: 'hidden' },
     brandSignature: createDefaultBrandSignature(),
-    copy: { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
+    copy: {
+      'zh-CN': { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY, ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY },
+      'en-US': { ...DEFAULT_HOME_COPY_EN, ...DEFAULT_BRAND_COPY_EN, ...DEFAULT_SIDEBAR_COPY_EN, ...DEFAULT_SIDEBAR_NAV_COPY_EN }
+    },
     hero: {
       source: null,
       focus: { x: 0.62, y: 0.42 },
@@ -1177,10 +1211,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 28) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 29) {
     const candidate = normalizeCurrentMediaReferences(input)
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 28) {
+    const candidate = normalizeCurrentMediaReferences(input)
+    return migrateVersionTwentyEight(versionTwentyEightThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 27) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -1597,7 +1635,7 @@ function migrateVersionTwentySix(legacy: z.infer<typeof versionTwentySixThemeSch
 }
 
 function migrateVersionTwentySeven(legacy: z.infer<typeof versionTwentySevenThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionTwentyEight(versionTwentyEightThemeSchema.parse({
     ...legacy,
     version: 28,
     appearance: {
@@ -1616,6 +1654,17 @@ function migrateVersionTwentySeven(legacy: z.infer<typeof versionTwentySevenThem
     conversationBubbles: {
       ...legacy.conversationBubbles,
       plan: createDefaultConversationBubbleStyle()
+    }
+  }))
+}
+
+function migrateVersionTwentyEight(legacy: z.infer<typeof versionTwentyEightThemeSchema>): ThemeProfile {
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 29,
+    copy: {
+      'zh-CN': structuredClone(legacy.copy),
+      'en-US': structuredClone(legacy.copy)
     }
   }))
 }

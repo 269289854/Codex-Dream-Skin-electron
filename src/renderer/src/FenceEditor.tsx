@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { Check, MousePointer2, RotateCcw } from 'lucide-react'
 import { isFenceValid, type Fence } from '../../shared/geometry'
 import { clampNormalized } from '../../shared/geometry'
+import { t } from '../../shared/i18n'
 
 interface FenceEditorProps {
   imageUrl: string
@@ -44,15 +45,15 @@ export function FenceEditor({ imageUrl, fence, onChange }: FenceEditorProps): Re
   return (
     <section className="fence-editor">
       <div className="fence-toolbar">
-        <strong>四点围栏</strong>
+        <strong>{t('四点围栏')}</strong>
         <div>
-          <button className={selecting !== null ? 'tool-button active' : 'tool-button'} onClick={() => setSelecting(0)} title="重新选点"><MousePointer2 size={15} /></button>
-          <button className="tool-button" onClick={() => onChange([{ x: .12, y: .12 }, { x: .88, y: .12 }, { x: .88, y: .88 }, { x: .12, y: .88 }])} title="重置围栏"><RotateCcw size={15} /></button>
+          <button className={selecting !== null ? 'tool-button active' : 'tool-button'} onClick={() => setSelecting(0)} title={t('重新选点')}><MousePointer2 size={15} /></button>
+          <button className="tool-button" onClick={() => onChange([{ x: .12, y: .12 }, { x: .88, y: .12 }, { x: .88, y: .88 }, { x: .12, y: .88 }])} title={t('重置围栏')}><RotateCcw size={15} /></button>
         </div>
       </div>
       <div className="fence-stage">
         <div className="fence-image-frame">
-          <img src={imageUrl} alt="拍立得原图" draggable={false} />
+          <img src={imageUrl} alt={t('拍立得原图')} draggable={false} />
           <svg
             ref={overlayRef}
             viewBox="0 0 1000 1000"
@@ -70,10 +71,10 @@ export function FenceEditor({ imageUrl, fence, onChange }: FenceEditorProps): Re
               </g>
             ))}
           </svg>
-          {selecting !== null && <span className="point-badge">点 {selecting + 1}</span>}
+          {selecting !== null && <span className="point-badge">{t('点 {number}', { number: selecting + 1 })}</span>}
         </div>
       </div>
-      <div className={valid ? 'fence-state valid' : 'fence-state invalid'}><Check size={13} />{valid ? '围栏有效' : '围栏交叉或越界'}</div>
+      <div className={valid ? 'fence-state valid' : 'fence-state invalid'}><Check size={13} />{t(valid ? '围栏有效' : '围栏交叉或越界')}</div>
     </section>
   )
 }

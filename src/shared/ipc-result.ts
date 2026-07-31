@@ -1,3 +1,5 @@
+import { t } from './i18n'
+
 export type IpcResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string }
@@ -6,7 +8,7 @@ export async function captureIpcResult<T>(operation: () => T | Promise<T>): Prom
   try {
     return { ok: true, value: await operation() }
   } catch (reason) {
-    return { ok: false, error: reason instanceof Error ? reason.message : String(reason) }
+    return { ok: false, error: t(reason instanceof Error ? reason.message : String(reason)) }
   }
 }
 

@@ -26,7 +26,7 @@ describe('renderer injection template', () => {
     expect(template).toContain('data-dream-account-menu-item')
     expect(template).toContain('dream-account-menu-background')
     expect(template).toContain('ensureAccountMenuBackground')
-    expect(template).toContain('attributeFilter: ["data-state", "hidden", "aria-hidden"]')
+    expect(template).toContain('attributeFilter: ["data-state", "hidden", "aria-hidden", "lang"]')
     expect(template).toContain('[data-local-conversation-item-target-ids]')
     expect(template).toContain('ensureToolActivityBubbles()')
     expect(template).toContain('clearToolActivityBubbles()')
@@ -69,9 +69,10 @@ describe('renderer injection template', () => {
     expect(heroMediaRule).toContain('width: 100% !important')
     expect(heroMediaRule).toContain('height: 100% !important')
     expect(rendererEntry).toContain("dream-home-layout.css")
-    expect(studio).toContain('HOME_ACTIONS.map')
+    expect(studio).toContain('HOME_ACTIONS_BY_LOCALE[contentLocale]')
+    expect(studio).toContain('homeActions.map')
     expect(codexService).toContain("dream-home-layout.css")
-    expect(codexService).toContain('actions: HOME_ACTIONS')
+    expect(codexService).toContain('actionsByLocale: HOME_ACTIONS_BY_LOCALE')
   })
 
   it('keeps legacy home layout rules out of the base theme', async () => {
@@ -116,8 +117,8 @@ describe('renderer injection template', () => {
   it('reports the watcher injection count after startup', async () => {
     const codexService = await readFile(join(process.cwd(), 'src', 'main', 'codex-service.ts'), 'utf8')
     expect(codexService).toContain('const snapshot = await this.replaceWatcher')
-    expect(codexService).toContain('主题已注入 ${snapshot.targetCount} 个 Codex 页面')
-    expect(codexService).not.toContain('主题已注入 ${result.targetCount} 个 Codex 页面')
+    expect(codexService).toContain("t('主题已注入 {count} 个 Codex 页面', { count: snapshot.targetCount })")
+    expect(codexService).not.toContain("t('主题已注入 {count} 个 Codex 页面', { count: result.targetCount })")
   })
 
   it('keeps the custom polaroid surface transparent and leaves shadow styling configurable', async () => {

@@ -126,7 +126,8 @@ describe('theme share packages', () => {
     const composerGif = await store.importMediaAsset(original.id, gifSource, 'composerMelody', 'gif')
     const font = await store.importFontAsset(original.id, fontSource)
     const draft = structuredClone(original)
-    draft.copy.brandTitle = '尚未保存的分享标题'
+    draft.copy['zh-CN'].brandTitle = '尚未保存的分享标题'
+    draft.copy['en-US'].brandTitle = 'Unsaved shared title'
     draft.colors.accent = '#123456'
     draft.decorations.sparkles.performanceMode = 'quality'
     draft.hero.sourceImage = image.relativePath
@@ -192,9 +193,13 @@ describe('theme share packages', () => {
     expect(Buffer.from(archive['theme.json']!).toString('utf8')).not.toContain(root)
     expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, polaroidImage.relativePath, composerGif.relativePath, 'manifest.json', 'theme.json'].sort())
     expect(Buffer.from(archive['theme.json']!).toString('utf8')).not.toContain('icon-posters')
-    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 28 })
+    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 29 })
+    const rawProfile = JSON.parse(Buffer.from(archive['theme.json']!).toString('utf8')) as Record<string, unknown>
+    expect(rawProfile).not.toHaveProperty('locale')
+    expect(rawProfile).not.toHaveProperty('contentLocale')
     const checked = validateShareContents(new Map(Object.entries(archive).map(([path, data]) => [path, Buffer.from(data)])))
-    expect(checked.profile.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(checked.profile.copy['zh-CN'].brandTitle).toBe('尚未保存的分享标题')
+    expect(checked.profile.copy['en-US'].brandTitle).toBe('Unsaved shared title')
     expect(checked.profile.brandSignature).toEqual(draft.brandSignature)
     expect(checked.profile.decorations.composerMelody.source).toEqual(composerGif.reference)
     expect(checked.profile.windowBackground.source).toEqual(windowReference)
@@ -223,7 +228,8 @@ describe('theme share packages', () => {
     expect(imported.name).toBe(draft.name)
     expect(imported.accountMenuBackground).toEqual(draft.accountMenuBackground)
     expect(imported.icons.sidebarSearch).toEqual(draft.icons.sidebarSearch)
-    expect(imported.copy.brandTitle).toBe('尚未保存的分享标题')
+    expect(imported.copy['zh-CN'].brandTitle).toBe('尚未保存的分享标题')
+    expect(imported.copy['en-US'].brandTitle).toBe('Unsaved shared title')
     expect(imported.brandSignature).toEqual(draft.brandSignature)
     expect(imported.colors).toEqual(draft.colors)
     expect(imported.decorations.sparkles.performanceMode).toBe('quality')
@@ -237,7 +243,7 @@ describe('theme share packages', () => {
     expect(imported.polaroid.sourceImage).toBe(polaroidImage.relativePath)
     expect(imported.windowBackground).toMatchObject({ visible: true, mode: 'image', source: windowReference, masks: [{ id: '22222222-2222-4222-8222-222222222222', shape: 'ellipse' }] })
     expect(Date.parse(imported.updatedAt)).toBeGreaterThanOrEqual(Date.parse(original.updatedAt))
-    expect((await store.get(original.id)).copy.brandTitle).not.toBe(imported.copy.brandTitle)
+    expect((await store.get(original.id)).copy['zh-CN'].brandTitle).not.toBe(imported.copy['zh-CN'].brandTitle)
     expect(await readFile(join(store.themesRoot, imported.id, composerGif.relativePath))).toEqual(Buffer.from(ensureGifInfiniteLoop(gif)))
     const compiled = await store.compile(imported.id)
     expect(compiled.assets[image.relativePath]).toBe(`data:image/png;base64,${png.toString('base64')}`)
@@ -332,7 +338,7 @@ describe('theme share packages', () => {
     current.colors.accent = '#2878B8'
     const { mediaTransform: _heroTransform, ...hero } = current.hero
     const { mediaTransform: _polaroidTransform, ...polaroid } = current.polaroid
-    const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...currentWithoutResetColors } = current
+    const { resetColors: _resetColors, videoPlayback: _videoPlayback, ...currentWithoutResetColors } = { ...current, copy: current.copy['zh-CN'] }
     const legacy = { ...currentWithoutResetColors, version: 11, hero, polaroid }
     const packagePath = join(root, 'v11.cdstheme')
     await store.exportSharePackage(legacy, packagePath)
@@ -343,7 +349,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(28)
+    expect(imported.version).toBe(29)
     expect(imported.videoPlayback).toEqual({ pausePolicy: 'hidden' })
     expect(imported.conversationBubbles).toEqual({
       visible: true,
@@ -368,13 +374,13 @@ describe('theme share packages', () => {
     await store.exportSharePackage(original, packagePath)
     const archive = unzipSync(await readFile(packagePath))
     const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as { profileVersion: number }
-    const { videoPlayback: _videoPlayback, toolActivityBubbles: _toolActivityBubbles, ...legacy } = original
+    const { videoPlayback: _videoPlayback, toolActivityBubbles: _toolActivityBubbles, ...legacy } = { ...original, copy: original.copy['zh-CN'] }
     manifest.profileVersion = 19
     archive['theme.json'] = Buffer.from(JSON.stringify({ ...legacy, version: 19, conversationBubbles: { visible: false } }))
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(28)
+    expect(imported.version).toBe(29)
     expect(imported.conversationBubbles).toEqual({
       visible: false,
       user: createDefaultConversationBubbleStyle(),
@@ -395,7 +401,7 @@ describe('theme share packages', () => {
     const archive = unzipSync(await readFile(packagePath))
     const manifest = JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8')) as { profileVersion: number }
     const generatedColor = '#556677'
-    const { videoPlayback: _videoPlayback, ...versionSixteen } = original
+    const { videoPlayback: _videoPlayback, ...versionSixteen } = { ...original, copy: original.copy['zh-CN'] }
     const legacy = {
       ...versionSixteen,
       version: 16,
@@ -414,7 +420,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(28)
+    expect(imported.version).toBe(29)
     expect(imported.conversationBubbles).toEqual({
       visible: true,
       user: createDefaultConversationBubbleStyle(),

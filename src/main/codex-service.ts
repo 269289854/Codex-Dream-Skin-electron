@@ -14,7 +14,8 @@ import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
 import { resolveConversationBubbles } from '../shared/conversation-bubbles'
 import type { ThemeProfile } from '../shared/theme'
-import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, splitHeadingTemplate } from '../shared/home-layout'
+import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS_BY_LOCALE, splitHeadingTemplate } from '../shared/home-layout'
+import { t } from '../shared/i18n'
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CdpWatcher, type CdpMediaBinding, type CdpSnapshot } from './cdp-watcher'
 import type { ProfileStore } from './profile-store'
@@ -74,7 +75,7 @@ export class CodexService {
   private operationTail: Promise<void> = Promise.resolve()
   private status: RuntimeStatus = {
     phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null,
-    backupAvailable: false, lastError: null, message: '等待检测 Codex'
+    backupAvailable: false, lastError: null, message: t('等待检测 Codex')
   }
 
   constructor(
@@ -103,7 +104,7 @@ export class CodexService {
     } catch (reason) {
       if (!this.isCurrentGeneration(generation)) return
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
-      this.patch('error', '启动时无法检测官方 Codex 应用')
+      this.patch('error', t('启动时无法检测官方 Codex 应用'))
       return
     }
 
@@ -115,9 +116,9 @@ export class CodexService {
       if (!this.isCurrentGeneration(generation)) return
       if ((reason as NodeJS.ErrnoException).code === 'ENOENT') {
         await rm(this.restoredSessionMarkerPath(), { force: true }).catch(() => undefined)
-        const message = detection.backupAvailable
+        const message = t(detection.backupAvailable
           ? '检测到可恢复的 Codex 配置备份'
-          : detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex'
+          : detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex')
         this.patch('ready', message)
         return
       }
@@ -126,7 +127,7 @@ export class CodexService {
         return
       }
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
-      this.patch('ready', '运行会话记录不可用，可重新启动或恢复')
+      this.patch('ready', t('运行会话记录不可用，可重新启动或恢复'))
       return
     }
 
@@ -142,7 +143,7 @@ export class CodexService {
     } catch (reason) {
       if (!this.isCurrentGeneration(generation)) return
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
-      this.patch('ready', '运行会话记录不可用，可重新启动或恢复')
+      this.patch('ready', t('运行会话记录不可用，可重新启动或恢复'))
       return
     }
 
@@ -172,7 +173,7 @@ export class CodexService {
         ? await this.platformDriver.verifySession(session.port, session.browserId, detection, expectedInstallationId)
         : await this.platformDriver.verifySession(session.port, session.browserId, detection)
       if (!this.isCurrentGeneration(generation)) return
-      this.patch('injecting', '正在恢复上次主题会话')
+      this.patch('injecting', t('正在恢复上次主题会话'))
       const payload = await this.buildPayload(session.themeId)
       if (!this.isCurrentGeneration(generation)) return
       await this.writeRuntimePayload(payload.script)
@@ -186,7 +187,7 @@ export class CodexService {
       this.activeSessionGeneration = generation
       await this.replaceWatcher(verified.browserId, payload)
       if (!this.isCurrentGeneration(generation)) return
-      this.patch('active', '已恢复上次主题会话')
+      this.patch('active', t('已恢复上次主题会话'))
     } catch (reason) {
       if (!this.isCurrentGeneration(generation)) return
       if (this.activeSessionGeneration === generation && this.watcher) {
@@ -199,7 +200,7 @@ export class CodexService {
       }
       this.clearActiveSession()
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
-      this.patch('ready', detection.backupAvailable ? '上次主题会话已结束，可恢复配置或重新启动' : '上次主题会话已结束，可重新启动')
+      this.patch('ready', t(detection.backupAvailable ? '上次主题会话已结束，可恢复配置或重新启动' : '上次主题会话已结束，可重新启动'))
     }
   }
 
@@ -207,19 +208,19 @@ export class CodexService {
 
   private async detectInternal(): Promise<CodexDetection> {
     const preserveActiveSession = this.hasCurrentActiveSession()
-    this.patch(preserveActiveSession ? 'active' : 'detecting', '正在检测官方 Codex 应用')
+    this.patch(preserveActiveSession ? 'active' : 'detecting', t('正在检测官方 Codex 应用'))
     try {
       const detection = await this.platformDriver.detect()
       this.status.codexVersion = detection.version
       this.status.backupAvailable = detection.backupAvailable
       const active = preserveActiveSession && this.hasCurrentActiveSession()
-      this.patch(active ? 'active' : 'ready', active
+      this.patch(active ? 'active' : 'ready', t(active
         ? 'Codex 检测完成，当前主题会话仍在运行'
-        : detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex')
+        : detection.running ? '已找到 Codex，当前正在运行' : '已找到 Codex'))
       return detection
     } catch (reason) {
       if (preserveActiveSession && this.hasCurrentActiveSession()) {
-        throw this.reportActiveFailure(reason, 'Codex 检测失败，当前主题会话仍在运行')
+        throw this.reportActiveFailure(reason, t('Codex 检测失败，当前主题会话仍在运行'))
       }
       throw this.fail(reason)
     }
@@ -234,18 +235,18 @@ export class CodexService {
 
   private async installThemeInternal(themeId: string): Promise<RuntimePayload> {
     const preserveActiveSession = this.hasCurrentActiveSession()
-    this.patch(preserveActiveSession ? 'active' : 'installing', '正在生成并安装主题配置')
+    this.patch(preserveActiveSession ? 'active' : 'installing', t('正在生成并安装主题配置'))
     try {
       const payload = await this.buildPayload(themeId)
       await this.writeRuntimePayload(payload.script)
       await this.platformDriver.applyConfig(join(this.store.themesRoot, themeId, 'theme.json'))
       this.status.backupAvailable = true
       const active = preserveActiveSession && this.hasCurrentActiveSession()
-      this.patch(active ? 'active' : 'ready', active ? '主题配置已安装，当前主题会话仍在运行' : '主题配置已安装')
+      this.patch(active ? 'active' : 'ready', t(active ? '主题配置已安装，当前主题会话仍在运行' : '主题配置已安装'))
       return payload
     } catch (reason) {
       if (preserveActiveSession && this.hasCurrentActiveSession()) {
-        throw this.reportActiveFailure(reason, '主题配置安装失败，当前主题会话仍在运行')
+        throw this.reportActiveFailure(reason, t('主题配置安装失败，当前主题会话仍在运行'))
       }
       throw this.fail(reason)
     }
@@ -277,7 +278,7 @@ export class CodexService {
     let runtimeChanged = false
     let configChanged = false
     try {
-      this.patch(previousWatcher ? 'starting' : 'installing', '正在生成并安装主题配置')
+      this.patch(previousWatcher ? 'starting' : 'installing', t('正在生成并安装主题配置'))
       const payload = await this.buildPayload(themeId)
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
       await this.writeRuntimePayload(payload.script)
@@ -287,7 +288,7 @@ export class CodexService {
       configChanged = true
       this.status.backupAvailable = true
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
-      this.patch('starting', '正在启动 Codex 本地主题会话')
+      this.patch('starting', t('正在启动 Codex 本地主题会话'))
       const result = await this.platformDriver.start(this.status.port, restartExisting, expectedInstallationId)
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
       await this.writeSession(themeId, result)
@@ -299,7 +300,7 @@ export class CodexService {
       this.activeSessionGeneration = generation
       const snapshot = await this.replaceWatcher(result.browserId, payload)
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
-      this.patch('active', `主题已注入 ${snapshot.targetCount} 个 Codex 页面`)
+      this.patch('active', t('主题已注入 {count} 个 Codex 页面', { count: snapshot.targetCount }))
       return this.getStatus()
     } catch (reason) {
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
@@ -311,10 +312,10 @@ export class CodexService {
             } catch (rollbackReason) {
               const original = reason instanceof Error ? reason.message : String(reason)
               const rollback = rollbackReason instanceof Error ? rollbackReason.message : String(rollbackReason)
-              throw this.reportActiveFailure(new Error(`${original}；运行时载荷回滚失败: ${rollback}`), '新主题启动失败，原主题会话仍在运行')
+              throw this.reportActiveFailure(new Error(t('{message}；运行时载荷回滚失败: {rollback}', { message: original, rollback })), t('新主题启动失败，原主题会话仍在运行'))
             }
           }
-          throw this.reportActiveFailure(reason, '新主题启动失败，原主题会话仍在运行')
+          throw this.reportActiveFailure(reason, t('新主题启动失败，原主题会话仍在运行'))
         }
         try {
           await this.rollbackStartedSession(
@@ -329,10 +330,10 @@ export class CodexService {
           await this.discardIncompleteSession()
           const original = reason instanceof Error ? reason.message : String(reason)
           const rollback = rollbackReason instanceof Error ? rollbackReason.message : String(rollbackReason)
-          throw this.fail(new Error(`${original}；原主题会话回滚失败: ${rollback}`))
+          throw this.fail(new Error(t('{message}；原主题会话回滚失败: {rollback}', { message: original, rollback })))
         }
         if (!this.isCurrentGeneration(generation)) return this.getStatus()
-        throw this.reportActiveFailure(reason, '新主题启动失败，已恢复原主题会话')
+        throw this.reportActiveFailure(reason, t('新主题启动失败，已恢复原主题会话'))
       }
       await this.discardIncompleteSession()
       throw this.fail(reason)
@@ -355,11 +356,11 @@ export class CodexService {
     const previousMediaBindings = this.activeMediaBindings.map((binding) => ({ ...binding }))
     if (!watcher || !previousThemeId || !previousSession || !previousPayload ||
       !this.isActiveSession(previousThemeId, generation)) {
-      throw this.fail(new Error('当前没有活动的 Codex 主题会话。'))
+      throw this.fail(new Error(t('当前没有活动的 Codex 主题会话。')))
     }
     let runtimeChanged = false
     try {
-      this.patch('injecting', '正在重新编译并注入主题')
+      this.patch('injecting', t('正在重新编译并注入主题'))
       const payload = await this.buildPayload(themeId)
       if (!this.isActiveSession(previousThemeId, generation)) return this.getStatus()
       const mediaBindings = await this.store.getRuntimeMediaBindings(themeId)
@@ -377,11 +378,11 @@ export class CodexService {
       this.activePayload = payload
       this.activeMediaBindings = mediaBindings.map((binding) => ({ ...binding }))
       this.activeSessionGeneration = generation
-      this.patch('active', `主题已重新注入 ${snapshot.targetCount} 个页面`)
+      this.patch('active', t('主题已重新注入 {count} 个页面', { count: snapshot.targetCount }))
       return this.getStatus()
     } catch (reason) {
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
-      if (!runtimeChanged) throw this.reportActiveFailure(reason, '重新注入失败，原主题会话仍在运行')
+      if (!runtimeChanged) throw this.reportActiveFailure(reason, t('重新注入失败，原主题会话仍在运行'))
       try {
         await this.rollbackReinjection(previousThemeId, previousSession, previousPayload, previousMediaBindings, watcher, generation)
       } catch (rollbackReason) {
@@ -392,10 +393,10 @@ export class CodexService {
         await rm(this.sessionPath(), { force: true }).catch(() => undefined)
         const original = reason instanceof Error ? reason.message : String(reason)
         const rollback = rollbackReason instanceof Error ? rollbackReason.message : String(rollbackReason)
-        throw this.fail(new Error(`${original}；原主题回滚失败: ${rollback}`))
+        throw this.fail(new Error(t('{message}；原主题回滚失败: {rollback}', { message: original, rollback })))
       }
       if (!this.isCurrentGeneration(generation)) return this.getStatus()
-      throw this.reportActiveFailure(reason, '重新注入失败，已恢复原主题会话')
+      throw this.reportActiveFailure(reason, t('重新注入失败，已恢复原主题会话'))
     }
   }
 
@@ -404,16 +405,16 @@ export class CodexService {
   }
 
   private async verifyInternal(): Promise<RuntimeStatus> {
-    if (!this.watcher) throw this.fail(new Error('当前没有活动的 Codex 主题会话。'))
+    if (!this.watcher) throw this.fail(new Error(t('当前没有活动的 Codex 主题会话。')))
     try {
       const snapshot = await this.watcher.verify()
       if (snapshot.connected) {
-        this.patch('active', `验证通过，共 ${snapshot.targetCount} 个页面`)
+        this.patch('active', t('验证通过，共 {count} 个页面', { count: snapshot.targetCount }))
         return this.getStatus()
       }
-      this.patch('injecting', '检测到旧版或不完整主题，正在自动修复')
+      this.patch('injecting', t('检测到旧版或不完整主题，正在自动修复'))
       const repaired = await this.watcher.inject()
-      this.patch('active', `主题已自动修复，共 ${repaired.targetCount} 个页面`)
+      this.patch('active', t('主题已自动修复，共 {count} 个页面', { count: repaired.targetCount }))
       return this.getStatus()
     } catch (reason) { throw this.fail(reason) }
   }
@@ -430,14 +431,14 @@ export class CodexService {
     } catch (reason) {
       if (watcher === this.watcher && this.activeThemeId && this.activeSession) {
         this.activeSessionGeneration = generation
-        throw this.reportActiveFailure(reason, '停止注入失败，当前主题会话仍在运行，可重试恢复')
+        throw this.reportActiveFailure(reason, t('停止注入失败，当前主题会话仍在运行，可重试恢复'))
       }
       throw this.fail(reason)
     }
     this.clearActiveSession()
     await rm(this.sessionPath(), { force: true })
     this.watcher = null
-    this.patch('stopped', '已停止注入并移除当前页面主题')
+    this.patch('stopped', t('已停止注入并移除当前页面主题'))
     return this.getStatus()
   }
 
@@ -452,7 +453,7 @@ export class CodexService {
     generation: number,
     activeInstallationId?: string
   ): Promise<RuntimeStatus> {
-    this.patch('restoring', '正在恢复 Codex 原始配置')
+    this.patch('restoring', t('正在恢复 Codex 原始配置'))
     try {
       let restartCodex = requestedRestart
       let expectedInstallationId = activeInstallationId
@@ -465,7 +466,7 @@ export class CodexService {
           expectedInstallationId = await this.readPersistedInstallationId()
         } catch (reason) {
           restartCodex = false
-          restartWarning = '保存的运行会话不可用，未自动重启 Codex'
+          restartWarning = t('保存的运行会话不可用，未自动重启 Codex')
           diagnostic = reason instanceof Error ? reason.message : String(reason)
         }
       }
@@ -487,24 +488,24 @@ export class CodexService {
       } catch (reason) {
         if (!restartCodex || !expectedInstallationId || !(reason instanceof CodexInstallationIdentityError)) throw reason
         restartCodex = false
-        restartWarning = '保存的 Codex 安装身份已失效，未自动重启 Codex'
+        restartWarning = t('保存的 Codex 安装身份已失效，未自动重启 Codex')
         diagnostic = reason.message
         restoreResult = await this.platformDriver.restore(false)
       }
       if (!restoreResult.configRestored) {
         this.status.backupAvailable = false
         const restartFailure = restoreResult.restart.status === 'failed'
-          ? `；Codex 自动重启也失败: ${restoreResult.restart.error}`
+          ? t('；Codex 自动重启也失败: {error}', { error: restoreResult.restart.error })
           : ''
-        throw new Error(`未找到可恢复的 Codex 配置备份${restartFailure}`)
+        throw new Error(t('未找到可恢复的 Codex 配置备份{restartFailure}', { restartFailure }))
       }
       if (restoreResult.backupArchive.status === 'failed') {
-        backupArchiveWarning = 'Codex 配置已恢复，但配置备份归档失败'
-        diagnostic = [diagnostic, restoreResult.backupArchive.error].filter((part): part is string => part !== null).join('；')
+        backupArchiveWarning = t('Codex 配置已恢复，但配置备份归档失败')
+        diagnostic = [diagnostic, restoreResult.backupArchive.error].filter((part): part is string => part !== null).join(t('；'))
       }
       if (restoreResult.restart.status === 'failed') {
-        restartWarning = 'Codex 配置已恢复，但自动重启失败'
-        diagnostic = [diagnostic, restoreResult.restart.error].filter((part): part is string => part !== null).join('；')
+        restartWarning = t('Codex 配置已恢复，但自动重启失败')
+        diagnostic = [diagnostic, restoreResult.restart.error].filter((part): part is string => part !== null).join(t('；'))
       }
       let markerWritten = false
       let markerError: string | null = null
@@ -527,25 +528,25 @@ export class CodexService {
         cleanupError = reason instanceof Error ? reason.message : String(reason)
       }
       const message = [
-        restoreResult.restart.status === 'succeeded' ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置',
+        t(restoreResult.restart.status === 'succeeded' ? '已恢复配置并正常重启 Codex' : '已恢复 Codex 配置'),
         backupArchiveWarning,
         restartWarning,
         cleanupError
           ? markerWritten
-            ? '运行会话记录清理失败，下次启动将根据完成标记忽略该记录'
-            : '运行会话记录清理失败，下次启动将重新验证该记录'
+            ? t('运行会话记录清理失败，下次启动将根据完成标记忽略该记录')
+            : t('运行会话记录清理失败，下次启动将重新验证该记录')
           : null
-      ].filter((part): part is string => part !== null).join('；')
+      ].filter((part): part is string => part !== null).join(t('；'))
       const details = [
         diagnostic,
         cleanupError ? markerError : null,
         cleanupError
-      ].filter((part): part is string => part !== null).join('；') || null
+      ].filter((part): part is string => part !== null).join(t('；')) || null
       this.patch('stopped', message, details)
       return this.getStatus()
     } catch (reason) {
       if (this.hasCurrentActiveSession()) {
-        throw this.reportActiveFailure(reason, '恢复失败，当前主题会话仍在运行，可重试恢复')
+        throw this.reportActiveFailure(reason, t('恢复失败，当前主题会话仍在运行，可重试恢复'))
       }
       throw this.fail(reason)
     }
@@ -561,7 +562,7 @@ export class CodexService {
       await previousWatcher.stop(true)
       if (this.watcher === previousWatcher) this.watcher = null
     }
-    this.patch('injecting', '已连接 Codex，正在注入主题')
+    this.patch('injecting', t('已连接 Codex，正在注入主题'))
     const watcher = new CdpWatcher(this.status.port, browserId,
       (snapshot) => {
         if (this.watcher !== watcher) return
@@ -575,7 +576,7 @@ export class CodexService {
           this.activeSessionGeneration !== this.sessionGeneration) return
         const generation = this.activeSessionGeneration
         this.status.lastError = error.message
-        this.status.message = 'Codex 会话中断，正在尝试恢复'
+        this.status.message = t('Codex 会话中断，正在尝试恢复')
         this.emit()
         void this.recoverActiveSession(generation)
       }
@@ -675,10 +676,10 @@ export class CodexService {
       toolActivityBubbles: { visible: profile.toolActivityBubbles.visible },
       builtinGlyphs: BUILTIN_ICON_GLYPHS,
       actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
-      copy: { ...profile.copy, parts: splitHeadingTemplate(profile.copy.headingTemplate) },
+      copyByLocale: Object.fromEntries(Object.entries(profile.copy).map(([locale, copy]) => [locale, { ...copy, parts: splitHeadingTemplate(copy.headingTemplate) }])),
       sidebarNavigation: SIDEBAR_NAV_ITEMS,
       accountMenu: ACCOUNT_MENU_ITEMS,
-      actions: HOME_ACTIONS
+      actionsByLocale: HOME_ACTIONS_BY_LOCALE
     }
     const art = hero ?? TRANSPARENT_PNG
     const serializedConfig = JSON.stringify(runtimeConfig)
@@ -725,7 +726,7 @@ export class CodexService {
     const previousSession = this.activeSession
     if (!previousSession) return
     try {
-      this.patch('starting', '正在恢复 Codex 主题会话')
+      this.patch('starting', t('正在恢复 Codex 主题会话'))
       const result = await this.platformDriver.start(
         this.status.port,
         true,
@@ -743,13 +744,13 @@ export class CodexService {
       this.activeSession = result
       await this.replaceWatcher(result.browserId, payload)
       if (!this.isActiveSession(themeId, generation)) return
-      this.patch('active', 'Codex 主题会话已自动恢复')
+      this.patch('active', t('Codex 主题会话已自动恢复'))
     } catch (reason) {
       if (!this.isActiveSession(themeId, generation)) return
       await this.discardIncompleteSession()
       this.status.lastError = reason instanceof Error ? reason.message : String(reason)
       this.status.phase = 'error'
-      this.status.message = '自动恢复失败，请重新启动主题'
+      this.status.message = t('自动恢复失败，请重新启动主题')
       this.emit()
     }
   }
@@ -877,9 +878,9 @@ export class CodexService {
     this.clearActiveSession()
     this.patch(
       'ready',
-      cleanupError
+      t(cleanupError
         ? '已确认 Codex 配置恢复完成，已忽略无法清理的旧运行会话记录'
-        : '已确认 Codex 配置恢复完成，旧运行会话记录已清理',
+        : '已确认 Codex 配置恢复完成，旧运行会话记录已清理'),
       cleanupError
     )
   }
@@ -978,6 +979,6 @@ export class CodexService {
     this.emit()
     return error
   }
-  private fail(reason: unknown): Error { const error = reason instanceof Error ? reason : new Error(String(reason)); this.status.phase = 'error'; this.status.connected = false; this.status.lastError = error.message; this.status.message = '操作失败'; this.emit(); return error }
+  private fail(reason: unknown): Error { const error = reason instanceof Error ? reason : new Error(String(reason)); this.status.phase = 'error'; this.status.connected = false; this.status.lastError = t(error.message); this.status.message = t('操作失败'); this.emit(); return error }
   private emit(): void { this.onStatus(this.getStatus()) }
 }

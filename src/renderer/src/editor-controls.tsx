@@ -14,6 +14,7 @@ import { HOME_ACTION_FALLBACK_BUILTINS } from '../../shared/home-layout'
 import { resolveBuiltinIconGlyph } from '../../shared/icon-glyphs'
 import { iconGifPosterAssetKey } from '../../shared/icon-assets'
 import type { IconSlot, ThemeColors, ThemeProfile } from '../../shared/theme'
+import { t } from '../../shared/i18n'
 import { BUILTIN_FONTS, type FontSelection } from '../../shared/typography'
 import type { TypographySlot } from './preview-editing'
 import { builtinIconLabels, builtinIconOptions, builtinIcons } from './icons'
@@ -46,7 +47,7 @@ interface RangeProps {
 export function Range({ label, value, onChange, min, max, step, suffix = '', displayScale = 1, disabled = false, onChangeEnd }: RangeProps): React.JSX.Element {
   const displayValue = value * displayScale
   const formattedValue = Number.isInteger(step * displayScale) ? displayValue.toFixed(0) : displayValue.toFixed(2)
-  return <label className={disabled ? 'range-row is-disabled' : 'range-row'}><span>{label}</span><input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onInput={(event) => onChange(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} /><output>{formattedValue}{suffix}</output></label>
+  return <label className={disabled ? 'range-row is-disabled' : 'range-row'}><span>{t(label)}</span><input type="range" min={min} max={max} step={step} value={value} disabled={disabled} onInput={(event) => onChange(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} /><output>{formattedValue}{suffix}</output></label>
 }
 
 export interface SolidColorControlProps {
@@ -86,12 +87,12 @@ export function SolidColorControl({ label, value, onChange, onChangeEnd, token, 
 
   return (
     <div className={disabled ? 'solid-color-control is-disabled' : 'solid-color-control'} data-color-token={token}>
-      <div className="solid-color-heading"><span>{label}</span><code>{Math.round(alpha * 100)}%</code></div>
+      <div className="solid-color-heading"><span>{t(label)}</span><code>{Math.round(alpha * 100)}%</code></div>
       <div className="solid-color-row">
-        <span className="color-swatch" style={{ background: value }}><input aria-label={`${label}色板`} type="color" value={pickerValue} disabled={disabled} onInput={(event) => updatePicker(event.currentTarget.value)} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onBlur={onChangeEnd} /></span>
-        <input className="color-text-input" aria-label={`${label}颜色值`} value={input} disabled={disabled} aria-invalid={parseCssColor(input) === null} onInput={(event) => updateText(event.currentTarget.value)} onBlur={onChangeEnd} onKeyDown={(event) => { if (event.key === 'Enter') onChangeEnd?.() }} />
+        <span className="color-swatch" style={{ background: value }}><input aria-label={t('{label}色板', { label: t(label) })} type="color" value={pickerValue} disabled={disabled} onInput={(event) => updatePicker(event.currentTarget.value)} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onBlur={onChangeEnd} /></span>
+        <input className="color-text-input" aria-label={t('{label}颜色值', { label: t(label) })} value={input} disabled={disabled} aria-invalid={parseCssColor(input) === null} onInput={(event) => updateText(event.currentTarget.value)} onBlur={onChangeEnd} onKeyDown={(event) => { if (event.key === 'Enter') onChangeEnd?.() }} />
       </div>
-      <input className="alpha-slider" aria-label={`${label}透明度`} type="range" min={0} max={1} step={.01} value={alpha} disabled={disabled} onInput={(event) => updateAlpha(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} />
+      <input className="alpha-slider" aria-label={t('{label}透明度', { label: t(label) })} type="range" min={0} max={1} step={.01} value={alpha} disabled={disabled} onInput={(event) => updateAlpha(Number(event.currentTarget.value))} onPointerUp={onChangeEnd} onPointerCancel={onChangeEnd} onKeyUp={onChangeEnd} onBlur={onChangeEnd} />
     </div>
   )
 }
@@ -159,20 +160,20 @@ export function PaintControl({ token, label: providedLabel, value, onChange, onC
 
   return (
     <section className="paint-control" data-paint-token={token}>
-      <div className="paint-control-heading"><strong>{label}</strong><span className="paint-preview" style={{ background: paintPreview(value) }} /></div>
-      <div className="segmented-control" aria-label={`${label}类型`}>
-        {(['solid', 'linear', 'radial'] as const).map((kind) => <button type="button" className={value.kind === kind ? 'active' : ''} key={kind} onClick={() => switchKind(kind)}>{kind === 'solid' ? '纯色' : kind === 'linear' ? '线性' : '径向'}</button>)}
+      <div className="paint-control-heading"><strong>{t(label)}</strong><span className="paint-preview" style={{ background: paintPreview(value) }} /></div>
+      <div className="segmented-control" aria-label={t('{label}类型', { label: t(label) })}>
+        {(['solid', 'linear', 'radial'] as const).map((kind) => <button type="button" className={value.kind === kind ? 'active' : ''} key={kind} onClick={() => switchKind(kind)}>{t(kind === 'solid' ? '纯色' : kind === 'linear' ? '线性' : '径向')}</button>)}
       </div>
       {value.kind === 'solid' && <SolidColorControl label="颜色" value={value.color} onChange={(color) => onChange({ kind: 'solid', color }, true)} onChangeEnd={onChangeEnd} />}
       {value.kind === 'linear' && <Range label="角度" min={0} max={360} step={1} suffix="°" value={value.angle} onChange={(angle) => onChange({ ...value, angle }, true)} onChangeEnd={onChangeEnd} />}
       {value.kind === 'radial' && <><Range label="中心 X" min={0} max={1} step={.01} value={value.center.x} onChange={(x) => onChange({ ...value, center: { ...value.center, x } }, true)} onChangeEnd={onChangeEnd} /><Range label="中心 Y" min={0} max={1} step={.01} value={value.center.y} onChange={(y) => onChange({ ...value, center: { ...value.center, y } }, true)} onChangeEnd={onChangeEnd} /></>}
       {value.kind !== 'solid' && <div className="gradient-stops">
         {value.stops.map((stop, index) => <div className="gradient-stop" key={index}>
-          <SolidColorControl label={`色标 ${index + 1}`} value={stop.color} onChange={(color) => updateStop(index, { color })} onChangeEnd={onChangeEnd} />
+          <SolidColorControl label={t('色标 {index}', { index: index + 1 })} value={stop.color} onChange={(color) => updateStop(index, { color })} onChangeEnd={onChangeEnd} />
           <Range label="位置" min={0} max={1} step={.01} value={stop.position} onChange={(position) => updateStop(index, { position })} onChangeEnd={onChangeEnd} />
-          <button className="mini-icon-button" type="button" title="删除色标" disabled={value.stops.length <= 2} onClick={() => removeStop(index)}><Trash2 size={13} /></button>
+          <button className="mini-icon-button" type="button" title={t('删除色标')} disabled={value.stops.length <= 2} onClick={() => removeStop(index)}><Trash2 size={13} /></button>
         </div>)}
-        <button className="add-stop-button" type="button" disabled={value.stops.length >= 8} onClick={addStop}><Plus size={13} />添加色标</button>
+        <button className="add-stop-button" type="button" disabled={value.stops.length >= 8} onClick={addStop}><Plus size={13} />{t('添加色标')}</button>
       </div>}
     </section>
   )
@@ -194,16 +195,16 @@ interface FontControlProps {
 export function FontControl({ slot, profile, onChange, onImport }: FontControlProps): React.JSX.Element {
   const selection = profile.typography.slots[slot]
   const value = selection.kind === 'inherit' ? 'inherit' : `${selection.kind}:${selection.id}`
-  return <div className="font-control" data-font-slot={slot}><label><span>{typographyLabels[slot]}</span><select value={value} onChange={(event) => {
+  return <div className="font-control" data-font-slot={slot}><label><span>{t(typographyLabels[slot])}</span><select value={value} onChange={(event) => {
     const [kind, id] = event.currentTarget.value.split(':')
     if (kind === 'inherit') onChange({ kind: 'inherit' })
     else if (kind === 'builtin' && id && id in BUILTIN_FONTS) onChange({ kind: 'builtin', id: id as keyof typeof BUILTIN_FONTS })
     else if (kind === 'imported' && id) onChange({ kind: 'imported', id })
   }}>
-    {slot !== 'ui' && <option value="inherit">继承全局界面字体</option>}
-    <optgroup label="内置字体">{Object.entries(BUILTIN_FONTS).map(([id, font]) => <option key={id} value={`builtin:${id}`}>{font.label}</option>)}</optgroup>
-    {profile.typography.importedFonts.length > 0 && <optgroup label="已导入字体">{profile.typography.importedFonts.map((font) => <option key={font.id} value={`imported:${font.id}`}>{font.family}</option>)}</optgroup>}
-  </select></label><button className="tool-button" type="button" title={`为${typographyLabels[slot]}导入字体`} onClick={onImport}><Upload size={14} /></button></div>
+    {slot !== 'ui' && <option value="inherit">{t('继承全局界面字体')}</option>}
+    <optgroup label={t('内置字体')}>{Object.entries(BUILTIN_FONTS).map(([id, font]) => <option key={id} value={`builtin:${id}`}>{font.label}</option>)}</optgroup>
+    {profile.typography.importedFonts.length > 0 && <optgroup label={t('已导入字体')}>{profile.typography.importedFonts.map((font) => <option key={font.id} value={`imported:${font.id}`}>{font.family}</option>)}</optgroup>}
+  </select></label><button className="tool-button" type="button" title={t('为{label}导入字体', { label: t(typographyLabels[slot]) })} onClick={onImport}><Upload size={14} /></button></div>
 }
 
 interface ThemeIconControlProps { slot: IconSlot; profile: ThemeProfile; assets: Record<string, string>; onChange: (name: string) => void; onImport: () => void; highlighted?: boolean }
@@ -231,7 +232,7 @@ export function ThemeIconControl({ slot, profile, assets, onChange, onImport, hi
   }, [open])
 
   const currentName = source.kind === 'builtin' ? source.name : null
-  const currentLabel = source.kind === 'asset' ? source.asset.toLowerCase().endsWith('.gif') ? '自定义 GIF' : '自定义图片' : builtinIconLabels[source.name] ?? source.name
+  const currentLabel = source.kind === 'asset' ? source.asset.toLowerCase().endsWith('.gif') ? t('自定义 GIF') : t('自定义图片') : t(builtinIconLabels[source.name] ?? source.name)
   const togglePicker = (): void => setOpen((value) => !value)
   const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
@@ -243,29 +244,29 @@ export function ThemeIconControl({ slot, profile, assets, onChange, onImport, hi
   return <div className={highlighted ? 'icon-slot inspector-highlight' : 'icon-slot'} data-icon-slot={slot} data-inspector-anchor={`icon-${slot}`} ref={pickerRef}>
     <span className="icon-preview"><RenderIcon slot={slot} profile={profile} assets={assets} /></span>
     <div className="icon-picker-field">
-      <span>{iconLabels[slot]}</span>
+      <span>{t(iconLabels[slot])}</span>
       <div className="icon-picker">
         <button className="icon-picker-trigger" type="button" aria-haspopup="listbox" aria-expanded={open} aria-controls={listId} onClick={togglePicker} onKeyDown={handleTriggerKeyDown}>
           <span className="icon-picker-trigger-icon"><RenderIcon slot={slot} profile={profile} assets={assets} /></span>
           <span className="icon-picker-trigger-label">{currentLabel}</span>
           <ChevronDown size={13} aria-hidden="true" />
         </button>
-        {open && <div className="icon-picker-menu" id={listId} role="listbox" aria-label={`${iconLabels[slot]}图标`}>
+        {open && <div className="icon-picker-menu" id={listId} role="listbox" aria-label={t('{label}图标', { label: t(iconLabels[slot]) })}>
           <button className={source.kind === 'asset' ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={source.kind === 'asset'} data-icon-name="__asset" onClick={() => { onImport(); setOpen(false) }}>
             <span className="icon-picker-option-icon"><RenderIcon slot={slot} profile={{ ...profile, icons: { ...profile.icons, [slot]: { kind: 'builtin', name: 'image' } } }} assets={assets} /></span>
-            <span>自定义图片 / GIF</span>
+            <span>{t('自定义图片 / GIF')}</span>
           </button>
           {builtinIconOptions.map((name) => {
             const Icon = builtinIcons[name] ?? Sparkles
             return <button className={currentName === name ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={currentName === name} data-icon-name={name} key={name} onClick={() => { onChange(name); setOpen(false) }}>
               <span className="icon-picker-option-icon"><Icon size={16} aria-hidden="true" /></span>
-              <span>{builtinIconLabels[name] ?? name}</span>
+              <span>{t(builtinIconLabels[name] ?? name)}</span>
             </button>
           })}
         </div>}
       </div>
     </div>
-    <button className="tool-button" type="button" title={source.kind === 'asset' ? `更换${iconLabels[slot]}图标` : `选择自定义${iconLabels[slot]}图标`} onClick={onImport}><Upload size={14} /></button>
+    <button className="tool-button" type="button" title={source.kind === 'asset' ? t('更换{label}图标', { label: t(iconLabels[slot]) }) : t('选择自定义{label}图标', { label: t(iconLabels[slot]) })} onClick={onImport}><Upload size={14} /></button>
   </div>
 }
 

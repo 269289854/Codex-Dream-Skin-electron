@@ -144,6 +144,7 @@ describe('theme decorations', () => {
     const legacy = {
       ...profile,
       version: 22,
+      copy: profile.copy['zh-CN'],
       decorations: {
         ...profile.decorations,
         composerMelody: {
@@ -156,7 +157,7 @@ describe('theme decorations', () => {
     }
 
     const parsed = parseThemeProfile(legacy)
-    expect(parsed.version).toBe(28)
+    expect(parsed.version).toBe(29)
     expect(parsed.decorations.composerMelody).toMatchObject({ mode: 'gif', source: { asset: 'assets/legacy.gif', mimeType: 'image/gif' }, effect: 'none', direction: 'left', speed: 1, mediaWidth: 144 })
     expect('gifWidth' in parsed.decorations.composerMelody).toBe(false)
     expect(COMPOSER_DECORATION_EFFECT_IDS).toEqual(['none', 'wave', 'barrage', 'scroll', 'float', 'pulse'])

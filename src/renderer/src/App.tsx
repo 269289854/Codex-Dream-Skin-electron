@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download, ExternalLink,
-  GitBranch, Home, Image, Laptop, LogOut, MessageSquare, MonitorPlay, Palette, Play,
+  GitBranch, Home, Image, Languages, Laptop, LogOut, MessageSquare, MonitorPlay, Palette, Play,
   Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppInfo, AppUpdateStatus, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoImportDecision, VideoMediaRole, VideoSourceSelection } from '../../shared/contracts'
@@ -13,11 +13,12 @@ import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../.
 import { gifPosterAssetKey } from '../../shared/gif'
 import { PARTICLE_EFFECT_IDS, createParticleCyclePosition, createParticleViewportMetrics, createSparkleParticles, particleEffectIconSlot, resolveParticleRenderPolicy, type ParticleCyclePosition } from '../../shared/particle-effects'
 import type { Fence } from '../../shared/geometry'
-import { brandCopyError, headingTemplateError, HOME_ACTIONS, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
+import { brandCopyError, headingTemplateError, HOME_ACTIONS_BY_LOCALE, HOME_PREVIEW_VIEWPORT, splitHeadingTemplate } from '../../shared/home-layout'
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { activateVideoVariant, mediaFlipCssTransform } from '../../shared/media'
-import type { ConversationBubbleRole, CreateThemeInput, IconSlot, MediaReference, ThemeProfile, ThemeSummary, VideoVariants } from '../../shared/theme'
+import { resolveThemeCopy, type ConversationBubbleRole, type CreateThemeInput, type IconSlot, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoVariants } from '../../shared/theme'
+import { DEFAULT_LOCALE, setActiveLocale, t, type SupportedLocale } from '../../shared/i18n'
 import { conversationBubbleMediaReferences, conversationBubbleRolePurpose, resolveConversationBubbleFrame } from '../../shared/conversation-bubbles'
 import { SIDEBAR_NAV_ITEMS } from '../../shared/sidebar-layout'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
@@ -31,7 +32,7 @@ import { PolaroidControls } from './PolaroidControls'
 import { PolaroidPreview } from './PolaroidPreview'
 import { ParticleEffectControls } from './ParticleEffectControls'
 import { PreviewVideo } from './PreviewVideo'
-import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_ACCOUNT_MENU_LABELS, PREVIEW_HOME_CONTEXT, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS, PREVIEW_SIDEBAR_TEAM } from './preview-home'
+import { buildPreviewHeroImageProps, fitPreviewHeadingDensity, PREVIEW_ACCOUNT_MENU_LABELS_BY_LOCALE, PREVIEW_CONTENT_BY_LOCALE, PREVIEW_HOME_CONTEXT_BY_LOCALE, PREVIEW_PROJECT_NAME, PREVIEW_SIDEBAR_PROJECTS_BY_LOCALE, PREVIEW_SIDEBAR_TEAM } from './preview-home'
 import { PreviewQuickEditor } from './PreviewQuickEditor'
 import { VideoPlaybackPanel } from './VideoPlaybackPanel'
 import { VideoTranscodeDialog } from './VideoTranscodeDialog'
@@ -40,6 +41,7 @@ import { WindowBackgroundControls } from './WindowBackgroundControls'
 import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
 import { BrandSignatureControls } from './BrandSignatureControls'
 import { appUpdateDisabledMessage, studioPlatformLabel } from './platform-ui'
+import { activeThemeCopy, setActiveContentLocale } from './content-locale'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../../shared/video-transcode'
 import {
   ICON_PREVIEW_TARGETS,
@@ -81,6 +83,10 @@ interface VideoTranscodeDialogState {
 }
 
 export function App(): React.JSX.Element {
+  const [locale, setLocale] = useState<SupportedLocale>(DEFAULT_LOCALE)
+  const [contentLocale, setContentLocale] = useState<SupportedLocale>(DEFAULT_LOCALE)
+  setActiveLocale(locale)
+  setActiveContentLocale(contentLocale)
   const [themes, setThemes] = useState<ThemeSummary[]>([])
   const [draft, setDraft] = useState<ThemeProfile | null>(null)
   const [assets, setAssets] = useState<Record<string, string>>({})
@@ -165,9 +171,17 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     let active = true
-    void window.studio.app.getInfo().then((info) => { if (active) setAppInfo(info) })
+    void Promise.all([window.studio.app.getInfo(), window.studio.app.getLocale()]).then(([info, savedLocale]) => {
+      if (!active) return
+      setAppInfo(info)
+      setLocale(savedLocale)
+    })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
 
   const refreshThemes = useCallback(async (generation?: number) => {
     const next = await window.studio.themes.list()
@@ -423,7 +437,7 @@ export function App(): React.JSX.Element {
       observer.disconnect()
       void fontReady
     }
-  }, [draft?.copy.headingTemplate, draft?.copy.subtitle, draft?.decorations.homeHeading.visible, draft?.decorations.homeHeading.text, draft?.decorations.homeHeading.fontSize, draft?.typography.slots.homeHeading, draft?.typography.slots.homeSubtitle, draft?.typography.slots.homeHeadingDecoration, previewMode, previewScale])
+  }, [draft?.copy[contentLocale].headingTemplate, draft?.copy[contentLocale].subtitle, draft?.decorations.homeHeading.visible, draft?.decorations.homeHeading.text, draft?.decorations.homeHeading.fontSize, draft?.typography.slots.homeHeading, draft?.typography.slots.homeSubtitle, draft?.typography.slots.homeHeadingDecoration, contentLocale, previewMode, previewScale])
 
   const change = (mutator: (profile: ThemeProfile) => void, historyGroup?: string): void => {
     if (themeOperationBusyRef.current) return
@@ -464,12 +478,18 @@ export function App(): React.JSX.Element {
 
   const saveWithinOperation = async (token: ThemeOperationToken, profile: ThemeProfile): Promise<boolean> => {
     if (!isThemeOperationCurrent(token) || profile.id !== token.themeId) return false
-    const copyError = headingTemplateError(profile.copy.headingTemplate) ??
-      (profile.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null) ??
-      brandCopyError(profile.copy)
-    if (copyError) {
-      if (isThemeOperationCurrent(token)) setError(copyError)
-      return false
+    for (const candidateLocale of ['zh-CN', 'en-US'] as const) {
+      const candidate = resolveThemeCopy(profile, candidateLocale)
+      const copyError = headingTemplateError(candidate.headingTemplate) ??
+        (candidate.subtitle.length > 160 ? t('首页副标题不能超过 160 个字符。') : null) ??
+        brandCopyError(candidate)
+      if (copyError) {
+        if (isThemeOperationCurrent(token)) {
+          setContentLocale(candidateLocale)
+          setError(t('{language}: {message}', { language: candidateLocale === 'zh-CN' ? t('中文') : 'English', message: t(copyError) }))
+        }
+        return false
+      }
     }
     setSaving(true)
     setError(null)
@@ -502,13 +522,13 @@ export function App(): React.JSX.Element {
 
   const createTheme = async (input: CreateThemeInput): Promise<void> => {
     const token = beginThemeOperation(loadedThemeIdRef.current)
-    if (!token) throw new Error('另一项主题操作正在进行，请稍后重试。')
+    if (!token) throw new Error(t('另一项主题操作正在进行，请稍后重试。'))
     try {
       const profile = await window.studio.themes.create(input)
-      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
       if (!isThemeOperationCurrent(token)) return
       setCreateDialogOpen(false)
-      setNotice(`已创建主题“${profile.name}”`)
+      setNotice(t('已创建主题“{name}”', { name: profile.name }))
     } finally {
       finishThemeOperation(token)
     }
@@ -516,7 +536,7 @@ export function App(): React.JSX.Element {
 
   const openDuplicateDialog = (): void => {
     if (!draft || duplicateBusy || themeOperationBusyRef.current) return
-    const suffix = ' 副本'
+    const suffix = t(' 副本')
     setDuplicateName(`${draft.name.slice(0, 80 - suffix.length)}${suffix}`)
     setDuplicateError(null)
     setNotice(null)
@@ -551,7 +571,7 @@ export function App(): React.JSX.Element {
       mergeAssetsForThemeOperation(token, restoredAssets)
       setPreviewSelection(null)
       setInspectorAnchor(null)
-      setNotice('已恢复默认预设，保存主题后生效。')
+      setNotice(t('已恢复默认预设，保存主题后生效。'))
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
@@ -581,10 +601,10 @@ export function App(): React.JSX.Element {
     setDuplicateError(null)
     try {
       const profile = await window.studio.themes.duplicate(source, name)
-      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
       if (!isThemeOperationCurrent(token)) return
       setDuplicateDialogOpen(false)
-      setNotice(`已创建主题“${profile.name}”`)
+      setNotice(t('已创建主题“{name}”', { name: profile.name }))
     } catch (reason) {
       if (isThemeOperationActive(token)) setDuplicateError(messageOf(reason))
     } finally {
@@ -596,7 +616,7 @@ export function App(): React.JSX.Element {
   const exportTheme = async (): Promise<void> => {
     if (!draft) return
     if (!window.studio.share) {
-      setError('当前版本不支持主题分享。')
+      setError(t('当前版本不支持主题分享。'))
       return
     }
     const profile = structuredClone(draft)
@@ -606,7 +626,7 @@ export function App(): React.JSX.Element {
     setError(null)
     try {
       const result = await window.studio.share.exportTheme(profile)
-      if (result && isThemeOperationCurrent(token)) setNotice(`主题已导出为“${result.filePath.split(/[\\/]/).pop() ?? '分享文件'}”`)
+      if (result && isThemeOperationCurrent(token)) setNotice(t('主题已导出为“{name}”', { name: result.filePath.split(/[\\/]/).pop() ?? t('分享文件') }))
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
@@ -623,15 +643,15 @@ export function App(): React.JSX.Element {
     if (incompatibleCount > 0) {
       setActiveInspector('visual')
       setInspectorAnchor('visual-video-playback')
-      setNotice(`已导入主题“${profile.name}”；${incompatibleCount} 个视频需转换后才能应用到 Codex。`)
+      setNotice(t('已导入主题“{name}”；{count} 个视频需转换后才能应用到 Codex。', { name: profile.name, count: incompatibleCount }))
       return
     }
-    setNotice(`已导入主题“${profile.name}”`)
+    setNotice(t('已导入主题“{name}”', { name: profile.name }))
   }
 
   const importTheme = async (): Promise<void> => {
     if (!window.studio.share) {
-      setError('当前版本不支持主题分享。')
+      setError(t('当前版本不支持主题分享。'))
       return
     }
     const token = beginThemeOperation(loadedThemeIdRef.current)
@@ -641,7 +661,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.share.importTheme()
       if (profile) {
-        if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+        if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
         await finishThemeImport(token, profile)
       }
     } catch (reason) {
@@ -659,7 +679,7 @@ export function App(): React.JSX.Element {
     const file = event.dataTransfer.files[0]
     if (!file) return
     if (!window.studio.share || !window.studio.files) {
-      setError('当前版本不支持主题分享。')
+      setError(t('当前版本不支持主题分享。'))
       return
     }
     const token = beginThemeOperation(loadedThemeIdRef.current)
@@ -669,7 +689,7 @@ export function App(): React.JSX.Element {
     try {
       const path = window.studio.files.getPathForFile(file)
       const profile = await window.studio.share.importThemePath(path)
-      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
       await finishThemeImport(token, profile)
     } catch (reason) {
       if (isThemeOperationActive(token)) setError(messageOf(reason))
@@ -682,10 +702,10 @@ export function App(): React.JSX.Element {
   const deleteTheme = async (): Promise<void> => {
     if (!draft) return
     if (themes.find((theme) => theme.id === draft.id)?.system) {
-      setError('系统默认主题不能删除。')
+      setError(t('系统默认主题不能删除。'))
       return
     }
-    if (!window.confirm(`删除主题“${draft.name}”？`)) return
+    if (!window.confirm(t('删除主题“{name}”？', { name: draft.name }))) return
     const themeId = draft.id
     const token = beginThemeOperation(themeId)
     if (!token) return
@@ -766,7 +786,7 @@ export function App(): React.JSX.Element {
       if (isVideoSourceSelection(selected)) {
         if (!isVideoMediaRole(purpose)) {
           await window.studio.assets.discardVideoSelection(themeId, selected.selectionId)
-          throw new Error('该位置不支持视频。')
+          throw new Error(t('该位置不支持视频。'))
         }
         setPreviewSelection(null)
         setVideoTranscodeDialog({
@@ -852,7 +872,7 @@ export function App(): React.JSX.Element {
       } else {
         mergeAssetsForThemeOperation(token, { [imported.relativePath]: imported.previewUrl })
         changeForThemeOperation(token, (profile) => setVideoReferenceForRole(profile, dialogState.role, imported.reference, { width: imported.width, height: imported.height }))
-        setNotice(`${videoRoleLabel(dialogState.role)}已${videoReferenceForRole(draft, dialogState.role)?.videoVariants ? '重新' : ''}生成优化版。`)
+        setNotice(t(videoReferenceForRole(draft, dialogState.role)?.videoVariants ? '{role}已重新生成优化版。' : '{role}已生成优化版。', { role: videoRoleLabel(dialogState.role) }))
       }
       setVideoTranscodeDialog(null)
     } catch (reason) {
@@ -1048,7 +1068,7 @@ export function App(): React.JSX.Element {
       if (!await saveWithinOperation(token, profile)) return
       const detection = await window.studio.codex.detect()
       if (!isThemeOperationCurrent(token)) return
-      const restart = detection.running && window.confirm('Codex 需要重启一次以启用本地主题端口。未提交的输入可能丢失，继续吗？')
+      const restart = detection.running && window.confirm(t('Codex 需要重启一次以启用本地主题端口。未提交的输入可能丢失，继续吗？'))
       if (detection.running && !restart) return
       const status = await window.studio.codex.start(profile.id, restart)
       if (isThemeOperationCurrent(token)) setRuntime(status)
@@ -1106,7 +1126,10 @@ export function App(): React.JSX.Element {
     setDraft((profile) => profile ? { ...profile, polaroid: { ...profile.polaroid, placement: { ...profile.polaroid.placement, ...position } } } : profile)
   }
 
-  if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? '正在打开主题工作台'}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>重新加载</button>}</div>
+  if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? t('正在打开主题工作台')}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>{t('重新加载')}</button>}</div>
+  const copy = resolveThemeCopy(draft, contentLocale)
+  const previewContext = PREVIEW_HOME_CONTEXT_BY_LOCALE[contentLocale]
+  const homeActions = HOME_ACTIONS_BY_LOCALE[contentLocale]
   const previewAssets = reducedMotionPreviewAssets(draft, assets, prefersReducedMotion)
   const heroUrl = draft.hero.source ? previewAssets[draft.hero.source.asset] : draft.hero.sourceImage ? previewAssets[draft.hero.sourceImage] : undefined
   const polaroidUrl = draft.polaroid.source ? previewAssets[draft.polaroid.source.asset] : draft.polaroid.sourceImage ? previewAssets[draft.polaroid.sourceImage] : undefined
@@ -1114,10 +1137,10 @@ export function App(): React.JSX.Element {
   const windowBackgroundUrl = draft.windowBackground.source ? previewAssets[draft.windowBackground.source.asset] : undefined
   const accountMenuBackgroundUrl = draft.accountMenuBackground.source ? previewAssets[draft.accountMenuBackground.source.asset] : undefined
   const windowBackgroundVisible = draft.windowBackground.visible && (draft.windowBackground.mode === 'color' || Boolean(windowBackgroundUrl))
-  const headingParts = splitHeadingTemplate(draft.copy.headingTemplate) ?? { before: draft.copy.headingTemplate, after: '' }
+  const headingParts = splitHeadingTemplate(copy.headingTemplate) ?? { before: copy.headingTemplate, after: '' }
   const homeHeadingVisible = draft.decorations.homeHeading.visible && draft.decorations.homeHeading.text.length > 0
-  const homeCopyValidationError = headingTemplateError(draft.copy.headingTemplate) ?? (draft.copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
-  const brandValidationError = brandCopyError(draft.copy)
+  const homeCopyValidationError = headingTemplateError(copy.headingTemplate) ?? (copy.subtitle.length > 160 ? '首页副标题不能超过 160 个字符。' : null)
+  const brandValidationError = brandCopyError(copy)
   const copyValidationError = homeCopyValidationError ?? brandValidationError
   const duplicateNameValidationError = themeNameError(duplicateName)
   const selectedTarget = previewSelection ? PREVIEW_TARGETS[previewSelection.id] : null
@@ -1132,41 +1155,41 @@ export function App(): React.JSX.Element {
   const currentVersionLabel = currentVersion ? currentVersion.startsWith('v') ? currentVersion : `v${currentVersion}` : '-'
   const updateError = appUpdate?.error ?? appUpdateActionError
   const updateMessage = updateError
-    ? `${updateVersionLabel} 下载失败`
+    ? t('{version} 下载失败', { version: updateVersionLabel })
     : appUpdate?.phase === 'downloading'
-      ? `正在下载 ${updateVersionLabel} · ${Math.round(appUpdate.downloadPercent ?? 0)}%`
+      ? t('正在下载 {version} · {percent}%', { version: updateVersionLabel, percent: Math.round(appUpdate.downloadPercent ?? 0) })
       : appUpdate?.phase === 'downloaded'
-        ? `${updateVersionLabel} 已下载，重启即可安装`
-        : `发现新版本 ${updateVersionLabel}，可以更新`
-  const updateButtonLabel = appUpdate?.phase === 'downloaded' ? '重启并安装' : appUpdate?.phase === 'error' || updateError ? '重试更新' : '立即更新'
+        ? t('{version} 已下载，重启即可安装', { version: updateVersionLabel })
+        : t('发现新版本 {version}，可以更新', { version: updateVersionLabel })
+  const updateButtonLabel = appUpdate?.phase === 'downloaded' ? t('重启并安装') : appUpdate?.phase === 'error' || updateError ? t('重试更新') : t('立即更新')
   const updatePanelMessage = !appUpdate
-    ? '正在读取更新状态…'
+    ? t('正在读取更新状态…')
     : appUpdate.phase === 'disabled'
-      ? appUpdateDisabledMessage(appInfo?.platform ?? null)
+      ? t(appUpdateDisabledMessage(appInfo?.platform ?? null))
       : appUpdate.phase === 'checking' || appUpdateCheckBusy
-        ? '正在检查更新…'
+        ? t('正在检查更新…')
         : updateError && !updateVisible
-          ? updateError
+          ? t(updateError)
           : appUpdate.phase === 'up-to-date'
-            ? `当前已是最新版本 ${currentVersionLabel}`
+            ? t('当前已是最新版本 {version}', { version: currentVersionLabel })
             : appUpdate.phase === 'available'
-              ? `发现新版本 ${updateVersionLabel}，可以更新`
+              ? t('发现新版本 {version}，可以更新', { version: updateVersionLabel })
               : appUpdate.phase === 'downloading'
-                ? `正在下载 ${updateVersionLabel} · ${Math.round(appUpdate.downloadPercent ?? 0)}%`
+                ? t('正在下载 {version} · {percent}%', { version: updateVersionLabel, percent: Math.round(appUpdate.downloadPercent ?? 0) })
                 : appUpdate.phase === 'downloaded'
-                  ? `${updateVersionLabel} 已下载，重启即可安装`
+                  ? t('{version} 已下载，重启即可安装', { version: updateVersionLabel })
                   : appUpdate.phase === 'error'
-                    ? updateVisible ? `${updateVersionLabel} 下载失败` : updateError ?? '检查更新失败，请稍后重试。'
-                    : '可手动检查 GitHub 正式版本'
+                    ? updateVisible ? t('{version} 下载失败', { version: updateVersionLabel }) : t(updateError ?? '检查更新失败，请稍后重试。')
+                    : t('可手动检查 GitHub 正式版本')
   const updatePanelButtonLabel = appUpdate?.phase === 'downloaded'
-    ? '重启并安装'
+    ? t('重启并安装')
     : updateVisible
-      ? appUpdate?.phase === 'downloading' ? '下载中' : appUpdate?.phase === 'error' ? '重试更新' : '立即更新'
+      ? appUpdate?.phase === 'downloading' ? t('下载中') : appUpdate?.phase === 'error' ? t('重试更新') : t('立即更新')
       : appUpdate?.phase === 'checking' || appUpdateCheckBusy
-        ? '检查中'
+        ? t('检查中')
         : appUpdate?.phase === 'up-to-date' || appUpdate?.phase === 'error' || Boolean(updateError)
-          ? '重新检查'
-          : '检查更新'
+          ? t('重新检查')
+          : t('检查更新')
   const updatePanelDisabled = !appUpdate || appUpdate.phase === 'disabled' || appUpdate.phase === 'checking' || appUpdate.phase === 'downloading' || appUpdateCheckBusy
 
   return (
@@ -1195,21 +1218,29 @@ export function App(): React.JSX.Element {
         <span className="brand-mark"><Sparkles size={16} /></span>
         <strong>Codex Dream Skin Studio</strong>
         <span className="title-status">{studioPlatformLabel(appInfo?.platform ?? null)}</span>
+        <label className="locale-select" title={t('语言')}><Languages size={14} aria-hidden="true" /><select aria-label={t('语言')} value={locale} onChange={(event) => {
+          const nextLocale = event.currentTarget.value as SupportedLocale
+          void window.studio.app.setLocale(nextLocale).then((saved) => {
+            setLocale(saved)
+            setError(null)
+            setNotice(null)
+          }).catch((reason) => setError(messageOf(reason)))
+        }}><option value="zh-CN">{t('中文')}</option><option value="en-US">English</option></select></label>
         {updateVisible && <div className="app-update-notice" role="status" aria-live="polite" aria-atomic="true">
           <span className="app-update-dot" aria-hidden="true" />
           <span className="app-update-message">{updateMessage}</span>
           <button type="button" disabled={appUpdate?.phase === 'downloading'} onClick={() => void runAppUpdate()}>
             {appUpdate?.phase === 'downloaded' ? <RotateCcw size={12} /> : <Download size={12} />}
-            {appUpdate?.phase === 'downloading' ? '下载中' : updateButtonLabel}
+            {appUpdate?.phase === 'downloading' ? t('下载中') : updateButtonLabel}
           </button>
         </div>}
       </header>
-      {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
-      {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>释放 .cdstheme 文件以导入主题</strong><span>将创建新的本地主题，不会覆盖现有主题</span></div>}
+      {error && <div className="error-banner"><span>{t(error)}</span><button onClick={() => setError(null)}>{t('关闭')}</button></div>}
+      {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>{t('释放 .cdstheme 文件以导入主题')}</strong><span>{t('将创建新的本地主题，不会覆盖现有主题')}</span></div>}
       {createDialogOpen && <CreateThemeDialog onClose={() => setCreateDialogOpen(false)} onCreate={createTheme} />}
       {videoTranscodeDialog && <VideoTranscodeDialog
         key={`${videoTranscodeDialog.kind}:${videoTranscodeDialog.selectionId ?? videoTranscodeDialog.sourceAsset}`}
-        title={videoTranscodeDialog.kind === 'import' ? `${videoRoleLabel(videoTranscodeDialog.role)}视频` : `优化${videoRoleLabel(videoTranscodeDialog.role)}视频`}
+        title={videoTranscodeDialog.kind === 'import' ? t('{role}视频', { role: videoRoleLabel(videoTranscodeDialog.role) }) : t('优化{role}视频', { role: videoRoleLabel(videoTranscodeDialog.role) })}
         originalName={videoTranscodeDialog.originalName}
         inspection={videoTranscodeDialog.inspection}
         purpose={videoTranscodeDialog.kind}
@@ -1222,33 +1253,33 @@ export function App(): React.JSX.Element {
       />}
       {duplicateDialogOpen && <div className="theme-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDuplicateDialog() }}>
         <section className="theme-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-theme-title">
-          <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">复制主题</h2><button type="button" title="关闭" disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
+          <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">{t('复制主题')}</h2><button type="button" title={t('关闭')} disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
           <form onSubmit={(event) => { event.preventDefault(); void duplicateTheme() }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeDuplicateDialog() } else if (event.key === 'Enter') { event.preventDefault(); void duplicateTheme() } }}>
-            <label className="theme-dialog-field"><span>副本名称</span><input ref={duplicateInputRef} value={duplicateName} maxLength={80} aria-invalid={Boolean(duplicateNameValidationError)} aria-describedby={duplicateNameValidationError || duplicateError ? 'duplicate-theme-error' : undefined} onInput={(event) => { setDuplicateName(event.currentTarget.value); setDuplicateError(null) }} /></label>
-            {(duplicateNameValidationError || duplicateError) && <p className="theme-dialog-error" id="duplicate-theme-error" role="alert">{duplicateError ?? duplicateNameValidationError}</p>}
-            <footer><button className="secondary-command" type="button" disabled={duplicateBusy} onClick={closeDuplicateDialog}>取消</button><button className="primary-button" type="submit" disabled={Boolean(duplicateNameValidationError) || duplicateBusy}><Copy size={14} />{duplicateBusy ? '复制中' : '创建副本'}</button></footer>
+            <label className="theme-dialog-field"><span>{t('副本名称')}</span><input ref={duplicateInputRef} value={duplicateName} maxLength={80} aria-invalid={Boolean(duplicateNameValidationError)} aria-describedby={duplicateNameValidationError || duplicateError ? 'duplicate-theme-error' : undefined} onInput={(event) => { setDuplicateName(event.currentTarget.value); setDuplicateError(null) }} /></label>
+            {(duplicateNameValidationError || duplicateError) && <p className="theme-dialog-error" id="duplicate-theme-error" role="alert">{t(duplicateError ?? duplicateNameValidationError ?? '')}</p>}
+            <footer><button className="secondary-command" type="button" disabled={duplicateBusy} onClick={closeDuplicateDialog}>{t('取消')}</button><button className="primary-button" type="submit" disabled={Boolean(duplicateNameValidationError) || duplicateBusy}><Copy size={14} />{duplicateBusy ? t('复制中') : t('创建副本')}</button></footer>
           </form>
         </section>
       </div>}
       <section className="workspace">
         <aside className="theme-sidebar">
-          <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>我的主题</h2></div><button className="icon-button" title="新建主题" disabled={themeOperationBusy} onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
+          <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>{t('我的主题')}</h2></div><button className="icon-button" title={t('新建主题')} disabled={themeOperationBusy} onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
           <div className="theme-list">
-            {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} disabled={themeOperationBusy} onClick={() => { if (theme.id !== draft.id) void loadTheme(theme.id).catch(() => undefined) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题'}</small></span></button>)}
+            {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} disabled={themeOperationBusy} onClick={() => { if (theme.id !== draft.id) void loadTheme(theme.id).catch(() => undefined) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{t(theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题')}</small></span></button>)}
           </div>
-          <div className="theme-actions"><button type="button" title="导出主题" disabled={themeOperationBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title="导入主题" disabled={themeOperationBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title="复制主题" disabled={themeOperationBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={systemThemeSelected ? '系统主题不能删除' : '删除主题'} disabled={themeOperationBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
-          {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title="关闭提示" onClick={() => setNotice(null)}><X size={13} /></button></div>}
-          {operationProgress && <div className="operation-progress" role="status"><span>{operationProgress.message}</span>{operationProgress.totalBytes ? <small>{Math.round(operationProgress.processedBytes / operationProgress.totalBytes * 100)}%</small> : <small>处理中</small>}<button type="button" title="取消操作" onClick={() => void window.studio.operations?.cancel(operationProgress.id)}>取消</button></div>}
+          <div className="theme-actions"><button type="button" title={t('导出主题')} disabled={themeOperationBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title={t('导入主题')} disabled={themeOperationBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title={t('复制主题')} disabled={themeOperationBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={t(systemThemeSelected ? '系统主题不能删除' : '删除主题')} disabled={themeOperationBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
+          {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title={t('关闭提示')} onClick={() => setNotice(null)}><X size={13} /></button></div>}
+          {operationProgress && <div className="operation-progress" role="status"><span>{t(operationProgress.message)}</span>{operationProgress.totalBytes ? <small>{Math.round(operationProgress.processedBytes / operationProgress.totalBytes * 100)}%</small> : <small>{t('处理中')}</small>}<button type="button" title={t('取消操作')} onClick={() => void window.studio.operations?.cancel(operationProgress.id)}>{t('取消')}</button></div>}
           <nav className="sidebar-nav">
-            <button className={activeInspector === 'visual' ? 'active' : ''} onClick={() => showInspector('visual')}><Palette size={17} />视觉设计</button>
-            <button className={activeInspector === 'icons' ? 'active' : ''} onClick={() => showInspector('icons')}><Box size={17} />图标样式</button>
-            <button className={activeInspector === 'runtime' ? 'active' : ''} onClick={() => showInspector('runtime')}><Settings2 size={17} />运行设置</button>
+            <button className={activeInspector === 'visual' ? 'active' : ''} onClick={() => showInspector('visual')}><Palette size={17} />{t('视觉设计')}</button>
+            <button className={activeInspector === 'icons' ? 'active' : ''} onClick={() => showInspector('icons')}><Box size={17} />{t('图标样式')}</button>
+            <button className={activeInspector === 'runtime' ? 'active' : ''} onClick={() => showInspector('runtime')}><Settings2 size={17} />{t('运行设置')}</button>
           </nav>
-          <div className="sidebar-footer"><CircleHelp size={15} />本地配置 · 可随时恢复</div>
+          <div className="sidebar-footer"><CircleHelp size={15} />{t('本地配置 · 可随时恢复')}</div>
         </aside>
 
         <section className="preview-panel" inert={themeOperationBusy ? true : undefined} aria-busy={themeOperationBusy}>
-          <div className="preview-toolbar"><div><span className="status-dot" />Codex 实时预览 <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><div className="preview-view-switch segmented-control" aria-label="预览页面"><button type="button" className={previewMode === 'home' ? 'active' : ''} title="首页预览" onClick={() => { setPreviewMode('home'); setPreviewSelection(null) }}><Home size={14} /></button><button type="button" className={previewMode === 'conversation' ? 'active' : ''} title="会话预览" onClick={() => { setPreviewMode('conversation'); setPreviewSelection(null) }}><MessageSquare size={14} /></button></div><button className="tool-button" title="撤销" disabled={themeOperationBusy} onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title="恢复默认" disabled={resetting || themeOperationBusy} onClick={() => void restoreDefault()}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving || resetting || themeOperationBusy} onClick={() => void save()}><Save size={15} />{saving ? '保存中' : '保存主题'}</button></div></div>
+          <div className="preview-toolbar"><div><span className="status-dot" />{t('Codex 实时预览')} <span className="viewport-label">{HOME_PREVIEW_VIEWPORT.width} × {HOME_PREVIEW_VIEWPORT.height}</span></div><div className="preview-actions"><div className="content-locale-switch segmented-control" aria-label={t('内容语言')}><button type="button" className={contentLocale === 'zh-CN' ? 'active' : ''} aria-pressed={contentLocale === 'zh-CN'} title={t('编辑中文主题文案')} onClick={() => setContentLocale('zh-CN')}>中</button><button type="button" className={contentLocale === 'en-US' ? 'active' : ''} aria-pressed={contentLocale === 'en-US'} title={t('编辑英文主题文案')} onClick={() => setContentLocale('en-US')}>EN</button></div><div className="preview-view-switch segmented-control" aria-label={t('预览页面')}><button type="button" className={previewMode === 'home' ? 'active' : ''} title={t('首页预览')} onClick={() => { setPreviewMode('home'); setPreviewSelection(null) }}><Home size={14} /></button><button type="button" className={previewMode === 'conversation' ? 'active' : ''} title={t('会话预览')} onClick={() => { setPreviewMode('conversation'); setPreviewSelection(null) }}><MessageSquare size={14} /></button></div><button className="tool-button" title={t('撤销')} disabled={themeOperationBusy} onClick={undo}><Undo2 size={16} /></button><button className="tool-button" title={t('恢复默认')} disabled={resetting || themeOperationBusy} onClick={() => void restoreDefault()}><RotateCcw size={16} /></button><button className="primary-button" disabled={Boolean(copyValidationError) || saving || resetting || themeOperationBusy} onClick={() => void save()}><Save size={15} />{saving ? t('保存中') : t('保存主题')}</button></div></div>
           <div className="preview-stage" ref={previewStageRef}>
             <div className="preview-frame" style={{ width: HOME_PREVIEW_VIEWPORT.width * previewScale, height: HOME_PREVIEW_VIEWPORT.height * previewScale }}>
               <div
@@ -1264,9 +1295,9 @@ export function App(): React.JSX.Element {
                 >
                   {previewFontCss && <style>{previewFontCss}</style>}
                   <WindowBackgroundPreview profile={draft} backgroundUrl={windowBackgroundUrl} />
-                  <CodexSidebarPreview profile={draft} assets={previewAssets} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />
+                  <CodexSidebarPreview profile={draft} assets={previewAssets} locale={contentLocale} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />
                 <section className="codex-main" ref={previewRef} data-preview-target="surface-main">
-                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label="编辑品牌栏颜色" /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label="编辑品牌图标"><RenderIcon slot="branding" profile={draft} assets={previewAssets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label="编辑品牌主标题">{draft.copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label="编辑品牌副标题">{draft.copy.brandSubtitle}</small></div><PreviewBrandSignature profile={draft} assets={previewAssets} /></header>
+                  <header className="preview-brand"><button className="preview-brand-palette-target" data-preview-target="palette-brand" type="button" aria-label={t('编辑品牌栏颜色')} /><span className="preview-brand-icon" data-preview-target="icon-branding" tabIndex={0} role="button" aria-label={t('编辑品牌图标')}><RenderIcon slot="branding" profile={draft} assets={previewAssets} injected /></span><div><strong data-preview-target="copy-brand-title" tabIndex={0} role="button" aria-label={t('编辑品牌主标题')}>{copy.brandTitle}</strong><small data-preview-target="copy-brand-subtitle" tabIndex={0} role="button" aria-label={t('编辑品牌副标题')}>{copy.brandSubtitle}</small></div><PreviewBrandSignature profile={draft} assets={previewAssets} /></header>
                   <PreviewSparkles profile={draft} assets={previewAssets} />
                   {previewMode === 'home' ? <div className="preview-home-content">
                     <section className="dream-layout-root dream-hero preview-hero-explicit" data-preview-target="hero">
@@ -1278,29 +1309,29 @@ export function App(): React.JSX.Element {
                         </div>
                         : <div className="preview-hero-fallback" aria-hidden="true" />}
                       <div className={homeHeadingVisible ? 'dream-heading-region dream-heading-region-decorated' : 'dream-heading-region'} data-preview-target="copy-heading">
-                        {homeHeadingVisible && <span className="dream-heading-decoration" data-preview-target="home-heading-decoration" tabIndex={0} role="button" aria-label="编辑首页标题装饰" style={{ fontSize: `${draft.decorations.homeHeading.fontSize}px` }}>{draft.decorations.homeHeading.text}</span>}
+                        {homeHeadingVisible && <span className="dream-heading-decoration" data-preview-target="home-heading-decoration" tabIndex={0} role="button" aria-label={t('编辑首页标题装饰')} style={{ fontSize: `${draft.decorations.homeHeading.fontSize}px` }}>{draft.decorations.homeHeading.text}</span>}
                         <h1 className="dream-heading">
                           <span className="dream-copy-node dream-copy-before">{headingParts.before}</span>
-                          <button className="dream-project-selector dream-project-proxy" data-preview-target="project-selector" type="button">{PREVIEW_HOME_CONTEXT.projectName}</button>
+                          <button className="dream-project-selector dream-project-proxy" data-preview-target="project-selector" type="button">{previewContext.projectName}</button>
                           <span className="dream-copy-node dream-copy-after">{headingParts.after}</span>
-                          <span className="dream-copy-node dream-copy-subtitle" data-preview-target="copy-subtitle" tabIndex={0} role="button" aria-label="编辑副标题">{draft.copy.subtitle}</span>
+                          <span className="dream-copy-node dream-copy-subtitle" data-preview-target="copy-subtitle" tabIndex={0} role="button" aria-label={t('编辑副标题')}>{copy.subtitle}</span>
                         </h1>
                       </div>
                       <div className="dream-action-grid">
-                        {HOME_ACTIONS.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={`编辑${action.label}卡片样式`}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={previewAssets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label" data-preview-target="action-card-text">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={previewAssets} injected /></span></button>)}
+                        {homeActions.map((action) => <button className="dream-action-card" data-preview-target="palette-action-card" type="button" key={action.label} aria-label={t('编辑{label}卡片样式', { label: action.label })}><span className="dream-action-icon" data-preview-target={ICON_PREVIEW_TARGETS[action.iconSlot]}><RenderIcon slot={action.iconSlot} profile={draft} assets={previewAssets} injected fallbackGlyph={action.icon} /></span><span className="dream-action-label" data-preview-target="action-card-text">{action.label}</span><span className="dream-action-heart" data-preview-target="icon-decoration"><RenderIcon slot="decoration" profile={draft} assets={previewAssets} injected /></span></button>)}
                       </div>
                     </section>
                     <div className="preview-lower-region">
                       <div className="dream-project-bar preview-project-bar" data-preview-target="palette-project-bar">
                         <div className="preview-project-chips">
-                          <button type="button" data-preview-target="project-chip" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={previewAssets} /></span><span>{PREVIEW_HOME_CONTEXT.projectName}</span></button>
-                          <button type="button" data-preview-target="project-chip" data-preview-context="environment"><Laptop size={15} /><span>{PREVIEW_HOME_CONTEXT.environment}</span></button>
-                          <button type="button" data-preview-target="project-chip" data-preview-context="branch"><GitBranch size={15} /><span>{PREVIEW_HOME_CONTEXT.branch}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={previewAssets} /></span><span>{previewContext.projectName}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="environment"><Laptop size={15} /><span>{previewContext.environment}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="branch"><GitBranch size={15} /><span>{previewContext.branch}</span></button>
                         </div>
                       </div>
-                      <PreviewComposer profile={draft} assets={previewAssets} />
+                      <PreviewComposer profile={draft} assets={previewAssets} locale={contentLocale} />
                     </div>
-                  </div> : <ConversationPreview profile={draft} assets={previewAssets} />}
+                  </div> : <ConversationPreview profile={draft} assets={previewAssets} locale={contentLocale} />}
                   {draft.polaroid.visible && polaroidUrl && <PolaroidPreview mediaUrl={polaroidUrl} mediaKey={draft.polaroid.source?.asset ?? polaroidUrl} mediaKind={draft.polaroid.source?.kind ?? 'image'} playback={draft.polaroid.playback} pausePolicy={draft.videoPlayback.pausePolicy} mediaTransform={draft.polaroid.mediaTransform} mode={draft.polaroid.mode} fence={draft.polaroid.fence as Fence} sourceSize={draft.polaroid.sourceSize} placement={draft.polaroid.placement} style={draft.polaroid.style} pin={<RenderIcon slot="polaroidPin" profile={draft} assets={previewAssets} injected />} quickEditorOpen={selectedTarget !== null} onPointerDown={beginPlacementDrag} />}
                 </section>
               </div>
@@ -1336,29 +1367,29 @@ export function App(): React.JSX.Element {
             <Property title="整个窗口背景" anchor="visual-window-background" highlighted={inspectorAnchor === 'visual-window-background'}><WindowBackgroundControls profile={draft} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('windowBackground', kind) }} /></Property>
             <Property title="账号菜单背景" anchor="visual-account-menu-background" highlighted={inspectorAnchor === 'visual-account-menu-background'}><AccountMenuBackgroundControls profile={draft} backgroundUrl={accountMenuBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('accountMenuBackground', kind) }} /></Property>
             <Property title="侧栏固定文案" anchor="visual-sidebar-copy" highlighted={inspectorAnchor === 'visual-sidebar-copy'}>
-              <label className="copy-field">模式标题<input value={draft.copy.sidebarModeTitle} maxLength={80} aria-invalid={!draft.copy.sidebarModeTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.sidebarModeTitle = value }) }} /></label>
-              {SIDEBAR_NAV_ITEMS.map((item) => <label className="copy-field" key={item.id}>{item.label}<input value={draft.copy[item.copyField]} maxLength={80} aria-invalid={!draft.copy[item.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy[item.copyField] = value }) }} /></label>)}
+              <label className="copy-field">{t('模式标题')}<input value={copy.sidebarModeTitle} maxLength={80} aria-invalid={!copy.sidebarModeTitle.trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { activeThemeCopy(profile).sidebarModeTitle = value }) }} /></label>
+              {SIDEBAR_NAV_ITEMS.map((item) => <label className="copy-field" key={item.id}>{t(item.label)}<input value={copy[item.copyField]} maxLength={80} aria-invalid={!copy[item.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { activeThemeCopy(profile)[item.copyField] = value }) }} /></label>)}
             </Property>
             <SidebarSectionTitleInspector profile={draft} highlighted={inspectorAnchor === 'visual-sidebar-section-titles'} onChange={change} onInteractionEnd={endHistoryGroup} onImportFont={(slot) => { void importFont(slot) }} />
             <Property title="品牌文案" anchor="visual-brand-copy" highlighted={inspectorAnchor === 'visual-brand-copy'}>
-              <label className="copy-field">品牌主标题<input value={draft.copy.brandTitle} maxLength={80} aria-invalid={!draft.copy.brandTitle.trim() || draft.copy.brandTitle.length > 80} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandTitle = value }) }} /></label>
-              <label className="copy-field">品牌副标题<textarea value={draft.copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSubtitle = value }) }} /></label>
+              <label className="copy-field">{t('品牌主标题')}<input value={copy.brandTitle} maxLength={80} aria-invalid={!copy.brandTitle.trim() || copy.brandTitle.length > 80} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { activeThemeCopy(profile).brandTitle = value }) }} /></label>
+              <label className="copy-field">{t('品牌副标题')}<textarea value={copy.brandSubtitle} maxLength={120} rows={2} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { activeThemeCopy(profile).brandSubtitle = value }) }} /></label>
               <BrandSignatureControls profile={draft} assets={previewAssets} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('brandSignature', kind) }} />
-              {draft.brandSignature.mode === 'text' && <label className="copy-field">品牌签名<input value={draft.copy.brandSignature} maxLength={32} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.brandSignature = value }) }} /></label>}
-              {brandValidationError && <p className="field-error">{brandValidationError}</p>}
+              {draft.brandSignature.mode === 'text' && <label className="copy-field">{t('品牌签名')}<input value={copy.brandSignature} maxLength={32} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { activeThemeCopy(profile).brandSignature = value }) }} /></label>}
+              {brandValidationError && <p className="field-error">{t(brandValidationError)}</p>}
             </Property>
             <Property title="首页文案" anchor="visual-copy" highlighted={inspectorAnchor === 'visual-copy'}>
-              <label className="copy-field">首页标题<input value={draft.copy.headingTemplate} maxLength={120} aria-invalid={Boolean(headingTemplateError(draft.copy.headingTemplate))} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.headingTemplate = value }) }} /></label>
-              <label className="copy-field">副标题<textarea value={draft.copy.subtitle} maxLength={160} rows={3} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { profile.copy.subtitle = value }) }} /></label>
-              {homeCopyValidationError && <p className="field-error">{homeCopyValidationError}</p>}
+              <label className="copy-field">{t('首页标题')}<input value={copy.headingTemplate} maxLength={120} aria-invalid={Boolean(headingTemplateError(copy.headingTemplate))} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { activeThemeCopy(profile).headingTemplate = value }) }} /></label>
+              <label className="copy-field">{t('副标题')}<textarea value={copy.subtitle} maxLength={160} rows={3} onChange={(event) => { const value = event.currentTarget.value; change((profile) => { activeThemeCopy(profile).subtitle = value }) }} /></label>
+              {homeCopyValidationError && <p className="field-error">{t(homeCopyValidationError)}</p>}
             </Property>
             <Property title="主视觉" anchor="visual-hero" highlighted={inspectorAnchor === 'visual-hero'}>
-              <button className="asset-picker" disabled={mediaBusy} onClick={() => void selectImage('hero')}>{heroUrl ? (draft.hero.source?.kind === 'video' ? <VideoThumbnail src={heroUrl} style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />选择主视觉媒体</span></button>
-              {draft.hero.source?.kind === 'video' && <div className="media-playback-controls"><label className="toggle-row"><span>自动播放</span><input type="checkbox" checked={draft.hero.playback.autoplay} onChange={(event) => { const autoplay = event.currentTarget.checked; change((profile) => { profile.hero.playback.autoplay = autoplay }) }} /></label><label className="toggle-row"><span>循环播放</span><input type="checkbox" checked={draft.hero.playback.loop} onChange={(event) => { const loop = event.currentTarget.checked; change((profile) => { profile.hero.playback.loop = loop }) }} /></label><label className="toggle-row"><span>声音</span><input type="checkbox" checked={draft.hero.playback.sound} onChange={(event) => { const sound = event.currentTarget.checked; change((profile) => { profile.hero.playback.sound = sound; if (sound) profile.polaroid.playback.sound = false }) }} /></label><Range label="音量" min={0} max={1} step={.01} value={draft.hero.playback.volume} disabled={!draft.hero.playback.sound} onChange={(value) => change((profile) => { profile.hero.playback.volume = value }, 'hero-volume')} /></div>}
+              <button className="asset-picker" disabled={mediaBusy} onClick={() => void selectImage('hero')}>{heroUrl ? (draft.hero.source?.kind === 'video' ? <VideoThumbnail src={heroUrl} style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} /> : <img src={heroUrl} alt={t('主视觉')} style={{ transform: mediaFlipCssTransform(draft.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />{t('选择主视觉媒体')}</span></button>
+              {draft.hero.source?.kind === 'video' && <div className="media-playback-controls"><label className="toggle-row"><span>{t('自动播放')}</span><input type="checkbox" checked={draft.hero.playback.autoplay} onChange={(event) => { const autoplay = event.currentTarget.checked; change((profile) => { profile.hero.playback.autoplay = autoplay }) }} /></label><label className="toggle-row"><span>{t('循环播放')}</span><input type="checkbox" checked={draft.hero.playback.loop} onChange={(event) => { const loop = event.currentTarget.checked; change((profile) => { profile.hero.playback.loop = loop }) }} /></label><label className="toggle-row"><span>{t('声音')}</span><input type="checkbox" checked={draft.hero.playback.sound} onChange={(event) => { const sound = event.currentTarget.checked; change((profile) => { profile.hero.playback.sound = sound; if (sound) profile.polaroid.playback.sound = false }) }} /></label><Range label={t('音量')} min={0} max={1} step={.01} value={draft.hero.playback.volume} disabled={!draft.hero.playback.sound} onChange={(value) => change((profile) => { profile.hero.playback.volume = value }, 'hero-volume')} /></div>}
               {draft.hero.source && heroUrl && <MediaFlipControls value={draft.hero.mediaTransform} onChange={(field, value) => change((profile) => { profile.hero.mediaTransform[field] = value })} />}
-              <Range label="缩放" min={.5} max={3} step={.01} value={draft.hero.scale} onChange={(value) => change((profile) => { profile.hero.scale = value })} />
-              <Range label="水平位置" min={0} max={1} step={.01} value={draft.hero.position.x} onChange={(value) => change((profile) => { profile.hero.position.x = value })} />
-              <Range label="垂直位置" min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
+              <Range label={t('缩放')} min={.5} max={3} step={.01} value={draft.hero.scale} onChange={(value) => change((profile) => { profile.hero.scale = value })} />
+              <Range label={t('水平位置')} min={0} max={1} step={.01} value={draft.hero.position.x} onChange={(value) => change((profile) => { profile.hero.position.x = value })} />
+              <Range label={t('垂直位置')} min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="首页标题装饰" anchor="visual-home-heading-decoration" highlighted={inspectorAnchor === 'visual-home-heading-decoration'}><HomeHeadingDecorationControls profile={draft} assets={previewAssets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
             <Property title="聊天气泡" anchor="visual-conversation-bubbles" highlighted={inspectorAnchor === 'visual-conversation-bubbles'}><ConversationBubbleControls profile={draft} assets={previewAssets} role={conversationBubbleRole} mediaBusy={mediaBusy} onRoleChange={setConversationBubbleRole} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage(conversationBubbleRolePurpose(conversationBubbleRole), kind) }} /></Property>
@@ -1371,18 +1402,18 @@ export function App(): React.JSX.Element {
             <Property title="输入框装饰" anchor="visual-composer-melody" highlighted={inspectorAnchor === 'visual-composer-melody'}><ComposerMelodyControls profile={draft} assets={previewAssets} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} onSelectMedia={(kind) => { void selectImage('composerMelody', kind) }} /></Property>
             <Property title="字体" anchor="typography" highlighted={inspectorAnchor === 'typography'}>
               <div className="font-editor">{(Object.keys(draft.typography.slots) as TypographySlot[]).map((slot) => <FontControl key={slot} slot={slot} profile={draft} onChange={(selection) => change((profile) => assignFontSlot(profile, slot, selection))} onImport={() => void importFont(slot)} />)}</div>
-              {draft.typography.importedFonts.length > 0 && <div className="font-library">{draft.typography.importedFonts.map((font) => <div key={font.id}><span><strong>{font.family}</strong><small>{font.originalName}</small></span><button className="mini-icon-button" type="button" title="移除字体" onClick={() => removeImportedFont(font.id)}><Trash2 size={13} /></button></div>)}</div>}
+              {draft.typography.importedFonts.length > 0 && <div className="font-library">{draft.typography.importedFonts.map((font) => <div key={font.id}><span><strong>{font.family}</strong><small>{font.originalName}</small></span><button className="mini-icon-button" type="button" title={t('移除字体')} onClick={() => removeImportedFont(font.id)}><Trash2 size={13} /></button></div>)}</div>}
             </Property>
             {appearanceGroups.map((group) => <AppearanceInspectorGroup key={`${draft.id}-${group}`} group={group} profile={draft} highlighted={inspectorAnchor === `appearance-${group}`} onChange={change} onInteractionEnd={endHistoryGroup} />)}
             <Property title="兼容主题色" anchor="visual-colors" highlighted={inspectorAnchor === 'visual-colors'}><div className="legacy-color-grid">{(Object.keys(colorLabels) as (keyof ThemeProfile['colors'])[]).map((key) => <ThemeColorControl key={`${draft.id}-${key}`} colorKey={key} value={draft.colors[key]} onChange={(value) => change((profile) => { profile.colors[key] = value }, `legacy-color-${key}`)} onChangeEnd={endHistoryGroup} />)}</div></Property>
           </>}
           {activeInspector === 'icons' && <><Property title="图标槽位"><div className="icon-editor">{standardIconSlots.map((slot) => slot === 'composerBadge'
-            ? <div className="icon-slot-with-visibility" key={slot}><ThemeIconControl slot={slot} profile={draft} assets={previewAssets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} /><label className="toggle-row"><span>显示输入框装饰</span><input type="checkbox" checked={draft.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; change((profile) => { profile.composerBadge.visible = visible }) }} /></label></div>
+            ? <div className="icon-slot-with-visibility" key={slot}><ThemeIconControl slot={slot} profile={draft} assets={previewAssets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} /><label className="toggle-row"><span>{t('显示输入框装饰')}</span><input type="checkbox" checked={draft.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; change((profile) => { profile.composerBadge.visible = visible }) }} /></label></div>
             : <ThemeIconControl key={slot} slot={slot} profile={draft} assets={previewAssets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property><Property title="粒子动效素材"><div className="icon-editor">{particleIconSlots.map((slot) => <ThemeIconControl key={slot} slot={slot} profile={draft} assets={previewAssets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property></>}
           {activeInspector === 'runtime' && <>
-            <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{runtime.message}</strong><dl><div><dt>阶段</dt><dd>{runtime.phase}</dd></div><div><dt>端口</dt><dd>{runtime.port}</dd></div><div><dt>页面</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{runtime.lastError}</p>}</div></Property>
+            <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{t(runtime.message)}</strong><dl><div><dt>{t('阶段')}</dt><dd>{t(runtimePhaseLabels[runtime.phase])}</dd></div><div><dt>{t('端口')}</dt><dd>{runtime.port}</dd></div><div><dt>{t('页面')}</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{t(runtime.lastError)}</p>}</div></Property>
             <Property title="应用更新"><div className="app-update-panel">
-              <div className="app-update-current"><span>当前版本</span><strong>{currentVersionLabel}</strong></div>
+              <div className="app-update-current"><span>{t('当前版本')}</span><strong>{currentVersionLabel}</strong></div>
               <p className={appUpdate?.phase === 'error' || updateError ? 'error' : ''} role="status" aria-live="polite" aria-atomic="true">{updatePanelMessage}</p>
               <button className="secondary-command app-update-command" type="button" disabled={updatePanelDisabled} onClick={() => { void (updateVisible ? runAppUpdate() : runAppUpdateCheck()) }}>
                 {appUpdate?.phase === 'downloaded' ? <RotateCcw size={14} /> : updateVisible ? <Download size={14} /> : <RefreshCw size={14} />}
@@ -1390,16 +1421,16 @@ export function App(): React.JSX.Element {
               </button>
             </div></Property>
             <Property title="Codex 控制"><div className="runtime-commands">
-              <button disabled={runtimeBusy} onClick={() => void runRuntime(async () => { await window.studio.codex.detect(); return window.studio.runtime.getStatus() })}><MonitorPlay size={15} />检测 Codex</button>
-              <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.installTheme(themeId))}><Save size={15} />安装配置</button>
-              <button className="accent" disabled={runtimeBusy} onClick={() => void startTheme()}><Play size={15} />启动并应用</button>
-              <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.reinject(themeId))}><RotateCcw size={15} />重新注入</button>
-              <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.verify())}><Check size={15} />验证主题</button>
-              <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.stop())}><Box size={15} />停止注入</button>
-              {runtime.phase === 'active' && <button className="runtime-exit-command" disabled={runtimeBusy} title="退出 Studio 并保留当前已注入主题" onClick={() => window.studio.app.quit()}><LogOut size={15} />退出 Studio</button>}
+              <button disabled={runtimeBusy} onClick={() => void runRuntime(async () => { await window.studio.codex.detect(); return window.studio.runtime.getStatus() })}><MonitorPlay size={15} />{t('检测 Codex')}</button>
+              <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.installTheme(themeId))}><Save size={15} />{t('安装配置')}</button>
+              <button className="accent" disabled={runtimeBusy} onClick={() => void startTheme()}><Play size={15} />{t('启动并应用')}</button>
+              <button disabled={runtimeBusy} onClick={() => void runSavedRuntime((themeId) => window.studio.codex.reinject(themeId))}><RotateCcw size={15} />{t('重新注入')}</button>
+              <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.verify())}><Check size={15} />{t('验证主题')}</button>
+              <button disabled={runtimeBusy} onClick={() => void runRuntime(() => window.studio.codex.stop())}><Box size={15} />{t('停止注入')}</button>
+              {runtime.phase === 'active' && <button className="runtime-exit-command" disabled={runtimeBusy} title={t('退出 Studio 并保留当前已注入主题')} onClick={() => window.studio.app.quit()}><LogOut size={15} />{t('退出 Studio')}</button>}
             </div></Property>
-            <button className="danger-command" disabled={runtimeBusy} onClick={() => { if (window.confirm('恢复 Codex 原始配置并正常重启 Codex？')) void runRuntime(() => window.studio.codex.restore(true)) }}><Undo2 size={15} />恢复并重启 Codex</button>
-            {runtimeBusy && <div className="runtime-progress">操作进行中</div>}
+            <button className="danger-command" disabled={runtimeBusy} onClick={() => { if (window.confirm(t('恢复 Codex 原始配置并正常重启 Codex？'))) void runRuntime(() => window.studio.codex.restore(true)) }}><Undo2 size={15} />{t('恢复并重启 Codex')}</button>
+            {runtimeBusy && <div className="runtime-progress">{t('操作进行中')}</div>}
           </>}
         </aside>
       </section>
@@ -1408,6 +1439,18 @@ export function App(): React.JSX.Element {
 }
 
 const appearanceGroups: AppearanceGroup[] = ['global', 'conversation', 'sidebar', 'account', 'brand', 'home', 'cards', 'projects', 'composer', 'decoration']
+const runtimePhaseLabels: Record<RuntimeStatus['phase'], string> = {
+  idle: '空闲',
+  detecting: '检测中',
+  ready: '就绪',
+  installing: '安装中',
+  starting: '启动中',
+  injecting: '注入中',
+  active: '已启用',
+  stopped: '已停止',
+  restoring: '恢复中',
+  error: '错误'
+}
 const PREVIEW_SIDEBAR_WIDTH = 270
 const BACKGROUND_VIDEO_PLAYBACK: ThemeProfile['hero']['playback'] = { autoplay: true, loop: true, sound: false, volume: 0 }
 const particleIconSlots: IconSlot[] = PARTICLE_EFFECT_IDS.map(particleEffectIconSlot)
@@ -1456,10 +1499,10 @@ function setVideoReferenceForRole(profile: ThemeProfile, role: VideoMediaRole, r
 }
 
 function videoRoleLabel(role: VideoMediaRole): string {
-  if (role === 'hero') return '主视觉'
-  if (role === 'polaroid') return '拍立得'
-  if (role === 'conversationBackground') return '对话背景'
-  return '窗口背景'
+  if (role === 'hero') return t('主视觉')
+  if (role === 'polaroid') return t('拍立得')
+  if (role === 'conversationBackground') return t('对话背景')
+  return t('窗口背景')
 }
 
 const previewParticleCyclePositions = new WeakMap<HTMLElement, ParticleCyclePosition>()
@@ -1501,13 +1544,13 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
     if (next.y !== undefined) node.style.setProperty('--dream-particle-y', `${next.y}%`)
     if (next.startY !== undefined) node.style.setProperty('--dream-particle-start-y', `${next.startY}%`)
   }
-  return <div className="preview-sparkles" data-dream-effect={config.effect} data-dream-performance={policy.mode} data-dream-trails={policy.showTrails ? 'true' : 'false'} aria-label="背景粒子" style={viewportStyle} onAnimationIteration={randomizePosition}>
+  return <div className="preview-sparkles" data-dream-effect={config.effect} data-dream-performance={policy.mode} data-dream-trails={policy.showTrails ? 'true' : 'false'} aria-label={t('背景粒子')} style={viewportStyle} onAnimationIteration={randomizePosition}>
     {particles.map((particle, index) => <button
       className="preview-sparkle-particle"
       data-preview-target="sparkles"
       data-dream-animated={animatedIndexes.has(index) ? 'true' : 'false'}
       type="button"
-      aria-label={`编辑背景粒子 ${index + 1}`}
+      aria-label={t('编辑背景粒子 {index}', { index: index + 1 })}
       key={index}
       ref={(node) => {
         if (!node || node.dataset.dreamCycleEffect === config.effect) return
@@ -1540,9 +1583,11 @@ function PreviewSparkles({ profile, assets }: { profile: ThemeProfile; assets: R
   </div>
 }
 
-function PreviewComposer({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+function PreviewComposer({ profile, assets, locale }: { profile: ThemeProfile; assets: Record<string, string>; locale: SupportedLocale }): React.JSX.Element {
   const melody = profile.decorations.composerMelody
-  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label="编辑输入框装饰"><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <PreviewComposerDecoration profile={profile} assets={assets} />}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label="编辑输入框占位文案颜色">随心输入，让灵感与代码一起起飞吧～</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-add" type="button" title="添加" aria-label="编辑添加按钮图标"><RenderIcon slot="composerAdd" profile={profile} assets={assets} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>完全访问</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{PREVIEW_HOME_CONTEXT.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-microphone" type="button" title="语音输入" aria-label="编辑麦克风按钮图标"><RenderIcon slot="composerMicrophone" profile={profile} assets={assets} /></button><button className="preview-send-command bg-token-foreground" data-preview-target="icon-composer" type="button" title="发送" aria-label="编辑发送按钮"><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
+  const context = PREVIEW_HOME_CONTEXT_BY_LOCALE[locale]
+  const content = PREVIEW_CONTENT_BY_LOCALE[locale]
+  return <div className="dream-composer preview-composer" data-preview-target="palette-composer">{profile.composerBadge.visible && <span className="dream-composer-badge" data-preview-target="icon-composer-badge" tabIndex={0} role="button" aria-label={t('编辑输入框装饰')}><RenderIcon slot="composerBadge" profile={profile} assets={assets} injected /></span>}{melody.visible && <PreviewComposerDecoration profile={profile} assets={assets} />}<span className="preview-composer-placeholder" data-preview-target="composer-placeholder" tabIndex={0} role="button" aria-label={t('编辑输入框占位文案颜色')}>{content.composerPlaceholder}</span><div className="preview-composer-footer"><div className="preview-composer-tools"><button className="preview-icon-command" data-preview-target="composer-add" type="button" title={t('添加')} aria-label={t('编辑添加按钮图标')}><RenderIcon slot="composerAdd" profile={profile} assets={assets} /></button><button className="preview-access-command" data-preview-target="composer-permission" type="button"><span aria-hidden="true">!</span>{content.fullAccess}</button></div><div className="preview-composer-tools"><button className="preview-model-command" data-preview-target="composer-model" type="button">{context.model}<ChevronDown size={14} /></button><button className="preview-icon-command" data-preview-target="composer-microphone" type="button" title={t('语音输入')} aria-label={t('编辑麦克风按钮图标')}><RenderIcon slot="composerMicrophone" profile={profile} assets={assets} /></button><button className="preview-send-command bg-token-foreground" data-preview-target="icon-composer" type="button" title={t('发送')} aria-label={t('编辑发送按钮')}><RenderIcon slot="composer" profile={profile} assets={assets} /></button></div></div></div>
 }
 
 function PreviewBrandSignature({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
@@ -1554,10 +1599,10 @@ function PreviewBrandSignature({ profile, assets }: { profile: ThemeProfile; ass
     data-dream-brand-signature-mode={config.mode}
     tabIndex={0}
     role="button"
-    aria-label="编辑品牌签名"
+    aria-label={t('编辑品牌签名')}
     style={config.mode === 'text' ? undefined : { width: `${config.mediaWidth}px` }}
   >
-    {config.mode === 'text' ? profile.copy.brandSignature : mediaUrl && <img src={mediaUrl} alt="" draggable={false} />}
+    {config.mode === 'text' ? activeThemeCopy(profile).brandSignature : mediaUrl && <img src={mediaUrl} alt="" draggable={false} />}
   </em>
 }
 
@@ -1582,7 +1627,7 @@ function PreviewComposerDecoration({ profile, assets }: { profile: ThemeProfile;
     data-dream-composer-direction={trackEffect ? config.direction : undefined}
     tabIndex={0}
     role="button"
-    aria-label="编辑输入框装饰"
+    aria-label={t('编辑输入框装饰')}
     style={style}
   >
     {config.mode !== 'text'
@@ -1614,22 +1659,23 @@ function WindowBackgroundPreview({ profile, backgroundUrl }: { profile: ThemePro
     {visible && backgroundUrl && background.mode === 'video' && <PreviewVideo role="windowBackground" mediaKey={background.source?.asset ?? backgroundUrl} className="preview-window-background-base preview-window-background-media" src={backgroundUrl} playback={BACKGROUND_VIDEO_PLAYBACK} pausePolicy={profile.videoPlayback.pausePolicy} controls={false} ariaHidden style={baseStyle} />}
     {visible && backgroundUrl && background.mode !== 'color' && background.mode !== 'video' && <img className="preview-window-background-base preview-window-background-media" src={backgroundUrl} alt="" draggable={false} aria-hidden="true" style={baseStyle} />}
     {visible && background.masks.map((mask, index) => mask.visible && <div className="preview-window-background-mask" aria-hidden="true" key={mask.id} style={{ ...buildBackgroundOverlayStyle(mask), zIndex: background.masks.length - index }} />)}
-    <button className="preview-window-background-edit" type="button" title="编辑整个窗口背景" aria-label="编辑整个窗口背景" data-preview-target="window-background"><Palette size={14} /></button>
+    <button className="preview-window-background-edit" type="button" title={t('编辑整个窗口背景')} aria-label={t('编辑整个窗口背景')} data-preview-target="window-background"><Palette size={14} /></button>
   </div>
 }
 
-function ConversationPreview({ profile, assets }: { profile: ThemeProfile; assets: Record<string, string> }): React.JSX.Element {
+function ConversationPreview({ profile, assets, locale }: { profile: ThemeProfile; assets: Record<string, string>; locale: SupportedLocale }): React.JSX.Element {
   const background = profile.conversationBackground
   const sourceUrl = background.source ? assets[background.source.asset] : undefined
   const userFrame = conversationBubblePreviewFrameProps(profile, assets, 'user')
   const codexFrame = conversationBubblePreviewFrameProps(profile, assets, 'codex')
   const planFrame = conversationBubblePreviewFrameProps(profile, assets, 'plan')
+  const content = PREVIEW_CONTENT_BY_LOCALE[locale]
   const mediaStyle: React.CSSProperties = {
     objectPosition: `${background.focus.x * 100}% ${background.focus.y * 100}%`,
     opacity: background.visible ? background.opacity : 0,
     transform: `scale(${background.scale})`
   }
-  return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>完善主题编辑器</strong><span>{PREVIEW_PROJECT_NAME} · Miku</span></div></header><div className="preview-conversation-surface" data-preview-target="conversation-background" tabIndex={0} role="button" aria-label="编辑对话区域背景">
+  return <div className="preview-conversation"><header className="preview-thread-header"><div><strong>{content.conversationTitle}</strong><span>{PREVIEW_PROJECT_NAME} · Miku</span></div></header><div className="preview-conversation-surface" data-preview-target="conversation-background" tabIndex={0} role="button" aria-label={t('编辑对话区域背景')}>
     <div className="preview-conversation-background" aria-hidden="true">
       {background.visible && background.mode === 'color' && <div className="preview-conversation-background-color" style={{ background: background.color, opacity: background.opacity }} />}
       {background.visible && sourceUrl && background.mode === 'video' && <PreviewVideo role="conversationBackground" mediaKey={background.source?.asset ?? sourceUrl} className="preview-conversation-background-media" src={sourceUrl} playback={BACKGROUND_VIDEO_PLAYBACK} pausePolicy={profile.videoPlayback.pausePolicy} controls={false} ariaHidden style={mediaStyle} />}
@@ -1637,18 +1683,18 @@ function ConversationPreview({ profile, assets }: { profile: ThemeProfile; asset
       {background.visible && <div className="preview-conversation-background-overlay" style={buildConversationOverlayStyle(background.overlay)} />}
     </div>
     <div className="preview-message-list">
-      <article className={`preview-message user${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-user-message" tabIndex={0} {...userFrame}><strong>你</strong><p>让预览里的每个元素都可以直接点击配置。</p></article>
+      <article className={`preview-message user${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-user-message" tabIndex={0} {...userFrame}><strong>{content.userLabel}</strong><p>{content.userMessage}</p></article>
       <section className="preview-assistant-response">
-        <article className={`preview-message assistant${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-codex-message" tabIndex={0} {...codexFrame}><strong>Codex</strong><p>已建立全界面外观令牌，并同步到 <a href="#preview-runtime">运行时主题</a>。颜色、渐变和字体会实时更新。</p></article>
-        <article className={`preview-message assistant plan${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-plan-message" tabIndex={0} {...planFrame}><strong>生成计划</strong><p>整理主题模型、Studio 预览与运行时注入，并逐项完成验证。</p></article>
+        <article className={`preview-message assistant${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-codex-message" tabIndex={0} {...codexFrame}><strong>Codex</strong><p>{content.codexMessageBeforeLink}<a href="#preview-runtime">{content.codexMessageLink}</a>{content.codexMessageAfterLink}</p></article>
+        <article className={`preview-message assistant plan${profile.conversationBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-plan-message" tabIndex={0} {...planFrame}><strong>{content.planLabel}</strong><p>{content.planMessage}</p></article>
         <article className={`preview-tool-activity${profile.toolActivityBubbles.visible ? ' bubble' : ''}`} data-preview-target="conversation-tool-activity" tabIndex={0}>
-          <header><Play size={12} aria-hidden="true" /><strong>已运行命令</strong><span>2.1 秒</span></header>
+          <header><Play size={12} aria-hidden="true" /><strong>{content.commandLabel}</strong><span>{content.elapsed}</span></header>
           <code>npm test -- tests/theme.test.ts</code>
           <pre><code>Tests 34 passed</code></pre>
         </article>
-        <button className="preview-primary-command" data-preview-target="primary-button" type="button">查看改动</button>
+        <button className="preview-primary-command" data-preview-target="primary-button" type="button">{content.viewChanges}</button>
       </section>
-    </div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} /></div>
+    </div><div className="preview-conversation-composer"><PreviewComposer profile={profile} assets={assets} locale={locale} /></div>
   </div></div>
 }
 
@@ -1667,21 +1713,24 @@ function conversationBubblePreviewFrameProps(profile: ThemeProfile, assets: Reco
   }
 }
 
-function CodexSidebarPreview({ profile, assets, accountMenuBackgroundUrl }: { profile: ThemeProfile; assets: Record<string, string>; accountMenuBackgroundUrl?: string }): React.JSX.Element {
+function CodexSidebarPreview({ profile, assets, locale, accountMenuBackgroundUrl }: { profile: ThemeProfile; assets: Record<string, string>; locale: SupportedLocale; accountMenuBackgroundUrl?: string }): React.JSX.Element {
   const accountMenuMediaVisible = profile.accountMenuBackground.mode !== 'color' && Boolean(accountMenuBackgroundUrl)
+  const copy = activeThemeCopy(profile)
+  const projects = PREVIEW_SIDEBAR_PROJECTS_BY_LOCALE[locale]
+  const accountMenuLabels = PREVIEW_ACCOUNT_MENU_LABELS_BY_LOCALE[locale]
   return (
-    <aside className="codex-sidebar" aria-label="Codex 侧边栏预览" data-preview-target="palette-sidebar">
+    <aside className="codex-sidebar" aria-label={t('Codex 侧边栏预览')} data-preview-target="palette-sidebar">
       <div className="codex-sidebar-header" data-preview-target="sidebar-header">
-        <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">{profile.copy.sidebarModeTitle}</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label="编辑侧边栏模式图标"><RenderIcon slot="sidebarMode" profile={profile} assets={assets} injected /></span></div>
-        <button className="codex-sidebar-icon-button" data-preview-target="sidebar-search" type="button" title="搜索" aria-label="搜索"><RenderIcon slot="sidebarSearch" profile={profile} assets={assets} /></button>
+        <div className="codex-mode-button"><strong data-preview-target="sidebar-codex" tabIndex={0} role="button">{copy.sidebarModeTitle}</strong><span data-preview-target="sidebar-arrow" tabIndex={0} role="button"><ChevronDown size={16} /></span><span className="codex-mode-icon" data-preview-target="icon-sidebar-mode" tabIndex={0} role="button" aria-label={t('编辑侧边栏模式图标')}><RenderIcon slot="sidebarMode" profile={profile} assets={assets} injected /></span></div>
+        <button className="codex-sidebar-icon-button" data-preview-target="sidebar-search" type="button" title={t('搜索')} aria-label={t('搜索')}><RenderIcon slot="sidebarSearch" profile={profile} assets={assets} /></button>
       </div>
-      <nav className="codex-primary-nav" aria-label="主要导航" data-preview-target="sidebar-nav">
-        {SIDEBAR_NAV_ITEMS.map((item) => <button type="button" data-preview-target={item.previewTarget} key={item.id}><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /><span>{profile.copy[item.copyField]}</span></button>)}
+      <nav className="codex-primary-nav" aria-label={t('主要导航')} data-preview-target="sidebar-nav">
+        {SIDEBAR_NAV_ITEMS.map((item) => <button type="button" data-preview-target={item.previewTarget} key={item.id}><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /><span>{copy[item.copyField]}</span></button>)}
       </nav>
       <section className="codex-project-section">
-        <button className="codex-section-heading codex-project-heading" data-preview-target="sidebar-project-title" type="button" aria-expanded="true"><span>{profile.copy.sidebarProjectsTitle}</span><ChevronDown size={14} aria-hidden="true" /></button>
+        <button className="codex-section-heading codex-project-heading" data-preview-target="sidebar-project-title" type="button" aria-expanded="true"><span>{copy.sidebarProjectsTitle}</span><ChevronDown size={14} aria-hidden="true" /></button>
         <div className="codex-project-scroll">
-          {PREVIEW_SIDEBAR_PROJECTS.map((project) => (
+          {projects.map((project) => (
             <div className="codex-project-group" key={project.name}>
               <button className="codex-project-row" data-preview-target="sidebar-project" type="button">
                 <span className="codex-project-icon" data-preview-target="icon-project-sidebar"><RenderIcon slot="project" profile={profile} assets={assets} /></span>
@@ -1693,13 +1742,13 @@ function CodexSidebarPreview({ profile, assets, accountMenuBackgroundUrl }: { pr
             </div>
           ))}
         </div>
-        <button className="codex-section-heading codex-task-heading" data-preview-target="sidebar-task-title" type="button" aria-expanded="false"><span>{profile.copy.sidebarTasksTitle}</span><ChevronRight size={14} aria-hidden="true" /></button>
+        <button className="codex-section-heading codex-task-heading" data-preview-target="sidebar-task-title" type="button" aria-expanded="false"><span>{copy.sidebarTasksTitle}</span><ChevronRight size={14} aria-hidden="true" /></button>
       </section>
-      <div className="codex-account-menu-preview" data-preview-target="account-menu-surface" role="menu" aria-label="账号菜单样式预览">
+      <div className="codex-account-menu-preview" data-preview-target="account-menu-surface" role="menu" aria-label={t('账号菜单样式预览')}>
         {accountMenuMediaVisible && <img className="codex-account-menu-background-media" src={accountMenuBackgroundUrl} alt="" aria-hidden="true" style={buildAccountMenuBackgroundStyle(profile.accountMenuBackground)} />}
-        {ACCOUNT_MENU_ITEMS.map((item) => <button className={`codex-account-menu-row codex-account-menu-${item.id}`} data-preview-target={item.previewTarget} type="button" role="menuitem" key={item.id} aria-label={`编辑${item.label}样式`}>
+        {ACCOUNT_MENU_ITEMS.map((item) => <button className={`codex-account-menu-row codex-account-menu-${item.id}`} data-preview-target={item.previewTarget} type="button" role="menuitem" key={item.id} aria-label={t('编辑{label}样式', { label: t(item.label) })}>
           <span className="codex-account-menu-icon"><RenderIcon slot={item.iconSlot} profile={profile} assets={assets} injected /></span>
-          <span className="codex-account-menu-label">{PREVIEW_ACCOUNT_MENU_LABELS[item.id]}</span>
+          <span className="codex-account-menu-label">{accountMenuLabels[item.id]}</span>
           {item.id === 'team' && <ExternalLink className="codex-account-menu-trailing" size={13} aria-hidden="true" />}
           {item.id === 'usage' && <ChevronRight className="codex-account-menu-trailing" size={14} aria-hidden="true" />}
           {item.id === 'settings' && <kbd>Ctrl ,</kbd>}
@@ -1711,16 +1760,16 @@ function CodexSidebarPreview({ profile, assets, accountMenuBackgroundUrl }: { pr
 }
 
 function Property({ title, children, anchor, highlighted = false }: { title: string; children: React.ReactNode; anchor?: string; highlighted?: boolean }): React.JSX.Element {
-  return <section className={highlighted ? 'property-group inspector-highlight' : 'property-group'} data-inspector-anchor={anchor}><h3>{title}</h3>{children}</section>
+  return <section className={highlighted ? 'property-group inspector-highlight' : 'property-group'} data-inspector-anchor={anchor}><h3>{t(title)}</h3>{children}</section>
 }
 
 function AppearanceInspectorGroup({ group, profile, highlighted, onChange, onInteractionEnd }: { group: AppearanceGroup; profile: ThemeProfile; highlighted: boolean; onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void; onInteractionEnd: () => void }): React.JSX.Element {
   const colorTokens = (Object.keys(APPEARANCE_COLOR_TOKENS) as AppearanceColorToken[]).filter((token) => APPEARANCE_COLOR_TOKENS[token].group === group && APPEARANCE_COLOR_TOKENS[token].editable && !sidebarSectionTitleColorTokens.has(token))
   const paintTokens = (Object.keys(APPEARANCE_PAINT_TOKENS) as AppearancePaintToken[]).filter((token) => APPEARANCE_PAINT_TOKENS[token].group === group && APPEARANCE_PAINT_TOKENS[token].editable && token !== 'accountMenuSurface' && !sidebarSectionTitlePaintTokens.has(token))
   return <Property title={appearanceGroupLabels[group]} anchor={`appearance-${group}`} highlighted={highlighted}><div className="appearance-editor">
-    {group === 'conversation' && <label className="toggle-row"><span>显示工具活动气泡</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
-    {colorTokens.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
-    {paintTokens.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
+    {group === 'conversation' && <label className="toggle-row"><span>{t('显示工具活动气泡')}</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
+    {colorTokens.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title={t('恢复主题默认值')} onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
+    {paintTokens.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title={t('恢复主题默认值')} onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
   </div></Property>
 }
 
@@ -1757,14 +1806,15 @@ function SidebarSectionTitleInspector({ profile, highlighted, onChange, onIntera
   onInteractionEnd: () => void
   onImportFont: (slot: TypographySlot) => void
 }): React.JSX.Element {
+  const copy = activeThemeCopy(profile)
   return <Property title="侧栏分区标题" anchor="visual-sidebar-section-titles" highlighted={highlighted}>
     <div className="sidebar-section-title-settings">{sidebarSectionTitleSettings.map((setting) => <section key={setting.copyField}>
-      <h4>{setting.label}</h4>
-      <label className="copy-field">显示文字<input value={profile.copy[setting.copyField]} maxLength={80} aria-invalid={!profile.copy[setting.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; onChange((next) => { next.copy[setting.copyField] = value }, `copy-${setting.copyField}`) }} onBlur={onInteractionEnd} /></label>
+      <h4>{t(setting.label)}</h4>
+      <label className="copy-field">{t('显示文字')}<input value={copy[setting.copyField]} maxLength={80} aria-invalid={!copy[setting.copyField].trim()} onChange={(event) => { const value = event.currentTarget.value; onChange((next) => { activeThemeCopy(next)[setting.copyField] = value }, `copy-${setting.copyField}`) }} onBlur={onInteractionEnd} /></label>
       <FontControl slot={setting.fontSlot} profile={profile} onChange={(selection) => onChange((next) => assignFontSlot(next, setting.fontSlot, selection))} onImport={() => onImportFont(setting.fontSlot)} />
       <div className="appearance-editor">
-        {setting.colors.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
-        {setting.paints.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
+        {setting.colors.map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title={t('恢复主题默认值')} onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
+        {setting.paints.map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title={t('恢复主题默认值')} onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
       </div>
     </section>)}</div>
   </Property>
@@ -1827,5 +1877,5 @@ function reducedMotionPreviewAssets(
 }
 
 function messageOf(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason)
+  return t(reason instanceof Error ? reason.message : String(reason))
 }

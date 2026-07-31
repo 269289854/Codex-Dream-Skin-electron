@@ -6,11 +6,22 @@ export const DEFAULT_HOME_COPY = {
   subtitle: '和初音未来一起，把灵感写成代码与旋律 ♫'
 } as const
 
+export const DEFAULT_HOME_COPY_EN = {
+  headingTemplate: `What should we build in ${PROJECT_PLACEHOLDER}?`,
+  subtitle: 'Turn ideas into code and melodies with Hatsune Miku ♫'
+} as const
+
 export const DEFAULT_HOME_HEADING_DECORATION = '♫ · ✦ · ♡'
 
 export const DEFAULT_BRAND_COPY = {
   brandTitle: '初音未来主题 Codex App',
   brandSubtitle: '你的专属 AI 编程与创作伙伴',
+  brandSignature: 'MIKU ✦ 01'
+} as const
+
+export const DEFAULT_BRAND_COPY_EN = {
+  brandTitle: 'Hatsune Miku Theme for Codex',
+  brandSubtitle: 'Your AI coding and creative companion',
   brandSignature: 'MIKU ✦ 01'
 } as const
 
@@ -45,6 +56,38 @@ export const HOME_ACTIONS = [
     prompt: '请诊断并修复当前项目中的问题或失败，先定位根因，再实施修复并运行相关验证。'
   }
 ] as const
+
+export const HOME_ACTIONS_EN = [
+  {
+    icon: '</>',
+    iconSlot: 'cardPrimary',
+    label: 'Explore and understand code',
+    prompt: 'Explore and understand the current project. Explain its key modules, entry points, and main data flows.'
+  },
+  {
+    icon: '+',
+    iconSlot: 'cardSecondary',
+    label: 'Build a feature, app, or tool',
+    prompt: 'Build a new feature, app, or tool for the current project. Analyze the existing patterns first, then implement and verify it.'
+  },
+  {
+    icon: '✓',
+    iconSlot: 'cardSecondary',
+    label: 'Review code and suggest changes',
+    prompt: 'Review the current project. Prioritize defects, regression risks, and missing tests, then suggest concrete changes.'
+  },
+  {
+    icon: '✦',
+    iconSlot: 'cardSecondary',
+    label: 'Fix issues and failures',
+    prompt: 'Diagnose and fix issues or failures in the current project. Find the root cause first, then implement the fix and run relevant checks.'
+  }
+] as const
+
+export const HOME_ACTIONS_BY_LOCALE = {
+  'zh-CN': HOME_ACTIONS,
+  'en-US': HOME_ACTIONS_EN
+} as const
 
 export type HomeAction = (typeof HOME_ACTIONS)[number]
 

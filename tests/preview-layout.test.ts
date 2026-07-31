@@ -50,8 +50,8 @@ describe('Studio home preview', () => {
     expect(source).toContain('className="preview-access-command"')
     expect(source).toContain('className="preview-model-command"')
     expect(source).toContain('className="preview-send-command bg-token-foreground"')
-    expect(source).toContain('title="语音输入"')
-    expect(source).toContain('title="发送"')
+    expect(source).toContain("title={t('语音输入')}")
+    expect(source).toContain("title={t('发送')}")
     expect(source).toContain('<span>{PREVIEW_PROJECT_NAME} · Miku</span>')
     expect(sendButtonRule).toContain('width: 28px')
     expect(sendButtonRule).toContain('height: 28px')
@@ -90,7 +90,7 @@ describe('Studio home preview', () => {
     const modeIconRule = css.match(/\.codex-mode-icon\s*\{[^}]+\}/)?.[0]
     const brandGlyphRule = css.match(/\.preview-brand-icon \.builtin-icon-glyph\s*\{[^}]+\}/)?.[0]
 
-    expect(source).toContain('<CodexSidebarPreview profile={draft} assets={previewAssets} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />')
+    expect(source).toContain('<CodexSidebarPreview profile={draft} assets={previewAssets} locale={contentLocale} accountMenuBackgroundUrl={accountMenuBackgroundUrl} />')
     expect(source).not.toContain('className="codex-rail"')
     expect(source).toContain('className="codex-project-scroll"')
     expect(source).toContain('className="codex-sidebar-footer"')

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Image, Trash2, Upload, Video } from 'lucide-react'
 import type { MediaSelectionKind } from '../../shared/contracts'
+import { t } from '../../shared/i18n'
 import type { ThemeProfile } from '../../shared/theme'
 import { PaintControl, Range, SolidColorControl } from './editor-controls'
 import { VideoThumbnail } from './VideoThumbnail'
@@ -44,27 +45,27 @@ export function ConversationBackgroundControls({ profile, backgroundUrl, mediaBu
   }
 
   return <div className="conversation-background-controls">
-    <label className="toggle-row"><span>显示对话区域背景</span><input type="checkbox" checked={background.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.conversationBackground.visible = visible }) }} /></label>
-    <div className="segmented-control conversation-background-modes" aria-label="对话区域背景类型">
-      {modes.map((mode) => <button type="button" key={mode.value} className={background.mode === mode.value ? 'active' : ''} onClick={() => chooseMode(mode.value)}>{mode.label}</button>)}
+    <label className="toggle-row"><span>{t('显示对话区域背景')}</span><input type="checkbox" checked={background.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.conversationBackground.visible = visible }) }} /></label>
+    <div className="segmented-control conversation-background-modes" aria-label={t('对话区域背景类型')}>
+      {modes.map((mode) => <button type="button" key={mode.value} className={background.mode === mode.value ? 'active' : ''} onClick={() => chooseMode(mode.value)}>{t(mode.label)}</button>)}
     </div>
     <Range label="背景透明度" min={0} max={1} step={.01} value={background.opacity} onChange={(value) => onChange((next) => { next.conversationBackground.opacity = value }, 'conversation-background-opacity')} onChangeEnd={onInteractionEnd} />
     {background.mode === 'color' && <SolidColorControl label="背景颜色" value={background.color} onChange={(value) => onChange((next) => { next.conversationBackground.color = value }, 'conversation-background-color')} onChangeEnd={onInteractionEnd} />}
     {mediaMode && <>
       <button className="asset-picker conversation-background-asset-picker" type="button" disabled={mediaBusy} onClick={() => onSelectMedia(background.mode as MediaSelectionKind)}>
-        {backgroundUrl && background.mode === 'video' ? <VideoThumbnail src={backgroundUrl} /> : backgroundUrl ? <img src={backgroundUrl} alt="对话区域背景预览" /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
-        <span><Upload size={13} />{backgroundUrl ? '更换背景素材' : '选择背景素材'}</span>
+        {backgroundUrl && background.mode === 'video' ? <VideoThumbnail src={backgroundUrl} /> : backgroundUrl ? <img src={backgroundUrl} alt={t('对话区域背景预览')} /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
+        <span><Upload size={13} />{t(backgroundUrl ? '更换背景素材' : '选择背景素材')}</span>
       </button>
-      {background.source && <button className="secondary-command conversation-background-remove" type="button" onClick={() => onChange((next) => { next.conversationBackground.mode = 'color'; next.conversationBackground.source = null })}><Trash2 size={14} />移除背景素材</button>}
+      {background.source && <button className="secondary-command conversation-background-remove" type="button" onClick={() => onChange((next) => { next.conversationBackground.mode = 'color'; next.conversationBackground.source = null })}><Trash2 size={14} />{t('移除背景素材')}</button>}
       <Range label="水平焦点" min={0} max={1} step={.01} value={background.focus.x} onChange={(value) => onChange((next) => { next.conversationBackground.focus.x = value }, 'conversation-background-focus-x')} onChangeEnd={onInteractionEnd} />
       <Range label="垂直焦点" min={0} max={1} step={.01} value={background.focus.y} onChange={(value) => onChange((next) => { next.conversationBackground.focus.y = value }, 'conversation-background-focus-y')} onChangeEnd={onInteractionEnd} />
       <Range label="缩放" min={1} max={3} step={.01} value={background.scale} onChange={(value) => onChange((next) => { next.conversationBackground.scale = value }, 'conversation-background-scale')} onChangeEnd={onInteractionEnd} />
     </>}
-    <section className="conversation-overlay-controls" aria-label="对话背景遮罩">
+    <section className="conversation-overlay-controls" aria-label={t('对话背景遮罩')}>
       <PaintControl label="遮罩颜色" value={overlay.paint} onChange={(paint, continuous) => onChange((next) => { next.conversationBackground.overlay.paint = paint }, continuous ? 'conversation-background-overlay-paint' : undefined)} onChangeEnd={onInteractionEnd} />
       <Range label="遮罩透明度" min={0} max={1} step={.01} value={overlay.opacity} onChange={(value) => onChange((next) => { next.conversationBackground.overlay.opacity = value }, 'conversation-background-overlay-opacity')} onChangeEnd={onInteractionEnd} />
-      <div className="segmented-control conversation-overlay-shapes" aria-label="遮罩形状">
-        {overlayShapes.map((shape) => <button type="button" key={shape.value} className={overlay.shape === shape.value ? 'active' : ''} onClick={() => onChange((next) => { next.conversationBackground.overlay.shape = shape.value })}>{shape.label}</button>)}
+      <div className="segmented-control conversation-overlay-shapes" aria-label={t('遮罩形状')}>
+        {overlayShapes.map((shape) => <button type="button" key={shape.value} className={overlay.shape === shape.value ? 'active' : ''} onClick={() => onChange((next) => { next.conversationBackground.overlay.shape = shape.value })}>{t(shape.label)}</button>)}
       </div>
       {overlay.shape !== 'full' && <div className="conversation-overlay-geometry">
         <Range label="水平位置" min={0} max={1} step={.01} value={overlay.position.x} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.conversationBackground.overlay.position.x = value }, 'conversation-background-overlay-position-x')} onChangeEnd={onInteractionEnd} />

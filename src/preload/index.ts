@@ -10,6 +10,8 @@ async function invokeIpcResult<T>(channel: string, ...args: unknown[]): Promise<
 const api: StudioApi = {
   app: {
     getInfo: () => ipcRenderer.invoke('app:get-info'),
+    getLocale: () => ipcRenderer.invoke('app:get-locale'),
+    setLocale: (locale) => invokeIpcResult('app:set-locale', locale),
     quit: () => ipcRenderer.send('app:quit'),
     getUpdateStatus: () => ipcRenderer.invoke('app:get-update-status'),
     checkForUpdates: () => invokeIpcResult('app:check-for-updates'),

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { Window } from 'happy-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PARTICLE_EFFECT_IDS, PARTICLE_PERFORMANCE_MODES, PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy, type SparkleParticle } from '../src/shared/particle-effects'
-import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS } from '../src/shared/home-layout'
+import { DEFAULT_BRAND_COPY, DEFAULT_HOME_COPY, HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS, HOME_ACTIONS_EN } from '../src/shared/home-layout'
 import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import type { ConversationOverlayStyle } from '../src/shared/conversation-overlay'
@@ -98,6 +98,20 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
         </div>
       </div>
     </main>`
+}
+
+function englishCodexHomeFixture(projectName: string): string {
+  return homeFixture(projectName)
+    .replace('<main class="main-surface">', '<main>')
+    .replace('切换模式：Codex', 'Switch mode: Codex')
+    .replaceAll('搜索', 'Search')
+    .replace('<div class="native-new-task-row"><a aria-current="page" href="#new"><span>新建任务</span></a><button type="button" aria-label="新建任务">+</button></div>', '<button type="button" aria-current="page"><span>New chat</span></button>')
+    .replace('<a href="#pull"><span>拉取请求</span></a>', '<button type="button"><span>Pull requests</span></button>')
+    .replace('归档任务', 'Archive task')
+    .replace('置顶任务', 'Pin task')
+    .replace('添加文件和照片', 'Add files and photos')
+    .replace('语音输入', 'Voice input')
+    .replace('发送', 'Send')
 }
 
 function layeredHomeFixture(projectName: string, voiceLabel = 'Try ChatGPT Voice'): string {
@@ -222,7 +236,10 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }, brandSignature: RuntimeBrandSignature = { ...defaultProfile.brandSignature, dataUrl: null }, artDataUrl = 'data:image/png;base64,AA=='): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }, brandSignature: RuntimeBrandSignature = { ...defaultProfile.brandSignature, dataUrl: null }, artDataUrl = 'data:image/png;base64,AA==', localized?: {
+  copyByLocale: Record<'zh-CN' | 'en-US', Record<string, unknown>>
+  actionsByLocale: Record<'zh-CN' | 'en-US', ReadonlyArray<Record<string, unknown>>>
+}): void {
   const runtimeConfig = {
     themeId,
     videoPlayback,
@@ -242,7 +259,8 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
     actionFallbackBuiltins: HOME_ACTION_FALLBACK_BUILTINS,
     copy: { ...copy, parts: { before: '我们应该在 ', after: ' 中构建什么？' } },
     accountMenu: ACCOUNT_MENU_ITEMS,
-    actions: HOME_ACTIONS
+    actions: HOME_ACTIONS,
+    ...localized
   }
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify(JSON.stringify(runtimeConfig)))
@@ -265,6 +283,112 @@ function dispatchAnimationIteration(window: Window, node: Element, animationName
 }
 
 describe('renderer home DOM adaptation', () => {
+  it('selects localized v29 copy from English native signals and rebuilds when Codex switches language', async () => {
+    const window = createWindow()
+    window.document.documentElement.lang = 'en-US'
+    window.document.body.innerHTML = englishCodexHomeFixture('Localized-Project')
+    const localized = {
+      copyByLocale: {
+        'zh-CN': {
+          ...defaultProfile.copy['zh-CN'],
+          brandTitle: '中文品牌',
+          sidebarModeTitle: '中文模式',
+          sidebarNavNewTask: '中文新任务',
+          parts: { before: '中文标题 ', after: ' 之后' }
+        },
+        'en-US': {
+          ...defaultProfile.copy['en-US'],
+          brandTitle: 'English Brand',
+          sidebarModeTitle: 'English Mode',
+          sidebarNavNewTask: 'English New Task',
+          parts: { before: 'English heading ', after: ' after' }
+        }
+      },
+      actionsByLocale: {
+        'zh-CN': HOME_ACTIONS,
+        'en-US': HOME_ACTIONS_EN
+      }
+    }
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 'data:image/png;base64,AA==', localized)
+    expect(window.document.querySelector('main.main-surface')).toBeNull()
+    expect(window.document.querySelector('[role="main"]')).not.toBeNull()
+    expect(window.document.querySelector('.dream-brand b')?.textContent).toBe('English Brand')
+    expect(window.document.querySelector('.dream-copy-before')?.textContent).toBe('English heading ')
+    expect(window.document.querySelector('.dream-copy-after')?.textContent).toBe(' after')
+    expect([...window.document.querySelectorAll('.dream-action-label')].map((node) => node.textContent)).toEqual(HOME_ACTIONS_EN.map((action) => action.label))
+    expect(window.document.querySelector('[data-dream-sidebar-nav="newTask"]')?.textContent).toContain('English New Task')
+
+    window.document.querySelector('aside.app-shell-left-panel')?.replaceWith(window.document.createRange().createContextualFragment(`
+      <aside class="app-shell-left-panel">
+        <button type="button" aria-label="切换模式：Codex"><span>Codex</span></button>
+        <button type="button" aria-label="搜索">搜索</button>
+        <nav><a href="#new"><span>新建任务</span></a><a href="#pull"><span>拉取请求</span></a></nav>
+      </aside>
+    `))
+    window.document.documentElement.lang = 'zh-CN'
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 220))
+
+    expect(window.document.querySelector('.dream-brand b')?.textContent).toBe('中文品牌')
+    expect(window.document.querySelector('.dream-copy-before')?.textContent).toBe('中文标题 ')
+    expect(window.document.querySelector('.dream-copy-after')?.textContent).toBe(' 之后')
+    expect([...window.document.querySelectorAll('.dream-action-label')].map((node) => node.textContent)).toEqual(HOME_ACTIONS.map((action) => action.label))
+  })
+
+  it('keeps legacy flat runtime copy and actions compatible in an English Codex DOM', () => {
+    const window = createWindow()
+    window.document.documentElement.lang = 'en-US'
+    window.document.body.innerHTML = homeFixture('Legacy-Project')
+      .replace('切换模式：Codex', 'Switch mode: Codex')
+      .replaceAll('搜索', 'Search')
+      .replaceAll('新建任务', 'New task')
+      .replace('拉取请求', 'Pull requests')
+    inject(window, undefined, {
+      ...DEFAULT_HOME_COPY,
+      ...DEFAULT_BRAND_COPY,
+      brandTitle: 'Legacy flat title'
+    })
+
+    expect(window.document.querySelector('.dream-brand b')?.textContent).toBe('Legacy flat title')
+    expect([...window.document.querySelectorAll('.dream-action-label')].map((node) => node.textContent)).toEqual(HOME_ACTIONS.map((action) => action.label))
+  })
+
+  it('localizes an existing media play button when the Codex DOM language changes', async () => {
+    const window = createWindow()
+    window.document.documentElement.lang = 'en-US'
+    window.document.body.innerHTML = englishCodexHomeFixture('Video-Locale-Project')
+    Object.defineProperty(window.HTMLMediaElement.prototype, 'play', {
+      configurable: true,
+      value: vi.fn(() => Promise.reject(new Error('autoplay blocked')))
+    })
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: {
+        asset: 'assets/hero.mp4',
+        kind: 'video',
+        mimeType: 'video/mp4',
+        playback: { autoplay: true, loop: true, sound: false, volume: 0 },
+        transform: { flipHorizontal: false, flipVertical: false }
+      },
+      polaroid: null
+    })
+    await Promise.resolve()
+
+    const playButton = window.document.querySelector('.dream-media-play')
+    expect(playButton?.getAttribute('aria-label')).toBe('Play media')
+
+    window.document.documentElement.lang = 'zh-CN'
+    window.document.querySelector('aside.app-shell-left-panel')?.replaceWith(window.document.createRange().createContextualFragment(`
+      <aside class="app-shell-left-panel">
+        <button type="button" aria-label="切换模式：Codex"><span>Codex</span></button>
+        <button type="button" aria-label="搜索">搜索</button>
+        <nav><a href="#new"><span>新建任务</span></a><a href="#pull"><span>拉取请求</span></a></nav>
+      </aside>
+    `))
+    stateOf(window).ensure()
+    expect(window.document.querySelector('.dream-media-play')).toBe(playButton)
+    expect(playButton?.getAttribute('aria-label')).toBe('播放媒体')
+  })
+
   it('styles the account portal without copying identity text and restores native icons on removal and cleanup', () => {
     const window = createWindow()
     window.document.body.innerHTML = `

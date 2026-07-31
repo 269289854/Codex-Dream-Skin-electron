@@ -240,7 +240,7 @@ describe('preview quick editor', () => {
         control.dispatchEvent(new browserWindow.Event('input', { bubbles: true }) as unknown as Event)
         control.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
       })
-      expect(profile.copy[field]).toBe(value)
+      expect(profile.copy['zh-CN'][field]).toBe(value)
     }
   })
 
@@ -333,7 +333,7 @@ describe('preview quick editor', () => {
 
     expect(queuedChange).toBeTypeOf('function')
     expect(() => queuedChange?.(profile)).not.toThrow()
-    expect(profile.copy.brandSignature).toBe('QUEUED VALUE')
+    expect(profile.copy['zh-CN'].brandSignature).toBe('QUEUED VALUE')
   })
 
   it('switches polaroid modes without clearing the fence points', () => {

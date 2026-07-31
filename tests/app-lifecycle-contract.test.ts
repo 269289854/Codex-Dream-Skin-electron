@@ -26,7 +26,7 @@ describe('Studio application lifecycle contract', () => {
 
     expect(preload).toContain("quit: () => ipcRenderer.send('app:quit')")
     expect(main).toContain("ipcMain.on('app:quit', () => quitStudio())")
-    expect(main).toContain("label: '退出 Studio（保留当前主题）', click: quitStudio")
+    expect(main).toContain("label: t('退出 Studio（保留当前主题）'), click: quitStudio")
     expect(quitStudio).toContain('quitting = true')
     expect(quitStudio).toContain('app.quit()')
     expect(quitStudio).not.toContain('codexService.stop')
@@ -37,7 +37,7 @@ describe('Studio application lifecycle contract', () => {
     const main = await readFile(join(process.cwd(), 'src', 'main', 'index.ts'), 'utf8')
     const restoreAndQuit = main.match(/async function restoreCodexAndQuit\(\): Promise<void> \{[\s\S]*?\r?\n\}/)?.[0]
 
-    expect(main).toContain("{ label: '恢复 Codex 并退出', click: () => void restoreCodexAndQuit() }")
+    expect(main).toContain("{ label: t('恢复 Codex 并退出'), click: () => void restoreCodexAndQuit() }")
     expect(restoreAndQuit).toContain('await codexService.restore(true)')
     expect(restoreAndQuit).toContain('if (status.lastError)')
     expect(restoreAndQuit).toContain('catch')
@@ -70,7 +70,7 @@ describe('Studio application lifecycle contract', () => {
     expect(showWindow).toContain('if (mainWindow?.isMinimized()) mainWindow.restore()')
     expect(showWindow).toContain('mainWindow?.show()')
     expect(showWindow).toContain('mainWindow?.focus()')
-    expect(main).toContain("{ label: '显示主题工作台', click: showWindow }")
+    expect(main).toContain("{ label: t('显示主题工作台'), click: showWindow }")
     expect(main).toContain("else if (action === 'show') showWindow()")
     expect(main).toContain('else showWindow()')
     expect(updateTray).toContain('const shouldRevealRuntimeError = tray !== null')

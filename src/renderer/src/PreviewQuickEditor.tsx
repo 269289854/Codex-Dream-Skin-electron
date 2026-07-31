@@ -8,6 +8,7 @@ import {
   type AppearanceState
 } from '../../shared/appearance'
 import { headingTemplateError } from '../../shared/home-layout'
+import { t } from '../../shared/i18n'
 import { mediaFlipCssTransform } from '../../shared/media'
 import { conversationBubbleRolePurpose } from '../../shared/conversation-bubbles'
 import type { ThemeProfile } from '../../shared/theme'
@@ -24,6 +25,7 @@ import { AccountMenuBackgroundControls } from './AccountMenuBackgroundControls'
 import { BrandSignatureControls } from './BrandSignatureControls'
 import { VideoThumbnail } from './VideoThumbnail'
 import type { PopoverPosition, PreviewCopyField, PreviewTargetDefinition, TypographySlot } from './preview-editing'
+import { activeThemeCopy } from './content-locale'
 
 const copyFieldConfig: Record<PreviewCopyField, { label: string; maxLength: number; rows?: number }> = {
   headingTemplate: { label: '首页标题', maxLength: 120 },
@@ -72,34 +74,35 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
   const copyConfig = copyField ? copyFieldConfig[copyField] : null
   const brandSignatureTarget = copyField === 'brandSignature'
   const brandSignatureTextMode = !brandSignatureTarget || profile.brandSignature.mode === 'text'
+  const copy = activeThemeCopy(profile)
   const copyInvalid = copyField && copyConfig ? (
-    profile.copy[copyField].length > copyConfig.maxLength ||
-    (copyField === 'headingTemplate' && Boolean(headingTemplateError(profile.copy.headingTemplate))) ||
-    (copyField === 'brandTitle' && !profile.copy.brandTitle.trim())
+    copy[copyField].length > copyConfig.maxLength ||
+    (copyField === 'headingTemplate' && Boolean(headingTemplateError(copy.headingTemplate))) ||
+    (copyField === 'brandTitle' && !copy.brandTitle.trim())
   ) : false
   const states = editor.kind === 'style' ? availableStates(editor.colors, editor.paints) : ['normal'] as AppearanceState[]
-  const updateCopy = (field: PreviewCopyField, value: string): void => onChange((next) => { next.copy[field] = value }, `copy-${field}`)
+  const updateCopy = (field: PreviewCopyField, value: string): void => onChange((next) => { activeThemeCopy(next)[field] = value }, `copy-${field}`)
 
-  return <section ref={popoverRef} className={position ? 'preview-edit-popover' : 'preview-edit-popover measuring'} data-placement={position?.placement ?? 'right'} role="dialog" aria-label={`${target.label}快捷配置`} style={{ left: position?.left ?? 0, top: position?.top ?? 0 }}>
-    <header className="preview-edit-popover-header"><div><span>QUICK EDIT</span><strong>{target.label}</strong></div><button className="preview-edit-close" type="button" title="关闭快捷配置" onClick={onClose}><X size={16} /></button></header>
-    {states.length > 1 && <div className="state-tabs segmented-control" aria-label="组件状态">{states.map((item) => <button type="button" className={state === item ? 'active' : ''} key={item} onClick={() => { setState(item); onStateChange(item) }}>{item === 'normal' ? '普通' : item === 'hover' ? '悬停' : '选中'}</button>)}</div>}
+  return <section ref={popoverRef} className={position ? 'preview-edit-popover' : 'preview-edit-popover measuring'} data-placement={position?.placement ?? 'right'} role="dialog" aria-label={t('{target}快捷配置', { target: t(target.label) })} style={{ left: position?.left ?? 0, top: position?.top ?? 0 }}>
+    <header className="preview-edit-popover-header"><div><span>QUICK EDIT</span><strong>{t(target.label)}</strong></div><button className="preview-edit-close" type="button" title={t('关闭快捷配置')} onClick={onClose}><X size={16} /></button></header>
+    {states.length > 1 && <div className="state-tabs segmented-control" aria-label={t('组件状态')}>{states.map((item) => <button type="button" className={state === item ? 'active' : ''} key={item} onClick={() => { setState(item); onStateChange(item) }}>{t(item === 'normal' ? '普通' : item === 'hover' ? '悬停' : '选中')}</button>)}</div>}
     <div className="preview-edit-popover-body">
-      {editor.kind === 'style' && editor.visibility === 'composerBadge' && <label className="toggle-row"><span>显示输入框装饰</span><input type="checkbox" checked={profile.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.composerBadge.visible = visible }) }} /></label>}
+      {editor.kind === 'style' && editor.visibility === 'composerBadge' && <label className="toggle-row"><span>{t('显示输入框装饰')}</span><input type="checkbox" checked={profile.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.composerBadge.visible = visible }) }} /></label>}
       {editor.kind === 'style' && editor.conversationBubbleRole && <ConversationBubbleControls profile={profile} assets={assets} role={editor.conversationBubbleRole} mediaBusy={mediaBusy} showRoleTabs={false} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage(conversationBubbleRolePurpose(editor.conversationBubbleRole!), kind)} />}
-      {editor.kind === 'style' && editor.visibility === 'toolActivityBubbles' && <label className="toggle-row"><span>显示工具活动气泡</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
+      {editor.kind === 'style' && editor.visibility === 'toolActivityBubbles' && <label className="toggle-row"><span>{t('显示工具活动气泡')}</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
       {brandSignatureTarget && <BrandSignatureControls profile={profile} assets={assets} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('brandSignature', kind)} />}
-      {copyField && copyConfig && brandSignatureTextMode && <label className="quick-copy-field">{copyConfig.label}{copyConfig.rows
-        ? <textarea value={profile.copy[copyField]} maxLength={copyConfig.maxLength} rows={copyConfig.rows} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />
-        : <input value={profile.copy[copyField]} maxLength={copyConfig.maxLength} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />}</label>}
-      {copyField === 'brandTitle' && copyInvalid && <p className="field-error">品牌主标题不能为空。</p>}
+      {copyField && copyConfig && brandSignatureTextMode && <label className="quick-copy-field">{t(copyConfig.label)}{copyConfig.rows
+        ? <textarea value={copy[copyField]} maxLength={copyConfig.maxLength} rows={copyConfig.rows} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />
+        : <input value={copy[copyField]} maxLength={copyConfig.maxLength} aria-invalid={copyInvalid} onInput={(event) => updateCopy(copyField, event.currentTarget.value)} onBlur={onInteractionEnd} />}</label>}
+      {copyField === 'brandTitle' && copyInvalid && <p className="field-error">{t('品牌主标题不能为空。')}</p>}
 
-      {editor.kind === 'hero' && <><button className="quick-asset-command" type="button" onClick={() => onSelectImage('hero')}>{heroUrl ? (profile.hero.source?.kind === 'video' ? <VideoThumbnail src={heroUrl} style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} /> : <img src={heroUrl} alt="主视觉" style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />{heroUrl ? '更换图片' : '选择图片'}</span></button>{profile.hero.source && heroUrl && <MediaFlipControls value={profile.hero.mediaTransform} onChange={(field, value) => onChange((next) => { next.hero.mediaTransform[field] = value })} />}<Range label="缩放" min={.5} max={3} step={.01} value={profile.hero.scale} onChange={(value) => onChange((next) => { next.hero.scale = value }, 'hero-scale')} onChangeEnd={onInteractionEnd} /></>}
+      {editor.kind === 'hero' && <><button className="quick-asset-command" type="button" onClick={() => onSelectImage('hero')}>{heroUrl ? (profile.hero.source?.kind === 'video' ? <VideoThumbnail src={heroUrl} style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} /> : <img src={heroUrl} alt={t('主视觉')} style={{ transform: mediaFlipCssTransform(profile.hero.mediaTransform) }} />) : <Image size={20} />}<span><Upload size={13} />{t(heroUrl ? '更换图片' : '选择图片')}</span></button>{profile.hero.source && heroUrl && <MediaFlipControls value={profile.hero.mediaTransform} onChange={(field, value) => onChange((next) => { next.hero.mediaTransform[field] = value })} />}<Range label="缩放" min={.5} max={3} step={.01} value={profile.hero.scale} onChange={(value) => onChange((next) => { next.hero.scale = value }, 'hero-scale')} onChangeEnd={onInteractionEnd} /></>}
       {editor.kind === 'polaroid' && <PolaroidControls profile={profile} polaroidUrl={polaroidUrl} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectImage={() => onSelectImage('polaroid')} />}
       {editor.kind === 'conversationBackground' && <ConversationBackgroundControls profile={profile} backgroundUrl={conversationBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('conversationBackground', kind)} />}
       {editor.kind === 'windowBackground' && <WindowBackgroundControls compact profile={profile} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('windowBackground', kind)} />}
       {editor.kind === 'style' && editor.accountMenuBackground && <AccountMenuBackgroundControls profile={profile} backgroundUrl={accountMenuBackgroundUrl} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('accountMenuBackground', kind)} />}
-      {editor.kind === 'style' && !decoration && brandSignatureTextMode && editor.colors.filter((token) => tokenState(APPEARANCE_COLOR_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
-      {editor.kind === 'style' && !decoration && editor.paints.filter((token) => tokenState(APPEARANCE_PAINT_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title="恢复主题默认值" onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
+      {editor.kind === 'style' && !decoration && brandSignatureTextMode && editor.colors.filter((token) => tokenState(APPEARANCE_COLOR_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><AppearanceColorControl token={token} value={resolveAppearanceColor(profile.appearance, profile.colors, token)} onChange={(value) => onChange((next) => { next.appearance.colors[token] = value }, `color-${token}`)} onChangeEnd={onInteractionEnd} />{profile.appearance.colors[token] && <button className="reset-token" type="button" title={t('恢复主题默认值')} onClick={() => onChange((next) => { delete next.appearance.colors[token] })}><RotateCcw size={12} /></button>}</div>)}
+      {editor.kind === 'style' && !decoration && editor.paints.filter((token) => tokenState(APPEARANCE_PAINT_TOKENS[token].state) === state).map((token) => <div className="token-control" key={token}><PaintControl token={token} value={resolveAppearancePaint(profile.appearance, profile.colors, token)} onChange={(paint, continuous) => onChange((next) => { next.appearance.paints[token] = paint }, continuous ? `paint-${token}` : undefined)} onChangeEnd={onInteractionEnd} />{profile.appearance.paints[token] && <button className="reset-token" type="button" title={t('恢复主题默认值')} onClick={() => onChange((next) => { delete next.appearance.paints[token] })}><RotateCcw size={12} /></button>}</div>)}
       {editor.kind === 'style' && !decoration && brandSignatureTextMode && editor.fontSlot && <FontControl slot={editor.fontSlot} profile={profile} onChange={(selection) => onChange((next) => { assignFontSlot(next, editor.fontSlot!, selection) })} onImport={() => onImportFont(editor.fontSlot!)} />}
       {editor.kind === 'style' && !decoration && editor.iconSlot && <div className="icon-editor quick-icon-editor"><ThemeIconControl slot={editor.iconSlot} profile={profile} assets={assets} onChange={(name) => onChange((next) => { next.icons[editor.iconSlot!] = { kind: 'builtin', name } })} onImport={() => onImportIcon(editor.iconSlot!)} /></div>}
       {decoration === 'sparkles' && <ParticleEffectControls profile={profile} assets={assets} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} />}
@@ -107,9 +110,9 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
       {decoration === 'composerMelody' && <ComposerMelodyControls profile={profile} assets={assets} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onImportIcon={onImportIcon} onImportFont={onImportFont} onSelectMedia={(kind) => onSelectImage('composerMelody', kind)} />}
     </div>
     <footer className="preview-edit-popover-footer">
-      <button type="button" onClick={() => onMore()}><PanelRightOpen size={15} />更多设置</button>
-      {editor.kind === 'style' && brandSignatureTextMode && editor.fontSlot && <button type="button" onClick={() => onMore('font')}><Type size={15} />字体管理</button>}
-      {editor.kind === 'style' && editor.iconSlot && !decoration && <button type="button" onClick={() => onMore('icon')}><Box size={15} />图标设置</button>}
+      <button type="button" onClick={() => onMore()}><PanelRightOpen size={15} />{t('更多设置')}</button>
+      {editor.kind === 'style' && brandSignatureTextMode && editor.fontSlot && <button type="button" onClick={() => onMore('font')}><Type size={15} />{t('字体管理')}</button>}
+      {editor.kind === 'style' && editor.iconSlot && !decoration && <button type="button" onClick={() => onMore('icon')}><Box size={15} />{t('图标设置')}</button>}
     </footer>
   </section>
 }

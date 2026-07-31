@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Play } from 'lucide-react'
 import type { Fence } from '../../shared/geometry'
+import { t } from '../../shared/i18n'
 import { mediaFlipCssTransform } from '../../shared/media'
 import { getPolaroidLayout, polaroidShadowFilter } from '../../shared/polaroid'
 import type { PolaroidMode, ThemeProfile, VideoPausePolicy } from '../../shared/theme'
@@ -53,7 +54,7 @@ export function PolaroidPreview({ mediaUrl, mediaKey, mediaKind, playback, pause
       data-preview-target="polaroid"
       tabIndex={0}
       role="button"
-      aria-label="编辑拍立得"
+      aria-label={t('编辑拍立得')}
       onPointerDown={onPointerDown}
       onPointerUp={resumeIfPaused}
       onPointerCancel={resumeIfPaused}
@@ -68,8 +69,8 @@ export function PolaroidPreview({ mediaUrl, mediaKey, mediaKind, playback, pause
     >
       <div className="preview-polaroid-shadow" style={{ filter: polaroidShadowFilter(style) }}>
         <div className="preview-polaroid-surface" style={{ clipPath: layout.clipPath ?? 'none' }}>
-          {mediaKind === 'video' ? <video ref={videoRef} className="preview-polaroid-media" src={mediaUrl} muted={!playback.sound} autoPlay={playback.autoplay} loop={playback.loop} controls={!playback.autoplay} playsInline preload="auto" style={{ ...layout.image, transform: mediaFlipCssTransform(mediaTransform) }} /> : <img className="preview-polaroid-media" src={mediaUrl} alt="拍立得" draggable={false} style={{ ...layout.image, transform: mediaFlipCssTransform(mediaTransform) }} />}
-          {mediaKind === 'video' && playback.autoplay && playbackBlocked && <button className="preview-media-play" type="button" title="播放媒体" aria-label="播放媒体" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); attemptPlay() }}><Play size={16} fill="currentColor" /></button>}
+          {mediaKind === 'video' ? <video ref={videoRef} className="preview-polaroid-media" src={mediaUrl} muted={!playback.sound} autoPlay={playback.autoplay} loop={playback.loop} controls={!playback.autoplay} playsInline preload="auto" style={{ ...layout.image, transform: mediaFlipCssTransform(mediaTransform) }} /> : <img className="preview-polaroid-media" src={mediaUrl} alt={t('拍立得')} draggable={false} style={{ ...layout.image, transform: mediaFlipCssTransform(mediaTransform) }} />}
+          {mediaKind === 'video' && playback.autoplay && playbackBlocked && <button className="preview-media-play" type="button" title={t('播放媒体')} aria-label={t('播放媒体')} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); attemptPlay() }}><Play size={16} fill="currentColor" /></button>}
         </div>
       </div>
       <span className="preview-polaroid-pin" data-preview-target="icon-polaroid-pin" onPointerDown={(event) => event.stopPropagation()}>{pin}</span>

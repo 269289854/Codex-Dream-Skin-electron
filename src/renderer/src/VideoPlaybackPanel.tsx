@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Gauge, Video, Zap } from 'lucide-react'
 import type { VideoAssetInspection, VideoMediaRole } from '../../shared/contracts'
+import { t } from '../../shared/i18n'
 import type { MediaReference, ThemeProfile, VideoVariants } from '../../shared/theme'
 
 interface VideoPlaybackPanelProps {
@@ -21,15 +22,15 @@ const videoRoles: Array<{ role: VideoMediaRole; label: string }> = [
 
 export function VideoPlaybackPanel({ profile, inspections, optimizingRole, onChange, onOptimize, onActivateVariant }: VideoPlaybackPanelProps): React.JSX.Element {
   return <div className="video-playback-panel">
-    <div className="segmented-control video-pause-policies" aria-label="视频暂停策略">
-      <button type="button" className={profile.videoPlayback.pausePolicy === 'hidden' ? 'active' : ''} aria-pressed={profile.videoPlayback.pausePolicy === 'hidden'} onClick={() => onChange((next) => { next.videoPlayback.pausePolicy = 'hidden' })}>仅隐藏时暂停</button>
-      <button type="button" className={profile.videoPlayback.pausePolicy === 'unfocused' ? 'active' : ''} aria-pressed={profile.videoPlayback.pausePolicy === 'unfocused'} onClick={() => onChange((next) => { next.videoPlayback.pausePolicy = 'unfocused' })}>失焦即暂停</button>
+    <div className="segmented-control video-pause-policies" aria-label={t('视频暂停策略')}>
+      <button type="button" className={profile.videoPlayback.pausePolicy === 'hidden' ? 'active' : ''} aria-pressed={profile.videoPlayback.pausePolicy === 'hidden'} onClick={() => onChange((next) => { next.videoPlayback.pausePolicy = 'hidden' })}>{t('仅隐藏时暂停')}</button>
+      <button type="button" className={profile.videoPlayback.pausePolicy === 'unfocused' ? 'active' : ''} aria-pressed={profile.videoPlayback.pausePolicy === 'unfocused'} onClick={() => onChange((next) => { next.videoPlayback.pausePolicy = 'unfocused' })}>{t('失焦即暂停')}</button>
     </div>
     <div className="video-role-list">
       {videoRoles.map(({ role, label }) => <VideoRoleRow
         key={role}
         role={role}
-        label={label}
+        label={t(label)}
         reference={videoReferenceForRole(profile, role)}
         inspection={videoReferenceForRole(profile, role)?.kind === 'video' ? inspections[videoReferenceForRole(profile, role)!.asset] : null}
         optimizing={optimizingRole === role}
@@ -50,7 +51,7 @@ function VideoRoleRow({ role, label, reference, inspection, optimizing, onOptimi
   onActivateVariant: (role: VideoMediaRole, variant: VideoVariants['active']) => void
 }): React.JSX.Element {
   if (reference?.kind !== 'video') {
-    return <section className="video-role-row is-empty"><header><Video size={14} /><strong>{label}</strong></header><span>未使用视频</span></section>
+    return <section className="video-role-row is-empty"><header><Video size={14} /><strong>{label}</strong></header><span>{t('未使用视频')}</span></section>
   }
 
   const activeVariant = reference.videoVariants?.[reference.videoVariants.active]
@@ -62,21 +63,21 @@ function VideoRoleRow({ role, label, reference, inspection, optimizing, onOptimi
   const highLoad = inspection?.highLoad ?? Boolean(width && height && frameRate && (Math.max(width, height) > 1920 || Math.min(width, height) > 1080 || frameRate > 30.5))
   const needsConversion = inspection?.portable === false
   const detail = inspection === null
-    ? '规格读取失败'
+    ? t('规格读取失败')
     : width && height && frameRate
-      ? `${width}×${height} · ${formatFrameRate(frameRate)} FPS${inspection ? ` · ${inspection.codec.toUpperCase()} · ${formatDuration(inspection.duration)}${inspection.audioCodec ? ` · ${inspection.audioCodec.toUpperCase()}` : ' · 无音频'}` : ''}`
-      : '正在读取规格'
+      ? `${width}×${height} · ${formatFrameRate(frameRate)} FPS${inspection ? ` · ${inspection.codec.toUpperCase()} · ${formatDuration(inspection.duration)}${inspection.audioCodec ? ` · ${inspection.audioCodec.toUpperCase()}` : ` · ${t('无音频')}`}` : ''}`
+      : t('正在读取规格')
 
   return <section className={needsConversion ? 'video-role-row is-incompatible' : highLoad ? 'video-role-row is-high-load' : 'video-role-row'}>
-    <header><Video size={14} /><strong>{label}</strong>{needsConversion ? <span className="video-load-badge"><Zap size={12} />需转换</span> : highLoad && <span className="video-load-badge"><Gauge size={12} />高负载</span>}</header>
+    <header><Video size={14} /><strong>{label}</strong>{needsConversion ? <span className="video-load-badge"><Zap size={12} />{t('需转换')}</span> : highLoad && <span className="video-load-badge"><Gauge size={12} />{t('高负载')}</span>}</header>
     <p>{detail}</p>
     {inspection?.bitRate ? <small>{formatBitRate(inspection.bitRate)}</small> : null}
-    <div className="segmented-control video-variant-switch" aria-label={`${label}视频版本`}>
-      <button type="button" className={activeVersion === 'original' ? 'active' : ''} aria-pressed={activeVersion === 'original'} onClick={() => onActivateVariant(role, 'original')}>原片</button>
-      <button type="button" className={activeVersion === 'optimized' ? 'active' : ''} aria-pressed={activeVersion === 'optimized'} disabled={!hasOptimizedVersion} title={hasOptimizedVersion ? undefined : '尚未生成优化版'} onClick={() => onActivateVariant(role, 'optimized')}>优化版</button>
+    <div className="segmented-control video-variant-switch" aria-label={t('{role}视频版本', { role: label })}>
+      <button type="button" className={activeVersion === 'original' ? 'active' : ''} aria-pressed={activeVersion === 'original'} onClick={() => onActivateVariant(role, 'original')}>{t('原片')}</button>
+      <button type="button" className={activeVersion === 'optimized' ? 'active' : ''} aria-pressed={activeVersion === 'optimized'} disabled={!hasOptimizedVersion} title={hasOptimizedVersion ? undefined : t('尚未生成优化版')} onClick={() => onActivateVariant(role, 'optimized')}>{t('优化版')}</button>
     </div>
     <button className="secondary-command optimize-video-command" type="button" disabled={optimizing || !inspection} onClick={() => onOptimize(role)}>
-      <Zap size={14} />{optimizing ? '正在转换' : reference.videoVariants ? '重新生成优化版' : needsConversion ? '转换视频' : highLoad ? '优化视频' : '生成优化版'}
+      <Zap size={14} />{t(optimizing ? '正在转换' : reference.videoVariants ? '重新生成优化版' : needsConversion ? '转换视频' : highLoad ? '优化视频' : '生成优化版')}
     </button>
   </section>
 }

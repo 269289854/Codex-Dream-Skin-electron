@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, ImportedMediaAsset, OperationProgress, RuntimeStatus, StudioApi } from '../src/shared/contracts'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { gifPosterAssetKey } from '../src/shared/gif'
+import type { SupportedLocale } from '../src/shared/i18n'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../src/shared/video-transcode'
 import { App } from '../src/renderer/src/App'
@@ -67,6 +68,8 @@ describe('Studio preview editing interaction', () => {
   let cancelOperation: ReturnType<typeof vi.fn>
   let operationProgressListener: ((progress: OperationProgress) => void) | null
   let emitReducedMotion: (matches: boolean) => void
+  let persistedLocale: SupportedLocale
+  let setLocalePreference: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     browserWindow = new Window({ url: 'app://-/index.html' })
@@ -159,6 +162,11 @@ describe('Studio preview editing interaction', () => {
     restoreCodex = vi.fn(async () => runtimeStatus)
     cancelOperation = vi.fn(async () => undefined)
     operationProgressListener = null
+    persistedLocale = 'zh-CN'
+    setLocalePreference = vi.fn(async (locale: SupportedLocale) => {
+      persistedLocale = locale
+      return locale
+    })
     createTheme = vi.fn(async (input: CreateThemeInput) => {
       const created = { ...createDefaultTheme('00000000-0000-4000-8000-000000000002', input.name), colors: { ...input.colors } }
       themeProfiles.push(created)
@@ -167,6 +175,8 @@ describe('Studio preview editing interaction', () => {
     const studio: StudioApi = {
       app: {
         getInfo: async () => ({ version: 'test', platform: 'win32' }),
+        getLocale: async () => persistedLocale,
+        setLocale: setLocalePreference,
         quit: quitStudio,
         getUpdateStatus: async () => appUpdateStatus,
         checkForUpdates: checkAppUpdate,
@@ -348,6 +358,55 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
   }
+
+  it('keeps the Studio and theme content languages independent', async () => {
+    const localeSelect = container.querySelector<HTMLSelectElement>('.locale-select select')
+    if (!localeSelect) throw new Error('Studio locale selector is missing.')
+    const chineseTitle = profile.copy['zh-CN'].brandTitle
+    const englishTitle = profile.copy['en-US'].brandTitle
+    expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe(chineseTitle)
+
+    await act(async () => {
+      localeSelect.value = 'en-US'
+      localeSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await Promise.resolve()
+    })
+    expect(setLocalePreference).toHaveBeenCalledWith('en-US')
+    expect(persistedLocale).toBe('en-US')
+    expect(container.textContent).toContain('My themes')
+    expect(container.querySelector('.preview-actions .primary-button')?.textContent).toContain('Save theme')
+    expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe(chineseTitle)
+
+    const englishContent = [...container.querySelectorAll<HTMLButtonElement>('.content-locale-switch button')]
+      .find((button) => button.textContent === 'EN')
+    if (!englishContent) throw new Error('English content selector is missing.')
+    act(() => englishContent.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
+    expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe(englishTitle)
+
+    const title = container.querySelector('[data-preview-target="copy-brand-title"]')
+    if (!title) throw new Error('English brand title target is missing.')
+    pointerDown(title)
+    enterQuickCopy('Edited English title')
+    expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe('Edited English title')
+
+    await act(async () => {
+      localeSelect.value = 'zh-CN'
+      localeSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await Promise.resolve()
+    })
+    expect(setLocalePreference).toHaveBeenLastCalledWith('zh-CN')
+    expect(englishContent.getAttribute('aria-pressed')).toBe('true')
+    expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe('Edited English title')
+
+    const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.copy['en-US'].brandTitle).toBe('Edited English title')
+    expect(savedProfiles.at(-1)?.copy['zh-CN'].brandTitle).toBe(chineseTitle)
+  })
 
   const openRuntimeInspector = (): HTMLElement => {
     const runtimeSettings = [...container.querySelectorAll<HTMLButtonElement>('aside button')].find((button) => button.textContent?.includes('运行设置'))
@@ -894,9 +953,9 @@ describe('Studio preview editing interaction', () => {
     act(() => submit.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(duplicateTheme).toHaveBeenCalledTimes(1)
     const submitted = duplicateTheme.mock.calls[0]?.[0] as ThemeProfile
-    expect(submitted.copy.brandTitle).toBe('尚未保存的副本标题')
+    expect(submitted.copy['zh-CN'].brandTitle).toBe('尚未保存的副本标题')
     expect((await Promise.resolve(duplicateTheme.mock.calls[0]?.[1]))).toBe('我的设计副本')
-    expect(profile.copy.brandTitle).not.toBe('尚未保存的副本标题')
+    expect(profile.copy['zh-CN'].brandTitle).not.toBe('尚未保存的副本标题')
 
     const duplicated = { ...structuredClone(submitted), id: '00000000-0000-4000-8000-000000000002', name: '我的设计副本', updatedAt: new Date().toISOString() }
     themeProfiles.push(duplicated)
@@ -944,7 +1003,7 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(exportTheme).toHaveBeenCalledTimes(1)
-    expect((exportTheme.mock.calls[0]?.[0] as ThemeProfile).copy.brandTitle).toBe('尚未保存的分享标题')
+    expect((exportTheme.mock.calls[0]?.[0] as ThemeProfile).copy['zh-CN'].brandTitle).toBe('尚未保存的分享标题')
     expect(exportButton.disabled).toBe(true)
     await act(async () => {
       finishExport?.({ filePath: 'C:\\Shares\\design.cdstheme' })
@@ -2312,7 +2371,7 @@ describe('Studio preview editing interaction', () => {
 
     act(() => browserWindow.document.dispatchEvent(new browserWindow.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     pointerDown(pullRequests)
-    expect(container.querySelector('[role="dialog"] .quick-copy-field input')?.getAttribute('value')).toBe(profile.copy.sidebarNavPullRequests)
+    expect(container.querySelector('[role="dialog"] .quick-copy-field input')?.getAttribute('value')).toBe(profile.copy['zh-CN'].sidebarNavPullRequests)
 
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
@@ -2320,7 +2379,7 @@ describe('Studio preview editing interaction', () => {
       save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await Promise.resolve()
     })
-    expect(savedProfiles.at(-1)?.copy.sidebarNavNewTask).toBe('快速创建')
+    expect(savedProfiles.at(-1)?.copy['zh-CN'].sidebarNavNewTask).toBe('快速创建')
     expect(savedProfiles.at(-1)?.icons.sidebarNavNewTask).toEqual({ kind: 'builtin', name: 'star' })
     expect(savedProfiles.at(-1)?.typography.slots.sidebarNavNewTask).toEqual({ kind: 'builtin', id: 'jetbrains-mono' })
     expect(savedProfiles.at(-1)?.appearance.colors).toMatchObject({ sidebarNavNewTaskText: '#123456', sidebarNavNewTaskSelectedText: '#654321' })
@@ -2526,7 +2585,7 @@ describe('Studio preview editing interaction', () => {
 
     pointerDown(taskTitle)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('任务标题快捷配置')
-    expect(container.querySelector<HTMLInputElement>('[role="dialog"] .quick-copy-field input')?.value).toBe(profile.copy.sidebarTasksTitle)
+    expect(container.querySelector<HTMLInputElement>('[role="dialog"] .quick-copy-field input')?.value).toBe(profile.copy['zh-CN'].sidebarTasksTitle)
     enterQuickCopy('工作项')
     const taskFont = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="sidebarTasksTitle"] select')
     const taskNormalText = container.querySelector<HTMLInputElement>('[role="dialog"] [data-color-token="sidebarTasksTitleText"] .color-text-input')
@@ -2547,7 +2606,7 @@ describe('Studio preview editing interaction', () => {
       save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await Promise.resolve()
     })
-    expect(savedProfiles.at(-1)?.copy).toMatchObject({ sidebarProjectsTitle: '作品集', sidebarTasksTitle: '工作项' })
+    expect(savedProfiles.at(-1)?.copy['zh-CN']).toMatchObject({ sidebarProjectsTitle: '作品集', sidebarTasksTitle: '工作项' })
     expect(savedProfiles.at(-1)?.typography.slots).toMatchObject({ sidebarProjectsTitle: { kind: 'builtin', id: 'jetbrains-mono' }, sidebarTasksTitle: { kind: 'builtin', id: 'noto-serif-sc' } })
     expect(savedProfiles.at(-1)?.appearance.colors).toMatchObject({ sidebarProjectsTitleText: '#123456', sidebarProjectsTitleHoverText: '#654321', sidebarTasksTitleText: '#0a0b0c' })
     expect(savedProfiles.at(-1)?.appearance.paints.sidebarProjectsTitleBackground).toEqual({ kind: 'solid', color: '#fefefe' })
@@ -2901,7 +2960,7 @@ describe('Studio preview editing interaction', () => {
       save.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await Promise.resolve()
     })
-    expect(savedProfiles.at(-1)?.copy).toMatchObject({
+    expect(savedProfiles.at(-1)?.copy['zh-CN']).toMatchObject({
       brandTitle: '最终品牌标题',
       brandSubtitle: '保存后的品牌副标题',
       brandSignature: 'MIKU SAVED'
@@ -2951,7 +3010,7 @@ describe('Studio preview editing interaction', () => {
     expect(container.querySelector<HTMLElement>('[data-preview-target="copy-brand-signature"]')?.style.width).toBe('150px')
 
     act(() => modeButton('文字').click())
-    expect(container.querySelector('[data-preview-target="copy-brand-signature"]')?.textContent).toBe(profile.copy.brandSignature)
+    expect(container.querySelector('[data-preview-target="copy-brand-signature"]')?.textContent).toBe(profile.copy['zh-CN'].brandSignature)
     const callsBeforeReuse = selectMedia.mock.calls.length
     act(() => modeButton('图片').click())
     expect(selectMedia).toHaveBeenCalledTimes(callsBeforeReuse)

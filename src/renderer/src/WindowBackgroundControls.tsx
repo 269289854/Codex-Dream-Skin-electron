@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, Eye, EyeOff, Image, Plus, Trash2, Upload, Video } from 'lucide-react'
 import type { MediaSelectionKind } from '../../shared/contracts'
+import { t } from '../../shared/i18n'
 import { createDefaultWindowBackgroundMask, type ThemeProfile, type WindowBackgroundMask } from '../../shared/theme'
 import { PaintControl, Range } from './editor-controls'
 import { MediaFlipControls } from './MediaFlipControls'
@@ -66,17 +67,17 @@ export function WindowBackgroundControls({ profile, backgroundUrl, mediaBusy = f
   }
 
   return <div className={compact ? 'window-background-controls compact' : 'window-background-controls'}>
-    <label className="toggle-row"><span>显示整个窗口背景</span><input type="checkbox" checked={background.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.windowBackground.visible = visible }) }} /></label>
-    <div className="segmented-control window-background-modes" aria-label="整个窗口背景类型">
-      {modes.map((mode) => <button type="button" key={mode.value} className={background.mode === mode.value ? 'active' : ''} onClick={() => chooseMode(mode.value)}>{mode.label}</button>)}
+    <label className="toggle-row"><span>{t('显示整个窗口背景')}</span><input type="checkbox" checked={background.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.windowBackground.visible = visible }) }} /></label>
+    <div className="segmented-control window-background-modes" aria-label={t('整个窗口背景类型')}>
+      {modes.map((mode) => <button type="button" key={mode.value} className={background.mode === mode.value ? 'active' : ''} onClick={() => chooseMode(mode.value)}>{t(mode.label)}</button>)}
     </div>
     {background.mode === 'color' && <PaintControl label="背景颜色" value={background.paint} onChange={(paint, continuous) => onChange((next) => { next.windowBackground.paint = paint }, continuous ? 'window-background-paint' : undefined)} onChangeEnd={onInteractionEnd} />}
     {mediaMode && <>
       <button className="asset-picker window-background-asset-picker" type="button" disabled={mediaBusy} onClick={() => onSelectMedia(background.mode as MediaSelectionKind)}>
-        {backgroundUrl && background.mode === 'video' ? <VideoThumbnail src={backgroundUrl} /> : backgroundUrl ? <img src={backgroundUrl} alt="整个窗口背景预览" /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
-        <span><Upload size={13} />{backgroundUrl ? '更换背景素材' : '选择背景素材'}</span>
+        {backgroundUrl && background.mode === 'video' ? <VideoThumbnail src={backgroundUrl} /> : backgroundUrl ? <img src={backgroundUrl} alt={t('整个窗口背景预览')} /> : background.mode === 'video' ? <Video size={20} /> : <Image size={20} />}
+        <span><Upload size={13} />{t(backgroundUrl ? '更换背景素材' : '选择背景素材')}</span>
       </button>
-      {background.source && <button className="secondary-command window-background-remove" type="button" onClick={() => onChange((next) => { next.windowBackground.mode = 'color'; next.windowBackground.source = null })}><Trash2 size={14} />移除背景素材</button>}
+      {background.source && <button className="secondary-command window-background-remove" type="button" onClick={() => onChange((next) => { next.windowBackground.mode = 'color'; next.windowBackground.source = null })}><Trash2 size={14} />{t('移除背景素材')}</button>}
       <Range label="水平焦点" min={0} max={1} step={.01} value={background.focus.x} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.windowBackground.focus.x = value }, 'window-background-focus-x')} onChangeEnd={onInteractionEnd} />
       <Range label="垂直焦点" min={0} max={1} step={.01} value={background.focus.y} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.windowBackground.focus.y = value }, 'window-background-focus-y')} onChangeEnd={onInteractionEnd} />
       <Range label="缩放" min={1} max={3} step={.01} value={background.scale} onChange={(value) => onChange((next) => { next.windowBackground.scale = value }, 'window-background-scale')} onChangeEnd={onInteractionEnd} />
@@ -84,26 +85,26 @@ export function WindowBackgroundControls({ profile, backgroundUrl, mediaBusy = f
     </>}
     <Range label="背景透明度" min={0} max={1} step={.01} value={background.opacity} onChange={(value) => onChange((next) => { next.windowBackground.opacity = value }, 'window-background-opacity')} onChangeEnd={onInteractionEnd} />
 
-    <section className="window-mask-controls" aria-label="窗口背景遮罩图层">
-      <header><div><strong>遮罩图层</strong><span>{background.masks.length}/8 · 前景到背景</span></div><button className="mini-icon-button" type="button" title="添加遮罩" disabled={background.masks.length >= 8} onClick={addMask}><Plus size={14} /></button></header>
-      {background.masks.length === 0 && <p className="window-mask-empty">无遮罩</p>}
+    <section className="window-mask-controls" aria-label={t('窗口背景遮罩图层')}>
+      <header><div><strong>{t('遮罩图层')}</strong><span>{background.masks.length}/8 · {t('前景到背景')}</span></div><button className="mini-icon-button" type="button" title={t('添加遮罩')} disabled={background.masks.length >= 8} onClick={addMask}><Plus size={14} /></button></header>
+      {background.masks.length === 0 && <p className="window-mask-empty">{t('无遮罩')}</p>}
       <div className="window-mask-list">
         {background.masks.map((mask, index) => {
           const expanded = expandedMaskId === mask.id
           return <section className="window-mask-layer" key={mask.id}>
             <header className="window-mask-layer-header">
-              <button className="window-mask-expand" type="button" title={expanded ? '收起遮罩设置' : '展开遮罩设置'} onClick={() => setExpandedMaskId(expanded ? null : mask.id)}>{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}<span>遮罩 {index + 1}</span></button>
-              <button className="mini-icon-button" type="button" title={mask.visible ? '隐藏遮罩' : '显示遮罩'} onClick={() => onChange((next) => { next.windowBackground.masks[index]!.visible = !mask.visible })}>{mask.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
-              <button className="mini-icon-button" type="button" title="复制遮罩" disabled={background.masks.length >= 8} onClick={() => copyMask(index)}><Copy size={13} /></button>
-              <button className="mini-icon-button" type="button" title="上移遮罩" disabled={index === 0} onClick={() => moveMask(index, -1)}><ArrowUp size={13} /></button>
-              <button className="mini-icon-button" type="button" title="下移遮罩" disabled={index === background.masks.length - 1} onClick={() => moveMask(index, 1)}><ArrowDown size={13} /></button>
-              <button className="mini-icon-button" type="button" title="删除遮罩" onClick={() => onChange((next) => { next.windowBackground.masks.splice(index, 1) })}><Trash2 size={13} /></button>
+              <button className="window-mask-expand" type="button" title={t(expanded ? '收起遮罩设置' : '展开遮罩设置')} onClick={() => setExpandedMaskId(expanded ? null : mask.id)}>{expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}<span>{t('遮罩 {number}', { number: index + 1 })}</span></button>
+              <button className="mini-icon-button" type="button" title={t(mask.visible ? '隐藏遮罩' : '显示遮罩')} onClick={() => onChange((next) => { next.windowBackground.masks[index]!.visible = !mask.visible })}>{mask.visible ? <Eye size={13} /> : <EyeOff size={13} />}</button>
+              <button className="mini-icon-button" type="button" title={t('复制遮罩')} disabled={background.masks.length >= 8} onClick={() => copyMask(index)}><Copy size={13} /></button>
+              <button className="mini-icon-button" type="button" title={t('上移遮罩')} disabled={index === 0} onClick={() => moveMask(index, -1)}><ArrowUp size={13} /></button>
+              <button className="mini-icon-button" type="button" title={t('下移遮罩')} disabled={index === background.masks.length - 1} onClick={() => moveMask(index, 1)}><ArrowDown size={13} /></button>
+              <button className="mini-icon-button" type="button" title={t('删除遮罩')} onClick={() => onChange((next) => { next.windowBackground.masks.splice(index, 1) })}><Trash2 size={13} /></button>
             </header>
             {expanded && <div className="window-mask-layer-body">
               <PaintControl label="遮罩颜色" value={mask.paint} onChange={(paint, continuous) => onChange((next) => { next.windowBackground.masks[index]!.paint = paint }, continuous ? `window-mask-${mask.id}-paint` : undefined)} onChangeEnd={onInteractionEnd} />
               <Range label="遮罩透明度" min={0} max={1} step={.01} value={mask.opacity} onChange={(value) => onChange((next) => { next.windowBackground.masks[index]!.opacity = value }, `window-mask-${mask.id}-opacity`)} onChangeEnd={onInteractionEnd} />
-              <div className="segmented-control window-mask-shapes" aria-label={`遮罩 ${index + 1} 形状`}>
-                {maskShapes.map((shape) => <button type="button" key={shape.value} className={mask.shape === shape.value ? 'active' : ''} onClick={() => onChange((next) => { next.windowBackground.masks[index]!.shape = shape.value })}>{shape.label}</button>)}
+              <div className="segmented-control window-mask-shapes" aria-label={t('遮罩 {number} 形状', { number: index + 1 })}>
+                {maskShapes.map((shape) => <button type="button" key={shape.value} className={mask.shape === shape.value ? 'active' : ''} onClick={() => onChange((next) => { next.windowBackground.masks[index]!.shape = shape.value })}>{t(shape.label)}</button>)}
               </div>
               {mask.shape !== 'full' && <div className="window-mask-geometry">
                 <Range label="水平位置" min={0} max={1} step={.01} value={mask.position.x} displayScale={100} suffix="%" onChange={(value) => onChange((next) => { next.windowBackground.masks[index]!.position.x = value }, `window-mask-${mask.id}-position-x`)} onChangeEnd={onInteractionEnd} />

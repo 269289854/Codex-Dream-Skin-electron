@@ -44,14 +44,23 @@ import { inspectImageBytes, validateFontBytes } from './asset-validation'
 import { dataUrlByteLength, EmbeddedAssetBudget } from './embedded-assets'
 import { budgetSelectedBuiltinFonts } from './theme-fonts'
 import { VIDEO_OPTIMIZATION_NO_CHANGE_MESSAGE, createDefaultVideoTranscodeSettings, estimateVideoTranscodeStorageBytes, isMeaningfulVideoOptimization, parseVideoTranscodeSettings, type VideoTranscodeSettings } from '../shared/video-transcode'
+import { DEFAULT_LOCALE, type SupportedLocale } from '../shared/i18n'
+import { localeSchema } from '../shared/locale-schema'
 
 interface StudioSettings {
+  version: 3
+  activeThemeId: string
+  systemThemeId: string
+  locale: SupportedLocale
+}
+
+interface LegacyStudioSettingsV2 {
   version: 2
   activeThemeId: string
   systemThemeId: string
 }
 
-interface LegacyStudioSettings {
+interface LegacyStudioSettingsV1 {
   version: 1
   activeThemeId: string
 }
@@ -205,7 +214,7 @@ export class ProfileStore {
       settings = await this.readSettings()
     } catch {
       const profile = await this.createSystemTheme()
-      await this.writeSettings({ version: 2, activeThemeId: profile.id, systemThemeId: profile.id })
+      await this.writeSettings({ version: 3, activeThemeId: profile.id, systemThemeId: profile.id, locale: DEFAULT_LOCALE })
       await this.cleanupOrphanedAssets()
       return
     }
@@ -218,9 +227,10 @@ export class ProfileStore {
     if (!systemExists || !activeExists) {
       const systemThemeId = systemExists ? settings.systemThemeId : (await this.createSystemTheme()).id
       await this.writeSettings({
-        version: 2,
+        version: 3,
         activeThemeId: activeExists ? settings.activeThemeId : systemThemeId,
-        systemThemeId
+        systemThemeId,
+        locale: settings.locale
       })
     }
     await this.cleanupOrphanedAssets()
@@ -236,6 +246,17 @@ export class ProfileStore {
       .filter((profile): profile is ThemeProfile => profile !== null)
       .map((profile) => ({ id: profile.id, name: profile.name, updatedAt: profile.updatedAt, active: profile.id === settings.activeThemeId, system: profile.id === settings.systemThemeId }))
       .sort((a, b) => Number(b.system) - Number(a.system) || b.updatedAt.localeCompare(a.updatedAt))
+  }
+
+  async getLocale(): Promise<SupportedLocale> {
+    return (await this.readSettings()).locale
+  }
+
+  async setLocale(input: unknown): Promise<SupportedLocale> {
+    const locale = localeSchema.parse(input)
+    const settings = await this.readSettings()
+    if (settings.locale !== locale) await this.writeSettings({ ...settings, locale })
+    return locale
   }
 
   async get(id: string): Promise<ThemeProfile> {
@@ -744,11 +765,26 @@ export class ProfileStore {
 
   private async readSettings(): Promise<StudioSettings> {
     const parsed = await this.readJsonWithRecovery(this.settingsPath, (content) =>
-      JSON.parse(content) as Partial<StudioSettings> | Partial<LegacyStudioSettings>)
+      JSON.parse(content) as Partial<StudioSettings> | Partial<LegacyStudioSettingsV2> | Partial<LegacyStudioSettingsV1>)
+    if (parsed.version === 3 && parsed.activeThemeId && parsed.systemThemeId) {
+      this.assertId(parsed.activeThemeId)
+      this.assertId(parsed.systemThemeId)
+      const locale = localeSchema.safeParse(parsed.locale)
+      const settings: StudioSettings = {
+        version: 3,
+        activeThemeId: parsed.activeThemeId,
+        systemThemeId: parsed.systemThemeId,
+        locale: locale.success ? locale.data : DEFAULT_LOCALE
+      }
+      if (!locale.success) await this.writeSettings(settings)
+      return settings
+    }
     if (parsed.version === 2 && parsed.activeThemeId && parsed.systemThemeId) {
       this.assertId(parsed.activeThemeId)
       this.assertId(parsed.systemThemeId)
-      return parsed as StudioSettings
+      const settings: StudioSettings = { version: 3, activeThemeId: parsed.activeThemeId, systemThemeId: parsed.systemThemeId, locale: DEFAULT_LOCALE }
+      await this.writeSettings(settings)
+      return settings
     }
     if (parsed.version === 1 && parsed.activeThemeId) {
       this.assertId(parsed.activeThemeId)
@@ -1135,9 +1171,10 @@ export class ProfileStore {
     systemThemeId ??= candidates[0]?.id
     if (!systemThemeId) throw new Error('Studio settings cannot identify the system theme.')
     const settings: StudioSettings = {
-      version: 2,
+      version: 3,
       activeThemeId: candidates.some((candidate) => candidate.id === activeThemeId) ? activeThemeId : systemThemeId,
-      systemThemeId
+      systemThemeId,
+      locale: DEFAULT_LOCALE
     }
     await this.writeSettings(settings)
     return settings
@@ -1205,6 +1242,7 @@ export class ProfileStore {
   private async writeSettings(settings: StudioSettings): Promise<void> {
     this.assertId(settings.activeThemeId)
     this.assertId(settings.systemThemeId)
+    localeSchema.parse(settings.locale)
     await this.writeJsonAtomic(this.settingsPath, settings)
   }
 

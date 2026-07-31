@@ -8,6 +8,7 @@ import {
 } from '../../shared/theme'
 import { conversationBubblePresetAssetKey } from '../../shared/conversation-bubbles'
 import type { MediaSelectionKind } from '../../shared/contracts'
+import { t } from '../../shared/i18n'
 import { Range } from './editor-controls'
 
 const conversationBubbleRoleLabels: Record<ConversationBubbleRole, string> = {
@@ -43,7 +44,7 @@ export function ConversationBubbleControls({
 }: ConversationBubbleControlsProps): React.JSX.Element {
   const [customPickerOpen, setCustomPickerOpen] = React.useState(false)
   const style = profile.conversationBubbles[role]
-  const roleLabel = conversationBubbleRoleLabels[role]
+  const roleLabel = t(conversationBubbleRoleLabels[role])
   const customUrl = style.source.kind === 'custom' ? assets[style.source.reference.asset] : undefined
   const selectedPresetId = style.source.kind === 'preset' ? style.source.presetId : CONVERSATION_BUBBLE_PRESETS[0].id
   React.useEffect(() => setCustomPickerOpen(false), [role, style.source.kind])
@@ -71,44 +72,44 @@ export function ConversationBubbleControls({
   }, historyGroup)
 
   return <div className="conversation-bubble-controls" data-bubble-role-controls={role}>
-    {showVisibility && <label className="toggle-row"><span>显示聊天气泡</span><input type="checkbox" checked={profile.conversationBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.conversationBubbles.visible = visible }) }} /></label>}
-    {showRoleTabs && <div className="conversation-bubble-role-tabs segmented-control" aria-label="聊天气泡角色">
-      <button type="button" className={role === 'user' ? 'active' : ''} onClick={() => onRoleChange?.('user')}>我的消息</button>
-      <button type="button" className={role === 'codex' ? 'active' : ''} onClick={() => onRoleChange?.('codex')}>Codex 回复</button>
-      <button type="button" className={role === 'plan' ? 'active' : ''} onClick={() => onRoleChange?.('plan')}>生成计划</button>
+    {showVisibility && <label className="toggle-row"><span>{t('显示聊天气泡')}</span><input type="checkbox" checked={profile.conversationBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.conversationBubbles.visible = visible }) }} /></label>}
+    {showRoleTabs && <div className="conversation-bubble-role-tabs segmented-control" aria-label={t('聊天气泡角色')}>
+      <button type="button" className={role === 'user' ? 'active' : ''} onClick={() => onRoleChange?.('user')}>{t('我的消息')}</button>
+      <button type="button" className={role === 'codex' ? 'active' : ''} onClick={() => onRoleChange?.('codex')}>{t('Codex 回复')}</button>
+      <button type="button" className={role === 'plan' ? 'active' : ''} onClick={() => onRoleChange?.('plan')}>{t('生成计划')}</button>
     </div>}
-    <div className="conversation-bubble-mode-tabs segmented-control" aria-label="聊天气泡模式">
-      <button type="button" className={style.source.kind === 'none' ? 'active' : ''} onClick={selectNone}>无边框</button>
-      <button type="button" className={style.source.kind === 'preset' ? 'active' : ''} onClick={() => selectPreset(selectedPresetId)}>预设</button>
-      <button type="button" className={style.source.kind === 'custom' || customPickerOpen ? 'active' : ''} onClick={openCustom}>自定义</button>
+    <div className="conversation-bubble-mode-tabs segmented-control" aria-label={t('聊天气泡模式')}>
+      <button type="button" className={style.source.kind === 'none' ? 'active' : ''} onClick={selectNone}>{t('无边框')}</button>
+      <button type="button" className={style.source.kind === 'preset' ? 'active' : ''} onClick={() => selectPreset(selectedPresetId)}>{t('预设')}</button>
+      <button type="button" className={style.source.kind === 'custom' || customPickerOpen ? 'active' : ''} onClick={openCustom}>{t('自定义')}</button>
     </div>
 
     {style.source.kind !== 'custom' && customPickerOpen && <div className="conversation-bubble-custom-actions is-picker">
-      <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('image')}><Upload size={13} />选择图片</button>
-      <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('gif')}><Upload size={13} />选择 GIF</button>
+      <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('image')}><Upload size={13} />{t('选择图片')}</button>
+      <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('gif')}><Upload size={13} />{t('选择 GIF')}</button>
     </div>}
 
-    {style.source.kind === 'preset' && <div className="conversation-bubble-preset-grid" role="radiogroup" aria-label={`${roleLabel}气泡预设`}>
+    {style.source.kind === 'preset' && <div className="conversation-bubble-preset-grid" role="radiogroup" aria-label={t('{role}气泡预设', { role: roleLabel })}>
       {CONVERSATION_BUBBLE_PRESETS.map((preset) => {
         const source = assets[conversationBubblePresetAssetKey(preset.id)]
         const selected = style.source.kind === 'preset' && selectedPresetId === preset.id
         return <button type="button" role="radio" aria-checked={selected} className={selected ? 'active' : ''} key={preset.id} onClick={() => selectPreset(preset.id)}>
           {source ? <img src={source} alt="" /> : <ImageIcon size={18} />}
-          <span>{preset.name}</span>
+          <span>{t(preset.name)}</span>
         </button>
       })}
     </div>}
 
     {style.source.kind === 'custom' && <div className="conversation-bubble-custom">
-      <div className="conversation-bubble-custom-preview">{customUrl ? <img src={customUrl} alt={`${roleLabel}自定义气泡`} /> : <ImageIcon size={20} />}</div>
+      <div className="conversation-bubble-custom-preview">{customUrl ? <img src={customUrl} alt={t('{role}自定义气泡', { role: roleLabel })} /> : <ImageIcon size={20} />}</div>
       <div className="conversation-bubble-custom-actions">
-        <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('image')}><Upload size={13} />选择图片</button>
-        <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('gif')}><Upload size={13} />选择 GIF</button>
-        <button className="mini-icon-button" type="button" title="移除自定义气泡" onClick={selectNone}><Trash2 size={13} /></button>
+        <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('image')}><Upload size={13} />{t('选择图片')}</button>
+        <button type="button" disabled={mediaBusy} onClick={() => onSelectMedia('gif')}><Upload size={13} />{t('选择 GIF')}</button>
+        <button className="mini-icon-button" type="button" title={t('移除自定义气泡')} onClick={selectNone}><Trash2 size={13} /></button>
       </div>
-      <div className="conversation-bubble-fit-tabs segmented-control" aria-label="自定义气泡适配">
-        <button type="button" className={style.fit === 'nineSlice' ? 'active' : ''} onClick={() => onChange((next) => { next.conversationBubbles[role].fit = 'nineSlice' })}>九宫格</button>
-        <button type="button" className={style.fit === 'stretch' ? 'active' : ''} onClick={() => onChange((next) => { next.conversationBubbles[role].fit = 'stretch' })}>整图拉伸</button>
+      <div className="conversation-bubble-fit-tabs segmented-control" aria-label={t('自定义气泡适配')}>
+        <button type="button" className={style.fit === 'nineSlice' ? 'active' : ''} onClick={() => onChange((next) => { next.conversationBubbles[role].fit = 'nineSlice' })}>{t('九宫格')}</button>
+        <button type="button" className={style.fit === 'stretch' ? 'active' : ''} onClick={() => onChange((next) => { next.conversationBubbles[role].fit = 'stretch' })}>{t('整图拉伸')}</button>
       </div>
       {style.fit === 'nineSlice' && <>
         <Range label="切片" min={10} max={45} step={1} value={style.slice} onChange={(value) => updateLayout('slice', value, `bubble-${role}-slice`)} onChangeEnd={onInteractionEnd} />

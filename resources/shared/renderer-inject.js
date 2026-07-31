@@ -18,7 +18,39 @@
   const composerToolButtons = new Set();
   const ACCOUNT_MENU_BACKGROUND_CLASS = "dream-account-menu-background";
 
-  const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
+  let activeLocale = null;
+  let actions = [];
+  const localeSignals = {
+    "zh-CN": new Set(["新建任务", "拉取请求", "站点", "已安排", "插件", "项目", "任务", "搜索", "设置", "退出登录"]),
+    "en-US": new Set(["new task", "new chat", "pull requests", "sites", "scheduled", "plugins", "projects", "tasks", "search", "settings", "log out"]),
+  };
+  const normalizedLocaleLabel = (value) => `${value || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
+  const detectedDocumentLocale = () => {
+    const candidates = document.querySelectorAll("aside.app-shell-left-panel button, aside.app-shell-left-panel a, aside.app-shell-left-panel [aria-label]");
+    const scores = { "zh-CN": 0, "en-US": 0 };
+    for (const node of candidates) {
+      const values = [node.textContent, node.getAttribute?.("aria-label")].map(normalizedLocaleLabel).filter(Boolean);
+      for (const locale of ["zh-CN", "en-US"]) {
+        if (values.some((value) => localeSignals[locale].has(value))) scores[locale] += 1;
+      }
+    }
+    if (scores["en-US"] > scores["zh-CN"]) return "en-US";
+    if (scores["zh-CN"] > scores["en-US"]) return "zh-CN";
+    const declared = normalizedLocaleLabel(document.documentElement?.lang);
+    if (declared.startsWith("en")) return "en-US";
+    return "zh-CN";
+  };
+  const refreshLocale = () => {
+    const locale = detectedDocumentLocale();
+    if (locale === activeLocale) return false;
+    activeLocale = locale;
+    const copies = themeConfig?.copyByLocale;
+    themeConfig.copy = copies?.[locale] || copies?.["zh-CN"] || themeConfig?.copy || {};
+    const localizedActions = themeConfig?.actionsByLocale?.[locale] || themeConfig?.actionsByLocale?.["zh-CN"] || themeConfig?.actions;
+    actions = Array.isArray(localizedActions) ? localizedActions : [];
+    return true;
+  };
+  refreshLocale();
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
   const reducedMotionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)") || null;
   const motionIsPaused = () => document.documentElement?.hasAttribute("data-dream-motion-paused") ||
@@ -445,7 +477,7 @@
   };
 
   const SIDEBAR_NAV_FALLBACKS = [
-    { id: "newTask", copyField: "sidebarNavNewTask", iconSlot: "sidebarNavNewTask", previewTarget: "sidebar-nav-new-task", aliases: ["新建任务", "New task"] },
+    { id: "newTask", copyField: "sidebarNavNewTask", iconSlot: "sidebarNavNewTask", previewTarget: "sidebar-nav-new-task", aliases: ["新建任务", "New task", "New chat"] },
     { id: "pullRequests", copyField: "sidebarNavPullRequests", iconSlot: "sidebarNavPullRequests", previewTarget: "sidebar-nav-pull-requests", aliases: ["拉取请求", "Pull requests"] },
     { id: "sites", copyField: "sidebarNavSites", iconSlot: "sidebarNavSites", previewTarget: "sidebar-nav-sites", aliases: ["站点", "Sites"] },
     { id: "scheduled", copyField: "sidebarNavScheduled", iconSlot: "sidebarNavScheduled", previewTarget: "sidebar-nav-scheduled", aliases: ["已安排", "Scheduled"] },
@@ -808,6 +840,9 @@
     return { changed: true, showPlayButton };
   };
   const configureVideo = (video, playback) => {
+    const playButtonLabel = activeLocale === "en-US" ? "Play media" : "播放媒体";
+    const existingPlayButton = video.parentElement?.querySelector(".dream-media-play");
+    if (existingPlayButton instanceof HTMLElement) existingPlayButton.setAttribute("aria-label", playButtonLabel);
     const configKey = JSON.stringify({ autoplay: Boolean(playback?.autoplay), loop: Boolean(playback?.loop), sound: Boolean(playback?.sound), volume: Number(playback?.volume) || 0 });
     const existing = playbackStates.get(video);
     if (existing?.configKey === configKey) return { changed: false, showPlayButton: existing.showPlayButton };
@@ -823,7 +858,7 @@
         button.type = "button";
         button.className = "dream-media-play";
         button.textContent = "▶";
-        button.setAttribute("aria-label", "播放媒体");
+        button.setAttribute("aria-label", playButtonLabel);
         button.addEventListener("click", () => { void video.play().catch(() => undefined); });
         video.parentElement?.appendChild(button);
       }
@@ -1935,14 +1970,15 @@
       grid.remove();
       grid = null;
     }
-    if (grid?.dataset.dreamVersion === VERSION) return grid;
+    if (grid?.dataset.dreamVersion === VERSION && grid.dataset.dreamLocale === activeLocale) return grid;
     grid?.remove();
 
     grid = document.createElement("div");
     grid.id = CARD_GRID_ID;
     grid.className = "dream-action-grid";
     grid.dataset.dreamVersion = VERSION;
-    grid.setAttribute("aria-label", "初音未来主题快捷操作");
+    grid.dataset.dreamLocale = activeLocale;
+    grid.setAttribute("aria-label", activeLocale === "en-US" ? "Hatsune Miku theme quick actions" : "初音未来主题快捷操作");
     actions.forEach((action) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -2210,7 +2246,8 @@
     }
     if (nativeProjectButton) document.getElementById(PROJECT_PROXY_ID)?.remove();
 
-    if (heading.dataset.dreamCopyVersion !== VERSION) {
+    const copyVersion = `${VERSION}:${activeLocale}`;
+    if (heading.dataset.dreamCopyVersion !== copyVersion) {
       heading.querySelectorAll(":scope > .dream-copy-node").forEach((node) => node.remove());
       const before = document.createElement("span");
       before.className = "dream-copy-node dream-copy-before";
@@ -2226,7 +2263,7 @@
       subtitle.className = "dream-copy-node dream-copy-subtitle";
       subtitle.textContent = typeof themeConfig.copy.subtitle === "string" ? themeConfig.copy.subtitle : "";
       heading.appendChild(subtitle);
-      heading.dataset.dreamCopyVersion = VERSION;
+      heading.dataset.dreamCopyVersion = copyVersion;
     }
     const before = heading.querySelector(":scope > .dream-copy-before");
     if (proxy && proxy.previousElementSibling !== before) before?.after(proxy);
@@ -2260,6 +2297,7 @@
     if (window.__CODEX_DREAM_SKIN_DISABLED__) return;
     const root = document.documentElement;
     if (!root) return;
+    refreshLocale();
     root.classList.add("codex-dream-skin");
     root.style.setProperty("--dream-art", "none");
 
@@ -2342,8 +2380,8 @@
     const brandTitle = chrome.querySelector(".dream-brand b");
     const brandSubtitle = chrome.querySelector(".dream-brand small");
     const brandSignature = chrome.querySelector(".dream-signature");
-    if (brandTitle) brandTitle.textContent = typeof copy.brandTitle === "string" ? copy.brandTitle : "初音未来主题 Codex App";
-    if (brandSubtitle) brandSubtitle.textContent = typeof copy.brandSubtitle === "string" ? copy.brandSubtitle : "你的专属 AI 编程与创作伙伴";
+    if (brandTitle) brandTitle.textContent = typeof copy.brandTitle === "string" ? copy.brandTitle : activeLocale === "en-US" ? "Hatsune Miku Theme for Codex" : "初音未来主题 Codex App";
+    if (brandSubtitle) brandSubtitle.textContent = typeof copy.brandSubtitle === "string" ? copy.brandSubtitle : activeLocale === "en-US" ? "Your AI coding and creative companion" : "你的专属 AI 编程与创作伙伴";
     ensureBrandSignature(brandSignature, copy);
     chrome.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     const polaroid = chrome.querySelector(".dream-polaroid");
@@ -2599,10 +2637,11 @@
       const changedNodes = [...record.addedNodes, ...record.removedNodes];
       return changedNodes.length === 0 || changedNodes.some((node) => !isInjectedNode(node));
     });
-    if (relevant.some(mutationNeedsFullEnsure)) scheduleEnsure();
+    if (records.some((record) => record.attributeName === "lang")) scheduleEnsure();
+    else if (relevant.some(mutationNeedsFullEnsure)) scheduleEnsure();
     else if (relevant.length > 0) scheduleContentSync();
   });
-  observer.observe(document.documentElement, { childList: true, characterData: true, attributes: true, attributeFilter: ["data-state", "hidden", "aria-hidden"], subtree: true });
+  observer.observe(document.documentElement, { childList: true, characterData: true, attributes: true, attributeFilter: ["data-state", "hidden", "aria-hidden", "lang"], subtree: true });
   const resizeHandler = scheduleEnsure;
   window.addEventListener("resize", resizeHandler);
   if (document.fonts?.ready) {

@@ -12,11 +12,25 @@ export const DEFAULT_SIDEBAR_NAV_COPY = {
   sidebarNavPlugins: '插件'
 } as const
 
+export const DEFAULT_SIDEBAR_COPY_EN = {
+  sidebarModeTitle: 'Codex',
+  sidebarProjectsTitle: 'Projects',
+  sidebarTasksTitle: 'Tasks'
+} as const
+
+export const DEFAULT_SIDEBAR_NAV_COPY_EN = {
+  sidebarNavNewTask: 'New chat',
+  sidebarNavPullRequests: 'Pull requests',
+  sidebarNavSites: 'Sites',
+  sidebarNavScheduled: 'Scheduled',
+  sidebarNavPlugins: 'Plugins'
+} as const
+
 export const SIDEBAR_NAV_ITEMS = [
   {
     id: 'newTask',
     label: '新建任务',
-    aliases: ['新建任务', 'New task'],
+    aliases: ['新建任务', 'New task', 'New chat'],
     iconName: 'square-pen',
     iconSlot: 'sidebarNavNewTask',
     copyField: 'sidebarNavNewTask',
