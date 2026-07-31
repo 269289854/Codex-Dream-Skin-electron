@@ -75,6 +75,11 @@ jobs:
             exit 1
           fi
 
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && ! -f "docs/releases/${GITHUB_REF_NAME}.md" ]]; then
+            echo "Release notes docs/releases/${GITHUB_REF_NAME}.md were not found." >&2
+            exit 1
+          fi
+
   windows:
     needs: version
     runs-on: windows-2025
@@ -144,6 +149,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+
       - uses: actions/download-artifact@v4
         with:
           path: release
@@ -168,6 +175,35 @@ jobs:
             fi
           done
 
+          artifact_count="$(find release -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
+          if [[ "${artifact_count}" != "${#required[@]}" ]]; then
+            echo "Expected exactly ${#required[@]} release artifacts, found ${artifact_count}." >&2
+            find release -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+
+      - name: Prepare release metadata
+        id: metadata
+        shell: bash
+        run: |
+          notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+          title="$(head -n 1 "${notes_file}" | tr -d '\r')"
+          if [[ "${title}" != "# "* ]]; then
+            echo "The first line of ${notes_file} must be a Markdown H1 title." >&2
+            exit 1
+          fi
+
+          title="${title#\# }"
+          body="${RUNNER_TEMP}/release-notes.md"
+          tail -n +2 "${notes_file}" > "${body}"
+          if [[ -z "$(tr -d '[:space:]' < "${body}")" ]]; then
+            echo "Release notes body is empty." >&2
+            exit 1
+          fi
+
+          echo "title=${title}" >> "${GITHUB_OUTPUT}"
+          echo "body=${body}" >> "${GITHUB_OUTPUT}"
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -175,16 +211,23 @@ jobs:
         shell: bash
         run: |
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" \
+              --latest \
+              --title "${{ steps.metadata.outputs.title }}" \
+              --notes-file "${{ steps.metadata.outputs.body }}"
             gh release upload "${GITHUB_REF_NAME}" release/* --clobber
           else
             gh release create "${GITHUB_REF_NAME}" release/* \
               --verify-tag \
-              --title "${GITHUB_REF_NAME}" \
-              --generate-notes
+              --latest \
+              --title "${{ steps.metadata.outputs.title }}" \
+              --notes-file "${{ steps.metadata.outputs.body }}"
           fi
 ```
 
 `workflow_dispatch` 只生成可下载的临时 Actions 产物，不创建 GitHub Release。只有推送 `v*` 标签时才执行 `release` Job。
+
+每个正式标签还必须提供 `docs/releases/v<version>.md`。第一行 Markdown H1 是 Release 标题，第二行起是 Release 正文；标签、`package.json` 版本或发布说明文件任一缺失或不匹配时，Workflow 必须停止。
 
 ## 标准发布流程
 

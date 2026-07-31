@@ -1,0 +1,182 @@
+name: Build and release desktop apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      value: ${{ steps.package.outputs.value }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: package
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "value=${version}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${version}." >&2
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && ! -f "docs/releases/${GITHUB_REF_NAME}.md" ]]; then
+            echo "Release notes docs/releases/${GITHUB_REF_NAME}.md were not found." >&2
+            exit 1
+          fi
+
+  windows:
+    needs: version
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:config
+      - run: npm run package:win
+
+      - name: Verify Windows artifacts
+        shell: pwsh
+        run: |
+          $version = '${{ needs.version.outputs.value }}'
+          $required = @(
+            "release/Codex-Dream-Skin-Studio-Setup-$version.exe",
+            "release/Codex-Dream-Skin-Studio-Setup-$version.exe.blockmap",
+            'release/latest.yml'
+          )
+          $missing = $required | Where-Object { -not (Test-Path -LiteralPath $_) }
+          if ($missing) {
+            throw "Missing Windows release artifacts: $($missing -join ', ')"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ needs.version.outputs.value }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            release/Codex-Dream-Skin-Studio-Setup-${{ needs.version.outputs.value }}.exe
+            release/Codex-Dream-Skin-Studio-Setup-${{ needs.version.outputs.value }}.exe.blockmap
+            release/latest.yml
+
+  macos:
+    needs: version
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run package:mac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ needs.version.outputs.value }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            release/Codex-Dream-Skin-Studio-${{ needs.version.outputs.value }}-mac-universal.dmg
+            release/Codex-Dream-Skin-Studio-${{ needs.version.outputs.value }}-mac-universal.zip
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [version, windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Verify complete release
+        shell: bash
+        run: |
+          version='${{ needs.version.outputs.value }}'
+          required=(
+            "release/Codex-Dream-Skin-Studio-Setup-${version}.exe"
+            "release/Codex-Dream-Skin-Studio-Setup-${version}.exe.blockmap"
+            "release/latest.yml"
+            "release/Codex-Dream-Skin-Studio-${version}-mac-universal.dmg"
+            "release/Codex-Dream-Skin-Studio-${version}-mac-universal.zip"
+          )
+
+          for artifact in "${required[@]}"; do
+            if [[ ! -f "${artifact}" ]]; then
+              echo "Missing release artifact: ${artifact}" >&2
+              exit 1
+            fi
+          done
+
+          artifact_count="$(find release -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
+          if [[ "${artifact_count}" != "${#required[@]}" ]]; then
+            echo "Expected exactly ${#required[@]} release artifacts, found ${artifact_count}." >&2
+            find release -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+
+      - name: Prepare release metadata
+        id: metadata
+        shell: bash
+        run: |
+          notes_file="docs/releases/${GITHUB_REF_NAME}.md"
+          title="$(head -n 1 "${notes_file}" | tr -d '\r')"
+          if [[ "${title}" != "# "* ]]; then
+            echo "The first line of ${notes_file} must be a Markdown H1 title." >&2
+            exit 1
+          fi
+
+          title="${title#\# }"
+          body="${RUNNER_TEMP}/release-notes.md"
+          tail -n +2 "${notes_file}" > "${body}"
+          if [[ -z "$(tr -d '[:space:]' < "${body}")" ]]; then
+            echo "Release notes body is empty." >&2
+            exit 1
+          fi
+
+          echo "title=${title}" >> "${GITHUB_OUTPUT}"
+          echo "body=${body}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" \
+              --latest \
+              --title "${{ steps.metadata.outputs.title }}" \
+              --notes-file "${{ steps.metadata.outputs.body }}"
+            gh release upload "${GITHUB_REF_NAME}" release/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" release/* \
+              --verify-tag \
+              --latest \
+              --title "${{ steps.metadata.outputs.title }}" \
+              --notes-file "${{ steps.metadata.outputs.body }}"
+          fi
