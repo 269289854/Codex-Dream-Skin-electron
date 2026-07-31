@@ -189,6 +189,7 @@ export class ProfileStore {
   private readonly readDiskSpace: NonNullable<ProfileStoreDependencies['readDiskSpace']>
   private readonly pendingAssets = new Map<string, Set<string>>()
   private readonly pendingVideoRoles = new Map<string, Map<string, VideoMediaRole>>()
+  private settingsUpdateTail: Promise<void> = Promise.resolve()
 
   constructor(
     readonly root: string,
@@ -254,16 +255,17 @@ export class ProfileStore {
 
   async setLocale(input: unknown): Promise<SupportedLocale> {
     const locale = localeSchema.parse(input)
-    const settings = await this.readSettings()
-    if (settings.locale !== locale) await this.writeSettings({ ...settings, locale })
-    return locale
+    return this.updateSettings((settings) => ({
+      settings: settings.locale === locale ? settings : { ...settings, locale },
+      result: locale
+    }))
   }
 
   async get(id: string): Promise<ThemeProfile> {
     this.assertId(id)
     const profile = await this.readJsonWithRecovery(join(this.themeRoot(id), 'theme.json'), (content) =>
       parseThemeProfile(JSON.parse(content) as unknown))
-    if (profile.id !== id) throw new Error('Theme directory does not match its profile ID.')
+    if (profile.id !== id) throw new Error('主题目录与配置 ID 不匹配。')
     return profile
   }
 
@@ -430,15 +432,19 @@ export class ProfileStore {
     this.assertId(id)
     if (settings.systemThemeId === id) throw new Error('系统默认主题不能删除。')
     const themes = await this.list()
-    if (themes.length <= 1) throw new Error('At least one theme must remain.')
-    const fallback = settings.activeThemeId === id ? themes.find((theme) => theme.id !== id) : undefined
-    if (settings.activeThemeId === id && !fallback) throw new Error('No fallback theme is available.')
+    if (themes.length <= 1) throw new Error('至少必须保留一个主题。')
+    const fallback = themes.find((theme) => theme.id !== id)
+    if (settings.activeThemeId === id && !fallback) throw new Error('没有可用的备用主题。')
     const themeRoot = this.themeRoot(id)
     const tombstone = join(this.themesRoot, `.theme-delete-${id}-${randomUUID()}`)
     await rename(themeRoot, tombstone)
     await this.syncParentDirectory(tombstone)
     try {
-      if (fallback) await this.writeSettings({ ...settings, activeThemeId: fallback.id })
+      await this.updateSettings((current) => {
+        if (current.activeThemeId !== id) return { settings: current, result: undefined }
+        if (!fallback) throw new Error('没有可用的备用主题。')
+        return { settings: { ...current, activeThemeId: fallback.id }, result: undefined }
+      })
     } catch (error) {
       try {
         await rename(tombstone, themeRoot)
@@ -453,21 +459,24 @@ export class ProfileStore {
   }
 
   async activate(id: string): Promise<ThemeProfile> {
-    const profile = await this.get(id)
-    const settings = await this.readSettings()
-    await this.writeSettings({ ...settings, activeThemeId: id })
-    return profile
+    return this.updateSettings(async (settings) => {
+      const profile = await this.get(id)
+      return {
+        settings: settings.activeThemeId === id ? settings : { ...settings, activeThemeId: id },
+        result: profile
+      }
+    })
   }
 
   async importAsset(themeId: string, sourcePath: string, purpose: AssetPurpose): Promise<ImportedAsset> {
-    if (purpose === 'font') throw new Error('Fonts must be imported through the font importer.')
+    if (purpose === 'font') throw new Error('字体必须通过字体导入器导入。')
     await this.get(themeId)
-    if (!isAbsolute(sourcePath)) throw new Error('The selected asset path must be absolute.')
+    if (!isAbsolute(sourcePath)) throw new Error('所选素材路径必须是绝对路径。')
     const sourceStat = await stat(sourcePath)
-    if (!sourceStat.isFile() || sourceStat.size > MAX_ASSET_BYTES) throw new Error('Asset must be a file no larger than 30 MB.')
+    if (!sourceStat.isFile() || sourceStat.size > MAX_ASSET_BYTES) throw new Error('素材必须是文件且不能超过 30 MB。')
 
     const extension = extname(sourcePath).toLowerCase()
-    if (extension !== '.svg' && !RASTER_EXTENSIONS.has(extension)) throw new Error('Unsupported image format.')
+    if (extension !== '.svg' && !RASTER_EXTENSIONS.has(extension)) throw new Error('不支持该图片格式。')
     if (extension === '.gif' && purpose !== 'icon') throw new Error('GIF 仅支持作为自定义图标导入。')
     if (extension === '.gif' && sourceStat.size > MAX_ICON_GIF_BYTES) throw new Error('GIF 图标不能超过 5 MB。')
     const outputExtension = extension === '.svg' ? '.png' : extension
@@ -498,7 +507,7 @@ export class ProfileStore {
       }
 
       const metadata = importedMetadata ?? await sharp(temporary).metadata()
-      if (!metadata.width || !metadata.height) throw new Error('Imported image dimensions are unavailable.')
+      if (!metadata.width || !metadata.height) throw new Error('无法读取导入图片的尺寸。')
       await this.syncFile(temporary)
       await rename(temporary, destination)
       this.trackPendingAsset(themeId, relativePath)
@@ -522,12 +531,12 @@ export class ProfileStore {
 
   async importFontAsset(themeId: string, sourcePath: string): Promise<ImportedFontAsset> {
     await this.get(themeId)
-    if (!isAbsolute(sourcePath)) throw new Error('The selected font path must be absolute.')
+    if (!isAbsolute(sourcePath)) throw new Error('所选字体路径必须是绝对路径。')
     const sourceStat = await stat(sourcePath)
-    if (!sourceStat.isFile() || sourceStat.size > MAX_FONT_BYTES) throw new Error('Font must be a file no larger than 12 MB.')
+    if (!sourceStat.isFile() || sourceStat.size > MAX_FONT_BYTES) throw new Error('字体必须是文件且不能超过 12 MB。')
 
     const extension = extname(sourcePath).toLowerCase().slice(1) as ImportedFontFormat
-    if (!FONT_EXTENSIONS.has(extension)) throw new Error('Unsupported font format.')
+    if (!FONT_EXTENSIONS.has(extension)) throw new Error('不支持该字体格式。')
     const data = await readFile(sourcePath)
     if (data.byteLength !== sourceStat.size || data.byteLength > MAX_FONT_BYTES) throw new Error('字体文件在读取期间发生变化。')
     await validateFontBytes(data, extension)
@@ -578,12 +587,12 @@ export class ProfileStore {
 
   resolveAsset(themeId: string, asset: string): string {
     this.assertId(themeId)
-    if (!asset || isAbsolute(asset) || asset.includes('\\')) throw new Error('Asset path is invalid.')
+    if (!asset || isAbsolute(asset) || asset.includes('\\')) throw new Error('素材路径无效。')
     const root = resolve(this.themeRoot(themeId))
     const candidate = resolve(root, asset)
     const rel = relative(root, candidate)
     if (!rel || rel.startsWith('..') || isAbsolute(rel) || !rel.startsWith(`assets${requireSeparator()}`)) {
-      throw new Error('Asset path escapes the theme directory.')
+      throw new Error('素材路径超出主题目录。')
     }
     return candidate
   }
@@ -790,7 +799,7 @@ export class ProfileStore {
       this.assertId(parsed.activeThemeId)
       return await this.migrateLegacySettings(parsed.activeThemeId)
     }
-    throw new Error('Studio settings are invalid.')
+    throw new Error('Studio 设置无效。')
   }
 
   private async readJsonWithRecovery<T>(path: string, parse: (content: string) => T): Promise<T> {
@@ -1169,7 +1178,7 @@ export class ProfileStore {
     let systemThemeId = candidates.find((candidate) => candidate.hasBundledAsset)?.id
     if (!systemThemeId && this.bundledSystemAssets) systemThemeId = (await this.createSystemTheme()).id
     systemThemeId ??= candidates[0]?.id
-    if (!systemThemeId) throw new Error('Studio settings cannot identify the system theme.')
+    if (!systemThemeId) throw new Error('Studio 设置无法识别系统主题。')
     const settings: StudioSettings = {
       version: 3,
       activeThemeId: candidates.some((candidate) => candidate.id === activeThemeId) ? activeThemeId : systemThemeId,
@@ -1244,6 +1253,19 @@ export class ProfileStore {
     this.assertId(settings.systemThemeId)
     localeSchema.parse(settings.locale)
     await this.writeJsonAtomic(this.settingsPath, settings)
+  }
+
+  private updateSettings<T>(
+    update: (settings: StudioSettings) => Promise<{ settings: StudioSettings; result: T }> | { settings: StudioSettings; result: T }
+  ): Promise<T> {
+    const operation = this.settingsUpdateTail.then(async () => {
+      const current = await this.readSettings()
+      const next = await update(current)
+      if (next.settings !== current) await this.writeSettings(next.settings)
+      return next.result
+    })
+    this.settingsUpdateTail = operation.then(() => undefined, () => undefined)
+    return operation
   }
 
   private async writeJsonAtomic(path: string, value: unknown): Promise<void> {
@@ -1650,18 +1672,18 @@ export class ProfileStore {
   }
 
   private resolveWithinRoot(root: string, asset: string): string {
-    if (!asset || asset.includes('\\') || isAbsolute(asset)) throw new Error('Asset path is invalid.')
+    if (!asset || asset.includes('\\') || isAbsolute(asset)) throw new Error('素材路径无效。')
     const base = resolve(root)
     const candidate = resolve(base, asset)
     const rel = relative(base, candidate)
-    if (!rel || rel.startsWith('..') || isAbsolute(rel) || !rel.startsWith(`assets${requireSeparator()}`)) throw new Error('Asset path escapes the theme directory.')
+    if (!rel || rel.startsWith('..') || isAbsolute(rel) || !rel.startsWith(`assets${requireSeparator()}`)) throw new Error('素材路径超出主题目录。')
     return candidate
   }
 
   private themeRoot(id: string): string { this.assertId(id); return join(this.themesRoot, id) }
   private assetRoot(id: string): string { return join(this.themeRoot(id), 'assets') }
-  private assertId(id: string): void { if (!THEME_ID_PATTERN.test(id)) throw new Error('Theme ID is invalid.') }
-  private cleanName(name: unknown): string { if (typeof name !== 'string') throw new Error('Theme name must be 1-80 characters.'); const result = name.trim(); if (!result || result.length > 80) throw new Error('Theme name must be 1-80 characters.'); return result }
+  private assertId(id: string): void { if (!THEME_ID_PATTERN.test(id)) throw new Error('主题 ID 无效。') }
+  private cleanName(name: unknown): string { if (typeof name !== 'string') throw new Error('主题名称必须为 1–80 个字符。'); const result = name.trim(); if (!result || result.length > 80) throw new Error('主题名称必须为 1–80 个字符。'); return result }
   private mediaType(extension: string): string {
     if (extension === '.png') return 'image/png'
     if (extension === '.webp') return 'image/webp'
@@ -1675,7 +1697,7 @@ export class ProfileStore {
   private fontMediaType(format: ImportedFontFormat): string { return this.mediaType(`.${format}`) }
   private assertSafeSvg(source: string): void {
     if (source.length > 2_000_000 || /<(?:script|foreignObject|iframe|object|embed)\b|<!DOCTYPE|<!ENTITY|(?:href|src)\s*=\s*["']\s*(?:https?:|file:|javascript:)/i.test(source)) {
-      throw new Error('SVG contains unsupported or external content.')
+      throw new Error('SVG 包含不支持的内容或外部引用。')
     }
   }
 }

@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { SlidersHorizontal, Video, X, Zap } from 'lucide-react'
 import type { VideoAssetInspection, VideoImportDecision } from '../../shared/contracts'
-import { t } from '../../shared/i18n'
+import { t, tm, type LocalizedMessage } from '../../shared/i18n'
 import {
   MAX_VIDEO_BIT_RATE,
   MIN_VIDEO_BIT_RATE,
@@ -28,7 +28,7 @@ interface VideoTranscodeDialogProps {
   allowOriginal: boolean
   defaultMode: VideoImportDecision['mode']
   busy: boolean
-  error: string | null
+  error: LocalizedMessage | null
   onCancel: () => void
   onSubmit: (decision: VideoImportDecision) => void
 }
@@ -189,7 +189,7 @@ export function VideoTranscodeDialog({
         </div>}
         {mode === 'transcode' && settingsError && <p className="theme-dialog-error" role="alert">{settingsError}</p>}
         {mode === 'transcode' && bitRateWarning && !settingsError && <p className="video-transcode-notice">{t('目标码率高于源视频，不会增加已有画质。')}</p>}
-        {error && <p className="theme-dialog-error" role="alert">{t(error)}</p>}
+        {error && <p className="theme-dialog-error" role="alert">{tm(error)}</p>}
 
         <footer>
           <button className="secondary-command" type="button" disabled={busy} onClick={close}>{t('取消')}</button>

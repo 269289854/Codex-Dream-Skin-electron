@@ -9,6 +9,7 @@ import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
 import { createDefaultTheme } from '../src/shared/theme'
 import { builtinIconLabels, builtinIconOptions, builtinIcons } from '../src/renderer/src/icons'
+import { DEFAULT_LOCALE, setActiveLocale } from '../src/shared/i18n'
 
 const GLOBAL_KEYS = ['window', 'document', 'navigator', 'Element', 'HTMLElement', 'Node', 'Event', 'InputEvent', 'MouseEvent', 'PointerEvent'] as const
 
@@ -46,6 +47,7 @@ describe('editor appearance controls', () => {
   })
 
   afterEach(() => {
+    setActiveLocale(DEFAULT_LOCALE)
     act(() => root.unmount())
     browserWindow.close()
     for (const key of GLOBAL_KEYS) {
@@ -175,6 +177,17 @@ describe('editor appearance controls', () => {
     if (!importButton) throw new Error('Font import command is missing.')
     act(() => importButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onImport).toHaveBeenCalledOnce()
+  })
+
+  it('localizes builtin font names in the Studio language', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    setActiveLocale('en-US')
+    act(() => root.render(React.createElement(FontControl, { slot: 'brandTitle', profile, onChange: vi.fn(), onImport: vi.fn() })))
+
+    const select = container.querySelector<HTMLSelectElement>('select')
+    expect(select?.querySelector('option[value="builtin:noto-sans-sc"]')?.textContent).toBe('Noto Sans SC')
+    expect(select?.querySelector('option[value="builtin:noto-serif-sc"]')?.textContent).toBe('Noto Serif SC')
+    expect(select?.querySelector('option[value="builtin:lxgw-wenkai"]')?.textContent).toBe('LXGW WenKai')
   })
 
   it('opens custom image import from the icon selector and keeps builtin changes separate', () => {

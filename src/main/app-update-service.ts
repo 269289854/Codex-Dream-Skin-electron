@@ -1,7 +1,7 @@
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater'
 import { win32 } from 'node:path'
 import type { AppUpdateStatus } from '../shared/contracts'
-import { t } from '../shared/i18n'
+import { LocalizedError, localizedMessage } from '../shared/i18n'
 
 export const APP_UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
@@ -126,10 +126,10 @@ export class AppUpdateService {
   }
 
   async downloadUpdate(): Promise<AppUpdateStatus> {
-    if (!this.enabled) throw new Error(t('自动更新仅在已安装的正式版本中可用。'))
-    if (!this.status.availableVersion) throw new Error(t('当前没有可下载的新版本。'))
+    if (!this.enabled) throw new LocalizedError(localizedMessage('自动更新仅在已安装的正式版本中可用。'))
+    if (!this.status.availableVersion) throw new LocalizedError(localizedMessage('当前没有可下载的新版本。'))
     if (this.status.phase === 'downloaded') return this.getStatus()
-    if (this.downloadBusy || this.status.phase === 'downloading') throw new Error(t('更新正在下载中。'))
+    if (this.downloadBusy || this.status.phase === 'downloading') throw new LocalizedError(localizedMessage('更新正在下载中。'))
 
     this.downloadBusy = true
     this.patch({ phase: 'downloading', downloadPercent: 0, error: null })
@@ -137,26 +137,27 @@ export class AppUpdateService {
       await this.driver.downloadUpdate()
       return this.getStatus()
     } catch {
-      this.patch({ phase: 'error', downloadPercent: null, error: t('更新下载失败，请重试。') })
-      throw new Error(t('更新下载失败，请重试。'))
+      const error = localizedMessage('更新下载失败，请重试。')
+      this.patch({ phase: 'error', downloadPercent: null, error })
+      throw new LocalizedError(error)
     } finally {
       this.downloadBusy = false
     }
   }
 
   async checkForUpdates(): Promise<AppUpdateStatus> {
-    if (!this.enabled) throw new Error(t('仅正式安装版支持检查更新。'))
+    if (!this.enabled) throw new LocalizedError(localizedMessage('仅正式安装版支持检查更新。'))
     return this.performCheck(true)
   }
 
   installUpdate(): void {
-    if (!this.enabled) throw new Error(t('自动更新仅在已安装的正式版本中可用。'))
-    if (this.status.phase !== 'downloaded') throw new Error(t('更新尚未下载完成。'))
+    if (!this.enabled) throw new LocalizedError(localizedMessage('自动更新仅在已安装的正式版本中可用。'))
+    if (this.status.phase !== 'downloaded') throw new LocalizedError(localizedMessage('更新尚未下载完成。'))
     this.driver.installUpdate()
   }
 
   private async performCheck(reportErrors: boolean): Promise<AppUpdateStatus> {
-    if (!this.started) throw new Error(t('更新服务尚未启动。'))
+    if (!this.started) throw new LocalizedError(localizedMessage('更新服务尚未启动。'))
     if (this.checkingBusy || this.downloadBusy || this.status.phase === 'downloading' || this.status.phase === 'downloaded') return this.getStatus()
     this.checkingBusy = true
     this.reportCheckErrors = reportErrors
@@ -167,7 +168,7 @@ export class AppUpdateService {
       return this.getStatus()
     } catch {
       if (!this.checkErrorHandled) this.handleCheckError(reportErrors)
-      if (reportErrors) throw new Error(t('检查更新失败，请稍后重试。'))
+      if (reportErrors) throw new LocalizedError(localizedMessage('检查更新失败，请稍后重试。'))
       return this.getStatus()
     } finally {
       this.checkingBusy = false
@@ -178,7 +179,7 @@ export class AppUpdateService {
 
   private handleDriverError(): void {
     if (this.downloadBusy || this.status.phase === 'downloading') {
-      this.patch({ phase: 'error', downloadPercent: null, error: t('更新下载失败，请重试。') })
+      this.patch({ phase: 'error', downloadPercent: null, error: localizedMessage('更新下载失败，请重试。') })
       return
     }
     this.checkErrorHandled = true
@@ -193,7 +194,7 @@ export class AppUpdateService {
     this.patch({
       phase: reportError ? 'error' : 'idle',
       downloadPercent: null,
-      error: reportError ? t('检查更新失败，请稍后重试。') : null
+      error: reportError ? localizedMessage('检查更新失败，请稍后重试。') : null
     })
   }
 

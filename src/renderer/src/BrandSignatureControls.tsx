@@ -35,7 +35,7 @@ export function BrandSignatureControls({ profile, assets, mediaBusy = false, onC
         {mediaUrl ? <img src={mediaUrl} alt={t('品牌签名{media}', { media: mediaLabel })} /> : <Image size={20} />}
         <span><Upload size={13} />{mediaUrl ? t('更换{media}', { media: mediaLabel }) : t('选择{media}', { media: mediaLabel })}</span>
       </button>
-      <Range label={`${mediaLabel}宽度`} min={32} max={190} step={1} suffix="px" value={config.mediaWidth} onChange={(mediaWidth) => onChange((next) => { next.brandSignature.mediaWidth = mediaWidth }, 'brand-signature-media-width')} onChangeEnd={onInteractionEnd} />
+      <Range label={activeMediaMode === 'gif' ? 'GIF 宽度' : '图片宽度'} min={32} max={190} step={1} suffix="px" value={config.mediaWidth} onChange={(mediaWidth) => onChange((next) => { next.brandSignature.mediaWidth = mediaWidth }, 'brand-signature-media-width')} onChangeEnd={onInteractionEnd} />
       {config.source && <button className="secondary-command brand-signature-remove" type="button" onClick={() => onChange((next) => { next.brandSignature.source = null; next.brandSignature.mode = 'text' })}><Trash2 size={14} />{t('移除{media}', { media: mediaLabel })}</button>}
     </>}
   </div>

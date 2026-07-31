@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureIpcResult } from '../src/shared/ipc-result'
-import { DEFAULT_LOCALE, getActiveLocale, normalizeLocale, setActiveLocale, t, translate } from '../src/shared/i18n'
+import { DEFAULT_LOCALE, getActiveLocale, joinLocalizedMessages, localizedMessage, normalizeLocale, setActiveLocale, t, tm, translate, translateLocalizedMessage } from '../src/shared/i18n'
 
 afterEach(() => {
   setActiveLocale(DEFAULT_LOCALE)
@@ -31,12 +31,41 @@ describe('internationalization', () => {
     expect(translate('en-US', '注入中')).toBe('Injecting')
     expect(translate('en-US', '主题素材不存在: assets/hero.png')).toBe('The theme asset does not exist: assets/hero.png')
     expect(translate('en-US', 'Codex 未在端口 9335 暴露经过验证的本地主题端点。')).toBe('Codex did not expose a verified local theme endpoint on port 9335.')
+    expect(translate('en-US', '素材必须是文件且不能超过 30 MB。')).toBe('The asset must be a file no larger than 30 MB.')
+    expect(translate('en-US', '保存的运行会话无效。')).toBe('The saved runtime session is invalid.')
+    expect(translate('en-US', 'PowerShell 退出，代码 7。')).toBe('PowerShell exited with code 7.')
+    expect(translate('en-US', 'Studio 版本无效。')).toBe('The Studio version is invalid.')
+    expect(translate('en-US', '主题列表')).toBe('Themes')
+    expect(translate('en-US', '属性')).toBe('Properties')
+    expect(translate('en-US', '快捷编辑')).toBe('Quick Edit')
+    expect(translate('en-US', '字体文件')).toBe('Fonts')
+    expect(translate('en-US', '图片和视频')).toBe('Images and Video')
   })
 
-  it('serializes IPC failures in the active language', async () => {
+  it('retranslates structured messages with nested values and joined parts', () => {
+    const message = joinLocalizedMessages([
+      localizedMessage('主题已注入 {count} 个 Codex 页面', { count: 2 }),
+      localizedMessage('正在生成 {width}×{height} / {frameRate} FPS / {bitRate} 视频', {
+        width: 1920,
+        height: 1080,
+        frameRate: 60,
+        bitRate: localizedMessage('自动码率')
+      })
+    ])
+
+    expect(translateLocalizedMessage('zh-CN', message)).toContain('主题已注入 2 个 Codex 页面；正在生成 1920×1080 / 60 FPS / 自动码率 视频')
+    expect(translateLocalizedMessage('en-US', message)).toContain('2')
+    expect(translateLocalizedMessage('en-US', message)).toContain('Automatic bit rate')
+    setActiveLocale('en-US')
+    expect(tm(message)).toBe(translateLocalizedMessage('en-US', message))
+    setActiveLocale('zh-CN')
+    expect(tm(message)).toBe(translateLocalizedMessage('zh-CN', message))
+  })
+
+  it('preserves stable IPC error sources for renderer-side translation', async () => {
     setActiveLocale('en-US')
     await expect(captureIpcResult(() => {
       throw new Error('主题素材不存在: assets/hero.png')
-    })).resolves.toEqual({ ok: false, error: 'The theme asset does not exist: assets/hero.png' })
+    })).resolves.toEqual({ ok: false, error: { source: '主题素材不存在: assets/hero.png' } })
   })
 })

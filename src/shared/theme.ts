@@ -1330,7 +1330,7 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     migrated.resetColors = { ...migrated.colors }
     return themeProfileSchema.parse(migrated)
   }
-  throw new Error('Unsupported theme profile version.')
+  throw new Error('不支持该主题配置版本。')
 }
 
 function migrateVersionNine(legacy: z.infer<typeof versionNineThemeSchema>): ThemeProfile {

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PreviewQuickEditor } from '../src/renderer/src/PreviewQuickEditor'
 import { PREVIEW_TARGETS, type PreviewTargetDefinition } from '../src/renderer/src/preview-editing'
 import { createDefaultTheme, type ThemeProfile } from '../src/shared/theme'
+import { DEFAULT_LOCALE, setActiveLocale } from '../src/shared/i18n'
 
 const GLOBAL_KEYS = ['window', 'document', 'navigator', 'Element', 'HTMLElement', 'Node', 'Event', 'MouseEvent'] as const
 
@@ -36,6 +37,7 @@ describe('preview quick editor', () => {
   })
 
   afterEach(() => {
+    setActiveLocale(DEFAULT_LOCALE)
     act(() => root.unmount())
     browserWindow.close()
     for (const key of GLOBAL_KEYS) {
@@ -75,6 +77,16 @@ describe('preview quick editor', () => {
       onClose: vi.fn()
     })))
   }
+
+  it('localizes the quick editor eyebrow', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    renderEditor(PREVIEW_TARGETS['palette-project-bar'], profile)
+    expect(container.querySelector('.preview-edit-popover-header span')?.textContent).toBe('快捷编辑')
+
+    setActiveLocale('en-US')
+    renderEditor(PREVIEW_TARGETS['palette-project-bar'], profile)
+    expect(container.querySelector('.preview-edit-popover-header span')?.textContent).toBe('Quick Edit')
+  })
 
   it('shows only the appearance tokens used by the selected region and opens full settings', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
@@ -286,6 +298,26 @@ describe('preview quick editor', () => {
     if (!remove) throw new Error('Brand signature remove command is missing.')
     act(() => remove.click())
     expect(profile.brandSignature).toEqual({ mode: 'text', source: null, mediaWidth: 144 })
+  })
+
+  it('uses complete localized width labels for brand signature image and GIF modes', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    setActiveLocale('en-US')
+    profile.brandSignature = {
+      mode: 'image',
+      source: { asset: 'assets/signature.png', kind: 'image', mimeType: 'image/png' },
+      mediaWidth: 96
+    }
+    renderEditor(PREVIEW_TARGETS['copy-brand-signature'], profile)
+    expect([...container.querySelectorAll('.range-row')].some((row) => row.querySelector('span')?.textContent === 'Image width')).toBe(true)
+
+    profile.brandSignature = {
+      mode: 'gif',
+      source: { asset: 'assets/signature.gif', kind: 'image', mimeType: 'image/gif' },
+      mediaWidth: 96
+    }
+    renderEditor(PREVIEW_TARGETS['copy-brand-signature'], profile)
+    expect([...container.querySelectorAll('.range-row')].some((row) => row.querySelector('span')?.textContent === 'GIF width')).toBe(true)
   })
 
   it('sets independent home copy fonts and restores global inheritance', () => {

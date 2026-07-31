@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Check, Palette, Plus, X } from 'lucide-react'
 import { DEFAULT_THEME_COLORS, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeColors } from '../../shared/theme'
-import { t } from '../../shared/i18n'
+import { localizedMessageFrom, t, tm, type LocalizedMessage } from '../../shared/i18n'
 import { ThemeColorControl } from './editor-controls'
 
 const THEME_COLOR_KEYS = ['surface', 'ink', 'accent', 'pink', 'lavender', 'border', 'success', 'danger'] as const satisfies ReadonlyArray<keyof ThemeColors>
@@ -19,17 +19,13 @@ export function themeNameError(name: string): string | null {
   return null
 }
 
-function messageOf(reason: unknown): string {
-  return t(reason instanceof Error ? reason.message : String(reason))
-}
-
 export function CreateThemeDialog({ onClose, onCreate }: CreateThemeDialogProps): React.JSX.Element {
   const [name, setName] = useState('')
   const [nameTouched, setNameTouched] = useState(false)
   const [paletteId, setPaletteId] = useState<string>(THEME_COLOR_PRESETS[0].id)
   const [colors, setColors] = useState<ThemeColors>({ ...DEFAULT_THEME_COLORS })
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<LocalizedMessage | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const submittingRef = useRef(false)
   const nameValidationError = themeNameError(name)
@@ -66,7 +62,7 @@ export function CreateThemeDialog({ onClose, onCreate }: CreateThemeDialogProps)
     try {
       await onCreate({ name: name.trim(), colors: { ...colors } })
     } catch (reason) {
-      setError(messageOf(reason))
+      setError(localizedMessageFrom(reason))
     } finally {
       submittingRef.current = false
       setBusy(false)
@@ -97,7 +93,7 @@ export function CreateThemeDialog({ onClose, onCreate }: CreateThemeDialogProps)
           {paletteId === 'custom' && <section className="create-theme-custom-colors" aria-label={t('自定义颜色')}>
             {THEME_COLOR_KEYS.map((key) => <div className="create-theme-color" key={key}><ThemeColorControl colorKey={key} value={colors[key]} onChange={(value) => setColors((current) => ({ ...current, [key]: value }))} /></div>)}
           </section>}
-          {visibleError && <p className="theme-dialog-error" id="create-theme-error" role="alert">{t(visibleError)}</p>}
+          {visibleError && <p className="theme-dialog-error" id="create-theme-error" role="alert">{tm(visibleError)}</p>}
           <footer><button className="secondary-command" type="button" disabled={busy} onClick={close}>{t('取消')}</button><button className="primary-button" type="submit" disabled={Boolean(nameValidationError) || busy} onClick={(event) => { event.preventDefault(); void submit() }}><Plus size={14} />{busy ? t('创建中') : t('创建主题')}</button></footer>
         </form>
       </section>

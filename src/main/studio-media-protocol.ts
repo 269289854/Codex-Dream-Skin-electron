@@ -71,7 +71,7 @@ export class StudioMediaProtocol {
   }
 
   private assertAvailable(themeId: string): void {
-    if (this.suspendedThemes.has(themeId)) throw new Error('Theme media is unavailable.')
+    if (this.suspendedThemes.has(themeId)) throw new Error('主题媒体暂时不可用。')
   }
 
   private trackStream(themeId: string, stream: ReadStream): void {

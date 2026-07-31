@@ -1,4 +1,13 @@
 import { EN_ERROR_MESSAGES, translateEnglishError } from './i18n-errors'
+import type { LocalizedMessage } from './localized-message'
+
+export {
+  LocalizedError,
+  joinLocalizedMessages,
+  localizedMessage,
+  localizedMessageFrom,
+  type LocalizedMessage
+} from './localized-message'
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'en-US'] as const
 export const DEFAULT_LOCALE = 'zh-CN' as const
@@ -194,6 +203,11 @@ const EN_MESSAGES: Readonly<Record<string, string>> = {
   '移除 GIF': 'Remove GIF',
   '图片': 'Image',
   '视频': 'Video',
+  '图片文件': 'Images',
+  '图片和 GIF': 'Images and GIF',
+  '视频文件': 'Video',
+  '图片和视频': 'Images and Video',
+  '字体文件': 'Fonts',
   '文字': 'Text',
   '颜色': 'Color',
   '纯色': 'Solid',
@@ -420,6 +434,12 @@ const EN_MESSAGES: Readonly<Record<string, string>> = {
   '视频优化完成': 'Video optimization complete',
   '视频优化失败': 'Video optimization failed',
   '主题': 'Theme',
+  '主题列表': 'Themes',
+  '属性': 'Properties',
+  '快捷编辑': 'Quick Edit',
+  'Windows 主题编辑器': 'Windows Theme Editor',
+  'macOS 主题编辑器': 'macOS Theme Editor',
+  '主题编辑器': 'Theme Editor',
   '正在导出主题': 'Exporting theme',
   '主题导出完成': 'Theme export complete',
   '主题导出失败': 'Theme export failed',
@@ -799,4 +819,21 @@ function translateCompound(source: string): string | null {
 
 export function t(source: string, values?: TranslationValues): string {
   return translate(activeLocale, source, values)
+}
+
+export function translateLocalizedMessage(locale: SupportedLocale, message: LocalizedMessage): string {
+  if ('parts' in message) {
+    return message.parts.map((part) => translateLocalizedMessage(locale, part)).join(translate(locale, message.separator))
+  }
+  const values = message.values
+    ? Object.fromEntries(Object.entries(message.values).map(([key, value]) => [
+        key,
+        typeof value === 'object' ? translateLocalizedMessage(locale, value) : value
+      ]))
+    : undefined
+  return translate(locale, message.source, values)
+}
+
+export function tm(message: LocalizedMessage | string): string {
+  return typeof message === 'string' ? t(message) : translateLocalizedMessage(activeLocale, message)
 }

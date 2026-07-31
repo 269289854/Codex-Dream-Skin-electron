@@ -6,6 +6,8 @@ import { createDefaultTheme } from '../src/shared/theme'
 import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
 import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
 import { gifPosterAssetKey } from '../src/shared/gif'
+import type { RuntimeStatus } from '../src/shared/contracts'
+import { translateLocalizedMessage } from '../src/shared/i18n'
 
 const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
@@ -13,6 +15,14 @@ vi.mock('../src/main/powershell', () => ({ runPowerShell: runPowerShellMock }))
 
 import { CodexInstallationIdentityError, type CodexPlatformDriver, type CodexStartResult } from '../src/main/codex-platform'
 import { CodexService } from '../src/main/codex-service'
+
+function localizedStatus(status: RuntimeStatus): Omit<RuntimeStatus, 'message' | 'lastError'> & { message: string; lastError: string | null } {
+  return {
+    ...status,
+    message: translateLocalizedMessage('zh-CN', status.message),
+    lastError: status.lastError ? translateLocalizedMessage('zh-CN', status.lastError) : null
+  }
+}
 
 const detection = {
   found: true,
@@ -238,7 +248,7 @@ describe('CodexService operation queue', () => {
     }
     ;(service as unknown as { watcher: typeof watcher }).watcher = watcher
 
-    await expect(service.verify()).resolves.toMatchObject({
+    await expect(service.verify().then(localizedStatus)).resolves.toMatchObject({
       phase: 'active',
       connected: false,
       targetCount: 0,
@@ -289,7 +299,7 @@ describe('CodexService operation queue', () => {
     expect(internals.activeSession).toBe(activeSession)
     expect(internals.activeSessionGeneration).toBe(2)
     expect(service.isActive()).toBe(true)
-    expect(service.getStatus()).toMatchObject({
+    expect(localizedStatus(service.getStatus())).toMatchObject({
       phase: 'active',
       lastError: 'Codex 页面主题清理失败',
       message: '停止注入失败，当前主题会话仍在运行，可重试恢复'
@@ -342,7 +352,7 @@ describe('CodexService operation queue', () => {
     expect(internals.activeSession).toBe(activeSession)
     expect(internals.activeSessionGeneration).toBe(2)
     expect(service.isActive()).toBe(true)
-    expect(service.getStatus()).toMatchObject({
+    expect(localizedStatus(service.getStatus())).toMatchObject({
       phase: 'active',
       lastError: 'Codex 页面主题清理失败',
       message: '恢复失败，当前主题会话仍在运行，可重试恢复'
@@ -442,7 +452,7 @@ describe('CodexService operation queue', () => {
 
     expect(driver.start).toHaveBeenCalledWith(9335, true, detection.installationId)
     expect(internals.replaceWatcher).toHaveBeenCalledWith('browser-fallback', payload)
-    expect(service.getStatus()).toMatchObject({ phase: 'active', port: 9341 })
+    expect(localizedStatus(service.getStatus())).toMatchObject({ phase: 'active', port: 9341 })
     expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({
       themeId,
       port: 9341,
@@ -497,7 +507,7 @@ describe('CodexService operation queue', () => {
     expect(internals.watcher).toBeNull()
     expect(internals.activeThemeId).toBeNull()
     expect(internals.activeSession).toBeNull()
-    expect(service.getStatus()).toMatchObject({
+    expect(localizedStatus(service.getStatus())).toMatchObject({
       phase: 'error',
       lastError: 'session write failed',
       message: '自动恢复失败，请重新启动主题'
@@ -638,7 +648,7 @@ describe('CodexService operation queue', () => {
     expect(internals.activeSessionGeneration).toBe(2)
     expect(internals.hasCurrentActiveSession()).toBe(true)
     expect(driver.start).not.toHaveBeenCalled()
-    expect(service.getStatus()).toMatchObject({
+    expect(localizedStatus(service.getStatus())).toMatchObject({
       phase: 'active',
       lastError: 'compile failed',
       message: '新主题启动失败，原主题会话仍在运行'
@@ -681,7 +691,7 @@ describe('CodexService operation queue', () => {
     expect(internals.watcher).toBeNull()
     expect(internals.activeThemeId).toBeNull()
     expect(internals.activeSession).toBeNull()
-    expect(service.getStatus()).toMatchObject({ phase: 'error', lastError: 'session write failed' })
+    expect(localizedStatus(service.getStatus())).toMatchObject({ phase: 'error', lastError: 'session write failed' })
     await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
     await rm(root, { recursive: true, force: true })
   })
@@ -756,7 +766,7 @@ describe('CodexService operation queue', () => {
     expect(internals.activeThemeId).toBe(oldThemeId)
     expect(internals.activeSession).toBe(restoredSession)
     expect(internals.activeSessionGeneration).toBe(2)
-    expect(service.getStatus()).toMatchObject({
+    expect(localizedStatus(service.getStatus())).toMatchObject({
       phase: 'active',
       message: '新主题启动失败，已恢复原主题会话'
     })
@@ -861,7 +871,7 @@ describe('CodexService operation queue', () => {
 
     await expect(service.restore(true)).rejects.toThrow('未找到可恢复的 Codex 配置备份')
 
-    expect(service.getStatus()).toMatchObject({
+    expect(localizedStatus(service.getStatus())).toMatchObject({
       phase: 'error',
       backupAvailable: false,
       lastError: '未找到可恢复的 Codex 配置备份'
@@ -893,7 +903,7 @@ describe('CodexService operation queue', () => {
 
     const status = await service.restore(true)
 
-    expect(status).toMatchObject({
+    expect(localizedStatus(status)).toMatchObject({
       phase: 'stopped',
       backupAvailable: false,
       lastError: 'Codex launch failed',
@@ -926,7 +936,7 @@ describe('CodexService operation queue', () => {
 
     const status = await service.restore(true)
 
-    expect(status).toMatchObject({
+    expect(localizedStatus(status)).toMatchObject({
       phase: 'stopped',
       backupAvailable,
       lastError: 'Backup archive failed',
@@ -951,7 +961,7 @@ describe('CodexService operation queue', () => {
       installationId: 'com.openai.codex:WRONGTEAM:/Applications/Codex.app'
     })}\n`)
 
-    await expect(service.restore(true)).resolves.toMatchObject({
+    await expect(service.restore(true).then(localizedStatus)).resolves.toMatchObject({
       phase: 'stopped',
       backupAvailable: false,
       message: expect.stringContaining('未自动重启 Codex')
@@ -973,10 +983,10 @@ describe('CodexService operation queue', () => {
     const status = await service.restore(true)
 
     expect(driver.restore).toHaveBeenCalledWith(false, undefined)
-    expect(status).toMatchObject({
+    expect(localizedStatus(status)).toMatchObject({
       phase: 'stopped',
       backupAvailable: false,
-      lastError: 'Saved runtime session is invalid.',
+      lastError: '保存的运行会话无效。',
       message: expect.stringContaining('未自动重启 Codex')
     })
     await expect(readFile(join(root, 'runtime', 'session.json'))).rejects.toMatchObject({ code: 'ENOENT' })
@@ -995,7 +1005,7 @@ describe('CodexService operation queue', () => {
     const status = await service.restore(true)
 
     expect(driver.restore).toHaveBeenCalledWith(false, undefined)
-    expect(status).toMatchObject({
+    expect(localizedStatus(status)).toMatchObject({
       phase: 'stopped',
       lastError: 'access denied',
       message: expect.stringContaining('未自动重启 Codex')
@@ -1029,7 +1039,7 @@ describe('CodexService operation queue', () => {
 
     expect(driver.restore).toHaveBeenNthCalledWith(1, true, oldInstallationId)
     expect(driver.restore).toHaveBeenNthCalledWith(2, false)
-    expect(status).toMatchObject({
+    expect(localizedStatus(status)).toMatchObject({
       phase: 'stopped',
       backupAvailable: false,
       message: expect.stringContaining('安装身份已失效')
@@ -1061,7 +1071,7 @@ describe('CodexService operation queue', () => {
 
     expect(driver.restore).toHaveBeenCalledOnce()
     expect(driver.restore).toHaveBeenCalledWith(true, installationId)
-    expect(status).toMatchObject({
+    expect(localizedStatus(status)).toMatchObject({
       phase: 'stopped',
       backupAvailable: false,
       lastError: 'session cleanup denied',
@@ -1125,7 +1135,7 @@ describe('CodexService operation queue', () => {
       expect.objectContaining({ backupAvailable: false }),
       activeSession.installationId
     )
-    expect(service.getStatus()).toMatchObject({ phase: 'active', backupAvailable: false })
+    expect(localizedStatus(service.getStatus())).toMatchObject({ phase: 'active', backupAvailable: false })
     await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain(themeId)
     await rm(root, { recursive: true, force: true })
   })
@@ -1222,7 +1232,7 @@ describe('CodexService operation queue', () => {
 
     expect(internals.activeThemeId).toBe(themeId)
     expect(internals.activeSessionGeneration).toBe(2)
-    expect(service.getStatus()).toMatchObject({
+    expect(localizedStatus(service.getStatus())).toMatchObject({
       phase: 'active',
       lastError: 'compile failed',
       message: '重新注入失败，原主题会话仍在运行'
@@ -1297,7 +1307,7 @@ describe('CodexService operation queue', () => {
     expect(internals.activeThemeId).toBe(oldThemeId)
     expect(internals.activePayload).toEqual(oldPayload)
     expect(internals.activeSessionGeneration).toBe(2)
-    expect(service.getStatus()).toMatchObject({ phase: 'active', message: '重新注入失败，已恢复原主题会话' })
+    expect(localizedStatus(service.getStatus())).toMatchObject({ phase: 'active', message: '重新注入失败，已恢复原主题会话' })
     expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({ themeId: oldThemeId })
     await rm(root, { recursive: true, force: true })
   })
@@ -1458,7 +1468,7 @@ describe('CodexService operation queue', () => {
     await service.resume()
 
     expect(driver.verifySession).toHaveBeenCalledWith(9335, 'browser-mounted', macDetection, savedInstallationId)
-    expect(service.getStatus()).toMatchObject({ phase: 'active', port: 9335 })
+    expect(localizedStatus(service.getStatus())).toMatchObject({ phase: 'active', port: 9335 })
     expect(JSON.parse(await readFile(join(root, 'runtime', 'session.json'), 'utf8'))).toMatchObject({
       themeId,
       installationId: savedInstallationId

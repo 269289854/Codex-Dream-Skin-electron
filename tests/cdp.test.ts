@@ -19,8 +19,8 @@ describe('CDP endpoint validation', () => {
   it('allows multi-font runtime payloads while retaining the size guard', () => {
     const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
     watcher.setPayload('x'.repeat(20_000_001), runtimeVersion)
-    expect(() => watcher.setPayload('x'.repeat(MAX_THEME_PAYLOAD_BYTES + 1), runtimeVersion)).toThrow('Theme payload is invalid.')
-    expect(() => watcher.setPayload('true', 'invalid')).toThrow('Theme payload is invalid.')
+    expect(() => watcher.setPayload('x'.repeat(MAX_THEME_PAYLOAD_BYTES + 1), runtimeVersion)).toThrow('主题载荷无效。')
+    expect(() => watcher.setPayload('true', 'invalid')).toThrow('主题载荷无效。')
   })
 
   it('only classifies closed endpoints and page targets as unavailable', () => {

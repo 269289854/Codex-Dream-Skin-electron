@@ -67,6 +67,45 @@ describe('ProfileStore', () => {
     })
   })
 
+  it('serializes locale and active-theme field updates without losing either change', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-settings-race-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const custom = await store.create({ name: '并发主题', colors: DEFAULT_THEME_COLORS })
+    const internals = store as unknown as {
+      readSettings: () => Promise<{ version: 3; activeThemeId: string; systemThemeId: string; locale: 'zh-CN' | 'en-US' }>
+    }
+    const readSettings = internals.readSettings.bind(store)
+    let readCount = 0
+    let releaseFirstRead: () => void = () => undefined
+    let signalFirstRead: () => void = () => undefined
+    const firstReadStarted = new Promise<void>((resolve) => { signalFirstRead = resolve })
+    const firstReadBlocked = new Promise<void>((resolve) => { releaseFirstRead = resolve })
+    vi.spyOn(internals, 'readSettings').mockImplementation(async () => {
+      const settings = await readSettings()
+      readCount += 1
+      if (readCount === 1) {
+        signalFirstRead()
+        await firstReadBlocked
+      }
+      return settings
+    })
+
+    const localeUpdate = store.setLocale('en-US')
+    await firstReadStarted
+    const activation = store.activate(custom.id)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(readCount).toBe(1)
+    releaseFirstRead()
+    await Promise.all([localeUpdate, activation])
+
+    expect(JSON.parse(await readFile(join(root, 'settings.json'), 'utf8'))).toMatchObject({
+      activeThemeId: custom.id,
+      locale: 'en-US'
+    })
+  })
+
   it('migrates version two settings with the Chinese default locale', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-locale-v2-'))
     roots.push(root)
@@ -188,8 +227,8 @@ describe('ProfileStore', () => {
         paints: { sidebarProjectsTitleBackground: { kind: 'solid', color: 'transparent' }, sidebarProjectsTitleHoverBackground: { kind: 'solid', color: '#abcdef' } }
       }
     })
-    expect(() => store.resolveAsset(created.id, '../outside.png')).toThrow('escapes')
-    expect(() => store.resolveAsset(created.id, 'theme.json')).toThrow('escapes')
+    expect(() => store.resolveAsset(created.id, '../outside.png')).toThrow('素材路径超出主题目录。')
+    expect(() => store.resolveAsset(created.id, 'theme.json')).toThrow('素材路径超出主题目录。')
 
     const profileFile = await readFile(join(root, 'themes', created.id, 'theme.json'), 'utf8')
     expect(profileFile).toContain('中文主题')
@@ -1049,10 +1088,10 @@ describe('ProfileStore', () => {
 
     await expect(store.duplicate({}, '非法主题')).rejects.toThrow()
     await expect(store.duplicate({ ...profile, id: '00000000-0000-4000-8000-000000000099' }, '未知主题')).rejects.toThrow()
-    await expect(store.duplicate({ ...profile, hero: { ...profile.hero, sourceImage: '../outside.png' } }, '越界主题')).rejects.toThrow('escapes')
+    await expect(store.duplicate({ ...profile, hero: { ...profile.hero, sourceImage: '../outside.png' } }, '越界主题')).rejects.toThrow('素材路径超出主题目录。')
     await expect(store.duplicate({ ...profile, hero: { ...profile.hero, sourceImage: 'assets/missing.png' } }, '缺失素材')).rejects.toThrow()
-    await expect(store.duplicate(profile, 123)).rejects.toThrow('1-80')
-    await expect(store.duplicate(profile, 'x'.repeat(81))).rejects.toThrow('1-80')
+    await expect(store.duplicate(profile, 123)).rejects.toThrow('主题名称必须为 1–80 个字符。')
+    await expect(store.duplicate(profile, 'x'.repeat(81))).rejects.toThrow('主题名称必须为 1–80 个字符。')
 
     expect((await readdir(store.themesRoot)).sort()).toEqual(originalDirectories)
   })
@@ -1076,7 +1115,7 @@ describe('ProfileStore', () => {
     await expect(store.importFontAsset(profile.id, collection)).rejects.toThrow('集合')
     const unsupported = join(root, 'collection.ttc')
     await writeFile(unsupported, Buffer.from('ttcf'))
-    await expect(store.importFontAsset(profile.id, unsupported)).rejects.toThrow('Unsupported')
+    await expect(store.importFontAsset(profile.id, unsupported)).rejects.toThrow('不支持该字体格式。')
     const oversized = join(root, 'large.woff')
     await writeFile(oversized, Buffer.from('wOFF'))
     await truncate(oversized, 12 * 1024 * 1024 + 1)

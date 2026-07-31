@@ -6,6 +6,7 @@ import {
   type AppUpdateDriver
 } from '../src/main/app-update-service'
 import type { AppUpdateStatus } from '../src/shared/contracts'
+import { localizedMessage } from '../src/shared/i18n'
 
 type DriverHandlers = Parameters<AppUpdateDriver['start']>[0]
 
@@ -109,7 +110,7 @@ describe('AppUpdateService', () => {
     driver.checkForUpdates.mockRejectedValueOnce(new Error('network unavailable'))
 
     await expect(service.checkForUpdates()).rejects.toThrow('检查更新失败，请稍后重试。')
-    expect(service.getStatus()).toEqual({ phase: 'error', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: '检查更新失败，请稍后重试。' })
+    expect(service.getStatus()).toEqual({ phase: 'error', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: localizedMessage('检查更新失败，请稍后重试。') })
 
     driver.checkForUpdates.mockImplementationOnce(async () => { driver.handlers?.notAvailable() })
     await expect(service.checkForUpdates()).resolves.toMatchObject({ phase: 'up-to-date', error: null })
@@ -174,7 +175,7 @@ describe('AppUpdateService', () => {
     driver.handlers?.available('1.1.0')
     driver.downloadUpdate.mockRejectedValueOnce(new Error('download unavailable'))
     await expect(service.downloadUpdate()).rejects.toThrow('更新下载失败，请重试。')
-    expect(service.getStatus()).toEqual({ phase: 'error', currentVersion: '1.0.3', availableVersion: '1.1.0', downloadPercent: null, error: '更新下载失败，请重试。' })
+    expect(service.getStatus()).toEqual({ phase: 'error', currentVersion: '1.0.3', availableVersion: '1.1.0', downloadPercent: null, error: localizedMessage('更新下载失败，请重试。') })
 
     driver.downloadUpdate.mockImplementationOnce(async () => { driver.handlers?.downloaded('1.1.0') })
     await expect(service.downloadUpdate()).resolves.toMatchObject({ phase: 'downloaded', downloadPercent: 100 })

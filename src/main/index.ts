@@ -15,7 +15,7 @@ import { captureIpcResult } from '../shared/ipc-result'
 import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole, VideoSourceSelection } from '../shared/contracts'
 import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, assertVideoImportDecisionCompatible, resolveVideoOutputSize, videoImportDecisionSchema, videoTranscodeSettingsSchema, type VideoTranscodeSettings } from '../shared/video-transcode'
-import { setActiveLocale, t } from '../shared/i18n'
+import { localizedMessage, localizedMessageFrom, setActiveLocale, t, type LocalizedMessage } from '../shared/i18n'
 
 const { autoUpdater } = electronUpdater
 
@@ -143,7 +143,7 @@ function configureApplicationMenu(): void {
 
 function registerIpc(): void {
   ipcMain.handle('app:get-info', () => ({ version: app.getVersion(), platform: process.platform }))
-  ipcMain.handle('app:get-locale', () => store.getLocale())
+  ipcMain.handle('app:get-locale', () => captureIpcResult(() => store.getLocale()))
   ipcMain.handle('app:set-locale', (_event, locale: unknown) => captureIpcResult(async () => {
     const saved = await store.setLocale(locale)
     setActiveLocale(saved)
@@ -160,32 +160,32 @@ function registerIpc(): void {
   ipcMain.handle('app:check-for-updates', () => captureIpcResult(() => appUpdateService.checkForUpdates()))
   ipcMain.handle('app:download-update', () => captureIpcResult(() => appUpdateService.downloadUpdate()))
   ipcMain.handle('app:install-update', () => captureIpcResult(() => appUpdateService.installUpdate()))
-  ipcMain.handle('themes:list', () => store.list())
-  ipcMain.handle('themes:get', (_event, id: string) => store.get(id))
-  ipcMain.handle('themes:create', (_event, input: unknown) => store.create(input))
-  ipcMain.handle('themes:get-default', (_event, id: string) => store.getDefault(id))
-  ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => store.duplicate(profile, name))
-  ipcMain.handle('themes:update', (_event, profile: unknown) => store.update(profile))
+  ipcMain.handle('themes:list', () => captureIpcResult(() => store.list()))
+  ipcMain.handle('themes:get', (_event, id: string) => captureIpcResult(() => store.get(id)))
+  ipcMain.handle('themes:create', (_event, input: unknown) => captureIpcResult(() => store.create(input)))
+  ipcMain.handle('themes:get-default', (_event, id: string) => captureIpcResult(() => store.getDefault(id)))
+  ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => captureIpcResult(() => store.duplicate(profile, name)))
+  ipcMain.handle('themes:update', (_event, profile: unknown) => captureIpcResult(() => store.update(profile)))
   ipcMain.handle('themes:delete', (_event, id: unknown) => captureIpcResult(async () => {
-    if (typeof id !== 'string') throw new Error(t('主题 ID 无效。'))
+    if (typeof id !== 'string') throw new Error('主题 ID 无效。')
     try {
       await studioMediaProtocol.withThemeSuspended(id, () => store.delete(id))
     } catch (reason) {
       throw toThemeDeleteError(reason)
     }
   }))
-  ipcMain.handle('themes:activate', (_event, id: string) => store.activate(id))
-  ipcMain.handle('themes:compile', (_event, id: string) => store.compile(id))
-  ipcMain.handle('assets:select', async (_event, themeId: unknown, purpose: unknown) => {
-    if (typeof themeId !== 'string') throw new Error(t('主题 ID 无效。'))
-    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'accountMenuBackground' && purpose !== 'icon' && purpose !== 'font') throw new Error(t('素材用途无效。'))
+  ipcMain.handle('themes:activate', (_event, id: string) => captureIpcResult(() => store.activate(id)))
+  ipcMain.handle('themes:compile', (_event, id: string) => captureIpcResult(() => store.compile(id)))
+  ipcMain.handle('assets:select', (_event, themeId: unknown, purpose: unknown) => captureIpcResult(async () => {
+    if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
+    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'accountMenuBackground' && purpose !== 'icon' && purpose !== 'font') throw new Error('素材用途无效。')
     const safePurpose = purpose as AssetPurpose
     const options: OpenDialogOptions = {
       title: t(safePurpose === 'font' ? '选择字体' : safePurpose === 'icon' ? '选择图标' : '选择主题图片'),
       properties: ['openFile'],
       filters: safePurpose === 'font'
-        ? [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff', 'woff2'] }]
-        : [{ name: safePurpose === 'icon' ? 'Images and GIF' : 'Images', extensions: safePurpose === 'icon' ? ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg'] : ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
+        ? [{ name: t('字体文件'), extensions: ['ttf', 'otf', 'woff', 'woff2'] }]
+        : [{ name: t(safePurpose === 'icon' ? '图片和 GIF' : '图片文件'), extensions: safePurpose === 'icon' ? ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg'] : ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
     }
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, options)
@@ -193,23 +193,23 @@ function registerIpc(): void {
     if (result.canceled || !result.filePaths[0]) return null
     if (safePurpose === 'font') return store.importFontAsset(themeId, result.filePaths[0])
     return store.importAsset(themeId, result.filePaths[0], safePurpose)
-  })
-  ipcMain.handle('assets:select-media', async (_event, themeId: unknown, purpose: unknown, requestedKind: unknown) => {
-    if (typeof themeId !== 'string') throw new Error(t('主题 ID 无效。'))
-    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'windowBackground' && purpose !== 'accountMenuBackground' && purpose !== 'brandSignature' && purpose !== 'composerMelody' && purpose !== 'conversationUserBubble' && purpose !== 'conversationCodexBubble' && purpose !== 'conversationPlanBubble') throw new Error(t('媒体用途无效。'))
-    if (requestedKind !== undefined && requestedKind !== 'image' && requestedKind !== 'gif' && requestedKind !== 'video') throw new Error(t('媒体类型无效。'))
-    if (purpose === 'brandSignature' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error(t('品牌签名只能选择图片或 GIF 文件。'))
-    if (purpose === 'composerMelody' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error(t('输入框装饰只能选择图片或 GIF 文件。'))
-    if (purpose === 'accountMenuBackground' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error(t('账号菜单背景只能选择图片或 GIF 文件。'))
-    if ((purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble') && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error(t('聊天气泡只能选择图片或 GIF 文件。'))
+  }))
+  ipcMain.handle('assets:select-media', (_event, themeId: unknown, purpose: unknown, requestedKind: unknown) => captureIpcResult(async () => {
+    if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
+    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'windowBackground' && purpose !== 'accountMenuBackground' && purpose !== 'brandSignature' && purpose !== 'composerMelody' && purpose !== 'conversationUserBubble' && purpose !== 'conversationCodexBubble' && purpose !== 'conversationPlanBubble') throw new Error('媒体用途无效。')
+    if (requestedKind !== undefined && requestedKind !== 'image' && requestedKind !== 'gif' && requestedKind !== 'video') throw new Error('媒体类型无效。')
+    if (purpose === 'brandSignature' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('品牌签名只能选择图片或 GIF 文件。')
+    if (purpose === 'composerMelody' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('输入框装饰只能选择图片或 GIF 文件。')
+    if (purpose === 'accountMenuBackground' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('账号菜单背景只能选择图片或 GIF 文件。')
+    if ((purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble') && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('聊天气泡只能选择图片或 GIF 文件。')
     const kind = requestedKind as MediaSelectionKind | undefined
     const filters = kind === 'image'
-      ? [{ name: 'Images', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
+      ? [{ name: t('图片文件'), extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
       : kind === 'gif'
         ? [{ name: 'GIF', extensions: ['gif'] }]
         : kind === 'video'
-          ? [{ name: 'Video', extensions: ['mp4', 'webm'] }]
-          : [{ name: 'Images and Video', extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
+          ? [{ name: t('视频文件'), extensions: ['mp4', 'webm'] }]
+          : [{ name: t('图片和视频'), extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
     const options: OpenDialogOptions = {
       title: t(purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : purpose === 'windowBackground' ? '选择整个窗口背景' : purpose === 'accountMenuBackground' ? kind === 'image' ? '选择账号菜单背景图片' : '选择账号菜单背景 GIF' : purpose === 'brandSignature' ? kind === 'image' ? '选择品牌签名图片' : '选择品牌签名 GIF' : purpose === 'conversationUserBubble' ? kind === 'image' ? '选择我的消息气泡图片' : '选择我的消息气泡 GIF' : purpose === 'conversationCodexBubble' ? kind === 'image' ? '选择 Codex 回复气泡图片' : '选择 Codex 回复气泡 GIF' : purpose === 'conversationPlanBubble' ? kind === 'image' ? '选择生成计划气泡图片' : '选择生成计划气泡 GIF' : kind === 'image' ? '选择输入框图片装饰' : '选择输入框 GIF 装饰'),
       properties: ['openFile'],
@@ -223,10 +223,10 @@ function registerIpc(): void {
     operationControllers.set(id, controller)
     const sourceExtension = extname(sourcePath).toLowerCase()
     const videoSelected = sourceExtension === '.mp4' || sourceExtension === '.webm'
-    emitProgress({ id, kind: 'media-import', phase: videoSelected ? 'validating' : 'started', processedBytes: 0, totalBytes: null, message: t(videoSelected ? '正在检查视频' : '正在导入媒体') })
+    emitProgress({ id, kind: 'media-import', phase: videoSelected ? 'validating' : 'started', processedBytes: 0, totalBytes: null, message: localizedMessage(videoSelected ? '正在检查视频' : '正在导入媒体') })
     try {
       if (videoSelected) {
-        if (!isVideoMediaRole(purpose)) throw new Error(t('该位置不支持视频。'))
+        if (!isVideoMediaRole(purpose)) throw new Error('该位置不支持视频。')
         const preflight = await store.preflightVideoSource(sourcePath, controller.signal)
         const selectionId = randomUUID()
         pendingVideoSelections.add(selectionId, {
@@ -242,25 +242,25 @@ function registerIpc(): void {
           originalName: basename(sourcePath),
           inspection: preflight.inspection
         }
-        emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: t('视频规格读取完成') })
+        emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('视频规格读取完成') })
         return selection
       }
-      emitProgress({ id, kind: 'media-import', phase: 'copying', processedBytes: 0, totalBytes: null, message: t('正在导入媒体') })
+      emitProgress({ id, kind: 'media-import', phase: 'copying', processedBytes: 0, totalBytes: null, message: localizedMessage('正在导入媒体') })
       const imported = await store.importMediaAsset(themeId, sourcePath, purpose, kind, controller.signal)
-      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: t('媒体导入完成') })
+      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('媒体导入完成') })
       return imported
     } catch (error) {
-      const failure = controller.signal.aborted ? new Error(t('媒体导入已取消。')) : error
-      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: failure instanceof Error ? t(failure.message) : t('媒体导入失败') })
+      const failure = controller.signal.aborted ? new Error('媒体导入已取消。') : error
+      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(failure, '媒体导入失败') })
       throw failure
     } finally {
       operationControllers.delete(id)
     }
-  })
-  ipcMain.handle('assets:commit-video-selection', async (_event, themeId: unknown, selectionId: unknown, decisionInput: unknown) => {
-    if (typeof themeId !== 'string' || typeof selectionId !== 'string') throw new Error(t('视频选择参数无效。'))
+  }))
+  ipcMain.handle('assets:commit-video-selection', (_event, themeId: unknown, selectionId: unknown, decisionInput: unknown) => captureIpcResult(async () => {
+    if (typeof themeId !== 'string' || typeof selectionId !== 'string') throw new Error('视频选择参数无效。')
     const parsedDecision = videoImportDecisionSchema.safeParse(decisionInput)
-    if (!parsedDecision.success) throw new Error(t('视频导入参数无效。'))
+    if (!parsedDecision.success) throw new Error('视频导入参数无效。')
     const selection = pendingVideoSelections.begin(themeId, selectionId)
     try {
       assertVideoImportDecisionCompatible(parsedDecision.data, selection.preflight.inspection)
@@ -278,7 +278,7 @@ function registerIpc(): void {
       phase: settings ? 'optimizing' : 'copying',
       processedBytes: 0,
       totalBytes: null,
-      message: settings ? videoTranscodeProgressMessage(selection.preflight.inspection, settings) : t('正在导入原视频')
+      message: settings ? videoTranscodeProgressMessage(selection.preflight.inspection, settings) : localizedMessage('正在导入原视频')
     })
     try {
       const imported = await store.importMediaAsset(
@@ -292,47 +292,47 @@ function registerIpc(): void {
         settings
       )
       pendingVideoSelections.complete(selectionId, selection)
-      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: t('视频导入完成') })
+      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('视频导入完成') })
       return imported
     } catch (error) {
       if (controller.signal.aborted) pendingVideoSelections.cancel(selectionId, selection)
       else pendingVideoSelections.restore(selectionId, selection)
       const failure = controller.signal.aborted ? new Error(VIDEO_IMPORT_CANCELLED_MESSAGE) : error
-      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: failure instanceof Error ? t(failure.message) : t('视频导入失败') })
+      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(failure, '视频导入失败') })
       throw failure
     } finally {
       operationControllers.delete(id)
     }
-  })
-  ipcMain.handle('assets:discard-video-selection', (_event, themeId: unknown, selectionId: unknown) => {
-    if (typeof themeId !== 'string' || typeof selectionId !== 'string') throw new Error(t('视频选择参数无效。'))
+  }))
+  ipcMain.handle('assets:discard-video-selection', (_event, themeId: unknown, selectionId: unknown) => captureIpcResult(() => {
+    if (typeof themeId !== 'string' || typeof selectionId !== 'string') throw new Error('视频选择参数无效。')
     pendingVideoSelections.discard(themeId, selectionId)
-  })
-  ipcMain.handle('assets:get-preview-url', (_event, themeId: unknown, asset: unknown) => store.getMediaPreviewUrl(themeId, asset))
-  ipcMain.handle('assets:inspect-video', (_event, themeId: unknown, asset: unknown) => store.inspectReferencedVideo(themeId, asset))
-  ipcMain.handle('assets:optimize-video', async (_event, themeId: unknown, role: unknown, asset: unknown, settingsInput: unknown) => {
-    if (!isVideoMediaRole(role)) throw new Error(t('视频位置无效。'))
+  }))
+  ipcMain.handle('assets:get-preview-url', (_event, themeId: unknown, asset: unknown) => captureIpcResult(() => store.getMediaPreviewUrl(themeId, asset)))
+  ipcMain.handle('assets:inspect-video', (_event, themeId: unknown, asset: unknown) => captureIpcResult(() => store.inspectReferencedVideo(themeId, asset)))
+  ipcMain.handle('assets:optimize-video', (_event, themeId: unknown, role: unknown, asset: unknown, settingsInput: unknown) => captureIpcResult(async () => {
+    if (!isVideoMediaRole(role)) throw new Error('视频位置无效。')
     const parsedSettings = videoTranscodeSettingsSchema.safeParse(settingsInput)
-    if (!parsedSettings.success) throw new Error(t('视频转换参数无效。'))
+    if (!parsedSettings.success) throw new Error('视频转换参数无效。')
     const id = randomUUID()
     const controller = new AbortController()
     operationControllers.set(id, controller)
-    emitProgress({ id, kind: 'media-import', phase: 'optimizing', processedBytes: 0, totalBytes: null, message: t('正在优化当前视频') })
+    emitProgress({ id, kind: 'media-import', phase: 'optimizing', processedBytes: 0, totalBytes: null, message: localizedMessage('正在优化当前视频') })
     try {
       const optimized = await store.optimizeReferencedVideo(themeId, role, asset, parsedSettings.data, controller.signal)
-      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: t('视频优化完成') })
+      emitProgress({ id, kind: 'media-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('视频优化完成') })
       return optimized
     } catch (error) {
-      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? t(error.message) : t('视频优化失败') })
+      emitProgress({ id, kind: 'media-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(error, '视频优化失败') })
       throw error
     } finally {
       operationControllers.delete(id)
     }
-  })
-  ipcMain.handle('operations:cancel', (_event, id: unknown) => {
+  }))
+  ipcMain.handle('operations:cancel', (_event, id: unknown) => captureIpcResult(() => {
     if (typeof id === 'string') operationControllers.get(id)?.abort()
-  })
-  ipcMain.handle('share:export', async (_event, profile: unknown) => {
+  }))
+  ipcMain.handle('share:export', (_event, profile: unknown) => captureIpcResult(async () => {
     const name = typeof profile === 'object' && profile !== null && 'name' in profile && typeof profile.name === 'string' ? profile.name : t('主题')
     const safeName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().slice(0, 80) || t('主题')
     const result = mainWindow
@@ -341,35 +341,35 @@ function registerIpc(): void {
     if (result.canceled || !result.filePath) return null
     const filePath = extname(result.filePath).toLowerCase() === '.cdstheme' ? result.filePath : `${result.filePath}.cdstheme`
     const id = randomUUID()
-    emitProgress({ id, kind: 'share-export', phase: 'started', processedBytes: 0, totalBytes: null, message: t('正在导出主题') })
+    emitProgress({ id, kind: 'share-export', phase: 'started', processedBytes: 0, totalBytes: null, message: localizedMessage('正在导出主题') })
     const controller = new AbortController()
     operationControllers.set(id, controller)
     try {
       await store.exportSharePackage(profile, filePath, controller.signal)
-      emitProgress({ id, kind: 'share-export', phase: 'completed', processedBytes: 0, totalBytes: null, message: t('主题导出完成') })
+      emitProgress({ id, kind: 'share-export', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('主题导出完成') })
       return { filePath }
     } catch (error) {
-      emitProgress({ id, kind: 'share-export', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? t(error.message) : t('主题导出失败') })
+      emitProgress({ id, kind: 'share-export', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(error, '主题导出失败') })
       throw error
     } finally {
       operationControllers.delete(id)
     }
-  })
+  }))
   ipcMain.handle('share:import', () => captureIpcResult(async () => {
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, { title: t('导入主题'), properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
       : await dialog.showOpenDialog({ title: t('导入主题'), properties: ['openFile'], filters: [{ name: 'Codex Dream Theme', extensions: ['cdstheme'] }] })
     if (result.canceled || !result.filePaths[0]) return null
     const id = randomUUID()
-    emitProgress({ id, kind: 'share-import', phase: 'started', processedBytes: 0, totalBytes: null, message: t('正在导入主题') })
+    emitProgress({ id, kind: 'share-import', phase: 'started', processedBytes: 0, totalBytes: null, message: localizedMessage('正在导入主题') })
     const controller = new AbortController()
     operationControllers.set(id, controller)
     try {
       const profile = await store.importSharePackage(result.filePaths[0], controller.signal)
-      emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: t('主题导入完成') })
+      emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('主题导入完成') })
       return profile
     } catch (error) {
-      emitProgress({ id, kind: 'share-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? t(error.message) : t('主题导入失败') })
+      emitProgress({ id, kind: 'share-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(error, '主题导入失败') })
       throw error
     } finally {
       operationControllers.delete(id)
@@ -377,15 +377,15 @@ function registerIpc(): void {
   }))
   ipcMain.handle('share:import-path', (_event, path: unknown) => captureIpcResult(async () => {
     const id = randomUUID()
-    emitProgress({ id, kind: 'share-import', phase: 'started', processedBytes: 0, totalBytes: null, message: t('正在导入主题') })
+    emitProgress({ id, kind: 'share-import', phase: 'started', processedBytes: 0, totalBytes: null, message: localizedMessage('正在导入主题') })
     const controller = new AbortController()
     operationControllers.set(id, controller)
     try {
       const profile = await store.importSharePackage(path, controller.signal)
-      emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: t('主题导入完成') })
+      emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('主题导入完成') })
       return profile
     } catch (error) {
-      emitProgress({ id, kind: 'share-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: error instanceof Error ? t(error.message) : t('主题导入失败') })
+      emitProgress({ id, kind: 'share-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(error, '主题导入失败') })
       throw error
     } finally {
       operationControllers.delete(id)
@@ -462,7 +462,7 @@ if (!hasSingleInstanceLock) {
   })
 
   app.whenReady().then(async () => {
-    if (!isSupportedDesktopPlatform(process.platform)) throw new Error(t('Codex Dream Skin Studio 仅支持 Windows 和 macOS。'))
+    if (!isSupportedDesktopPlatform(process.platform)) throw new Error('Codex Dream Skin Studio 仅支持 Windows 和 macOS。')
     const sharedResourcesRoot = app.isPackaged ? join(process.resourcesPath, 'shared') : join(app.getAppPath(), 'resources', 'shared')
     const platformResourcesRoot = app.isPackaged
       ? join(process.resourcesPath, process.platform === 'win32' ? 'windows' : 'macos')
@@ -518,10 +518,10 @@ function emitProgress(progress: OperationProgress): void {
   for (const window of BrowserWindow.getAllWindows()) window.webContents.send('operations:progress', progress)
 }
 
-function videoTranscodeProgressMessage(inspection: VideoAssetInspection, settings: VideoTranscodeSettings): string {
+function videoTranscodeProgressMessage(inspection: VideoAssetInspection, settings: VideoTranscodeSettings): LocalizedMessage {
   const output = resolveVideoOutputSize(inspection, settings)
-  const bitRate = settings.videoBitRate === null ? t('自动码率') : `${formatMbps(settings.videoBitRate)} Mbps`
-  return t('正在生成 {width}×{height} / {frameRate} FPS / {bitRate} 视频', {
+  const bitRate = settings.videoBitRate === null ? localizedMessage('自动码率') : `${formatMbps(settings.videoBitRate)} Mbps`
+  return localizedMessage('正在生成 {width}×{height} / {frameRate} FPS / {bitRate} 视频', {
     width: output.width,
     height: output.height,
     frameRate: formatFrameRate(settings.frameRate),

@@ -14,7 +14,7 @@ const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STA
 const RUNTIME_VERSION_PATTERN = /^studio-[0-9a-f]{24}$/
 const CDP_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'ECONNABORTED', 'EPIPE', 'UND_ERR_SOCKET'])
 const CDP_UNAVAILABLE_MESSAGES = [
-  /No Codex page target remains open\./i,
+  /(?:No Codex page target remains open\.|没有仍保持打开的 Codex 页面目标。)/i,
   /CDP 会话(?:已结束|意外关闭)。/,
   /No target with given id/i,
   /Session closed/i,
@@ -81,13 +81,13 @@ export class CdpWatcher {
     private readonly onSnapshot: (snapshot: CdpSnapshot) => void,
     private readonly onError: (error: Error) => void
   ) {
-    if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('CDP port is invalid.')
-    if (!/^[A-Za-z0-9._-]{1,200}$/.test(browserId)) throw new Error('CDP browser identity is invalid.')
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('CDP 端口无效。')
+    if (!/^[A-Za-z0-9._-]{1,200}$/.test(browserId)) throw new Error('CDP 浏览器身份无效。')
   }
 
   setPayload(payload: string, expectedVersion: string): void {
     if (!payload || Buffer.byteLength(payload, 'utf8') > MAX_THEME_PAYLOAD_BYTES || !RUNTIME_VERSION_PATTERN.test(expectedVersion)) {
-      throw new Error('Theme payload is invalid.')
+      throw new Error('主题载荷无效。')
     }
     this.payload = payload
     this.expectedVersion = expectedVersion
@@ -98,7 +98,7 @@ export class CdpWatcher {
   }
 
   async start(): Promise<CdpSnapshot> {
-    if (!this.payload || !this.expectedVersion) throw new Error('Theme payload is not ready.')
+    if (!this.payload || !this.expectedVersion) throw new Error('主题载荷尚未就绪。')
     await this.cleanupExcludedTargets()
     const snapshot = await this.inject()
     this.startTimer()
@@ -210,15 +210,15 @@ export class CdpWatcher {
   private async targets(includeExcluded = false): Promise<CdpTarget[]> {
     const version = await this.fetchJson<CdpVersion>('/json/version')
     const browserUrl = this.validateWebSocketUrl(version.webSocketDebuggerUrl, 'browser', this.browserId)
-    if (!browserUrl) throw new Error('CDP browser identity changed or is not loopback-only.')
+    if (!browserUrl) throw new Error('CDP 浏览器身份已变化或不是仅回环地址。')
     const targets = await this.fetchJson<CdpTarget[]>('/json/list')
     const candidates = targets.filter((target) => target.type === 'page' && target.url.startsWith('app://'))
     const valid = candidates.filter((target) =>
       /^[A-Za-z0-9._-]{1,200}$/.test(target.id) && this.validateWebSocketUrl(target.webSocketDebuggerUrl, 'page', target.id))
     const selected = includeExcluded ? valid : valid.filter((target) => isThemeCdpTargetUrl(target.url))
     if (selected.length === 0) {
-      if (includeExcluded && candidates.length === 0) throw new Error('No Codex page target remains open.')
-      throw new Error('No verified Codex page target is available.')
+      if (includeExcluded && candidates.length === 0) throw new Error('没有仍保持打开的 Codex 页面目标。')
+      throw new Error('没有可用的已验证 Codex 页面目标。')
     }
     return selected
   }
@@ -231,14 +231,14 @@ export class CdpWatcher {
     const response = await fetch(`http://127.0.0.1:${this.port}${path}`, {
       redirect: 'error', signal: AbortSignal.timeout(2500)
     })
-    if (!response.ok) throw new Error(`CDP returned HTTP ${response.status}.`)
+    if (!response.ok) throw new Error(`CDP 返回 HTTP ${response.status}。`)
     return await response.json() as T
   }
 
   private async evaluate(target: CdpTarget, expression: string): Promise<unknown> {
     return this.command(target, 'Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }).then((message) => {
       const result = message as { error?: { message: string }; result?: { result?: { value?: unknown }; exceptionDetails?: unknown } }
-      if (result.error || result.result?.exceptionDetails) throw new Error(result.error?.message ?? 'Theme evaluation failed.')
+      if (result.error || result.result?.exceptionDetails) throw new Error('主题脚本执行失败。')
       return result.result?.result?.value
     })
   }
@@ -272,7 +272,7 @@ export class CdpWatcher {
   }
 
   private async withSession<T>(target: CdpTarget, operation: (send: CdpCommand) => Promise<T>): Promise<T> {
-    if (!this.validateWebSocketUrl(target.webSocketDebuggerUrl, 'page', target.id)) throw new Error('Unsafe CDP page URL was rejected.')
+    if (!this.validateWebSocketUrl(target.webSocketDebuggerUrl, 'page', target.id)) throw new Error('不安全的 CDP 页面地址已被拒绝。')
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(target.webSocketDebuggerUrl, { handshakeTimeout: 3000 })
       const pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason: Error) => void }>()
@@ -288,7 +288,7 @@ export class CdpWatcher {
         if (reason) reject(reason)
         else resolve(value as T)
       }
-      const timeout = setTimeout(() => finish(new Error('CDP evaluation timed out.')), 12_000)
+      const timeout = setTimeout(() => finish(new Error('CDP 主题求值超时。')), 12_000)
       const send: CdpCommand = (method, params) => new Promise((resolveCommand, rejectCommand) => {
         const id = ++requestId
         pending.set(id, { resolve: resolveCommand, reject: rejectCommand })

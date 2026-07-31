@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, ImportedMediaAsset, OperationProgress, RuntimeStatus, StudioApi } from '../src/shared/contracts'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { gifPosterAssetKey } from '../src/shared/gif'
-import type { SupportedLocale } from '../src/shared/i18n'
+import { LocalizedError, localizedMessage, translateLocalizedMessage, type SupportedLocale } from '../src/shared/i18n'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../src/shared/video-transcode'
 import { App } from '../src/renderer/src/App'
@@ -25,7 +25,7 @@ const runtimeStatus: RuntimeStatus = {
   codexVersion: null,
   backupAvailable: false,
   lastError: null,
-  message: '等待检测 Codex'
+  message: localizedMessage('等待检测 Codex')
 }
 
 describe('Studio preview editing interaction', () => {
@@ -67,6 +67,7 @@ describe('Studio preview editing interaction', () => {
   let restoreCodex: ReturnType<typeof vi.fn>
   let cancelOperation: ReturnType<typeof vi.fn>
   let operationProgressListener: ((progress: OperationProgress) => void) | null
+  let runtimeStatusListener: ((status: RuntimeStatus) => void) | null
   let emitReducedMotion: (matches: boolean) => void
   let persistedLocale: SupportedLocale
   let setLocalePreference: ReturnType<typeof vi.fn>
@@ -162,6 +163,7 @@ describe('Studio preview editing interaction', () => {
     restoreCodex = vi.fn(async () => runtimeStatus)
     cancelOperation = vi.fn(async () => undefined)
     operationProgressListener = null
+    runtimeStatusListener = null
     persistedLocale = 'zh-CN'
     setLocalePreference = vi.fn(async (locale: SupportedLocale) => {
       persistedLocale = locale
@@ -255,7 +257,10 @@ describe('Studio preview editing interaction', () => {
       },
       runtime: {
         getStatus: async () => runtimeStatus,
-        subscribeStatus: () => () => undefined
+        subscribeStatus: (listener) => {
+          runtimeStatusListener = listener
+          return () => { runtimeStatusListener = null }
+        }
       }
     }
     ;(browserWindow as unknown as { studio: StudioApi }).studio = studio
@@ -365,6 +370,9 @@ describe('Studio preview editing interaction', () => {
     const chineseTitle = profile.copy['zh-CN'].brandTitle
     const englishTitle = profile.copy['en-US'].brandTitle
     expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe(chineseTitle)
+    expect(container.querySelector('.theme-sidebar .eyebrow')?.textContent).toBe('主题列表')
+    expect(container.querySelector('.inspector-title .eyebrow')?.textContent).toBe('属性')
+    expect(container.querySelector('.title-status')?.textContent).toBe('Windows 主题编辑器')
 
     await act(async () => {
       localeSelect.value = 'en-US'
@@ -375,6 +383,9 @@ describe('Studio preview editing interaction', () => {
     expect(persistedLocale).toBe('en-US')
     expect(container.textContent).toContain('My themes')
     expect(container.querySelector('.preview-actions .primary-button')?.textContent).toContain('Save theme')
+    expect(container.querySelector('.theme-sidebar .eyebrow')?.textContent).toBe('Themes')
+    expect(container.querySelector('.inspector-title .eyebrow')?.textContent).toBe('Properties')
+    expect(container.querySelector('.title-status')?.textContent).toBe('Windows Theme Editor')
     expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe(chineseTitle)
 
     const englishContent = [...container.querySelectorAll<HTMLButtonElement>('.content-locale-switch button')]
@@ -386,6 +397,7 @@ describe('Studio preview editing interaction', () => {
     const title = container.querySelector('[data-preview-target="copy-brand-title"]')
     if (!title) throw new Error('English brand title target is missing.')
     pointerDown(title)
+    expect(container.querySelector('.preview-edit-popover-header span')?.textContent).toBe('Quick Edit')
     enterQuickCopy('Edited English title')
     expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe('Edited English title')
 
@@ -397,6 +409,7 @@ describe('Studio preview editing interaction', () => {
     expect(setLocalePreference).toHaveBeenLastCalledWith('zh-CN')
     expect(englishContent.getAttribute('aria-pressed')).toBe('true')
     expect(container.querySelector('[data-preview-target="copy-brand-title"]')?.textContent).toBe('Edited English title')
+    expect(container.querySelector('.preview-edit-popover-header span')?.textContent).toBe('快捷编辑')
 
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
@@ -406,6 +419,73 @@ describe('Studio preview editing interaction', () => {
     })
     expect(savedProfiles.at(-1)?.copy['en-US'].brandTitle).toBe('Edited English title')
     expect(savedProfiles.at(-1)?.copy['zh-CN'].brandTitle).toBe(chineseTitle)
+  })
+
+  it('retranslates a nested IPC error after it reaches the top error banner', async () => {
+    const localeSelect = container.querySelector<HTMLSelectElement>('.locale-select select')
+    const exportButton = container.querySelector<HTMLButtonElement>('button[title="导出主题"]')
+    if (!localeSelect || !exportButton) throw new Error('Locale or export controls are missing.')
+    const nestedError = localizedMessage('{message}；原主题会话回滚失败: {rollback}', {
+      message: localizedMessage('操作失败'),
+      rollback: localizedMessage('素材路径无效。')
+    })
+    exportTheme.mockRejectedValueOnce(new LocalizedError(nestedError))
+
+    await act(async () => {
+      localeSelect.value = 'en-US'
+      localeSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await Promise.resolve()
+    })
+    await act(async () => {
+      exportButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.error-banner')?.textContent).toContain(translateLocalizedMessage('en-US', nestedError))
+
+    await act(async () => {
+      localeSelect.value = 'zh-CN'
+      localeSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.error-banner')?.textContent).toContain(translateLocalizedMessage('zh-CN', nestedError))
+  })
+
+  it('retranslates existing runtime, update, and operation statuses when the Studio locale changes', async () => {
+    const runtimeSettings = [...container.querySelectorAll<HTMLButtonElement>('aside button')].find((button) => button.textContent?.includes('运行设置'))
+    if (!runtimeSettings) throw new Error('Runtime settings navigation is missing.')
+    act(() => runtimeSettings.click())
+
+    const runtimeMessage = localizedMessage('主题已注入 {count} 个 Codex 页面', { count: 2 })
+    const runtimeError = localizedMessage('主题素材不存在: assets/hero.png')
+    const updateError = localizedMessage('检查更新失败，请稍后重试。')
+    const progressMessage = localizedMessage('正在导入媒体')
+    act(() => {
+      runtimeStatusListener?.({ ...runtimeStatus, phase: 'active', targetCount: 2, message: runtimeMessage, lastError: runtimeError })
+      appUpdateListener?.({ phase: 'error', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: updateError })
+      operationProgressListener?.({ id: 'locale-progress', kind: 'media-import', phase: 'copying', processedBytes: 0, totalBytes: null, message: progressMessage })
+    })
+
+    const localeSelect = container.querySelector<HTMLSelectElement>('.locale-select select')
+    if (!localeSelect) throw new Error('Studio locale selector is missing.')
+    await act(async () => {
+      localeSelect.value = 'en-US'
+      localeSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.runtime-summary')?.textContent).toContain(translateLocalizedMessage('en-US', runtimeMessage))
+    expect(container.querySelector('.runtime-summary')?.textContent).toContain(translateLocalizedMessage('en-US', runtimeError))
+    expect(container.querySelector('.app-update-panel')?.textContent).toContain(translateLocalizedMessage('en-US', updateError))
+    expect(container.querySelector('.operation-progress')?.textContent).toContain(translateLocalizedMessage('en-US', progressMessage))
+
+    await act(async () => {
+      localeSelect.value = 'zh-CN'
+      localeSelect.dispatchEvent(new browserWindow.Event('change', { bubbles: true }) as unknown as Event)
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.runtime-summary')?.textContent).toContain(translateLocalizedMessage('zh-CN', runtimeMessage))
+    expect(container.querySelector('.runtime-summary')?.textContent).toContain(translateLocalizedMessage('zh-CN', runtimeError))
+    expect(container.querySelector('.app-update-panel')?.textContent).toContain(translateLocalizedMessage('zh-CN', updateError))
+    expect(container.querySelector('.operation-progress')?.textContent).toContain(translateLocalizedMessage('zh-CN', progressMessage))
   })
 
   const openRuntimeInspector = (): HTMLElement => {
@@ -418,7 +498,7 @@ describe('Studio preview editing interaction', () => {
   }
 
   it('always shows the update entry and disables checks outside installed builds', async () => {
-    expect(container.querySelector('.title-status')?.textContent).toBe('Windows Theme Editor')
+    expect(container.querySelector('.title-status')?.textContent).toBe('Windows 主题编辑器')
     await emitAppUpdate({ phase: 'disabled', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: null })
 
     const panel = openRuntimeInspector()
@@ -740,7 +820,7 @@ describe('Studio preview editing interaction', () => {
         phase: 'validating',
         processedBytes: 1,
         totalBytes: 2,
-        message: '正在验证素材'
+        message: localizedMessage('正在验证素材')
       })
     })
     const cancelButton = container.querySelector<HTMLButtonElement>('.operation-progress button')

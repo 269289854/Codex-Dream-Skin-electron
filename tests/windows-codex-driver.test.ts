@@ -82,11 +82,11 @@ describe('WindowsCodexDriver', () => {
       running: false,
       backupAvailable: true
     }
-    await expect(driver.verifySession(9335, 'browser-1', detection)).rejects.toThrow('no longer running')
+    await expect(driver.verifySession(9335, 'browser-1', detection)).rejects.toThrow('保存的 Codex 会话已不再运行。')
     expect(runPowerShellMock).not.toHaveBeenCalled()
 
     runPowerShellMock.mockResolvedValueOnce({ port: 9335, browserId: 'browser-2', version: windowsDetection.version })
-    await expect(driver.verifySession(9335, 'browser-1', { ...detection, running: true })).rejects.toThrow('identity')
+    await expect(driver.verifySession(9335, 'browser-1', { ...detection, running: true })).rejects.toThrow('保存的 Codex 浏览器身份不再匹配。')
   })
 
   it('marks a changed installation as safe for configuration-only restore fallback', async () => {

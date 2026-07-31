@@ -117,8 +117,8 @@ describe('renderer injection template', () => {
   it('reports the watcher injection count after startup', async () => {
     const codexService = await readFile(join(process.cwd(), 'src', 'main', 'codex-service.ts'), 'utf8')
     expect(codexService).toContain('const snapshot = await this.replaceWatcher')
-    expect(codexService).toContain("t('主题已注入 {count} 个 Codex 页面', { count: snapshot.targetCount })")
-    expect(codexService).not.toContain("t('主题已注入 {count} 个 Codex 页面', { count: result.targetCount })")
+    expect(codexService).toContain("localizedMessage('主题已注入 {count} 个 Codex 页面', { count: snapshot.targetCount })")
+    expect(codexService).not.toContain("localizedMessage('主题已注入 {count} 个 Codex 页面', { count: result.targetCount })")
   })
 
   it('keeps the custom polaroid surface transparent and leaves shadow styling configurable', async () => {

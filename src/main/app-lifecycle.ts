@@ -12,7 +12,7 @@ export interface StudioInstanceData {
 export type StudioInstanceAction = 'show' | 'relaunch' | 'ignore'
 
 export function createStudioInstanceData(version: string): StudioInstanceData {
-  if (!APP_VERSION_PATTERN.test(version)) throw new Error('Studio version is invalid.')
+  if (!APP_VERSION_PATTERN.test(version)) throw new Error('Studio 版本无效。')
   return { protocol: STUDIO_INSTANCE_PROTOCOL, appId: STUDIO_INSTANCE_APP_ID, version }
 }
 

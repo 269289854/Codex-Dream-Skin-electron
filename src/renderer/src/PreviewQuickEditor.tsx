@@ -84,7 +84,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
   const updateCopy = (field: PreviewCopyField, value: string): void => onChange((next) => { activeThemeCopy(next)[field] = value }, `copy-${field}`)
 
   return <section ref={popoverRef} className={position ? 'preview-edit-popover' : 'preview-edit-popover measuring'} data-placement={position?.placement ?? 'right'} role="dialog" aria-label={t('{target}快捷配置', { target: t(target.label) })} style={{ left: position?.left ?? 0, top: position?.top ?? 0 }}>
-    <header className="preview-edit-popover-header"><div><span>QUICK EDIT</span><strong>{t(target.label)}</strong></div><button className="preview-edit-close" type="button" title={t('关闭快捷配置')} onClick={onClose}><X size={16} /></button></header>
+    <header className="preview-edit-popover-header"><div><span>{t('快捷编辑')}</span><strong>{t(target.label)}</strong></div><button className="preview-edit-close" type="button" title={t('关闭快捷配置')} onClick={onClose}><X size={16} /></button></header>
     {states.length > 1 && <div className="state-tabs segmented-control" aria-label={t('组件状态')}>{states.map((item) => <button type="button" className={state === item ? 'active' : ''} key={item} onClick={() => { setState(item); onStateChange(item) }}>{t(item === 'normal' ? '普通' : item === 'hover' ? '悬停' : '选中')}</button>)}</div>}
     <div className="preview-edit-popover-body">
       {editor.kind === 'style' && editor.visibility === 'composerBadge' && <label className="toggle-row"><span>{t('显示输入框装饰')}</span><input type="checkbox" checked={profile.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.composerBadge.visible = visible }) }} /></label>}

@@ -2,9 +2,9 @@ import type { AppInfo } from '../../shared/contracts'
 import { t } from '../../shared/i18n'
 
 export function studioPlatformLabel(platform: AppInfo['platform'] | null): string {
-  if (platform === 'darwin') return 'macOS Theme Editor'
-  if (platform === 'win32') return 'Windows Theme Editor'
-  return 'Theme Editor'
+  if (platform === 'darwin') return 'macOS 主题编辑器'
+  if (platform === 'win32') return 'Windows 主题编辑器'
+  return '主题编辑器'
 }
 
 export function appUpdateDisabledMessage(platform: AppInfo['platform'] | null): string {

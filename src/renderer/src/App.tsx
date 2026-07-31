@@ -18,7 +18,7 @@ import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics }
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { activateVideoVariant, mediaFlipCssTransform } from '../../shared/media'
 import { resolveThemeCopy, type ConversationBubbleRole, type CreateThemeInput, type IconSlot, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoVariants } from '../../shared/theme'
-import { DEFAULT_LOCALE, setActiveLocale, t, type SupportedLocale } from '../../shared/i18n'
+import { DEFAULT_LOCALE, localizedMessage, localizedMessageFrom, setActiveLocale, t, tm, type LocalizedMessage, type SupportedLocale } from '../../shared/i18n'
 import { conversationBubbleMediaReferences, conversationBubbleRolePurpose, resolveConversationBubbleFrame } from '../../shared/conversation-bubbles'
 import { SIDEBAR_NAV_ITEMS } from '../../shared/sidebar-layout'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
@@ -91,15 +91,15 @@ export function App(): React.JSX.Element {
   const [draft, setDraft] = useState<ThemeProfile | null>(null)
   const [assets, setAssets] = useState<Record<string, string>>({})
   const [activeInspector, setActiveInspector] = useState<'visual' | 'icons' | 'runtime'>('visual')
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [error, setError] = useState<LocalizedMessage | null>(null)
+  const [notice, setNotice] = useState<LocalizedMessage | null>(null)
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [duplicateName, setDuplicateName] = useState('')
   const [duplicateBusy, setDuplicateBusy] = useState(false)
-  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  const [duplicateError, setDuplicateError] = useState<LocalizedMessage | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
   const [mediaBusy, setMediaBusy] = useState(false)
   const [themeOperationBusy, setThemeOperationBusy] = useState(false)
@@ -109,10 +109,10 @@ export function App(): React.JSX.Element {
   const [operationProgress, setOperationProgress] = useState<OperationProgress | null>(null)
   const [shareDropActive, setShareDropActive] = useState(false)
   const [runtimeBusy, setRuntimeBusy] = useState(false)
-  const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: '等待检测 Codex' })
+  const [runtime, setRuntime] = useState<RuntimeStatus>({ phase: 'idle', port: 9335, connected: false, targetCount: 0, codexVersion: null, backupAvailable: false, lastError: null, message: localizedMessage('等待检测 Codex') })
   const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null)
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
-  const [appUpdateActionError, setAppUpdateActionError] = useState<string | null>(null)
+  const [appUpdateActionError, setAppUpdateActionError] = useState<LocalizedMessage | null>(null)
   const [appUpdateCheckBusy, setAppUpdateCheckBusy] = useState(false)
   const [draggingPlacement, setDraggingPlacement] = useState(false)
   const [previewScale, setPreviewScale] = useState(1)
@@ -486,7 +486,10 @@ export function App(): React.JSX.Element {
       if (copyError) {
         if (isThemeOperationCurrent(token)) {
           setContentLocale(candidateLocale)
-          setError(t('{language}: {message}', { language: candidateLocale === 'zh-CN' ? t('中文') : 'English', message: t(copyError) }))
+          setError(localizedMessage('{language}: {message}', {
+            language: candidateLocale === 'zh-CN' ? localizedMessage('中文') : 'English',
+            message: localizedMessage(copyError)
+          }))
         }
         return false
       }
@@ -522,13 +525,13 @@ export function App(): React.JSX.Element {
 
   const createTheme = async (input: CreateThemeInput): Promise<void> => {
     const token = beginThemeOperation(loadedThemeIdRef.current)
-    if (!token) throw new Error(t('另一项主题操作正在进行，请稍后重试。'))
+    if (!token) throw new Error('另一项主题操作正在进行，请稍后重试。')
     try {
       const profile = await window.studio.themes.create(input)
-      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
       if (!isThemeOperationCurrent(token)) return
       setCreateDialogOpen(false)
-      setNotice(t('已创建主题“{name}”', { name: profile.name }))
+      setNotice(localizedMessage('已创建主题“{name}”', { name: profile.name }))
     } finally {
       finishThemeOperation(token)
     }
@@ -571,7 +574,7 @@ export function App(): React.JSX.Element {
       mergeAssetsForThemeOperation(token, restoredAssets)
       setPreviewSelection(null)
       setInspectorAnchor(null)
-      setNotice(t('已恢复默认预设，保存主题后生效。'))
+      setNotice(localizedMessage('已恢复默认预设，保存主题后生效。'))
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
@@ -591,7 +594,7 @@ export function App(): React.JSX.Element {
     const name = duplicateName.trim()
     const nameError = themeNameError(name)
     if (nameError) {
-      setDuplicateError(nameError)
+      setDuplicateError(localizedMessage(nameError))
       return
     }
     const source = structuredClone(draft)
@@ -601,10 +604,10 @@ export function App(): React.JSX.Element {
     setDuplicateError(null)
     try {
       const profile = await window.studio.themes.duplicate(source, name)
-      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
       if (!isThemeOperationCurrent(token)) return
       setDuplicateDialogOpen(false)
-      setNotice(t('已创建主题“{name}”', { name: profile.name }))
+      setNotice(localizedMessage('已创建主题“{name}”', { name: profile.name }))
     } catch (reason) {
       if (isThemeOperationActive(token)) setDuplicateError(messageOf(reason))
     } finally {
@@ -616,7 +619,7 @@ export function App(): React.JSX.Element {
   const exportTheme = async (): Promise<void> => {
     if (!draft) return
     if (!window.studio.share) {
-      setError(t('当前版本不支持主题分享。'))
+      setError(localizedMessage('当前版本不支持主题分享。'))
       return
     }
     const profile = structuredClone(draft)
@@ -626,7 +629,7 @@ export function App(): React.JSX.Element {
     setError(null)
     try {
       const result = await window.studio.share.exportTheme(profile)
-      if (result && isThemeOperationCurrent(token)) setNotice(t('主题已导出为“{name}”', { name: result.filePath.split(/[\\/]/).pop() ?? t('分享文件') }))
+      if (result && isThemeOperationCurrent(token)) setNotice(localizedMessage('主题已导出为“{name}”', { name: result.filePath.split(/[\\/]/).pop() ?? localizedMessage('分享文件') }))
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
@@ -643,15 +646,15 @@ export function App(): React.JSX.Element {
     if (incompatibleCount > 0) {
       setActiveInspector('visual')
       setInspectorAnchor('visual-video-playback')
-      setNotice(t('已导入主题“{name}”；{count} 个视频需转换后才能应用到 Codex。', { name: profile.name, count: incompatibleCount }))
+      setNotice(localizedMessage('已导入主题“{name}”；{count} 个视频需转换后才能应用到 Codex。', { name: profile.name, count: incompatibleCount }))
       return
     }
-    setNotice(t('已导入主题“{name}”', { name: profile.name }))
+    setNotice(localizedMessage('已导入主题“{name}”', { name: profile.name }))
   }
 
   const importTheme = async (): Promise<void> => {
     if (!window.studio.share) {
-      setError(t('当前版本不支持主题分享。'))
+      setError(localizedMessage('当前版本不支持主题分享。'))
       return
     }
     const token = beginThemeOperation(loadedThemeIdRef.current)
@@ -661,7 +664,7 @@ export function App(): React.JSX.Element {
     try {
       const profile = await window.studio.share.importTheme()
       if (profile) {
-        if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
+        if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
         await finishThemeImport(token, profile)
       }
     } catch (reason) {
@@ -679,7 +682,7 @@ export function App(): React.JSX.Element {
     const file = event.dataTransfer.files[0]
     if (!file) return
     if (!window.studio.share || !window.studio.files) {
-      setError(t('当前版本不支持主题分享。'))
+      setError(localizedMessage('当前版本不支持主题分享。'))
       return
     }
     const token = beginThemeOperation(loadedThemeIdRef.current)
@@ -689,7 +692,7 @@ export function App(): React.JSX.Element {
     try {
       const path = window.studio.files.getPathForFile(file)
       const profile = await window.studio.share.importThemePath(path)
-      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error(t('主题切换已失效，请重试。'))
+      if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
       await finishThemeImport(token, profile)
     } catch (reason) {
       if (isThemeOperationActive(token)) setError(messageOf(reason))
@@ -702,7 +705,7 @@ export function App(): React.JSX.Element {
   const deleteTheme = async (): Promise<void> => {
     if (!draft) return
     if (themes.find((theme) => theme.id === draft.id)?.system) {
-      setError(t('系统默认主题不能删除。'))
+      setError(localizedMessage('系统默认主题不能删除。'))
       return
     }
     if (!window.confirm(t('删除主题“{name}”？', { name: draft.name }))) return
@@ -786,7 +789,7 @@ export function App(): React.JSX.Element {
       if (isVideoSourceSelection(selected)) {
         if (!isVideoMediaRole(purpose)) {
           await window.studio.assets.discardVideoSelection(themeId, selected.selectionId)
-          throw new Error(t('该位置不支持视频。'))
+          throw new Error('该位置不支持视频。')
         }
         setPreviewSelection(null)
         setVideoTranscodeDialog({
@@ -872,16 +875,17 @@ export function App(): React.JSX.Element {
       } else {
         mergeAssetsForThemeOperation(token, { [imported.relativePath]: imported.previewUrl })
         changeForThemeOperation(token, (profile) => setVideoReferenceForRole(profile, dialogState.role, imported.reference, { width: imported.width, height: imported.height }))
-        setNotice(t(videoReferenceForRole(draft, dialogState.role)?.videoVariants ? '{role}已重新生成优化版。' : '{role}已生成优化版。', { role: videoRoleLabel(dialogState.role) }))
+        setNotice(localizedMessage(videoReferenceForRole(draft, dialogState.role)?.videoVariants ? '{role}已重新生成优化版。' : '{role}已生成优化版。', { role: localizedMessage(videoRoleLabel(dialogState.role)) }))
       }
       setVideoTranscodeDialog(null)
     } catch (reason) {
       if (isThemeOperationCurrent(token)) {
         const message = messageOf(reason)
+        const rawMessage = reason instanceof Error ? reason.message : String(reason)
         setError(message)
         if (dialogState.kind === 'import' && (
-          message.includes(VIDEO_IMPORT_CANCELLED_MESSAGE) ||
-          message.includes(VIDEO_SELECTION_EXPIRED_MESSAGE)
+          rawMessage.includes(VIDEO_IMPORT_CANCELLED_MESSAGE) ||
+          rawMessage.includes(VIDEO_SELECTION_EXPIRED_MESSAGE)
         )) {
           setVideoTranscodeDialog(null)
         }
@@ -1126,7 +1130,7 @@ export function App(): React.JSX.Element {
     setDraft((profile) => profile ? { ...profile, polaroid: { ...profile.polaroid, placement: { ...profile.polaroid.placement, ...position } } } : profile)
   }
 
-  if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ?? t('正在打开主题工作台')}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>{t('重新加载')}</button>}</div>
+  if (!draft) return <div className="loading-screen"><Sparkles size={22} /><span>{error ? tm(error) : t('正在打开主题工作台')}</span>{error && <button className="secondary-command" onClick={() => window.location.reload()}>{t('重新加载')}</button>}</div>
   const copy = resolveThemeCopy(draft, contentLocale)
   const previewContext = PREVIEW_HOME_CONTEXT_BY_LOCALE[contentLocale]
   const homeActions = HOME_ACTIONS_BY_LOCALE[contentLocale]
@@ -1169,7 +1173,7 @@ export function App(): React.JSX.Element {
       : appUpdate.phase === 'checking' || appUpdateCheckBusy
         ? t('正在检查更新…')
         : updateError && !updateVisible
-          ? t(updateError)
+          ? tm(updateError)
           : appUpdate.phase === 'up-to-date'
             ? t('当前已是最新版本 {version}', { version: currentVersionLabel })
             : appUpdate.phase === 'available'
@@ -1179,7 +1183,7 @@ export function App(): React.JSX.Element {
                 : appUpdate.phase === 'downloaded'
                   ? t('{version} 已下载，重启即可安装', { version: updateVersionLabel })
                   : appUpdate.phase === 'error'
-                    ? updateVisible ? t('{version} 下载失败', { version: updateVersionLabel }) : t(updateError ?? '检查更新失败，请稍后重试。')
+                    ? updateVisible ? t('{version} 下载失败', { version: updateVersionLabel }) : updateError ? tm(updateError) : t('检查更新失败，请稍后重试。')
                     : t('可手动检查 GitHub 正式版本')
   const updatePanelButtonLabel = appUpdate?.phase === 'downloaded'
     ? t('重启并安装')
@@ -1217,13 +1221,11 @@ export function App(): React.JSX.Element {
       <header className="titlebar">
         <span className="brand-mark"><Sparkles size={16} /></span>
         <strong>Codex Dream Skin Studio</strong>
-        <span className="title-status">{studioPlatformLabel(appInfo?.platform ?? null)}</span>
+        <span className="title-status">{t(studioPlatformLabel(appInfo?.platform ?? null))}</span>
         <label className="locale-select" title={t('语言')}><Languages size={14} aria-hidden="true" /><select aria-label={t('语言')} value={locale} onChange={(event) => {
           const nextLocale = event.currentTarget.value as SupportedLocale
           void window.studio.app.setLocale(nextLocale).then((saved) => {
             setLocale(saved)
-            setError(null)
-            setNotice(null)
           }).catch((reason) => setError(messageOf(reason)))
         }}><option value="zh-CN">{t('中文')}</option><option value="en-US">English</option></select></label>
         {updateVisible && <div className="app-update-notice" role="status" aria-live="polite" aria-atomic="true">
@@ -1235,7 +1237,7 @@ export function App(): React.JSX.Element {
           </button>
         </div>}
       </header>
-      {error && <div className="error-banner"><span>{t(error)}</span><button onClick={() => setError(null)}>{t('关闭')}</button></div>}
+      {error && <div className="error-banner"><span>{tm(error)}</span><button onClick={() => setError(null)}>{t('关闭')}</button></div>}
       {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>{t('释放 .cdstheme 文件以导入主题')}</strong><span>{t('将创建新的本地主题，不会覆盖现有主题')}</span></div>}
       {createDialogOpen && <CreateThemeDialog onClose={() => setCreateDialogOpen(false)} onCreate={createTheme} />}
       {videoTranscodeDialog && <VideoTranscodeDialog
@@ -1256,20 +1258,20 @@ export function App(): React.JSX.Element {
           <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">{t('复制主题')}</h2><button type="button" title={t('关闭')} disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
           <form onSubmit={(event) => { event.preventDefault(); void duplicateTheme() }} onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeDuplicateDialog() } else if (event.key === 'Enter') { event.preventDefault(); void duplicateTheme() } }}>
             <label className="theme-dialog-field"><span>{t('副本名称')}</span><input ref={duplicateInputRef} value={duplicateName} maxLength={80} aria-invalid={Boolean(duplicateNameValidationError)} aria-describedby={duplicateNameValidationError || duplicateError ? 'duplicate-theme-error' : undefined} onInput={(event) => { setDuplicateName(event.currentTarget.value); setDuplicateError(null) }} /></label>
-            {(duplicateNameValidationError || duplicateError) && <p className="theme-dialog-error" id="duplicate-theme-error" role="alert">{t(duplicateError ?? duplicateNameValidationError ?? '')}</p>}
+            {(duplicateNameValidationError || duplicateError) && <p className="theme-dialog-error" id="duplicate-theme-error" role="alert">{duplicateError ? tm(duplicateError) : t(duplicateNameValidationError ?? '')}</p>}
             <footer><button className="secondary-command" type="button" disabled={duplicateBusy} onClick={closeDuplicateDialog}>{t('取消')}</button><button className="primary-button" type="submit" disabled={Boolean(duplicateNameValidationError) || duplicateBusy}><Copy size={14} />{duplicateBusy ? t('复制中') : t('创建副本')}</button></footer>
           </form>
         </section>
       </div>}
       <section className="workspace">
         <aside className="theme-sidebar">
-          <div className="panel-heading"><div><span className="eyebrow">THEMES</span><h2>{t('我的主题')}</h2></div><button className="icon-button" title={t('新建主题')} disabled={themeOperationBusy} onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
+          <div className="panel-heading"><div><span className="eyebrow">{t('主题列表')}</span><h2>{t('我的主题')}</h2></div><button className="icon-button" title={t('新建主题')} disabled={themeOperationBusy} onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
           <div className="theme-list">
             {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} disabled={themeOperationBusy} onClick={() => { if (theme.id !== draft.id) void loadTheme(theme.id).catch(() => undefined) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{t(theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题')}</small></span></button>)}
           </div>
           <div className="theme-actions"><button type="button" title={t('导出主题')} disabled={themeOperationBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title={t('导入主题')} disabled={themeOperationBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title={t('复制主题')} disabled={themeOperationBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={t(systemThemeSelected ? '系统主题不能删除' : '删除主题')} disabled={themeOperationBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
-          {notice && <div className="theme-success" role="status"><Check size={13} /><span>{notice}</span><button type="button" title={t('关闭提示')} onClick={() => setNotice(null)}><X size={13} /></button></div>}
-          {operationProgress && <div className="operation-progress" role="status"><span>{t(operationProgress.message)}</span>{operationProgress.totalBytes ? <small>{Math.round(operationProgress.processedBytes / operationProgress.totalBytes * 100)}%</small> : <small>{t('处理中')}</small>}<button type="button" title={t('取消操作')} onClick={() => void window.studio.operations?.cancel(operationProgress.id)}>{t('取消')}</button></div>}
+          {notice && <div className="theme-success" role="status"><Check size={13} /><span>{tm(notice)}</span><button type="button" title={t('关闭提示')} onClick={() => setNotice(null)}><X size={13} /></button></div>}
+          {operationProgress && <div className="operation-progress" role="status"><span>{tm(operationProgress.message)}</span>{operationProgress.totalBytes ? <small>{Math.round(operationProgress.processedBytes / operationProgress.totalBytes * 100)}%</small> : <small>{t('处理中')}</small>}<button type="button" title={t('取消操作')} onClick={() => void window.studio.operations?.cancel(operationProgress.id)}>{t('取消')}</button></div>}
           <nav className="sidebar-nav">
             <button className={activeInspector === 'visual' ? 'active' : ''} onClick={() => showInspector('visual')}><Palette size={17} />{t('视觉设计')}</button>
             <button className={activeInspector === 'icons' ? 'active' : ''} onClick={() => showInspector('icons')}><Box size={17} />{t('图标样式')}</button>
@@ -1361,7 +1363,7 @@ export function App(): React.JSX.Element {
         </section>
 
         <aside className="inspector" ref={inspectorRef} inert={themeOperationBusy ? true : undefined} aria-busy={themeOperationBusy}>
-          <div className="panel-heading inspector-title"><div><span className="eyebrow">PROPERTIES</span><input value={draft.name} onChange={(event) => { const name = event.currentTarget.value; change((profile) => { profile.name = name }) }} /></div><ChevronDown size={16} /></div>
+          <div className="panel-heading inspector-title"><div><span className="eyebrow">{t('属性')}</span><input value={draft.name} onChange={(event) => { const name = event.currentTarget.value; change((profile) => { profile.name = name }) }} /></div><ChevronDown size={16} /></div>
           {activeInspector === 'visual' && <>
             <Property title="视频播放" anchor="visual-video-playback" highlighted={inspectorAnchor === 'visual-video-playback'}><VideoPlaybackPanel profile={draft} inspections={videoInspections} optimizingRole={optimizingVideoRole} onChange={change} onOptimize={(role) => { void openVideoTranscodeDialog(role) }} onActivateVariant={(role, variant) => { void activateVideoVariantForRole(role, variant) }} /></Property>
             <Property title="整个窗口背景" anchor="visual-window-background" highlighted={inspectorAnchor === 'visual-window-background'}><WindowBackgroundControls profile={draft} backgroundUrl={windowBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('windowBackground', kind) }} /></Property>
@@ -1411,7 +1413,7 @@ export function App(): React.JSX.Element {
             ? <div className="icon-slot-with-visibility" key={slot}><ThemeIconControl slot={slot} profile={draft} assets={previewAssets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} /><label className="toggle-row"><span>{t('显示输入框装饰')}</span><input type="checkbox" checked={draft.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; change((profile) => { profile.composerBadge.visible = visible }) }} /></label></div>
             : <ThemeIconControl key={slot} slot={slot} profile={draft} assets={previewAssets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property><Property title="粒子动效素材"><div className="icon-editor">{particleIconSlots.map((slot) => <ThemeIconControl key={slot} slot={slot} profile={draft} assets={previewAssets} highlighted={inspectorAnchor === `icon-${slot}`} onChange={(name) => change((profile) => { profile.icons[slot] = { kind: 'builtin', name } })} onImport={() => void importIcon(slot)} />)}</div></Property></>}
           {activeInspector === 'runtime' && <>
-            <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{t(runtime.message)}</strong><dl><div><dt>{t('阶段')}</dt><dd>{t(runtimePhaseLabels[runtime.phase])}</dd></div><div><dt>{t('端口')}</dt><dd>{runtime.port}</dd></div><div><dt>{t('页面')}</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{t(runtime.lastError)}</p>}</div></Property>
+            <Property title="运行状态"><div className="runtime-summary"><span className={`runtime-indicator ${runtime.phase}`} /><strong>{tm(runtime.message)}</strong><dl><div><dt>{t('阶段')}</dt><dd>{t(runtimePhaseLabels[runtime.phase])}</dd></div><div><dt>{t('端口')}</dt><dd>{runtime.port}</dd></div><div><dt>{t('页面')}</dt><dd>{runtime.targetCount}</dd></div><div><dt>Codex</dt><dd>{runtime.codexVersion ?? '-'}</dd></div></dl>{runtime.lastError && <p>{tm(runtime.lastError)}</p>}</div></Property>
             <Property title="应用更新"><div className="app-update-panel">
               <div className="app-update-current"><span>{t('当前版本')}</span><strong>{currentVersionLabel}</strong></div>
               <p className={appUpdate?.phase === 'error' || updateError ? 'error' : ''} role="status" aria-live="polite" aria-atomic="true">{updatePanelMessage}</p>
@@ -1876,6 +1878,6 @@ function reducedMotionPreviewAssets(
   return result
 }
 
-function messageOf(reason: unknown): string {
-  return t(reason instanceof Error ? reason.message : String(reason))
+function messageOf(reason: unknown): LocalizedMessage {
+  return localizedMessageFrom(reason)
 }

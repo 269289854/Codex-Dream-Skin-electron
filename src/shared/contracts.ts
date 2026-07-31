@@ -1,5 +1,5 @@
 import type { CreateThemeInput, MediaReference, ThemeProfile, ThemeSummary } from './theme'
-import type { SupportedLocale } from './i18n'
+import type { LocalizedMessage, SupportedLocale } from './i18n'
 import type { ImportedFontFormat } from './typography'
 import type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
 export type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
@@ -19,7 +19,7 @@ export interface AppUpdateStatus {
   currentVersion: string
   availableVersion: string | null
   downloadPercent: number | null
-  error: string | null
+  error: LocalizedMessage | null
 }
 
 export interface ImportedAsset {
@@ -88,7 +88,7 @@ export interface OperationProgress {
   phase: 'started' | 'copying' | 'validating' | 'optimizing' | 'writing' | 'completed' | 'failed' | 'cancelled'
   processedBytes: number
   totalBytes: number | null
-  message: string
+  message: LocalizedMessage
 }
 
 export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'accountMenuBackground' | 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble'
@@ -116,8 +116,8 @@ export interface RuntimeStatus {
   targetCount: number
   codexVersion: string | null
   backupAvailable: boolean
-  lastError: string | null
-  message: string
+  lastError: LocalizedMessage | null
+  message: LocalizedMessage
 }
 
 export interface StudioApi {

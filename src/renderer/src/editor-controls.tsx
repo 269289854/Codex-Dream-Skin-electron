@@ -202,7 +202,7 @@ export function FontControl({ slot, profile, onChange, onImport }: FontControlPr
     else if (kind === 'imported' && id) onChange({ kind: 'imported', id })
   }}>
     {slot !== 'ui' && <option value="inherit">{t('继承全局界面字体')}</option>}
-    <optgroup label={t('内置字体')}>{Object.entries(BUILTIN_FONTS).map(([id, font]) => <option key={id} value={`builtin:${id}`}>{font.label}</option>)}</optgroup>
+    <optgroup label={t('内置字体')}>{Object.entries(BUILTIN_FONTS).map(([id, font]) => <option key={id} value={`builtin:${id}`}>{t(font.label)}</option>)}</optgroup>
     {profile.typography.importedFonts.length > 0 && <optgroup label={t('已导入字体')}>{profile.typography.importedFonts.map((font) => <option key={font.id} value={`imported:${font.id}`}>{font.family}</option>)}</optgroup>}
   </select></label><button className="tool-button" type="button" title={t('为{label}导入字体', { label: t(typographyLabels[slot]) })} onClick={onImport}><Upload size={14} /></button></div>
 }

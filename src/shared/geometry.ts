@@ -7,12 +7,12 @@ export function clampNormalized(value: number): number {
 }
 
 export function normalizePoint(x: number, y: number, width: number, height: number): Point {
-  if (width <= 0 || height <= 0) throw new Error('Image dimensions must be positive.')
+  if (width <= 0 || height <= 0) throw new Error('图片尺寸必须为正数。')
   return { x: clampNormalized(x / width), y: clampNormalized(y / height) }
 }
 
 export function denormalizePoint(point: Point, width: number, height: number): Point {
-  if (width <= 0 || height <= 0) throw new Error('Image dimensions must be positive.')
+  if (width <= 0 || height <= 0) throw new Error('图片尺寸必须为正数。')
   return { x: point.x * width, y: point.y * height }
 }
 

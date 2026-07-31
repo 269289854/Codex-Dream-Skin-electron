@@ -61,7 +61,7 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
   async start(preferredPort: number, restartExisting: boolean, expectedInstallationId?: string): Promise<CodexStartResult> {
     const detection = await this.detect()
     if (expectedInstallationId && expectedInstallationId !== detection.installationId) {
-      throw new CodexInstallationIdentityError('Saved Codex session belongs to another installation.')
+      throw new CodexInstallationIdentityError('保存的 Codex 会话属于其他安装。')
     }
     const argumentsList = ['-Port', String(preferredPort)]
     if (restartExisting) argumentsList.push('-RestartExisting')
@@ -71,10 +71,10 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
 
   async verifySession(port: number, browserId: string, detection: CodexDetection, expectedInstallationId = detection.installationId): Promise<CodexStartResult> {
     if (detection.platform !== this.platform || expectedInstallationId !== detection.installationId || !detection.running) {
-      throw new Error('Saved Codex session is no longer running.')
+      throw new Error('保存的 Codex 会话已不再运行。')
     }
     const result = await this.bridge<WindowsStartResult>('Start', ['-Port', String(port)], 10_000)
-    if (result.browserId !== browserId) throw new Error('Saved Codex browser identity no longer matches.')
+    if (result.browserId !== browserId) throw new Error('保存的 Codex 浏览器身份不再匹配。')
     return this.toStartResult(result, expectedInstallationId)
   }
 
@@ -82,7 +82,7 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
     if (restartCodex && expectedInstallationId) {
       const detection = await this.detect()
       if (expectedInstallationId !== detection.installationId) {
-        throw new CodexInstallationIdentityError('Saved Codex session belongs to another installation.')
+        throw new CodexInstallationIdentityError('保存的 Codex 会话属于其他安装。')
       }
     }
     const result = await this.bridge<WindowsRestoreResult>('Restore', restartCodex ? ['-RestartCodex'] : [], 65_000)
@@ -94,14 +94,14 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
           ? { status: 'succeeded' }
           : {
               status: 'failed',
-              error: result.archiveError || 'Codex configuration backup archive failed.',
+              error: result.archiveError || 'Codex 配置备份归档失败。',
               backupAvailable: result.backupAvailable
             },
       restart: !restartCodex || !result.restored
         ? { status: 'not-requested' }
         : result.restarted
           ? { status: 'succeeded' }
-          : { status: 'failed', error: result.restartError || 'Codex restart failed.' }
+          : { status: 'failed', error: result.restartError || 'Codex 重启失败。' }
     }
   }
 
