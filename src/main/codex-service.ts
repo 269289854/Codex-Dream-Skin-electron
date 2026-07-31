@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { CodexDetection, RuntimePhase, RuntimeStatus, SupportedDesktopPlatform } from '../shared/contracts'
 import { paintToCss } from '../shared/appearance'
 import { buildBackgroundOverlayStyle, buildConversationOverlayStyle } from '../shared/conversation-overlay'
-import { iconGifPosterAssetKey } from '../shared/icon-assets'
+import { gifPosterAssetKey } from '../shared/gif'
 import type { Fence } from '../shared/geometry'
 import { BUILTIN_ICON_GLYPHS } from '../shared/icon-glyphs'
 import { PARTICLE_VIEWPORT_TOP, createSparkleParticles, particleEffectIconSlot, resolveParticleCyclePositionPolicy, resolveParticleRenderPolicy } from '../shared/particle-effects'
@@ -56,7 +56,7 @@ export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<strin
     rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${layout.aspectRatio}; transform: rotate(${p.rotation}deg); transform-origin: center; opacity: ${style.opacity}; }`)
     rules.push(`#codex-dream-skin-chrome .dream-polaroid-shadow { filter: ${polaroidShadowFilter(style)} !important; }`)
     rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface { background-image: none !important; background-size: ${layout.backgroundSize} !important; background-position: ${layout.backgroundPosition} !important; clip-path: ${layout.clipPath ?? 'none'} !important; }`)
-    rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface::before { content: ""; position: absolute; inset: 0; background-image: ${imageSource && assets[source] ? `url("${assets[source]}")` : 'none'}; background-repeat: no-repeat; background-size: ${layout.backgroundSize}; background-position: ${layout.backgroundPosition}; transform: ${mediaFlipCssTransform(profile.polaroid.mediaTransform)}; transform-origin: center; pointer-events: none; }`)
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface::before { content: ""; position: absolute; inset: 0; background-image: ${imageSource && assets[source] ? `var(--dream-polaroid-art, url("${assets[source]}"))` : 'none'}; background-repeat: no-repeat; background-size: ${layout.backgroundSize}; background-position: ${layout.backgroundPosition}; transform: ${mediaFlipCssTransform(profile.polaroid.mediaTransform)}; transform-origin: center; pointer-events: none; }`)
     rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
   } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
   return rules.join('\n')
@@ -419,14 +419,23 @@ export class CodexService {
   }
 
   async stop(): Promise<RuntimeStatus> {
-    this.beginSessionIntent()
-    return this.enqueueOperation(() => this.stopInternal())
+    const generation = this.beginSessionIntent()
+    return this.enqueueOperation(() => this.stopInternal(generation))
   }
 
-  private async stopInternal(): Promise<RuntimeStatus> {
+  private async stopInternal(generation: number): Promise<RuntimeStatus> {
+    const watcher = this.watcher
+    try {
+      if (watcher) await watcher.stop(true)
+    } catch (reason) {
+      if (watcher === this.watcher && this.activeThemeId && this.activeSession) {
+        this.activeSessionGeneration = generation
+        throw this.reportActiveFailure(reason, '停止注入失败，当前主题会话仍在运行，可重试恢复')
+      }
+      throw this.fail(reason)
+    }
     this.clearActiveSession()
     await rm(this.sessionPath(), { force: true })
-    if (this.watcher) await this.watcher.stop(true)
     this.watcher = null
     this.patch('stopped', '已停止注入并移除当前页面主题')
     return this.getStatus()
@@ -434,11 +443,15 @@ export class CodexService {
 
   async restore(restartCodex: boolean): Promise<RuntimeStatus> {
     const activeInstallationId = restartCodex ? this.activeSession?.installationId : undefined
-    this.beginSessionIntent()
-    return this.enqueueOperation(() => this.restoreInternal(restartCodex, activeInstallationId))
+    const generation = this.beginSessionIntent()
+    return this.enqueueOperation(() => this.restoreInternal(restartCodex, generation, activeInstallationId))
   }
 
-  private async restoreInternal(requestedRestart: boolean, activeInstallationId?: string): Promise<RuntimeStatus> {
+  private async restoreInternal(
+    requestedRestart: boolean,
+    generation: number,
+    activeInstallationId?: string
+  ): Promise<RuntimeStatus> {
     this.patch('restoring', '正在恢复 Codex 原始配置')
     try {
       let restartCodex = requestedRestart
@@ -456,7 +469,17 @@ export class CodexService {
           diagnostic = reason instanceof Error ? reason.message : String(reason)
         }
       }
-      if (this.watcher) await this.watcher.stop(true)
+      const watcher = this.watcher
+      if (watcher) {
+        try {
+          await watcher.stop(true)
+        } catch (reason) {
+          if (watcher === this.watcher && this.activeThemeId && this.activeSession) {
+            this.activeSessionGeneration = generation
+          }
+          throw reason
+        }
+      }
       this.watcher = null
       let restoreResult: CodexRestoreResult
       try {
@@ -520,7 +543,12 @@ export class CodexService {
       ].filter((part): part is string => part !== null).join('；') || null
       this.patch('stopped', message, details)
       return this.getStatus()
-    } catch (reason) { throw this.fail(reason) }
+    } catch (reason) {
+      if (this.hasCurrentActiveSession()) {
+        throw this.reportActiveFailure(reason, '恢复失败，当前主题会话仍在运行，可重试恢复')
+      }
+      throw this.fail(reason)
+    }
   }
 
   private async replaceWatcher(
@@ -578,11 +606,13 @@ export class CodexService {
       : profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
     const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot, budgetDataUrls(compiled.assets))
     const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
+    const gifPosterDataUrl = (source?: { asset: string; mimeType: string } | null): string | null =>
+      source?.mimeType === 'image/gif' ? compiled.assets[gifPosterAssetKey(source.asset)] ?? null : null
     const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
       source.kind === 'asset'
         ? {
             dataUrl: compiled.assets[source.asset],
-            posterDataUrl: source.asset.toLowerCase().endsWith('.gif') ? compiled.assets[iconGifPosterAssetKey(source.asset)] : undefined
+            posterDataUrl: source.asset.toLowerCase().endsWith('.gif') ? compiled.assets[gifPosterAssetKey(source.asset)] : undefined
           }
         : { name: source.name }
     ]))
@@ -608,16 +638,16 @@ export class CodexService {
       themeId: profile.id,
       videoPlayback: profile.videoPlayback,
       media: {
-        hero: profile.hero.source ? { asset: profile.hero.source.asset, kind: profile.hero.source.kind, mimeType: profile.hero.source.mimeType, playback: profile.hero.playback, transform: profile.hero.mediaTransform } : null,
-        polaroid: profile.polaroid.source ? { asset: profile.polaroid.source.asset, kind: profile.polaroid.source.kind, mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback, transform: profile.polaroid.mediaTransform } : null,
+        hero: profile.hero.source ? { asset: profile.hero.source.asset, kind: profile.hero.source.kind, mimeType: profile.hero.source.mimeType, playback: profile.hero.playback, transform: profile.hero.mediaTransform, posterDataUrl: gifPosterDataUrl(profile.hero.source) } : null,
+        polaroid: profile.polaroid.source ? { asset: profile.polaroid.source.asset, kind: profile.polaroid.source.kind, mimeType: profile.polaroid.source.mimeType, playback: profile.polaroid.playback, transform: profile.polaroid.mediaTransform, dataUrl: profile.polaroid.source.kind === 'image' ? compiled.assets[profile.polaroid.source.asset] ?? null : null, posterDataUrl: gifPosterDataUrl(profile.polaroid.source) } : null,
         conversationBackground: profile.conversationBackground.source
-          ? { ...conversationBackground, overlayStyle: conversationOverlayStyle, kind: profile.conversationBackground.source.kind, mimeType: profile.conversationBackground.source.mimeType, asset: profile.conversationBackground.source.asset, dataUrl: profile.conversationBackground.source.kind === 'image' ? compiled.assets[profile.conversationBackground.source.asset] : null }
+          ? { ...conversationBackground, overlayStyle: conversationOverlayStyle, kind: profile.conversationBackground.source.kind, mimeType: profile.conversationBackground.source.mimeType, asset: profile.conversationBackground.source.asset, dataUrl: profile.conversationBackground.source.kind === 'image' ? compiled.assets[profile.conversationBackground.source.asset] : null, posterDataUrl: gifPosterDataUrl(profile.conversationBackground.source) }
           : { ...conversationBackground, overlayStyle: conversationOverlayStyle, dataUrl: null },
         windowBackground: windowBackgroundSource
-          ? { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, kind: windowBackgroundSource.kind, mimeType: windowBackgroundSource.mimeType, asset: windowBackgroundSource.asset, dataUrl: windowBackgroundSource.kind === 'image' ? compiled.assets[windowBackgroundSource.asset] : null }
+          ? { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, kind: windowBackgroundSource.kind, mimeType: windowBackgroundSource.mimeType, asset: windowBackgroundSource.asset, dataUrl: windowBackgroundSource.kind === 'image' ? compiled.assets[windowBackgroundSource.asset] : null, posterDataUrl: gifPosterDataUrl(windowBackgroundSource) }
           : { visible: windowBackground.visible, mode: windowBackground.mode, backgroundStyle: windowBackgroundStyle, masks: windowBackgroundMasks, dataUrl: null },
         accountMenuBackground: accountMenuBackgroundSource
-          ? { mode: accountMenuBackground.mode, style: buildAccountMenuBackgroundStyle(accountMenuBackground), kind: accountMenuBackgroundSource.kind, mimeType: accountMenuBackgroundSource.mimeType, asset: accountMenuBackgroundSource.asset, dataUrl: compiled.assets[accountMenuBackgroundSource.asset] ?? null }
+          ? { mode: accountMenuBackground.mode, style: buildAccountMenuBackgroundStyle(accountMenuBackground), kind: accountMenuBackgroundSource.kind, mimeType: accountMenuBackgroundSource.mimeType, asset: accountMenuBackgroundSource.asset, dataUrl: compiled.assets[accountMenuBackgroundSource.asset] ?? null, posterDataUrl: gifPosterDataUrl(accountMenuBackgroundSource) }
           : { mode: accountMenuBackground.mode, style: buildAccountMenuBackgroundStyle(accountMenuBackground), dataUrl: null }
       },
       icons,
@@ -625,7 +655,8 @@ export class CodexService {
         ...profile.decorations,
         composerMelody: {
           ...composerMelody,
-          dataUrl: composerMelody.source ? compiled.assets[composerMelody.source.asset] ?? null : null
+          dataUrl: composerMelody.source ? compiled.assets[composerMelody.source.asset] ?? null : null,
+          posterDataUrl: gifPosterDataUrl(composerMelody.source)
         }
       },
       particleViewportTop: PARTICLE_VIEWPORT_TOP,
@@ -636,7 +667,8 @@ export class CodexService {
       composerBadge: profile.composerBadge,
       brandSignature: {
         ...profile.brandSignature,
-        dataUrl: profile.brandSignature.source ? compiled.assets[profile.brandSignature.source.asset] ?? null : null
+        dataUrl: profile.brandSignature.source ? compiled.assets[profile.brandSignature.source.asset] ?? null : null,
+        posterDataUrl: gifPosterDataUrl(profile.brandSignature.source)
       },
       conversationBubbles: resolveConversationBubbles(profile.conversationBubbles, compiled.assets),
       toolActivityBubbles: { visible: profile.toolActivityBubbles.visible },

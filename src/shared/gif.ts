@@ -11,6 +11,10 @@ const INFINITE_LOOP_EXTENSION = Uint8Array.from([
   0x03, 0x01, 0x00, 0x00, 0x00
 ])
 
+export function gifPosterAssetKey(asset: string): string {
+  return `builtin/gif-posters/${asset}.png`
+}
+
 export function ensureGifInfiniteLoop(bytes: Uint8Array): Uint8Array {
   const dataStart = gifDataStart(bytes)
   if (dataStart === null) return bytes

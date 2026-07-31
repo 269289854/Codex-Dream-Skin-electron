@@ -11,8 +11,10 @@ import {
   CONVERSATION_BUBBLE_PRESETS,
   createDefaultTheme
 } from '../src/shared/theme'
+import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../src/shared/gif'
 
 const themeId = '11111111-1111-4111-8111-111111111111'
+const testGif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 const presetRoot = join(process.cwd(), 'resources', 'shared', 'conversation-bubbles')
 const expectedPresetSlices = {
   'daisy-heart': [65, 25, 28, 25],
@@ -105,7 +107,8 @@ describe('conversation bubble frames', () => {
     const resolved = resolveConversationBubbles(profile.conversationBubbles, {
       [conversationBubblePresetAssetKey('moon-stars')]: 'data:image/png;base64,USER',
       [conversationBubblePresetAssetKey('ocean-shell')]: 'data:image/png;base64,PLAN',
-      'assets/codex-bubble.gif': 'data:image/gif;base64,CODEX'
+      'assets/codex-bubble.gif': 'data:image/gif;base64,CODEX',
+      [gifPosterAssetKey('assets/codex-bubble.gif')]: 'data:image/png;base64,CODEX_POSTER'
     })
 
     expect(resolved).toEqual({
@@ -122,6 +125,7 @@ describe('conversation bubble frames', () => {
       codex: {
         mode: 'stretch',
         dataUrl: 'data:image/gif;base64,CODEX',
+        posterDataUrl: 'data:image/png;base64,CODEX_POSTER',
         slice: 31,
         sliceInsets: [31, 31, 31, 31],
         frameWidth: 18,
@@ -169,12 +173,13 @@ describe('conversation bubble frames', () => {
 
     const compiled = await compileTheme(
       profile,
-      async (asset) => `data:image/gif;base64,${Buffer.from(asset).toString('base64')}`,
+      async () => `data:image/gif;base64,${testGif.toString('base64')}`,
       async (presetId) => `data:image/png;base64,${Buffer.from(presetId).toString('base64')}`
     )
 
     expect(Object.keys(compiled.assets).filter((asset) => asset.startsWith('builtin/conversation-bubbles/'))).toHaveLength(8)
-    expect(compiled.assets['assets/codex-bubble.gif']).toBe(`data:image/gif;base64,${Buffer.from('assets/codex-bubble.gif').toString('base64')}`)
+    expect(compiled.assets['assets/codex-bubble.gif']).toBe(`data:image/gif;base64,${Buffer.from(ensureGifInfiniteLoop(testGif)).toString('base64')}`)
+    expect(compiled.assets[gifPosterAssetKey('assets/codex-bubble.gif')]).toMatch(/^data:image\/png;base64,/)
     expect(compiled.assets[conversationBubblePresetAssetKey('daisy-heart')]).toBe(`data:image/png;base64,${Buffer.from('daisy-heart').toString('base64')}`)
     expect(compiled.assets[conversationBubblePresetAssetKey('rainbow-candy')]).toBe(`data:image/png;base64,${Buffer.from('rainbow-candy').toString('base64')}`)
   })

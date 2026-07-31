@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import sharp from 'sharp'
-import { ensureGifInfiniteLoop } from '../shared/gif'
 import { MAX_ICON_GIF_BYTES, MAX_ICON_GIF_DIMENSION, MAX_ICON_GIF_FRAMES } from '../shared/icon-assets'
+import { prepareGif } from './gif-assets'
 
 interface IconGifInspection {
   width: number
@@ -28,13 +28,10 @@ export async function inspectIconGif(bytes: Uint8Array): Promise<IconGifInspecti
 
 export async function prepareIconGif(bytes: Uint8Array): Promise<PreparedIconGif> {
   const inspection = await inspectIconGif(bytes)
-  const normalized = Buffer.from(ensureGifInfiniteLoop(bytes))
-  const poster = await sharp(normalized, { page: 0, pages: 1 }).png().toBuffer()
+  const prepared = await prepareGif(bytes)
   return {
     ...inspection,
-    bytes: normalized,
-    dataUrl: `data:image/gif;base64,${normalized.toString('base64')}`,
-    posterDataUrl: `data:image/png;base64,${poster.toString('base64')}`
+    ...prepared
   }
 }
 

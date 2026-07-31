@@ -12,6 +12,36 @@ type CdpCommand = (method: string, params: Record<string, unknown>) => Promise<u
 
 const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin", "dream-window-background-active"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); document.getElementById("codex-dream-skin-window-background")?.remove(); return true; })()'
 const RUNTIME_VERSION_PATTERN = /^studio-[0-9a-f]{24}$/
+const CDP_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'ECONNABORTED', 'EPIPE', 'UND_ERR_SOCKET'])
+const CDP_UNAVAILABLE_MESSAGES = [
+  /No Codex page target remains open\./i,
+  /CDP 会话(?:已结束|意外关闭)。/,
+  /No target with given id/i,
+  /Session closed/i,
+  /Target (?:page )?closed/i,
+  /Inspected target navigated or closed/i,
+  /WebSocket (?:is not open|was closed|closed before)/i,
+  /socket hang up/i
+]
+
+export function isCdpUnavailableError(reason: unknown): boolean {
+  let current: unknown = reason
+  const visited = new Set<unknown>()
+  while (current && !visited.has(current)) {
+    visited.add(current)
+    if (typeof current === 'object') {
+      const error = current as { code?: unknown; message?: unknown; cause?: unknown }
+      if (typeof error.code === 'string' && CDP_UNAVAILABLE_CODES.has(error.code)) return true
+      const message = error.message
+      if (typeof message === 'string' && CDP_UNAVAILABLE_MESSAGES.some((pattern) => pattern.test(message))) return true
+      current = error.cause
+    } else {
+      const message = current
+      return typeof message === 'string' && CDP_UNAVAILABLE_MESSAGES.some((pattern) => pattern.test(message))
+    }
+  }
+  return false
+}
 
 export function isThemeCdpTargetUrl(value: string): boolean {
   try {
@@ -70,7 +100,7 @@ export class CdpWatcher {
     if (!this.payload || !this.expectedVersion) throw new Error('Theme payload is not ready.')
     await this.cleanupExcludedTargets()
     const snapshot = await this.inject()
-    if (!this.timer) this.timer = setInterval(() => void this.tick(), 2500)
+    this.startTimer()
     return snapshot
   }
 
@@ -98,21 +128,48 @@ export class CdpWatcher {
   }
 
   async stop(removeTheme: boolean): Promise<CdpSnapshot> {
+    const wasWatching = this.timer !== null
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     if (removeTheme) {
       try {
-        const targets = await this.targets(true)
-        await Promise.all(targets.map((target) => this.evaluate(target,
-          CLEANUP_EXPRESSION
-        )))
-      } catch {
-        // Codex may already be closed.
+        await this.cleanupTargets()
+      } catch (reason) {
+        if (wasWatching) this.startTimer()
+        throw reason
       }
     }
     const snapshot = { connected: false, targetCount: 0 }
     this.onSnapshot(snapshot)
     return snapshot
+  }
+
+  private startTimer(): void {
+    if (!this.timer) this.timer = setInterval(() => void this.tick(), 2500)
+  }
+
+  private async cleanupTargets(): Promise<void> {
+    let targets: CdpTarget[]
+    try {
+      targets = await this.targets(true)
+    } catch (reason) {
+      if (isCdpUnavailableError(reason)) return
+      throw reason
+    }
+    const outcomes = await Promise.allSettled(targets.map((target) => this.evaluate(target, CLEANUP_EXPRESSION)))
+    const failures: Error[] = []
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') {
+        if (!isCdpUnavailableError(outcome.reason)) {
+          failures.push(outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason)))
+        }
+      } else if (outcome.value !== true) {
+        failures.push(new Error('Codex 页面未确认主题清理完成。'))
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(`Codex 页面主题清理失败: ${failures.map((error) => error.message).join('；')}`)
+    }
   }
 
   private async tick(): Promise<void> {
@@ -138,10 +195,14 @@ export class CdpWatcher {
     const browserUrl = this.validateWebSocketUrl(version.webSocketDebuggerUrl, 'browser', this.browserId)
     if (!browserUrl) throw new Error('CDP browser identity changed or is not loopback-only.')
     const targets = await this.fetchJson<CdpTarget[]>('/json/list')
-    const valid = targets.filter((target) => target.type === 'page' && target.url.startsWith('app://') &&
+    const candidates = targets.filter((target) => target.type === 'page' && target.url.startsWith('app://'))
+    const valid = candidates.filter((target) =>
       /^[A-Za-z0-9._-]{1,200}$/.test(target.id) && this.validateWebSocketUrl(target.webSocketDebuggerUrl, 'page', target.id))
     const selected = includeExcluded ? valid : valid.filter((target) => isThemeCdpTargetUrl(target.url))
-    if (selected.length === 0) throw new Error('No verified Codex page target is available.')
+    if (selected.length === 0) {
+      if (includeExcluded && candidates.length === 0) throw new Error('No Codex page target remains open.')
+      throw new Error('No verified Codex page target is available.')
+    }
     return selected
   }
 

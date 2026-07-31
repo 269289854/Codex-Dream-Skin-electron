@@ -16,8 +16,9 @@ import { importedFontFormatForAsset, type ImportedFontFormat } from '../shared/t
 import { compileTheme, compiledAssetNames } from './theme-compiler'
 import { createVideoVariantReference, mediaMimeTypeForPath, mediaReferenceAssets, mediaReferenceForPath } from '../shared/media'
 import { conversationBubbleMediaReferences } from '../shared/conversation-bubbles'
-import { ensureGifInfiniteLoop } from '../shared/gif'
-import { iconGifPosterAssetKey, MAX_ICON_GIF_BYTES } from '../shared/icon-assets'
+import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../shared/gif'
+import { MAX_ICON_GIF_BYTES } from '../shared/icon-assets'
+import { prepareGif } from './gif-assets'
 import { inspectIconGif, prepareIconGif } from './icon-assets'
 import {
   addShareUncompressedBytes,
@@ -60,6 +61,28 @@ interface BundledSystemThemeAssets {
   resourcesRoot?: string
 }
 
+export interface ShareArchiveWriter {
+  pipe: (stream: NodeJS.WritableStream) => void
+  append: (input: NodeJS.ReadableStream | Buffer, options: { name: string }) => void
+  on: (event: 'error', listener: (reason: unknown) => void) => unknown
+  off: (event: 'error', listener: (reason: unknown) => void) => unknown
+  finalize: () => Promise<void>
+  abort?: () => void
+}
+
+interface ShareArchiveOutput {
+  destroyed?: boolean
+  destroy: (error?: Error) => void
+  once: {
+    (event: 'close', listener: () => void): unknown
+    (event: 'error', listener: (reason: unknown) => void): unknown
+  }
+  off: {
+    (event: 'close', listener: () => void): unknown
+    (event: 'error', listener: (reason: unknown) => void): unknown
+  }
+}
+
 export interface VideoSourcePreflight {
   sourcePath: string
   size: number
@@ -84,6 +107,61 @@ const THEME_DELETE_TOMBSTONE_PATTERN = /^\.theme-delete-([0-9a-f]{8}-[0-9a-f]{4}
 const THEME_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const CONTROLLED_TEMP_DIRECTORY_PATTERN = /^\.(?:cdstheme-import|media-validate)-/
 const CONTROLLED_TEMP_FILE_PATTERN = /\.[0-9a-f]{8}-[0-9a-f-]{27}\.tmp(?:\.mp4)?$/i
+
+export async function finalizeShareArchive(
+  archive: ShareArchiveWriter,
+  output: ShareArchiveOutput,
+  prepare: () => void,
+  signal?: AbortSignal
+): Promise<void> {
+  let failed = false
+  let rejectFailure!: (reason: Error) => void
+  let startFinalization!: () => void
+  const failure = new Promise<never>((_resolve, reject) => { rejectFailure = reject })
+  const outputCompletion = new Promise<void>((resolve) => { output.once('close', resolve) })
+  const finalization = new Promise<void>((resolve, reject) => {
+    startFinalization = () => {
+      void Promise.resolve().then(() => archive.finalize()).then(resolve, reject)
+    }
+  })
+  const completion = Promise.race([Promise.all([finalization, outputCompletion]).then(() => undefined), failure])
+  void completion.catch(() => undefined)
+
+  const terminate = (reason: unknown): void => {
+    if (failed) return
+    failed = true
+    const error = reason instanceof Error ? reason : new Error(String(reason))
+    try { archive.abort?.() } catch { /* Preserve the triggering failure. */ }
+    try {
+      if (!output.destroyed) output.destroy(error)
+    } catch { /* Preserve the triggering failure. */ }
+    rejectFailure(error)
+  }
+  const onArchiveError = (reason: unknown): void => terminate(reason)
+  const onOutputError = (reason: unknown): void => terminate(reason)
+  const onAbort = (): void => terminate(new Error('主题导出已取消。'))
+  archive.on('error', onArchiveError)
+  output.once('error', onOutputError)
+  signal?.addEventListener('abort', onAbort, { once: true })
+
+  try {
+    if (signal?.aborted) onAbort()
+    else {
+      prepare()
+      startFinalization()
+    }
+    await completion
+  } catch (reason) {
+    terminate(reason)
+    throw (reason instanceof Error ? reason : new Error(String(reason)))
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
+    if (!failed) {
+      archive.off('error', onArchiveError)
+      output.off('error', onOutputError)
+    }
+  }
+}
 
 export class ProfileStore {
   readonly themesRoot: string
@@ -497,9 +575,6 @@ export class ProfileStore {
     const gifIconAssets = new Set(Object.values(profile.icons)
       .filter((icon) => icon.kind === 'asset' && extname(icon.asset).toLowerCase() === '.gif')
       .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
-    const brandSignatureGifAsset = profile.brandSignature.source?.mimeType === 'image/gif'
-      ? profile.brandSignature.source.asset
-      : null
     for (const asset of compiledAssetNames(profile)) {
       this.throwIfAborted(signal, cancelledMessage)
       const source = resolveAssetPath(asset)
@@ -507,9 +582,11 @@ export class ProfileStore {
       if (gifIconAssets.has(asset)) {
         const prepared = await prepareIconGif(data)
         budget.set(asset, prepared.bytes.byteLength)
-        budget.set(iconGifPosterAssetKey(asset), dataUrlByteLength(prepared.posterDataUrl))
-      } else if (asset === brandSignatureGifAsset) {
-        budget.set(asset, ensureGifInfiniteLoop(data).byteLength)
+        budget.set(gifPosterAssetKey(asset), dataUrlByteLength(prepared.posterDataUrl))
+      } else if (extname(asset).toLowerCase() === '.gif') {
+        const prepared = await prepareGif(data)
+        budget.set(asset, prepared.bytes.byteLength)
+        budget.set(gifPosterAssetKey(asset), dataUrlByteLength(prepared.posterDataUrl))
       }
     }
     if (this.bundledSystemAssets?.conversationBubbles) {
@@ -1132,31 +1209,15 @@ export class ProfileStore {
     await mkdir(dirname(path), { recursive: true })
     const temporary = `${path}.${randomUUID()}.tmp`
     const output = createWriteStream(temporary, { flags: 'wx' })
-    const ZipArchive = (archiver as unknown as { ZipArchive: new (options?: Record<string, unknown>) => {
-      pipe: (stream: NodeJS.WritableStream) => void
-      append: (input: NodeJS.ReadableStream | Buffer, options: { name: string }) => void
-      on: (event: string, listener: (...args: unknown[]) => void) => void
-      finalize: () => Promise<void>
-      abort?: () => void
-    } }).ZipArchive
+    const ZipArchive = (archiver as unknown as { ZipArchive: new (options?: Record<string, unknown>) => ShareArchiveWriter }).ZipArchive
     const archive = new ZipArchive({ forceZip64: true, zlib: { level: 6 } })
-    const completion = new Promise<void>((resolvePromise, reject) => {
-      output.once('close', resolvePromise)
-      output.once('error', reject)
-      archive.on('error', reject)
-    })
-    const abortExport = (): void => {
-      archive.abort?.()
-      output.destroy(new Error('主题导出已取消。'))
-    }
-    signal?.addEventListener('abort', abortExport, { once: true })
-    archive.pipe(output)
-    archive.append(Buffer.from(manifest), { name: 'manifest.json' })
-    archive.append(Buffer.from(profile), { name: 'theme.json' })
-    for (const [asset, sourcePath] of assets) archive.append(createReadStream(sourcePath), { name: asset })
     try {
-      await archive.finalize()
-      await completion
+      await finalizeShareArchive(archive, output, () => {
+        archive.pipe(output)
+        archive.append(Buffer.from(manifest), { name: 'manifest.json' })
+        archive.append(Buffer.from(profile), { name: 'theme.json' })
+        for (const [asset, sourcePath] of assets) archive.append(createReadStream(sourcePath), { name: asset })
+      }, signal)
       this.throwIfAborted(signal, '主题导出已取消。')
       assertShareCompressedSize((await stat(temporary)).size)
       const file = await open(temporary, 'r+')
@@ -1175,8 +1236,6 @@ export class ProfileStore {
     } catch (error) {
       await rm(temporary, { force: true }).catch(() => undefined)
       throw error
-    } finally {
-      signal?.removeEventListener('abort', abortExport)
     }
   }
 

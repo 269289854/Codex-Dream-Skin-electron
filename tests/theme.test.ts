@@ -7,8 +7,10 @@ import { buildDynamicThemeCss } from '../src/main/codex-service'
 import { buildThemeStyleVariables } from '../src/shared/runtime-theme'
 import { DEFAULT_SIDEBAR_COPY, DEFAULT_SIDEBAR_NAV_COPY, SIDEBAR_NAV_ITEMS } from '../src/shared/sidebar-layout'
 import { APPEARANCE_COLOR_TOKENS, resolveAppearanceColor } from '../src/shared/appearance'
+import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../src/shared/gif'
 
 const id = '11111111-1111-4111-8111-111111111111'
+const TEST_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 
 function versionFourteenConversationBackground(background: ReturnType<typeof createDefaultTheme>['conversationBackground']): object {
   const { overlay, ...legacy } = background
@@ -106,8 +108,9 @@ describe('theme schema and compiler', () => {
     expect(() => parseThemeProfile({ ...profile, brandSignature: { mode: 'text', source: null, mediaWidth: 191 } })).toThrow()
 
     profile.brandSignature = { mode: 'gif', source: gifSource, mediaWidth: 144 }
-    const compiled = await compileTheme(profile, async (asset) => asset === gifSource.asset ? 'data:image/gif;base64,AA==' : 'data:image/png;base64,AA==')
-    expect(compiled.assets[gifSource.asset]).toBe('data:image/gif;base64,AA==')
+    const compiled = await compileTheme(profile, async (asset) => asset === gifSource.asset ? `data:image/gif;base64,${TEST_GIF.toString('base64')}` : 'data:image/png;base64,AA==')
+    expect(compiled.assets[gifSource.asset]).toBe(`data:image/gif;base64,${Buffer.from(ensureGifInfiniteLoop(TEST_GIF)).toString('base64')}`)
+    expect(compiled.assets[gifPosterAssetKey(gifSource.asset)]).toMatch(/^data:image\/png;base64,/)
   })
 
   it('provides validated creation palettes and clones default colors per theme', () => {

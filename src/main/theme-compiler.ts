@@ -1,11 +1,10 @@
-import { Buffer } from 'node:buffer'
 import type { CompiledTheme } from '../shared/contracts'
 import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey } from '../shared/conversation-bubbles'
-import { ensureGifInfiniteLoop } from '../shared/gif'
-import { iconGifPosterAssetKey } from '../shared/icon-assets'
+import { gifPosterAssetKey } from '../shared/gif'
 import { CONVERSATION_BUBBLE_PRESETS, type ConversationBubblePresetId, type ThemeProfile } from '../shared/theme'
 import { selectedImportedFonts } from '../shared/typography'
 import { budgetDataUrls } from './embedded-assets'
+import { prepareGifDataUrl } from './gif-assets'
 import { prepareIconGifDataUrl } from './icon-assets'
 
 export async function compileTheme(
@@ -20,18 +19,14 @@ export async function compileTheme(
   const gifIconAssets = new Set(Object.values(profile.icons)
     .filter((icon) => icon.kind === 'asset' && icon.asset.toLowerCase().endsWith('.gif'))
     .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
-  for (const asset of gifIconAssets) {
-    const prepared = await prepareIconGifDataUrl(assets[asset] ?? '')
+  for (const asset of [...assetNames].filter((candidate) => candidate.toLowerCase().endsWith('.gif'))) {
+    const prepared = gifIconAssets.has(asset)
+      ? await prepareIconGifDataUrl(assets[asset] ?? '')
+      : await prepareGifDataUrl(assets[asset] ?? '')
     assets[asset] = prepared.dataUrl
-    assets[iconGifPosterAssetKey(asset)] = prepared.posterDataUrl
+    assets[gifPosterAssetKey(asset)] = prepared.posterDataUrl
   }
 
-  const brandSignatureGifAsset = profile.brandSignature.source?.mimeType === 'image/gif'
-    ? profile.brandSignature.source.asset
-    : null
-  if (brandSignatureGifAsset && assets[brandSignatureGifAsset]) {
-    assets[brandSignatureGifAsset] = ensureInfiniteLoopingGifDataUrl(assets[brandSignatureGifAsset])
-  }
   if (readConversationBubblePreset) {
     for (const preset of CONVERSATION_BUBBLE_PRESETS) {
       assets[conversationBubblePresetAssetKey(preset.id)] = await readConversationBubblePreset(preset.id)
@@ -57,14 +52,4 @@ export function compiledAssetNames(profile: ThemeProfile): Set<string> {
   for (const icon of Object.values(profile.icons)) if (icon.kind === 'asset') assetNames.add(icon.asset)
   for (const font of selectedImportedFonts(profile.typography)) assetNames.add(font.asset)
   return assetNames
-}
-
-function ensureInfiniteLoopingGifDataUrl(dataUrl: string): string {
-  const prefix = 'data:image/gif;base64,'
-  if (!dataUrl.startsWith(prefix)) return dataUrl
-  const source = Buffer.from(dataUrl.slice(prefix.length), 'base64')
-  const normalized = ensureGifInfiniteLoop(source)
-  return normalized === source
-    ? dataUrl
-    : `${prefix}${Buffer.from(normalized).toString('base64')}`
 }

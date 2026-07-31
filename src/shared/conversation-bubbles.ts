@@ -8,12 +8,14 @@ import {
   type MediaReference,
   type ThemeProfile
 } from './theme'
+import { gifPosterAssetKey } from './gif'
 
 export type ConversationBubbleFrameInsets = readonly [top: number, right: number, bottom: number, left: number]
 
 export interface RuntimeConversationBubbleFrame {
   mode: 'none' | 'nineSlice' | 'stretch'
   dataUrl: string | null
+  posterDataUrl?: string | null
   slice: number
   sliceInsets: ConversationBubbleFrameInsets
   frameWidth: number
@@ -108,9 +110,13 @@ export function resolveConversationBubbleFrame(style: ConversationBubbleStyle, a
     : style.source.reference.asset
   const dataUrl = assets[asset]
   if (!dataUrl) throw new Error(`聊天气泡素材不存在: ${asset}`)
+  const posterDataUrl = dataUrl.startsWith('data:image/gif')
+    ? assets[gifPosterAssetKey(asset)] ?? null
+    : null
   return {
     mode: style.fit,
     dataUrl,
+    ...(posterDataUrl ? { posterDataUrl } : {}),
     slice: style.slice,
     sliceInsets: geometry.sliceInsets,
     frameWidth: style.frameWidth,

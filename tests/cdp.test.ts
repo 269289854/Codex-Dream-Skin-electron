@@ -1,8 +1,8 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { WebSocketServer } from 'ws'
-import { describe, expect, it } from 'vitest'
-import { CdpWatcher, isSafeCdpWebSocketUrl, isThemeCdpTargetUrl, MAX_THEME_PAYLOAD_BYTES } from '../src/main/cdp-watcher'
+import { describe, expect, it, vi } from 'vitest'
+import { CdpWatcher, isCdpUnavailableError, isSafeCdpWebSocketUrl, isThemeCdpTargetUrl, MAX_THEME_PAYLOAD_BYTES } from '../src/main/cdp-watcher'
 
 const runtimeVersion = `studio-${'a'.repeat(24)}`
 
@@ -22,6 +22,20 @@ describe('CDP endpoint validation', () => {
     expect(() => watcher.setPayload('x'.repeat(MAX_THEME_PAYLOAD_BYTES + 1), runtimeVersion)).toThrow('Theme payload is invalid.')
     expect(() => watcher.setPayload('true', 'invalid')).toThrow('Theme payload is invalid.')
   })
+
+  it('only classifies closed endpoints and page targets as unavailable', () => {
+    const refused = Object.assign(new Error('fetch failed'), {
+      cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:9335'), { code: 'ECONNREFUSED' })
+    })
+    expect(isCdpUnavailableError(refused)).toBe(true)
+    expect(isCdpUnavailableError(new Error('CDP 会话意外关闭。'))).toBe(true)
+    expect(isCdpUnavailableError(new Error('No target with given id'))).toBe(true)
+    expect(isCdpUnavailableError(new Error('No Codex page target remains open.'))).toBe(true)
+    expect(isCdpUnavailableError(new Error('No verified Codex page target is available.'))).toBe(false)
+    expect(isCdpUnavailableError(new Error('CDP returned HTTP 500.'))).toBe(false)
+    expect(isCdpUnavailableError(new Error('CDP evaluation timed out.'))).toBe(false)
+    expect(isCdpUnavailableError(new Error('Theme evaluation failed.'))).toBe(false)
+  })
 })
 
 describe('CDP theme target selection', () => {
@@ -29,6 +43,37 @@ describe('CDP theme target selection', () => {
     expect(isThemeCdpTargetUrl('app://-/index.html')).toBe(true)
     expect(isThemeCdpTargetUrl('app://-/index.html?initialRoute=%2Favatar-overlay')).toBe(false)
     expect(isThemeCdpTargetUrl('https://example.com/index.html')).toBe(false)
+  })
+})
+
+describe('CDP cleanup', () => {
+  it('ignores closed page targets but propagates unconfirmed cleanup and resumes watching', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    const internals = watcher as unknown as {
+      timer: NodeJS.Timeout | null
+      targets: () => Promise<Array<{ id: string }>>
+      evaluate: (target: { id: string }) => Promise<unknown>
+    }
+    internals.timer = setInterval(() => undefined, 60_000)
+    internals.targets = vi.fn().mockResolvedValue([{ id: 'closed' }, { id: 'unclean' }])
+    internals.evaluate = vi.fn(async (target) => {
+      if (target.id === 'closed') throw new Error('No target with given id')
+      return false
+    })
+
+    await expect(watcher.stop(true)).rejects.toThrow('未确认主题清理完成')
+    expect(internals.timer).not.toBeNull()
+    await watcher.stop(false)
+  })
+
+  it('treats a fully closed Codex endpoint as already cleaned', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    const internals = watcher as unknown as {
+      targets: () => Promise<never>
+    }
+    internals.targets = vi.fn().mockRejectedValue(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))
+
+    await expect(watcher.stop(true)).resolves.toEqual({ connected: false, targetCount: 0 })
   })
 })
 

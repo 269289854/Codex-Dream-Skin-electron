@@ -17,6 +17,7 @@ const roots: string[] = []
 const execFileAsync = promisify(execFile)
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64')
 const TEST_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
+const NORMALIZED_TEST_GIF = Buffer.from(ensureGifInfiniteLoop(TEST_GIF))
 const ANIMATED_GIF_FRAME = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==', 'base64')
 const TEST_FONT = join(process.cwd(), 'resources', 'shared', 'fonts', 'dancing-script', 'dancing-script-latin-wght-normal.woff2')
 
@@ -583,13 +584,13 @@ describe('ProfileStore', () => {
 
     const compiled = await store.compile(profile.id)
     expect(compiled.assets[user.relativePath]).toMatch(/^data:image\/png;base64,/)
-    expect(compiled.assets[codex.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect(compiled.assets[codex.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
     expect(compiled.assets[plan.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
 
     const duplicate = await store.duplicate(profile, '自定义气泡副本')
     expect(duplicate.conversationBubbles).toEqual(profile.conversationBubbles)
     expect((await store.compile(duplicate.id)).assets[user.relativePath]).toMatch(/^data:image\/png;base64,/)
-    expect((await store.compile(duplicate.id)).assets[codex.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect((await store.compile(duplicate.id)).assets[codex.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
     expect((await store.compile(duplicate.id)).assets[plan.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
 
     profile.conversationBubbles.user.source = { kind: 'none' }
@@ -705,10 +706,10 @@ describe('ProfileStore', () => {
 
     expect((await store.get(profile.id)).windowBackground.source).toEqual(imported.reference)
     await expect(store.getMediaPreviewUrl(profile.id, imported.relativePath)).resolves.toContain('studio-media://')
-    expect((await store.compile(profile.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect((await store.compile(profile.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
     const duplicate = await store.duplicate(profile, '窗口背景副本')
     expect(duplicate.windowBackground.source).toEqual(imported.reference)
-    expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
   })
 
   it('imports, previews, duplicates, replaces, and prunes account menu image and GIF backgrounds', async () => {
@@ -741,7 +742,7 @@ describe('ProfileStore', () => {
     profile.accountMenuBackground.source = gif.reference
     await store.update(profile)
     await expect(readFile(store.resolveAsset(profile.id, image.relativePath))).rejects.toThrow()
-    expect((await store.compile(profile.id)).assets[gif.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect((await store.compile(profile.id)).assets[gif.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
     const gifDuplicate = await store.duplicate(profile, '账号菜单 GIF 副本')
     expect(gifDuplicate.accountMenuBackground.source).toEqual(gif.reference)
 
@@ -818,10 +819,10 @@ describe('ProfileStore', () => {
     await store.update(profile)
 
     await expect(store.getMediaPreviewUrl(profile.id, imported.relativePath)).resolves.toContain('studio-media://')
-    expect((await store.compile(profile.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect((await store.compile(profile.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
     const duplicate = await store.duplicate(profile, 'GIF 装饰副本')
     expect(duplicate.decorations.composerMelody.source).toEqual(imported.reference)
-    expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${TEST_GIF.toString('base64')}`)
+    expect((await store.compile(duplicate.id)).assets[imported.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
     await expect(store.importMediaAsset(profile.id, pngSource, 'composerMelody', 'gif')).rejects.toThrow('GIF')
     await expect(store.importMediaAsset(profile.id, gifSource, 'composerMelody', 'image')).rejects.toThrow('图片')
     await expect(store.importMediaAsset(profile.id, videoSource, 'composerMelody', 'video')).rejects.toThrow('图片或 GIF')

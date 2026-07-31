@@ -153,6 +153,8 @@ type RuntimeMediaConfig = {
   transform: ThemeProfile['hero']['mediaTransform']
   playback?: ThemeProfile['hero']['playback']
   mimeType?: string
+  dataUrl?: string | null
+  posterDataUrl?: string | null
 }
 
 type RuntimeConversationBackgroundConfig = {
@@ -161,6 +163,7 @@ type RuntimeConversationBackgroundConfig = {
   color: string
   source?: { asset: string; kind: 'image' | 'video'; mimeType: string } | null
   dataUrl?: string | null
+  posterDataUrl?: string | null
   opacity: number
   overlayStyle?: ConversationOverlayStyle
   overlayColor?: string
@@ -176,6 +179,7 @@ type RuntimeWindowBackgroundConfig = {
   kind?: 'image' | 'video'
   mimeType?: string
   dataUrl?: string | null
+  posterDataUrl?: string | null
   backgroundStyle: { background: string; opacity: string; objectPosition: string; transform: string }
   masks: Array<{ id: string; visible: boolean; style: ConversationOverlayStyle }>
 }
@@ -183,14 +187,15 @@ type RuntimeWindowBackgroundConfig = {
 type RuntimeAccountMenuBackgroundConfig = {
   mode: 'color' | 'image' | 'gif'
   dataUrl?: string | null
+  posterDataUrl?: string | null
   style: { opacity: string; objectPosition: string; transform: string; transformOrigin: string }
 }
 
 type RuntimeDecorations = Omit<ThemeProfile['decorations'], 'composerMelody'> & {
-  composerMelody: ThemeProfile['decorations']['composerMelody'] & { dataUrl?: string | null }
+  composerMelody: ThemeProfile['decorations']['composerMelody'] & { dataUrl?: string | null; posterDataUrl?: string | null }
 }
 
-type RuntimeBrandSignature = ThemeProfile['brandSignature'] & { dataUrl?: string | null }
+type RuntimeBrandSignature = ThemeProfile['brandSignature'] & { dataUrl?: string | null; posterDataUrl?: string | null }
 
 type RuntimeConversationBubblesConfig = {
   visible: boolean
@@ -217,7 +222,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   cardSecondary: { name: 'image' },
   decoration: { name: 'heart' },
   backgroundSparkle: { name: 'sparkles' }
-}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }, brandSignature: RuntimeBrandSignature = { ...defaultProfile.brandSignature, dataUrl: null }): void {
+}, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }, brandSignature: RuntimeBrandSignature = { ...defaultProfile.brandSignature, dataUrl: null }, artDataUrl = 'data:image/png;base64,AA=='): void {
   const runtimeConfig = {
     themeId,
     videoPlayback,
@@ -242,7 +247,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
   const payload = template
     .replace('__DREAM_VERSION_JSON__', JSON.stringify(JSON.stringify(runtimeConfig)))
     .replace('__DREAM_CSS_JSON__', JSON.stringify(cssText))
-    .replace('__DREAM_ART_JSON__', JSON.stringify('data:image/png;base64,AA=='))
+    .replace('__DREAM_ART_JSON__', JSON.stringify(artDataUrl))
     .replace('__DREAM_CONFIG_JSON__', JSON.stringify(runtimeConfig))
   window.eval(payload)
 }
@@ -1431,6 +1436,159 @@ describe('renderer home DOM adaptation', () => {
     window.dispatchEvent(new window.Event('blur'))
     window.document.dispatchEvent(new window.Event('visibilitychange'))
     expect(window.document.documentElement.hasAttribute('data-dream-motion-paused')).toBe(false)
+  })
+
+  it('switches every runtime GIF role to its poster for reduced or paused motion', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `${homeFixture('Motion-GIF')}
+      <div role="menu" data-state="open">
+        <div role="menuitem"><span><svg></svg></span><span>示例账号</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>示例团队</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>剩余用量</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>隐藏宠物</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>设置</span></div>
+        <div role="menuitem"><span><svg></svg></span><span>退出登录</span></div>
+      </div>
+      <section class="conversation-viewport">
+        <div class="thread-scroll-container" data-app-action-timeline-scroll>
+          <div data-user-message-bubble>用户消息</div>
+          <div class="composer-surface-chrome"><div class="ProseMirror" contenteditable="true"></div></div>
+        </div>
+      </section>`
+    Object.defineProperty(window.document, 'hasFocus', { configurable: true, value: () => true })
+    let reduced = false
+    const changeListeners = new Set<() => void>()
+    const reducedMotionQuery = {
+      get matches() { return reduced },
+      addEventListener: vi.fn((_type: string, listener: () => void) => { changeListeners.add(listener) }),
+      removeEventListener: vi.fn((_type: string, listener: () => void) => { changeListeners.delete(listener) })
+    }
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => reducedMotionQuery })
+    let objectUrlCount = 0
+    Object.defineProperty(window.URL, 'createObjectURL', {
+      configurable: true,
+      value: () => ++objectUrlCount === 1 ? 'blob:animated-art' : 'blob:poster-art'
+    })
+
+    const animated = 'data:image/gif;base64,QU5JTUFURUQ='
+    const poster = 'data:image/png;base64,UE9TVEVS'
+    const decorations = structuredClone(defaultDecorations) as RuntimeDecorations
+    decorations.composerMelody = {
+      ...decorations.composerMelody,
+      visible: true,
+      mode: 'gif',
+      source: { asset: 'assets/composer.gif', kind: 'image', mimeType: 'image/gif' },
+      effect: 'none',
+      dataUrl: animated,
+      posterDataUrl: poster
+    }
+    const media = {
+      hero: { asset: 'assets/hero.gif', kind: 'image' as const, mimeType: 'image/gif', transform: { flipHorizontal: false, flipVertical: false }, posterDataUrl: poster },
+      polaroid: { asset: 'assets/polaroid.gif', kind: 'image' as const, mimeType: 'image/gif', transform: { flipHorizontal: false, flipVertical: false }, dataUrl: animated, posterDataUrl: poster },
+      conversationBackground: {
+        visible: true,
+        mode: 'gif' as const,
+        color: '#FFFFFF',
+        source: { asset: 'assets/conversation.gif', kind: 'image' as const, mimeType: 'image/gif' },
+        dataUrl: animated,
+        posterDataUrl: poster,
+        opacity: 1,
+        overlayStyle: fullOverlayStyle,
+        focus: { x: .5, y: .5 },
+        scale: 1
+      },
+      windowBackground: {
+        visible: true,
+        mode: 'gif' as const,
+        asset: 'assets/window.gif',
+        kind: 'image' as const,
+        mimeType: 'image/gif',
+        dataUrl: animated,
+        posterDataUrl: poster,
+        backgroundStyle: { background: '#FFFFFF', opacity: '1', objectPosition: '50% 50%', transform: 'scale(1)' },
+        masks: []
+      },
+      accountMenuBackground: {
+        mode: 'gif' as const,
+        dataUrl: animated,
+        posterDataUrl: poster,
+        style: { opacity: '1', objectPosition: '50% 50%', transform: 'scale(1)', transformOrigin: '50% 50%' }
+      }
+    }
+    const frames: RuntimeConversationBubblesConfig = {
+      visible: true,
+      user: {
+        mode: 'stretch',
+        dataUrl: animated,
+        posterDataUrl: poster,
+        slice: 25,
+        sliceInsets: [25, 25, 25, 25],
+        frameWidth: 20,
+        borderWidths: [20, 40, 20, 40],
+        contentPadding: 20
+      }
+    }
+    const signature: RuntimeBrandSignature = {
+      mode: 'gif',
+      source: { asset: 'assets/signature.gif', kind: 'image', mimeType: 'image/gif' },
+      mediaWidth: 96,
+      dataUrl: animated,
+      posterDataUrl: poster
+    }
+    inject(
+      window,
+      { sidebarSearch: { dataUrl: animated, posterDataUrl: poster } },
+      undefined,
+      dreamSkinCss,
+      undefined,
+      decorations,
+      undefined,
+      media,
+      frames,
+      undefined,
+      undefined,
+      signature,
+      animated
+    )
+
+    const gifSources = () => ({
+      icon: (window.document.querySelector('.dream-sidebar-search-button .dream-custom-icon') as unknown as HTMLImageElement | null)?.getAttribute('src'),
+      signature: (window.document.querySelector('.dream-signature-media-image') as unknown as HTMLImageElement | null)?.getAttribute('src'),
+      composer: (window.document.querySelector('.dream-composer-decoration-gif') as unknown as HTMLImageElement | null)?.getAttribute('src'),
+      account: (window.document.querySelector('.dream-account-menu-background') as unknown as HTMLImageElement | null)?.getAttribute('src'),
+      conversation: (window.document.querySelector('.dream-conversation-background-media') as unknown as HTMLImageElement | null)?.getAttribute('src'),
+      window: (window.document.querySelector('.dream-window-background-media') as unknown as HTMLImageElement | null)?.getAttribute('src'),
+      bubble: window.document.documentElement.style.getPropertyValue('--dream-user-bubble-frame-source'),
+      polaroid: (window.document.querySelector('.dream-polaroid-surface') as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-polaroid-art'),
+      hero: (window.document.querySelector('.dream-hero-image') as unknown as HTMLElement | null)?.style.backgroundImage
+    })
+    expect(gifSources()).toEqual({
+      icon: animated,
+      signature: animated,
+      composer: animated,
+      account: animated,
+      conversation: animated,
+      window: animated,
+      bubble: `url("${animated}")`,
+      polaroid: `url("${animated}")`,
+      hero: 'url("blob:animated-art")'
+    })
+
+    reduced = true
+    changeListeners.forEach((listener) => listener())
+    expect(Object.values(gifSources()).every((source) => source?.includes(source?.startsWith('url("blob:') ? 'poster-art' : 'UE9TVEVS'))).toBe(true)
+
+    reduced = false
+    changeListeners.forEach((listener) => listener())
+    expect(gifSources().icon).toBe(animated)
+    window.dispatchEvent(new window.Event('blur'))
+    expect(gifSources().composer).toBe(poster)
+    window.dispatchEvent(new window.Event('focus'))
+    expect(gifSources().account).toBe(animated)
+
+    stateOf(window).cleanup()
+    expect(reducedMotionQuery.removeEventListener).toHaveBeenCalledOnce()
+    expect(changeListeners.size).toBe(0)
   })
 
   it('applies hidden and unfocused video pause policies without resuming manually paused media', async () => {

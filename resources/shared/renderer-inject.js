@@ -20,6 +20,30 @@
 
   const actions = Array.isArray(themeConfig?.actions) ? themeConfig.actions : [];
   const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+  const reducedMotionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)") || null;
+  const motionIsPaused = () => document.documentElement?.hasAttribute("data-dream-motion-paused") ||
+    Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? reducedMotionQuery?.matches);
+  const motionDataUrl = (config) => {
+    const dataUrl = typeof config?.dataUrl === "string" && config.dataUrl.startsWith("data:image/") ? config.dataUrl : "";
+    const posterDataUrl = typeof config?.posterDataUrl === "string" && config.posterDataUrl.startsWith("data:image/") ? config.posterDataUrl : "";
+    return motionIsPaused() && posterDataUrl ? posterDataUrl : dataUrl;
+  };
+  const motionImageSources = new WeakMap();
+  const motionImages = new Set();
+  const setMotionImageSource = (image, config) => {
+    if (!(image instanceof HTMLImageElement)) return;
+    const dataUrl = typeof config?.dataUrl === "string" && config.dataUrl.startsWith("data:image/") ? config.dataUrl : "";
+    const posterDataUrl = typeof config?.posterDataUrl === "string" && config.posterDataUrl.startsWith("data:image/") ? config.posterDataUrl : "";
+    if (dataUrl && posterDataUrl) {
+      motionImageSources.set(image, { dataUrl, posterDataUrl });
+      motionImages.add(image);
+    } else {
+      motionImageSources.delete(image);
+      motionImages.delete(image);
+    }
+    const selected = motionIsPaused() && posterDataUrl ? posterDataUrl : dataUrl;
+    if (selected && image.getAttribute("src") !== selected) image.src = selected;
+  };
   const setInlineStyle = (node, property, value) => {
     if (!(node instanceof HTMLElement) || node.style.getPropertyValue(property) === value) return;
     node.style.setProperty(property, value);
@@ -70,7 +94,7 @@
     const node = event.target;
     if (!(node instanceof HTMLElement) || node.parentElement !== sparkleIterationLayer || !node.classList.contains("dream-particle")) return;
     if (node.dataset.dreamAnimated !== "true" || event.animationName !== `dream-particle-${sparkleIterationLayer?.dataset.dreamEffect || ""}`) return;
-    if (document.documentElement?.hasAttribute("data-dream-motion-paused") || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+    if (motionIsPaused()) return;
     randomizeParticleCyclePosition(node);
   };
   const bindSparkleIterationLayer = (layer) => {
@@ -84,15 +108,18 @@
   const renderSlot = (node, slot, fallback, useActionFallback = false, usePoster = false) => {
     if (!node) return false;
     const source = themeConfig?.icons?.[slot];
-    const dataUrl = usePoster && source?.posterDataUrl ? source.posterDataUrl : source?.dataUrl;
+    const dataUrl = (usePoster || motionIsPaused()) && source?.posterDataUrl ? source.posterDataUrl : source?.dataUrl;
     if (dataUrl) {
       const currentImage = node.querySelector(":scope > .dream-custom-icon");
-      if (currentImage?.getAttribute("src") === dataUrl && node.children.length === 1) return true;
+      if (currentImage instanceof HTMLImageElement && node.children.length === 1) {
+        setMotionImageSource(currentImage, usePoster ? { dataUrl, posterDataUrl: dataUrl } : source);
+        return true;
+      }
       node.textContent = "";
       const image = document.createElement("img");
-      image.src = dataUrl;
       image.alt = "";
       image.className = "dream-custom-icon";
+      setMotionImageSource(image, usePoster ? { dataUrl, posterDataUrl: dataUrl } : source);
       node.appendChild(image);
       return true;
     } else {
@@ -107,7 +134,7 @@
     if (!(node instanceof HTMLElement)) return;
     const config = themeConfig?.brandSignature;
     const requestedMode = config?.mode === "image" || config?.mode === "gif" ? config.mode : "text";
-    const dataUrl = typeof config?.dataUrl === "string" && config.dataUrl.startsWith("data:image/") ? config.dataUrl : "";
+    const dataUrl = motionDataUrl(config);
     const mode = requestedMode !== "text" && dataUrl ? requestedMode : "text";
     node.dataset.dreamBrandSignatureMode = mode;
     node.classList.toggle("dream-signature-media", mode !== "text");
@@ -129,7 +156,7 @@
       image.draggable = false;
       node.appendChild(image);
     }
-    if (image.getAttribute("src") !== dataUrl) image.src = dataUrl;
+    setMotionImageSource(image, config);
   };
 
   const clearSidebarModeIcon = (button) => {
@@ -321,12 +348,14 @@
     const trackEffect = effect === "barrage" || effect === "scroll";
     const text = typeof config.text === "string" ? config.text : "♫ · · · ♡ · · · ♪";
     const mediaWidth = clamp(Number(config.mediaWidth) || 96, 32, 240);
-    const dataUrl = typeof config.dataUrl !== "string"
+    const selectedDataUrl = motionDataUrl(config);
+    const selectedGifPoster = motionIsPaused() && selectedDataUrl === config.posterDataUrl;
+    const dataUrl = !selectedDataUrl
       ? null
-      : mode === "gif" && /^data:image\/gif;base64,/i.test(config.dataUrl)
-        ? config.dataUrl
-        : mode === "image" && /^data:image\/(?:png|webp|jpeg);base64,/i.test(config.dataUrl)
-          ? config.dataUrl
+      : mode === "gif" && (/^data:image\/gif;base64,/i.test(selectedDataUrl) || (selectedGifPoster && /^data:image\/png;base64,/i.test(selectedDataUrl)))
+        ? selectedDataUrl
+        : mode === "image" && /^data:image\/(?:png|webp|jpeg);base64,/i.test(selectedDataUrl)
+          ? selectedDataUrl
           : null;
     if (mode !== "text" && !dataUrl) {
       melody.remove();
@@ -374,7 +403,7 @@
         image.className = `dream-composer-decoration-media dream-composer-decoration-${mode}`;
         image.alt = "";
         image.draggable = false;
-        image.src = dataUrl;
+        setMotionImageSource(image, config);
         image.style.width = `${mediaWidth}px`;
         melody.appendChild(image);
       } else {
@@ -627,23 +656,28 @@
   if (previous?.timer) clearInterval(previous.timer);
   if (previous?.scheduler?.timeout) clearTimeout(previous.scheduler.timeout);
   if (previous?.artUrl) URL.revokeObjectURL(previous.artUrl);
+  if (previous?.artPosterUrl) URL.revokeObjectURL(previous.artPosterUrl);
   window.__CODEX_DREAM_SKIN_DISABLED__ = false;
 
-  const artUrl = (() => {
-    const comma = artDataUrl.indexOf(",");
-    const mediaType = artDataUrl.slice(5, artDataUrl.indexOf(";")) || "image/png";
-    const binary = atob(artDataUrl.slice(comma + 1));
+  const mediaConfig = themeConfig?.media || {};
+  const dataUrlObjectUrl = (dataUrl) => {
+    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) return null;
+    const comma = dataUrl.indexOf(",");
+    const mediaType = dataUrl.slice(5, dataUrl.indexOf(";")) || "image/png";
+    const binary = atob(dataUrl.slice(comma + 1));
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     return URL.createObjectURL(new Blob([bytes], { type: mediaType }));
-  })();
+  };
+  const artUrl = dataUrlObjectUrl(artDataUrl);
+  const artPosterUrl = dataUrlObjectUrl(mediaConfig?.hero?.posterDataUrl);
+  const motionArtUrl = () => motionIsPaused() && artPosterUrl ? artPosterUrl : artUrl;
 
   const mediaUrls = {};
   const mediaInputs = {};
   const retainedMediaNodes = {};
   const playbackStates = new WeakMap();
   const policyPausedVideos = new WeakSet();
-  const mediaConfig = themeConfig?.media || {};
   const videoPausePolicy = themeConfig?.videoPlayback?.pausePolicy === "unfocused" ? "unfocused" : "hidden";
   const shouldPauseVideoPlayback = () => document.hidden || (videoPausePolicy === "unfocused" && !windowFocused);
   const mediaTransform = (transform) => `scaleX(${transform?.flipHorizontal ? -1 : 1}) scaleY(${transform?.flipVertical ? -1 : 1})`;
@@ -872,7 +906,9 @@
     const config = mediaConfig?.windowBackground || null;
     const configuredMode = typeof config?.mode === "string" ? config.mode : "color";
     const mode = configuredMode === "image" || configuredMode === "gif" || configuredMode === "video" ? configuredMode : "color";
-    const source = config?.dataUrl || mediaUrls.windowBackground || "";
+    const source = mode === "video"
+      ? config?.dataUrl || mediaUrls.windowBackground || ""
+      : motionDataUrl(config);
     if (config?.visible !== true || (mode !== "color" && !source) || !document.body) {
       clearWindowBackground();
       return;
@@ -955,7 +991,7 @@
         image.draggable = false;
         background.prepend(image);
       }
-      if (image.src !== source) image.src = source;
+      setMotionImageSource(image, config);
       base = image;
     }
     if (base instanceof HTMLElement) applySafeStyle(base, config?.backgroundStyle, styleProperties);
@@ -995,7 +1031,8 @@
     if (!(hero instanceof HTMLElement)) return;
     let video = findExistingMediaVideo(hero, "hero");
     let image = hero.querySelector(":scope > .dream-hero-image");
-    if (!mediaConfig?.hero || !artUrl) {
+    const currentArtUrl = motionArtUrl();
+    if (!mediaConfig?.hero || !currentArtUrl) {
       if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
       retainedMediaNodes.hero = null;
@@ -1032,15 +1069,26 @@
       hero.appendChild(image);
     }
     keepHeroMediaOutOfLayoutAnchor(hero, image);
-    image.style.backgroundImage = `url("${artUrl}")`;
+    image.style.backgroundImage = `url("${currentArtUrl}")`;
     image.style.backgroundRepeat = "no-repeat";
     image.style.backgroundSize = "var(--dream-art-scale, 100%) auto";
     image.style.backgroundPosition = "var(--dream-art-x, 50%) var(--dream-art-y, 50%)";
     image.style.transform = mediaTransform(mediaConfig.hero.transform);
   };
+  const syncPolaroidArt = (surface) => {
+    if (!(surface instanceof HTMLElement)) return;
+    if (mediaConfig?.polaroid?.kind === "image") {
+      const source = motionDataUrl(mediaConfig.polaroid);
+      if (source) surface.style.setProperty("--dream-polaroid-art", `url("${source}")`);
+      else surface.style.removeProperty("--dream-polaroid-art");
+    } else {
+      surface.style.removeProperty("--dream-polaroid-art");
+    }
+  };
   const ensurePolaroidMedia = (surface) => {
     if (!(surface instanceof HTMLElement)) return;
     let video = findExistingMediaVideo(surface, "polaroid");
+    syncPolaroidArt(surface);
     if (mediaConfig?.polaroid?.kind !== "video" || !mediaUrls.polaroid) {
       if (video instanceof HTMLVideoElement) clearPlaybackGuard(video);
       video?.remove();
@@ -1132,7 +1180,7 @@
     });
     const config = mediaConfig?.accountMenuBackground;
     const mode = config?.mode;
-    const dataUrl = typeof config?.dataUrl === "string" && config.dataUrl.startsWith("data:image/") ? config.dataUrl : "";
+    const dataUrl = motionDataUrl(config);
     if (!(root instanceof HTMLElement) || (mode !== "image" && mode !== "gif") || !dataUrl) {
       root?.querySelectorAll?.(`:scope > .${ACCOUNT_MENU_BACKGROUND_CLASS}`).forEach((node) => node.remove());
       return;
@@ -1146,7 +1194,7 @@
       media.draggable = false;
       root.insertBefore(media, root.firstChild);
     }
-    if (media.src !== dataUrl) media.src = dataUrl;
+    setMotionImageSource(media, config);
     const style = config?.style && typeof config.style === "object" ? config.style : {};
     setInlineStyle(media, "opacity", typeof style.opacity === "string" ? style.opacity : "1");
     setInlineStyle(media, "object-position", typeof style.objectPosition === "string" ? style.objectPosition : "50% 50%");
@@ -1261,7 +1309,9 @@
     const configuredMode = typeof config?.mode === 'string' ? config.mode : 'color';
     const mode = configuredMode === 'image' || configuredMode === 'gif' || configuredMode === 'video' ? configuredMode : 'color';
     const visible = config?.visible === true;
-    const source = mediaConfig?.conversationBackground?.dataUrl || mediaUrls.conversationBackground || '';
+    const source = mode === 'video'
+      ? mediaConfig?.conversationBackground?.dataUrl || mediaUrls.conversationBackground || ''
+      : motionDataUrl(mediaConfig?.conversationBackground);
     const canRender = visible && (mode === 'color' || Boolean(source));
     const surface = findConversationSurface();
     const viewport = conversationViewport(surface);
@@ -1352,7 +1402,7 @@
         image.draggable = false;
         background.appendChild(image);
       }
-      if (image.src !== source) image.src = source;
+      setMotionImageSource(image, config);
       media = image;
     }
     if (media instanceof HTMLElement) {
@@ -1417,7 +1467,7 @@
     Object.entries(conversationBubbleFrameProperties).forEach(([role, properties]) => {
       const config = themeConfig?.conversationBubbles?.[role];
       const mode = config?.mode === 'nineSlice' || config?.mode === 'stretch' ? config.mode : 'none';
-      const dataUrl = typeof config?.dataUrl === 'string' && config.dataUrl.startsWith('data:image/') ? config.dataUrl : null;
+      const dataUrl = motionDataUrl(config) || null;
       const activeMode = dataUrl ? mode : 'none';
       root.setAttribute(properties.attribute, activeMode);
       if (activeMode === 'none') {
@@ -2409,10 +2459,15 @@
       window.removeEventListener("focus", state.motionHandler);
       window.removeEventListener("blur", state.motionHandler);
     }
+    if (state?.reducedMotionQuery && state?.reducedMotionHandler) {
+      state.reducedMotionQuery.removeEventListener?.("change", state.reducedMotionHandler);
+      state.reducedMotionQuery.removeListener?.(state.reducedMotionHandler);
+    }
     if (state?.timer) clearInterval(state.timer);
     if (state?.scheduler?.timeout) clearTimeout(state.scheduler.timeout);
     if (state?.scheduler?.contentTimeout) clearTimeout(state.scheduler.contentTimeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
+    if (state?.artPosterUrl) URL.revokeObjectURL(state.artPosterUrl);
     for (const url of Object.values(mediaUrls)) if (url) URL.revokeObjectURL(url);
     const mediaNodes = new Set([...document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
     mediaNodes.forEach((node) => { if (node instanceof HTMLVideoElement) clearPlaybackGuard(node); if (node instanceof HTMLMediaElement) node.pause(); if (node instanceof Element) node.remove(); });
@@ -2423,12 +2478,27 @@
     document.querySelectorAll("input[id^='codex-dream-skin-media-']").forEach((node) => node.remove());
     delete window.__CODEX_DREAM_SKIN_PREPARE_MEDIA__;
     delete window.__CODEX_DREAM_SKIN_ATTACH_MEDIA__;
+    motionImages.clear();
     delete window[STATE_KEY];
     return true;
   };
 
   const scheduler = { timeout: null, contentTimeout: null };
   let windowFocused = document.hasFocus();
+  const syncGifMotionSources = () => {
+    for (const node of [...motionImages]) {
+      if (!(node instanceof HTMLImageElement) || !node.isConnected) {
+        motionImages.delete(node);
+        continue;
+      }
+      setMotionImageSource(node, motionImageSources.get(node));
+    }
+    const heroImage = document.querySelector(".dream-hero-image");
+    const currentArtUrl = motionArtUrl();
+    if (heroImage instanceof HTMLElement && currentArtUrl) heroImage.style.backgroundImage = `url("${currentArtUrl}")`;
+    document.querySelectorAll(".dream-polaroid-surface").forEach(syncPolaroidArt);
+    applyConversationBubbleFrameConfig();
+  };
   const syncVideoPlaybackPolicy = () => {
     const paused = shouldPauseVideoPlayback();
     const videos = new Set([...document.querySelectorAll(".dream-hero-video, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
@@ -2452,13 +2522,17 @@
     if (document.hidden || !windowFocused) document.documentElement?.setAttribute("data-dream-motion-paused", "true");
     else document.documentElement?.removeAttribute("data-dream-motion-paused");
     syncVideoPlaybackPolicy();
+    if (event) syncGifMotionSources();
   };
-  const visibilityHandler = () => {
-    motionHandler();
+  const visibilityHandler = (event) => {
+    motionHandler(event);
   };
   document.addEventListener("visibilitychange", visibilityHandler);
   window.addEventListener("focus", motionHandler);
   window.addEventListener("blur", motionHandler);
+  const reducedMotionHandler = syncGifMotionSources;
+  if (reducedMotionQuery?.addEventListener) reducedMotionQuery.addEventListener("change", reducedMotionHandler);
+  else reducedMotionQuery?.addListener?.(reducedMotionHandler);
   motionHandler();
   const scheduleEnsure = () => {
     if (scheduler.timeout) return;
@@ -2547,9 +2621,12 @@
     timer,
     scheduler,
     artUrl,
+    artPosterUrl,
     mediaUrls,
     visibilityHandler,
     motionHandler,
+    reducedMotionQuery,
+    reducedMotionHandler,
     version: VERSION,
   };
   ensure();

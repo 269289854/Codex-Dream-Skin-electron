@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createDefaultTheme } from '../src/shared/theme'
 import { ACCOUNT_MENU_ITEMS } from '../src/shared/account-menu'
 import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
+import { gifPosterAssetKey } from '../src/shared/gif'
 
 const { runPowerShellMock } = vi.hoisted(() => ({ runPowerShellMock: vi.fn() }))
 
@@ -112,11 +113,13 @@ describe('CodexService operation queue', () => {
     profile.icons.composerAdd = { kind: 'asset', asset: 'assets/search.gif' }
     profile.icons.composerMicrophone = { kind: 'asset', asset: 'assets/window.png' }
     const searchPosterKey = iconGifPosterAssetKey('assets/search.gif')
+    const composerPosterKey = gifPosterAssetKey('assets/composer.gif')
+    const accountMenuPosterKey = gifPosterAssetKey('assets/account-menu.gif')
     const store = {
       root,
       themesRoot: join(root, 'themes'),
       get: vi.fn().mockResolvedValue(profile),
-      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', 'assets/window.png': 'data:image/png;base64,AA==', 'assets/account-menu.gif': 'data:image/gif;base64,AQ==', 'assets/search.gif': 'data:image/gif;base64,Ag==', [searchPosterKey]: 'data:image/png;base64,Aw==' } })
+      compile: vi.fn().mockResolvedValue({ assets: { 'assets/composer.gif': 'data:image/gif;base64,AA==', [composerPosterKey]: 'data:image/png;base64,BA==', 'assets/window.png': 'data:image/png;base64,AA==', 'assets/account-menu.gif': 'data:image/gif;base64,AQ==', [accountMenuPosterKey]: 'data:image/png;base64,BQ==', 'assets/search.gif': 'data:image/gif;base64,Ag==', [searchPosterKey]: 'data:image/png;base64,Aw==' } })
     }
     const service = new CodexService(store as never, join(process.cwd(), 'resources', 'shared'), createDriver(), '1.0.5', () => undefined)
     const builder = service as unknown as { buildPayload(themeId: string): Promise<{ script: string; version: string }> }
@@ -139,7 +142,7 @@ describe('CodexService operation queue', () => {
     expect(updated.version).not.toBe(first.version)
     expect(thirdVersion).not.toBe(firstVersion)
     expect(first.script).toContain('"asset":"asset-polaroid"')
-    expect(first.script).toContain('"dataUrl":"data:image/gif;base64,AA=="')
+    expect(first.script).toContain('"dataUrl":"data:image/gif;base64,AA==","posterDataUrl":"data:image/png;base64,BA=="')
     expect(first.script).toContain('"overlayStyle":{"background":"linear-gradient(120deg, #123456 0%, #abcdef 100%)"')
     expect(first.script).toContain('"left":"30%","top":"60%","width":"50%","height":"40%"')
     expect(first.script).toContain('"borderRadius":"50%","filter":"blur(12px)"')
@@ -150,7 +153,7 @@ describe('CodexService operation queue', () => {
     expect(first.script).toContain('"id":"22222222-2222-4222-8222-222222222222","visible":true,"style":{"background":"radial-gradient(circle at 40% 60%, #FFFFFF 0%, transparent 100%)"')
     expect(first.script).not.toContain('"windowBackground":{"visible":true,"mode":"image","paint"')
     expect(first.script).toContain('"accountMenuBackground":{"mode":"gif","style":{"opacity":"0.72","objectPosition":"25% 75%","transform":"scale(1.4)","transformOrigin":"25% 75%"}')
-    expect(first.script).toContain('"asset":"assets/account-menu.gif","dataUrl":"data:image/gif;base64,AQ=="')
+    expect(first.script).toContain('"asset":"assets/account-menu.gif","dataUrl":"data:image/gif;base64,AQ==","posterDataUrl":"data:image/png;base64,BQ=="')
     expect(first.script).toContain('"conversationBubbles":{"visible":false,"user":{"mode":"none","dataUrl":null,"slice":25,"sliceInsets":[25,25,25,25],"frameWidth":24,"borderWidths":[24,48,24,48],"contentPadding":20}')
     expect(first.script).toContain('"codex":{"mode":"none","dataUrl":null,"slice":25,"sliceInsets":[25,25,25,25],"frameWidth":24,"borderWidths":[24,48,24,48],"contentPadding":20}')
     expect(first.script).toContain('"toolActivityBubbles":{"visible":false}')
@@ -181,6 +184,109 @@ describe('CodexService operation queue', () => {
     })
     expect(watcher.verify).toHaveBeenCalledTimes(1)
     expect(watcher.inject).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the active watcher and persisted session when page cleanup fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-stop-cleanup-failure-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), createDriver(), '1.0.9', () => undefined)
+    const watcher = { stop: vi.fn().mockRejectedValue(new Error('Codex 页面主题清理失败')) }
+    const activeSession: CodexStartResult = {
+      port: 9335,
+      browserId: 'browser-1',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    const internals = service as unknown as {
+      watcher: typeof watcher
+      activeThemeId: string
+      activeSession: CodexStartResult
+      activeSessionGeneration: number
+      sessionGeneration: number
+    }
+    internals.watcher = watcher
+    internals.activeThemeId = themeId
+    internals.activeSession = activeSession
+    internals.activeSessionGeneration = 1
+    internals.sessionGeneration = 1
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: activeSession.port,
+      browserId: activeSession.browserId,
+      platform: activeSession.platform,
+      installationId: activeSession.installationId
+    })}\n`)
+
+    await expect(service.stop()).rejects.toThrow('Codex 页面主题清理失败')
+
+    expect(internals.watcher).toBe(watcher)
+    expect(internals.activeThemeId).toBe(themeId)
+    expect(internals.activeSession).toBe(activeSession)
+    expect(internals.activeSessionGeneration).toBe(2)
+    expect(service.isActive()).toBe(true)
+    expect(service.getStatus()).toMatchObject({
+      phase: 'active',
+      lastError: 'Codex 页面主题清理失败',
+      message: '停止注入失败，当前主题会话仍在运行，可重试恢复'
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain(themeId)
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('keeps the active watcher and generation when restore page cleanup fails', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-cleanup-failure-'))
+    const themeId = '11111111-1111-4111-8111-111111111111'
+    const driver = createDriver()
+    const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
+    const watcher = { stop: vi.fn().mockRejectedValue(new Error('Codex 页面主题清理失败')) }
+    const activeSession: CodexStartResult = {
+      port: 9335,
+      browserId: 'browser-1',
+      version: detection.version,
+      platform: 'win32',
+      installationId: detection.installationId
+    }
+    const internals = service as unknown as {
+      watcher: typeof watcher
+      activeThemeId: string
+      activeSession: CodexStartResult
+      activeSessionGeneration: number
+      sessionGeneration: number
+    }
+    internals.watcher = watcher
+    internals.activeThemeId = themeId
+    internals.activeSession = activeSession
+    internals.activeSessionGeneration = 1
+    internals.sessionGeneration = 1
+    await mkdir(join(root, 'runtime'), { recursive: true })
+    await writeFile(join(root, 'runtime', 'session.json'), `${JSON.stringify({
+      version: 2,
+      themeId,
+      port: activeSession.port,
+      browserId: activeSession.browserId,
+      platform: activeSession.platform,
+      installationId: activeSession.installationId
+    })}\n`)
+
+    await expect(service.restore(true)).rejects.toThrow('Codex 页面主题清理失败')
+
+    expect(watcher.stop).toHaveBeenCalledWith(true)
+    expect(driver.restore).not.toHaveBeenCalled()
+    expect(internals.watcher).toBe(watcher)
+    expect(internals.activeThemeId).toBe(themeId)
+    expect(internals.activeSession).toBe(activeSession)
+    expect(internals.activeSessionGeneration).toBe(2)
+    expect(service.isActive()).toBe(true)
+    expect(service.getStatus()).toMatchObject({
+      phase: 'active',
+      lastError: 'Codex 页面主题清理失败',
+      message: '恢复失败，当前主题会话仍在运行，可重试恢复'
+    })
+    await expect(readFile(join(root, 'runtime', 'session.json'), 'utf8')).resolves.toContain(themeId)
+    await rm(root, { recursive: true, force: true })
   })
 
   it('keeps detection and config installation active while a theme session is running', async () => {

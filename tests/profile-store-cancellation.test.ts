@@ -1,6 +1,8 @@
 import { mkdtemp, rm, stat, truncate, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { EventEmitter } from 'node:events'
+import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { VideoAssetInspection } from '../src/shared/contracts'
 
@@ -15,7 +17,7 @@ vi.mock('mediainfo.js', () => ({
   isTrackType: (track: { '@type'?: string }, type: string) => track['@type'] === type
 }))
 
-import { hashFile, ProfileStore } from '../src/main/profile-store'
+import { finalizeShareArchive, hashFile, ProfileStore, type ShareArchiveWriter } from '../src/main/profile-store'
 
 const roots: string[] = []
 
@@ -27,6 +29,42 @@ afterEach(async () => {
 })
 
 describe('ProfileStore cancellation', () => {
+  it.each([
+    {
+      name: 'cancellation',
+      fail: (controller: AbortController, output: PassThrough) => controller.abort(),
+      message: '主题导出已取消'
+    },
+    {
+      name: 'output failure',
+      fail: (_controller: AbortController, output: PassThrough) => output.destroy(new Error('disk write failed')),
+      message: 'disk write failed'
+    }
+  ])('terminates a stalled archive immediately after $name', async ({ fail, message }) => {
+    const events = new EventEmitter()
+    const archive = {
+      pipe: vi.fn(),
+      append: vi.fn(),
+      on: events.on.bind(events),
+      off: events.off.bind(events),
+      finalize: vi.fn(() => new Promise<void>(() => undefined)),
+      abort: vi.fn()
+    } as unknown as ShareArchiveWriter
+    const output = new PassThrough()
+    const controller = new AbortController()
+    const writing = finalizeShareArchive(archive, output, () => undefined, controller.signal)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    fail(controller, output)
+
+    await expect(Promise.race([
+      writing,
+      new Promise<void>((_resolve, reject) => setTimeout(() => reject(new Error('archive coordination timed out')), 250))
+    ])).rejects.toThrow(message)
+    expect(archive.abort).toHaveBeenCalledOnce()
+    expect(output.destroyed).toBe(true)
+  })
+
   it('cancels SHA-256 reads and releases the input stream', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-hash-cancel-'))
     roots.push(root)
