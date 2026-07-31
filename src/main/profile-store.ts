@@ -910,8 +910,9 @@ export class ProfileStore {
       if (extension === '.gif') {
         gifPosterDataUrl = (await prepareGif(await readFile(temporary, { signal }))).posterDataUrl
       }
-      const temporaryFile = await open(temporary, 'r+')
-      try { await temporaryFile.sync() } finally { await temporaryFile.close() }
+      this.throwIfAborted(signal, '媒体导入已取消。')
+      await this.syncFile(temporary)
+      this.throwIfAborted(signal, '媒体导入已取消。')
       await rename(temporary, destination)
       if (conversationBubble && (await stat(destination)).size > MAX_CONVERSATION_BUBBLE_BYTES) {
         throw new Error('聊天气泡图片和 GIF 不能超过 10 MB。')

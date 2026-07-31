@@ -529,7 +529,9 @@ describe('Studio preview editing interaction', () => {
       fit: 'stretch',
       source: { kind: 'custom', reference: reference(gifAssets.bubble) }
     }
-    alternateProfile.icons.sidebarSearch = { kind: 'asset', asset: gifAssets.icon }
+    for (const slot of Object.keys(alternateProfile.icons) as Array<keyof typeof alternateProfile.icons>) {
+      alternateProfile.icons[slot] = { kind: 'asset', asset: gifAssets.icon }
+    }
 
     const studio = (browserWindow as unknown as { studio: StudioApi }).studio
     const originalCompile = studio.themes.compile
@@ -564,12 +566,27 @@ describe('Studio preview editing interaction', () => {
       container.querySelector<HTMLImageElement>('.codex-sidebar-icon-button img.custom-icon')?.getAttribute('src')
     ]
     expect(homePreviewSources()).toEqual(Array(7).fill(animatedUrl))
+    expect(container.querySelector<HTMLImageElement>('.brand-signature-asset-picker img')?.getAttribute('src')).toBe(animatedUrl)
+    expect(container.querySelector<HTMLImageElement>('.conversation-bubble-custom-preview img')?.getAttribute('src')).toBe(animatedUrl)
+    expect(container.querySelector<HTMLImageElement>('.composer-decoration-asset-picker img')?.getAttribute('src')).toBe(animatedUrl)
+    expect(container.querySelectorAll<HTMLImageElement>('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]').length).toBeGreaterThanOrEqual(4)
 
     await act(async () => {
       emitReducedMotion(true)
       await Promise.resolve()
     })
     expect(homePreviewSources()).toEqual(Array(7).fill(posterUrl))
+    expect(container.querySelector<HTMLImageElement>('.brand-signature-asset-picker img')?.getAttribute('src')).toBe(posterUrl)
+    expect(container.querySelector<HTMLImageElement>('.conversation-bubble-custom-preview img')?.getAttribute('src')).toBe(posterUrl)
+    expect(container.querySelector<HTMLImageElement>('.composer-decoration-asset-picker img')?.getAttribute('src')).toBe(posterUrl)
+    expect(container.querySelector('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]')).toBeNull()
+
+    const iconInspector = [...container.querySelectorAll<HTMLButtonElement>('.sidebar-nav button')]
+      .find((button) => button.textContent?.includes('图标样式'))
+    if (!iconInspector) throw new Error('Icon inspector command is missing.')
+    act(() => iconInspector.click())
+    expect(container.querySelectorAll<HTMLImageElement>('.inspector img[src="data:image/png;base64,UE9TVEVS"]').length).toBeGreaterThan(10)
+    expect(container.querySelector('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]')).toBeNull()
 
     const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
     if (!conversation) throw new Error('Conversation preview command is missing.')
@@ -584,6 +601,7 @@ describe('Studio preview editing interaction', () => {
     })
     expect(container.querySelector<HTMLImageElement>('.preview-conversation-background-media')?.getAttribute('src')).toBe(animatedUrl)
     expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-frame-source')).toContain(animatedUrl)
+    expect(container.querySelectorAll<HTMLImageElement>('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]').length).toBeGreaterThan(10)
   })
 
   it('prepares a theme before activation and blocks rapid duplicate switching', async () => {

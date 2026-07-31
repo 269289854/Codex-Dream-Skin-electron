@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat, truncate, utimes, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, rm, stat, truncate, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
@@ -11,11 +11,18 @@ const mediaInfo = vi.hoisted(() => ({
   close: vi.fn(),
   factory: vi.fn()
 }))
+const gifAssets = vi.hoisted(() => ({
+  prepareGif: vi.fn()
+}))
 
 vi.mock('mediainfo.js', () => ({
   default: mediaInfo.factory,
   isTrackType: (track: { '@type'?: string }, type: string) => track['@type'] === type
 }))
+vi.mock('../src/main/gif-assets', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/main/gif-assets')>()
+  return { ...actual, prepareGif: gifAssets.prepareGif }
+})
 
 import { finalizeShareArchive, hashFile, ProfileStore, type ShareArchiveWriter } from '../src/main/profile-store'
 
@@ -25,6 +32,7 @@ afterEach(async () => {
   mediaInfo.analyzeData.mockReset()
   mediaInfo.close.mockReset()
   mediaInfo.factory.mockReset()
+  gifAssets.prepareGif.mockReset()
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
@@ -115,6 +123,64 @@ describe('ProfileStore cancellation', () => {
     await expect(inspecting).rejects.toThrow('主题导入已取消')
     expect(mediaInfo.close).toHaveBeenCalledOnce()
     await expect(rm(source)).resolves.toBeUndefined()
+  })
+
+  it('cancels a GIF import while its poster is being generated', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-gif-poster-cancel-'))
+    roots.push(root)
+    const source = join(root, 'animated.gif')
+    await writeFile(source, Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'))
+    let markStarted!: () => void
+    let releasePoster!: () => void
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const release = new Promise<void>((resolve) => { releasePoster = resolve })
+    gifAssets.prepareGif.mockImplementation(async (bytes: Uint8Array) => {
+      markStarted()
+      await release
+      return {
+        bytes: Buffer.from(bytes),
+        dataUrl: `data:image/gif;base64,${Buffer.from(bytes).toString('base64')}`,
+        posterDataUrl: 'data:image/png;base64,UE9TVEVS'
+      }
+    })
+
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('GIF 取消主题')
+    const controller = new AbortController()
+    const importing = store.importMediaAsset(profile.id, source, 'windowBackground', 'gif', controller.signal)
+    await started
+    controller.abort()
+    releasePoster()
+
+    await expect(importing).rejects.toThrow('媒体导入已取消')
+    expect(await readdir(join(root, 'themes', profile.id, 'assets'))).toEqual([])
+  })
+
+  it('cancels a GIF import after syncing but before committing the asset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-gif-commit-cancel-'))
+    roots.push(root)
+    const source = join(root, 'animated.gif')
+    await writeFile(source, Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'))
+    gifAssets.prepareGif.mockImplementation(async (bytes: Uint8Array) => ({
+      bytes: Buffer.from(bytes),
+      dataUrl: `data:image/gif;base64,${Buffer.from(bytes).toString('base64')}`,
+      posterDataUrl: 'data:image/png;base64,UE9TVEVS'
+    }))
+
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('GIF 提交取消主题')
+    const controller = new AbortController()
+    const internals = store as unknown as { syncFile: (path: string) => Promise<void> }
+    const syncFile = internals.syncFile.bind(store)
+    internals.syncFile = vi.fn(async (path) => {
+      await syncFile(path)
+      controller.abort()
+    })
+
+    await expect(store.importMediaAsset(profile.id, source, 'windowBackground', 'gif', controller.signal)).rejects.toThrow('媒体导入已取消')
+    expect(await readdir(join(root, 'themes', profile.id, 'assets'))).toEqual([])
   })
 
   it('reuses a source preflight once and re-inspects after the file identity changes', async () => {
