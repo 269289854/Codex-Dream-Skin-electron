@@ -14,9 +14,9 @@
     "test:config": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests/config-utf8.ps1",
     "generate:mac-icons": "node scripts/generate-macos-icons.mjs",
     "package:dir": "npm run build && electron-builder --win --x64 --dir",
-    "package:win": "npm run build && electron-builder --win nsis --x64",
+    "package:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "package:mac:dir": "npm run build && npm run generate:mac-icons && electron-builder --mac --universal --dir && npm run verify:mac:dir",
-    "package:mac": "npm run build && npm run generate:mac-icons && electron-builder --mac --universal && npm run verify:mac",
+    "package:mac": "npm run build && npm run generate:mac-icons && electron-builder --mac --universal --publish never && npm run verify:mac",
     "verify:mac:dir": "node scripts/verify-macos-artifacts.mjs --dir",
     "verify:mac": "node scripts/verify-macos-artifacts.mjs"
   },

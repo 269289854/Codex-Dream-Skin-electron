@@ -61,6 +61,15 @@ describe('GitHub Actions release contract', () => {
     expect(releaseJob).toMatch(/permissions:\r?\n      contents: write/)
   })
 
+  it('prevents electron-builder from publishing during platform build jobs', async () => {
+    const packageJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as {
+      scripts: Record<string, string>
+    }
+
+    expect(packageJson.scripts['package:win']).toContain('--publish never')
+    expect(packageJson.scripts['package:mac']).toContain('--publish never')
+  })
+
   it('publishes exactly the five supported release assets', async () => {
     const { workflow } = await releaseContract()
     const releaseJob = job(workflow, 'release')
