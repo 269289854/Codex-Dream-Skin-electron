@@ -147,7 +147,11 @@ export class MacCodexDriver implements CodexPlatformDriver {
         ? { status: 'not-attempted' as const }
         : configResult.archiveCompleted
           ? { status: 'succeeded' as const }
-          : { status: 'failed' as const, error: configResult.archiveError || 'Codex configuration backup archive failed.' }
+          : {
+              status: 'failed' as const,
+              error: configResult.archiveError || 'Codex configuration backup archive failed.',
+              backupAvailable: configResult.backupAvailable
+            }
       const restored = { configRestored: configResult.restored, backupArchive }
       if (!install) return { ...restored, restart: { status: 'not-requested' } }
       try {

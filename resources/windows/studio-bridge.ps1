@@ -150,6 +150,7 @@ try {
     $restored = $false
     $archiveCompleted = $false
     $archiveError = $null
+    $backupAvailable = $false
     $restarted = $false
     $restartError = $null
     if (Test-Path -LiteralPath $paths.Backup) {
@@ -161,6 +162,12 @@ try {
         $archiveCompleted = $true
       } catch {
         $archiveError = $_.Exception.Message
+        try {
+          $backupAvailable = [bool](Test-Path -LiteralPath $paths.Backup -PathType Leaf -ErrorAction Stop)
+        } catch {
+          $backupAvailable = $true
+          $archiveError = "$archiveError; backup status check failed: $($_.Exception.Message)"
+        }
       }
     }
     if ($RestartCodex) {
@@ -178,6 +185,7 @@ try {
       restored = $restored
       archiveCompleted = $archiveCompleted
       archiveError = $archiveError
+      backupAvailable = $backupAvailable
       restarted = $restarted
       restartError = $restartError
     })

@@ -216,13 +216,14 @@ describe('MacCodexDriver', () => {
     const restoreConfig = vi.fn().mockResolvedValue({
       restored: true,
       archiveCompleted: false,
-      archiveError: 'archive failed'
+      archiveError: 'archive failed',
+      backupAvailable: true
     })
     const driver = new MacCodexDriver(fixture.studioRoot, fixture.homeRoot, { restoreConfig })
 
     await expect(driver.restore(false)).resolves.toEqual({
       configRestored: true,
-      backupArchive: { status: 'failed', error: 'archive failed' },
+      backupArchive: { status: 'failed', error: 'archive failed', backupAvailable: true },
       restart: { status: 'not-requested' }
     })
   })

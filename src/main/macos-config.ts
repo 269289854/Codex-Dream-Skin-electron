@@ -10,6 +10,7 @@ export interface MacConfigRestoreResult {
   restored: boolean
   archiveCompleted: boolean
   archiveError: string | null
+  backupAvailable: boolean
 }
 
 interface MacConfigRestoreDependencies {
@@ -113,7 +114,7 @@ export async function restoreMacCodexThemeConfig(
     backupBytes = await readFile(backupPath)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { restored: false, archiveCompleted: false, archiveError: null }
+      return { restored: false, archiveCompleted: false, archiveError: null, backupAvailable: false }
     }
     throw error
   }
@@ -125,12 +126,27 @@ export async function restoreMacCodexThemeConfig(
   await writeMacBytesAtomically(configPath, Buffer.from(restored, 'utf8'), currentBytes, mode)
   try {
     await (dependencies.archiveBackup ?? archiveMacCodexConfigBackup)(backupPath)
-    return { restored: true, archiveCompleted: true, archiveError: null }
+    return { restored: true, archiveCompleted: true, archiveError: null, backupAvailable: false }
   } catch (reason) {
+    const archiveError = reason instanceof Error ? reason.message : String(reason)
+    let backupAvailable = true
+    let backupProbeError: string | null = null
+    try {
+      backupAvailable = (await stat(backupPath)).isFile()
+    } catch (probeReason) {
+      if ((probeReason as NodeJS.ErrnoException).code === 'ENOENT') {
+        backupAvailable = false
+      } else {
+        backupProbeError = probeReason instanceof Error ? probeReason.message : String(probeReason)
+      }
+    }
     return {
       restored: true,
       archiveCompleted: false,
-      archiveError: reason instanceof Error ? reason.message : String(reason)
+      archiveError: backupProbeError
+        ? `${archiveError}; backup status check failed: ${backupProbeError}`
+        : archiveError,
+      backupAvailable
     }
   }
 }

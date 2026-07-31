@@ -23,7 +23,7 @@ export type CodexRestartOutcome =
 export type CodexBackupArchiveOutcome =
   | { status: 'not-attempted' }
   | { status: 'succeeded' }
-  | { status: 'failed'; error: string }
+  | { status: 'failed'; error: string; backupAvailable: boolean }
 
 export interface CodexRestoreResult {
   configRestored: boolean

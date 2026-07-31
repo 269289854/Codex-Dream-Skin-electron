@@ -105,6 +105,7 @@ describe('WindowsCodexDriver', () => {
         restored: false,
         archiveCompleted: false,
         archiveError: null,
+        backupAvailable: false,
         restarted: false,
         restartError: null
       })
@@ -112,6 +113,7 @@ describe('WindowsCodexDriver', () => {
         restored: true,
         archiveCompleted: false,
         archiveError: 'Backup archive failed',
+        backupAvailable: true,
         restarted: false,
         restartError: 'Codex launch failed'
       })
@@ -123,7 +125,7 @@ describe('WindowsCodexDriver', () => {
     })
     await expect(driver.restore(true)).resolves.toEqual({
       configRestored: true,
-      backupArchive: { status: 'failed', error: 'Backup archive failed' },
+      backupArchive: { status: 'failed', error: 'Backup archive failed', backupAvailable: true },
       restart: { status: 'failed', error: 'Codex launch failed' }
     })
   })
@@ -136,11 +138,13 @@ describe('WindowsCodexDriver', () => {
     expect(restoreBlock).toContain('$restored = $false')
     expect(restoreBlock).toContain('$archiveCompleted = $false')
     expect(restoreBlock).toContain('$archiveError = $null')
+    expect(restoreBlock).toContain('$backupAvailable = $false')
     expect(restoreBlock).toContain('$restarted = $false')
     expect(restoreBlock).toContain('$restartError = $null')
     expect(configBlock.indexOf('$restored = $true')).toBeLessThan(configBlock.indexOf('Archive-DreamSkinConfigBackup'))
-    expect(configBlock).toMatch(/try\s*\{[\s\S]*Archive-DreamSkinConfigBackup[\s\S]*\$archiveCompleted = \$true[\s\S]*\}\s*catch\s*\{\s*\$archiveError = \$_\.Exception\.Message\s*\}/)
+    expect(configBlock).toMatch(/try\s*\{[\s\S]*Archive-DreamSkinConfigBackup[\s\S]*\$archiveCompleted = \$true[\s\S]*\}\s*catch\s*\{\s*\$archiveError = \$_\.Exception\.Message/)
+    expect(configBlock).toContain('Test-Path -LiteralPath $paths.Backup -PathType Leaf -ErrorAction Stop')
     expect(restoreBlock).toMatch(/catch\s*\{\s*\$restartError = \$_\.Exception\.Message\s*\}/)
-    expect(restoreBlock).toMatch(/restored = \$restored\s+archiveCompleted = \$archiveCompleted\s+archiveError = \$archiveError\s+restarted = \$restarted\s+restartError = \$restartError/)
+    expect(restoreBlock).toMatch(/restored = \$restored\s+archiveCompleted = \$archiveCompleted\s+archiveError = \$archiveError\s+backupAvailable = \$backupAvailable\s+restarted = \$restarted\s+restartError = \$restartError/)
   })
 })

@@ -494,7 +494,9 @@ export class CodexService {
         }
       }
       this.clearActiveSession()
-      this.status.backupAvailable = false
+      this.status.backupAvailable = restoreResult.backupArchive.status === 'failed'
+        ? restoreResult.backupArchive.backupAvailable
+        : false
       let cleanupError: string | null = null
       try {
         await this.retirePersistedSession()

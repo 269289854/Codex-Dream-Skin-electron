@@ -736,13 +736,13 @@ describe('CodexService operation queue', () => {
     await rm(root, { recursive: true, force: true })
   })
 
-  it('commits configuration restore and retires the session when only backup archiving fails', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'dream-skin-restore-archive-failure-'))
+  it.each([true, false])('commits configuration restore and reports backup availability as %s when archiving fails', async (backupAvailable) => {
+    const root = await mkdtemp(join(tmpdir(), `dream-skin-restore-archive-failure-${backupAvailable}-`))
     const driver = createDriver()
     const themeId = '11111111-1111-4111-8111-111111111111'
     vi.mocked(driver.restore).mockResolvedValueOnce({
       configRestored: true,
-      backupArchive: { status: 'failed', error: 'Backup archive failed' },
+      backupArchive: { status: 'failed', error: 'Backup archive failed', backupAvailable },
       restart: { status: 'succeeded' }
     })
     const service = new CodexService({ root, themesRoot: join(root, 'themes') } as never, join(process.cwd(), 'resources', 'shared'), driver, '1.0.9', () => undefined)
@@ -760,7 +760,7 @@ describe('CodexService operation queue', () => {
 
     expect(status).toMatchObject({
       phase: 'stopped',
-      backupAvailable: false,
+      backupAvailable,
       lastError: 'Backup archive failed',
       message: '已恢复配置并正常重启 Codex；Codex 配置已恢复，但配置备份归档失败'
     })

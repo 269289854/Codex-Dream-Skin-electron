@@ -27,6 +27,7 @@ interface WindowsRestoreResult {
   restored: boolean
   archiveCompleted: boolean
   archiveError: string | null
+  backupAvailable: boolean
   restarted: boolean
   restartError: string | null
 }
@@ -91,7 +92,11 @@ export class WindowsCodexDriver implements CodexPlatformDriver {
         ? { status: 'not-attempted' }
         : result.archiveCompleted
           ? { status: 'succeeded' }
-          : { status: 'failed', error: result.archiveError || 'Codex configuration backup archive failed.' },
+          : {
+              status: 'failed',
+              error: result.archiveError || 'Codex configuration backup archive failed.',
+              backupAvailable: result.backupAvailable
+            },
       restart: !restartCodex
         ? { status: 'not-requested' }
         : result.restarted

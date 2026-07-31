@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -54,7 +54,8 @@ describe('macOS Codex config editing', () => {
     await expect(restoreMacCodexThemeConfig(configPath, backupPath)).resolves.toEqual({
       restored: true,
       archiveCompleted: true,
-      archiveError: null
+      archiveError: null,
+      backupAvailable: false
     })
     const restored = await readFile(configPath, 'utf8')
     expect(restored).toContain('appearanceTheme = "dark"')
@@ -63,24 +64,50 @@ describe('macOS Codex config editing', () => {
     expect((await readdir(join(root, 'studio', 'backups'))).some((name) => /^config\.restored-\d{17}-[0-9a-f-]+\.toml$/.test(name))).toBe(true)
   })
 
-  it('reports a committed restore when backup archiving fails afterward', async () => {
+  it('reports the original backup as available when archiving fails before moving it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-macos-archive-failure-'))
     roots.push(root)
     const configPath = join(root, '.codex', 'config.toml')
     const backupPath = join(root, 'studio', 'backups', 'config.before-studio.toml')
     await writeMacBytesAtomically(configPath, Buffer.from('[desktop]\nappearanceTheme = "light"\n'), null)
     await writeMacBytesAtomically(backupPath, Buffer.from('[desktop]\nappearanceTheme = "system"\n'), null)
-    const archiveBackup = vi.fn().mockRejectedValue(new Error('archive directory sync failed'))
+    const archiveBackup = vi.fn().mockRejectedValue(new Error('archive move failed'))
 
     await expect(restoreMacCodexThemeConfig(configPath, backupPath, { archiveBackup })).resolves.toEqual({
       restored: true,
       archiveCompleted: false,
-      archiveError: 'archive directory sync failed'
+      archiveError: 'archive move failed',
+      backupAvailable: true
     })
 
     expect(archiveBackup).toHaveBeenCalledWith(backupPath)
     await expect(readFile(configPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
     await expect(readFile(backupPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
+  })
+
+  it('reports the original backup as unavailable when directory sync fails after moving it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-macos-archive-sync-failure-'))
+    roots.push(root)
+    const configPath = join(root, '.codex', 'config.toml')
+    const backupPath = join(root, 'studio', 'backups', 'config.before-studio.toml')
+    const archivedPath = join(root, 'studio', 'backups', 'config.restored-test.toml')
+    await writeMacBytesAtomically(configPath, Buffer.from('[desktop]\nappearanceTheme = "light"\n'), null)
+    await writeMacBytesAtomically(backupPath, Buffer.from('[desktop]\nappearanceTheme = "system"\n'), null)
+    const archiveBackup = vi.fn(async (path: string) => {
+      await rename(path, archivedPath)
+      throw new Error('archive directory sync failed')
+    })
+
+    await expect(restoreMacCodexThemeConfig(configPath, backupPath, { archiveBackup })).resolves.toEqual({
+      restored: true,
+      archiveCompleted: false,
+      archiveError: 'archive directory sync failed',
+      backupAvailable: false
+    })
+
+    await expect(readFile(configPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
+    await expect(readFile(backupPath)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(archivedPath, 'utf8')).resolves.toContain('appearanceTheme = "system"')
   })
 
   it('rejects invalid encodings, unsafe TOML shapes, and removes a newly created backup on failure', async () => {
