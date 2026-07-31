@@ -291,6 +291,7 @@ export class ProfileStore {
   async exportSharePackage(input: unknown, destinationPath: unknown, signal?: AbortSignal): Promise<void> {
     const localProfile = parseThemeProfile(input)
     await this.get(localProfile.id)
+    await this.validateProfileMedia(localProfile, true)
     const profile = createShareProfile(localProfile)
     await this.validateProfileMedia(profile, true)
     await this.validateProfileAssets(profile)
@@ -625,7 +626,6 @@ export class ProfileStore {
   }
 
   private async importOptimizedVideo(themeId: string, sourcePath: string, purpose: VideoMediaRole, inspection: VideoAssetInspection, settings: VideoTranscodeSettings, signal?: AbortSignal): Promise<ImportedMediaAsset> {
-    const preserveOriginal = inspection.portable
     const sourceExtension = extname(sourcePath).toLowerCase()
     const token = randomUUID()
     const originalAsset = `assets/${purpose}-${token}${sourceExtension}`
@@ -637,23 +637,21 @@ export class ProfileStore {
     await mkdir(dirname(originalPath), { recursive: true })
     let imported: ImportedMediaAsset | null = null
     try {
-      if (preserveOriginal) await pipeline(createReadStream(sourcePath), createWriteStreamChecked(originalTemporary), { signal })
+      await pipeline(createReadStream(sourcePath), createWriteStreamChecked(originalTemporary), { signal })
       await transcodeVideo({ inputPath: sourcePath, outputPath: optimizedTemporary, inspection, settings, signal })
       this.throwIfAborted(signal, '视频优化已取消。')
       const optimizedStat = await stat(optimizedTemporary)
       const optimizedInspection = await this.inspectVideo(optimizedTemporary, '.mp4', optimizedStat.size, signal, '视频优化已取消。')
       assertOptimizedVideoInspection(inspection, optimizedInspection, settings)
       await Promise.all([
-        ...(preserveOriginal ? [this.syncFile(originalTemporary)] : []),
+        this.syncFile(originalTemporary),
         this.syncFile(optimizedTemporary)
       ])
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
-      const reference = preserveOriginal
-        ? createVideoVariantReference(
-            this.videoVariant(originalAsset, mediaMimeTypeForPath(originalAsset) as 'video/mp4' | 'video/webm', inspection),
-            optimized
-          )
-        : mediaReferenceForPath(optimizedAsset)
+      const reference = createVideoVariantReference(
+        this.videoVariant(originalAsset, mediaMimeTypeForPath(originalAsset) as 'video/mp4' | 'video/webm', inspection),
+        optimized
+      )
       imported = {
         reference,
         relativePath: optimizedAsset,
@@ -665,7 +663,8 @@ export class ProfileStore {
       await commitVideoOutputs({
         optimizedTemporary,
         optimizedPath,
-        ...(preserveOriginal ? { originalTemporary, originalPath } : {})
+        originalTemporary,
+        originalPath
       })
     } catch (error) {
       await Promise.all([
@@ -675,7 +674,7 @@ export class ProfileStore {
       if (signal?.aborted) throw new Error('视频优化已取消。')
       throw error
     }
-    if (preserveOriginal) this.trackPendingVideoAsset(themeId, originalAsset, purpose)
+    this.trackPendingVideoAsset(themeId, originalAsset, purpose)
     this.trackPendingVideoAsset(themeId, optimizedAsset, purpose)
     return imported
   }
@@ -918,7 +917,7 @@ export class ProfileStore {
     }
     if (videoInspection && optimizeVideo) {
       const settings = parseVideoTranscodeSettings(transcodeSettings ?? createDefaultVideoTranscodeSettings(videoInspection), videoInspection)
-      const reservedBytes = estimateVideoTranscodeStorageBytes(sourceStat.size, videoInspection, settings, videoInspection.portable)
+      const reservedBytes = estimateVideoTranscodeStorageBytes(sourceStat.size, videoInspection, settings, true)
       await this.assertDiskSpace(this.assetRoot(themeId), reservedBytes)
       return this.importOptimizedVideo(themeId, sourcePath, purpose as VideoMediaRole, videoInspection, settings, signal)
     }
@@ -1012,10 +1011,14 @@ export class ProfileStore {
       : undefined
     const pendingRole = this.pendingVideoRoles.get(themeId)?.get(asset)
     if (!savedVariant && pendingRole !== role) throw new Error('视频与主题位置不匹配。')
-    const sourcePath = this.resolveAsset(themeId, asset)
+    const sourceVariant = savedVariant && savedReference?.kind === 'video'
+      ? savedReference.videoVariants?.original ?? savedVariant
+      : undefined
+    const sourceAsset = sourceVariant?.asset ?? asset
+    const sourcePath = this.resolveAsset(themeId, sourceAsset)
     const sourceStat = await stat(sourcePath)
     if (!sourceStat.isFile()) throw new Error('视频文件不存在。')
-    const sourceMimeType = savedVariant?.mimeType ?? mediaMimeTypeForPath(asset)
+    const sourceMimeType = sourceVariant?.mimeType ?? mediaMimeTypeForPath(sourceAsset)
     if (sourceMimeType !== 'video/mp4' && sourceMimeType !== 'video/webm') throw new Error('视频 MIME 类型无效。')
     const inspection = await this.inspectVideo(sourcePath, extname(sourcePath).toLowerCase(), sourceStat.size, signal, '视频优化已取消。')
     const settings = parseVideoTranscodeSettings(settingsInput, inspection)
@@ -1036,15 +1039,13 @@ export class ProfileStore {
       await this.syncFile(temporary)
       await rename(temporary, optimizedPath)
       const optimized = this.videoVariant(optimizedAsset, 'video/mp4', optimizedInspection)
-      const nextReference = inspection.portable
-        ? createVideoVariantReference(this.videoVariant(asset, sourceMimeType, inspection), optimized)
-        : mediaReferenceForPath(optimizedAsset)
+      const nextReference = createVideoVariantReference(this.videoVariant(sourceAsset, sourceMimeType, inspection), optimized)
       this.trackPendingVideoAsset(themeId, optimizedAsset, role)
       return {
         reference: nextReference,
         relativePath: optimizedAsset,
         previewUrl: this.mediaPreviewUrl(themeId, optimizedAsset),
-        originalName: basename(asset),
+        originalName: basename(sourceAsset),
         width: optimized.width,
         height: optimized.height
       }

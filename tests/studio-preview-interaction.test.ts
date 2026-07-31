@@ -989,6 +989,9 @@ describe('Studio preview editing interaction', () => {
     if (!importButton) throw new Error('Share import command is missing.')
     const imported = createDefaultTheme('00000000-0000-4000-8000-000000000003', '待转换分享主题')
     imported.hero.source = { asset: 'assets/shared-hero.mp4', kind: 'video', mimeType: 'video/mp4' }
+    imported.polaroid.source = { asset: 'assets/shared-polaroid.mp4', kind: 'video', mimeType: 'video/mp4' }
+    imported.conversationBackground.source = { asset: 'assets/shared-conversation.mp4', kind: 'video', mimeType: 'video/mp4' }
+    imported.windowBackground.source = { asset: 'assets/shared-window.mp4', kind: 'video', mimeType: 'video/mp4' }
     themeProfiles.push(imported)
     importTheme.mockResolvedValueOnce(imported)
     inspectVideo.mockResolvedValue({
@@ -1015,14 +1018,27 @@ describe('Studio preview editing interaction', () => {
     })
 
     expect(activateTheme).toHaveBeenCalledWith(imported.id)
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('已导入主题“待转换分享主题”；1 个视频需转换后才能应用到 Codex。')
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('已导入主题“待转换分享主题”；4 个视频需转换后才能应用到 Codex。')
     const videoPanel = container.querySelector('[data-inspector-anchor="visual-video-playback"]')
     expect(videoPanel?.classList.contains('inspector-highlight')).toBe(true)
     expect(videoPanel?.textContent).toContain('需转换')
     expect(videoPanel?.textContent).toContain('转换视频')
+    const videoRows = videoPanel?.querySelectorAll<HTMLElement>('.video-role-row:not(.is-empty)') ?? []
+    expect(videoRows).toHaveLength(4)
+    expect([...videoRows].map((row) => row.querySelector('strong')?.textContent)).toEqual(['主视觉', '拍立得', '对话背景', '窗口背景'])
+    for (const row of videoRows) {
+      const versions = row.querySelectorAll<HTMLButtonElement>('.video-variant-switch button')
+      expect(versions).toHaveLength(2)
+      expect(versions[0]?.textContent).toBe('原片')
+      expect(versions[0]?.classList.contains('active')).toBe(true)
+      expect(versions[1]?.textContent).toBe('优化版')
+      expect(versions[1]?.disabled).toBe(true)
+      expect(versions[1]?.title).toBe('尚未生成优化版')
+      versions[1]?.click()
+    }
     expect(container.querySelector('[role="dialog"]')).toBeNull()
 
-    const convert = videoPanel?.querySelector<HTMLButtonElement>('.optimize-video-command')
+    const convert = videoRows[0]?.querySelector<HTMLButtonElement>('.optimize-video-command')
     if (!convert) throw new Error('Video conversion command is missing.')
     await act(async () => {
       convert.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
@@ -1618,6 +1634,15 @@ describe('Studio preview editing interaction', () => {
         optimized: { ...optimizedReference.videoVariants.optimized, asset: 'assets/hero-regenerated.mp4' }
       }
     }
+    const conversationReference = {
+      ...optimizedReference,
+      asset: 'assets/conversation-optimized.mp4',
+      videoVariants: {
+        active: 'optimized' as const,
+        original: { ...optimizedReference.videoVariants.original, asset: 'assets/conversation-original.mp4' },
+        optimized: { ...optimizedReference.videoVariants.optimized, asset: 'assets/conversation-optimized.mp4' }
+      }
+    }
     selectMedia.mockResolvedValueOnce({ reference: originalReference, relativePath: originalReference.asset, previewUrl: 'studio-media://preview/hero-original.mp4', originalName: 'hero-original.mp4', width: 3840, height: 2160 })
     optimizeVideo
       .mockResolvedValueOnce({ reference: optimizedReference, relativePath: optimizedReference.asset, previewUrl: 'studio-media://preview/hero-optimized.mp4', originalName: 'hero-original.mp4', width: 1920, height: 1080 })
@@ -1654,7 +1679,27 @@ describe('Studio preview editing interaction', () => {
       frameRate: 30,
       videoBitRate: null
     })
+    const generatedVersions = container.querySelectorAll<HTMLButtonElement>('.video-variant-switch button')
+    expect(generatedVersions).toHaveLength(2)
+    expect([...generatedVersions].every((button) => !button.disabled)).toBe(true)
     expect(container.querySelector('.video-variant-switch button.active')?.textContent).toBe('优化版')
+
+    selectMedia.mockResolvedValueOnce({ reference: conversationReference, relativePath: conversationReference.asset, previewUrl: 'studio-media://preview/conversation-optimized.mp4', originalName: 'conversation.mp4', width: 1920, height: 1080 })
+    const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
+    if (!conversation) throw new Error('Conversation preview command is missing.')
+    act(() => conversation.click())
+    const conversationSurface = container.querySelector<HTMLElement>('[data-preview-target="conversation-background"]')
+    if (!conversationSurface) throw new Error('Conversation background target is missing.')
+    pointerDown(conversationSurface)
+    const conversationVideo = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-background-modes button')].find((button) => button.textContent === '视频')
+    if (!conversationVideo) throw new Error('Conversation video mode is missing.')
+    await act(async () => {
+      conversationVideo.click()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
+    })
+    const roleRow = (label: string): HTMLElement | undefined => [...container.querySelectorAll<HTMLElement>('.video-role-row')]
+      .find((row) => row.querySelector('strong')?.textContent === label)
+    expect(roleRow('对话背景')?.querySelector('.video-variant-switch button.active')?.textContent).toBe('优化版')
 
     const regenerate = [...container.querySelectorAll<HTMLButtonElement>('.optimize-video-command')].find((button) => button.textContent?.includes('重新生成优化版'))
     if (!regenerate) throw new Error('Regenerate optimized video command is missing.')
@@ -1681,7 +1726,8 @@ describe('Studio preview editing interaction', () => {
       original.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
     })
-    expect(container.querySelector('.video-variant-switch button.active')?.textContent).toBe('原片')
+    expect(roleRow('主视觉')?.querySelector('.video-variant-switch button.active')?.textContent).toBe('原片')
+    expect(roleRow('对话背景')?.querySelector('.video-variant-switch button.active')?.textContent).toBe('优化版')
 
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
@@ -1692,6 +1738,7 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.videoPlayback.pausePolicy).toBe('unfocused')
     expect(savedProfiles.at(-1)?.hero.source?.videoVariants).toMatchObject({ active: 'original' })
     expect(savedProfiles.at(-1)?.hero.source?.videoVariants?.optimized.asset).toBe(regeneratedReference.asset)
+    expect(savedProfiles.at(-1)?.conversationBackground.source?.videoVariants).toMatchObject({ active: 'optimized' })
   })
 
   it('keeps low-load video conversion available but requires a meaningful reduction', async () => {

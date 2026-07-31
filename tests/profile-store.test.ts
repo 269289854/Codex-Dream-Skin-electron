@@ -667,8 +667,12 @@ describe('ProfileStore', () => {
     expect(incompatibleInspection).toMatchObject({ width: 320, height: 180, portable: false, highLoad: false })
     await expect(store.importMediaAsset(profile.id, incompatibleSource, 'windowBackground', 'video')).rejects.toThrow('需要转换')
     const converted = await store.importMediaAsset(profile.id, incompatibleSource, 'windowBackground', 'video', undefined, true)
-    expect(converted.reference.videoVariants).toBeUndefined()
-    await expect(store.inspectReferencedVideo(profile.id, converted.reference.asset)).resolves.toMatchObject({ portable: true })
+    expect(converted.reference.videoVariants?.active).toBe('optimized')
+    const convertedOriginalAsset = converted.reference.videoVariants?.original.asset
+    const convertedOptimizedAsset = converted.reference.videoVariants?.optimized.asset
+    if (!convertedOriginalAsset || !convertedOptimizedAsset) throw new Error('Converted video variants are missing.')
+    await expect(store.inspectReferencedVideo(profile.id, convertedOriginalAsset)).resolves.toMatchObject({ portable: false })
+    await expect(store.inspectReferencedVideo(profile.id, convertedOptimizedAsset)).resolves.toMatchObject({ portable: true })
 
     const imported = await store.importMediaAsset(profile.id, mp4Source, 'hero', 'video', undefined, true)
     expect(imported.reference.videoVariants?.active).toBe('optimized')
@@ -679,7 +683,14 @@ describe('ProfileStore', () => {
     expect(optimizedInspection).toMatchObject({ width: 640, height: 360, hasAudio: true, portable: true, highLoad: false })
     expect(optimizedInspection.frameRate).toBeLessThanOrEqual(30.5)
     profile.hero.source = imported.reference
+    profile.windowBackground.visible = true
+    profile.windowBackground.mode = 'video'
+    profile.windowBackground.source = converted.reference
     await store.update(profile)
+
+    const duplicate = await store.duplicate(profile, '双版本视频副本')
+    await expect(readFile(join(store.themesRoot, duplicate.id, convertedOriginalAsset))).resolves.toBeInstanceOf(Buffer)
+    await expect(readFile(join(store.themesRoot, duplicate.id, convertedOptimizedAsset))).resolves.toBeInstanceOf(Buffer)
 
     await expect(store.optimizeReferencedVideo(profile.id, 'windowBackground', originalAsset, {
       maxWidth: 320,
@@ -687,6 +698,18 @@ describe('ProfileStore', () => {
       frameRate: 24,
       videoBitRate: 1_000_000
     })).rejects.toThrow('视频与主题位置不匹配')
+
+    const regeneratedConverted = await store.optimizeReferencedVideo(profile.id, 'windowBackground', converted.reference.asset, {
+      maxWidth: 320,
+      maxHeight: 180,
+      frameRate: 20,
+      videoBitRate: 1_000_000
+    })
+    expect(regeneratedConverted.reference.videoVariants?.original.asset).toBe(convertedOriginalAsset)
+    const regeneratedConvertedAsset = regeneratedConverted.reference.videoVariants?.optimized.asset
+    if (!regeneratedConvertedAsset) throw new Error('Regenerated converted video is missing.')
+    expect(regeneratedConvertedAsset).not.toBe(convertedOptimizedAsset)
+    await expect(store.inspectReferencedVideo(profile.id, regeneratedConvertedAsset)).resolves.toMatchObject({ portable: true })
 
     const regenerated = await store.optimizeReferencedVideo(profile.id, 'hero', originalAsset, {
       maxWidth: 320,
@@ -701,6 +724,7 @@ describe('ProfileStore', () => {
     await expect(store.inspectReferencedVideo(profile.id, regeneratedAsset)).resolves.toMatchObject({ width: 320, height: 180, portable: true })
 
     profile.hero.source = regenerated.reference
+    profile.windowBackground.source = regeneratedConverted.reference
     const lowLoad = await store.importMediaAsset(profile.id, webmSource, 'polaroid', 'video')
     profile.polaroid.source = lowLoad.reference
     const saved = await store.update(profile)
@@ -714,10 +738,17 @@ describe('ProfileStore', () => {
     await expect(readFile(join(store.themesRoot, profile.id, originalAsset))).resolves.toBeInstanceOf(Buffer)
     await expect(readFile(join(store.themesRoot, profile.id, optimizedAsset))).rejects.toThrow()
     await expect(readFile(join(store.themesRoot, profile.id, regeneratedAsset))).resolves.toBeInstanceOf(Buffer)
+    await expect(readFile(join(store.themesRoot, profile.id, convertedOriginalAsset))).resolves.toBeInstanceOf(Buffer)
+    await expect(readFile(join(store.themesRoot, profile.id, convertedOptimizedAsset))).rejects.toThrow()
+    await expect(readFile(join(store.themesRoot, profile.id, regeneratedConvertedAsset))).resolves.toBeInstanceOf(Buffer)
     saved.hero.source = null
+    saved.windowBackground.mode = 'color'
+    saved.windowBackground.source = null
     await store.update(saved)
     await expect(readFile(join(store.themesRoot, profile.id, originalAsset))).rejects.toThrow()
     await expect(readFile(join(store.themesRoot, profile.id, regeneratedAsset))).rejects.toThrow()
+    await expect(readFile(join(store.themesRoot, profile.id, convertedOriginalAsset))).rejects.toThrow()
+    await expect(readFile(join(store.themesRoot, profile.id, regeneratedConvertedAsset))).rejects.toThrow()
   })
 
   it('persists, compiles, previews, and duplicates a window GIF background', async () => {

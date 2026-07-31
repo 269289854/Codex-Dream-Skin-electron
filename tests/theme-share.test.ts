@@ -24,6 +24,7 @@ import {
 } from '../src/main/theme-share'
 import { ensureGifInfiniteLoop } from '../src/shared/gif'
 import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
+import { activateVideoVariant } from '../src/shared/media'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, DEFAULT_THEME_COLORS } from '../src/shared/theme'
 
 sharp.cache(false)
@@ -286,6 +287,34 @@ describe('theme share packages', () => {
     await expect(store.duplicate(imported, '待转换视频副本')).resolves.toMatchObject({ windowBackground: { source: { asset } } })
     await expect(store.exportSharePackage(imported, join(root, 'blocked-export.cdstheme'))).rejects.toThrow('请先转换视频')
     await expect(store.assertRuntimeVideoCompatibility(imported.id)).rejects.toThrow('1 个视频需要转换')
+
+    const optimized = await store.optimizeReferencedVideo(imported.id, 'windowBackground', asset, {
+      maxWidth: 320,
+      maxHeight: 180,
+      frameRate: 20,
+      videoBitRate: 1_000_000
+    })
+    expect(optimized.reference.videoVariants).toMatchObject({ active: 'optimized', original: { asset } })
+    const optimizedAsset = optimized.reference.videoVariants?.optimized.asset
+    if (!optimizedAsset) throw new Error('Optimized shared video is missing.')
+    imported.windowBackground.source = optimized.reference
+    await store.update(imported)
+    const optimizedPackage = join(root, 'optimized-export.cdstheme')
+    await expect(store.exportSharePackage(imported, optimizedPackage)).resolves.toBeUndefined()
+    await expect(store.assertRuntimeVideoCompatibility(imported.id)).resolves.toBeUndefined()
+    const optimizedArchive = unzipSync(await readFile(optimizedPackage))
+    expect(optimizedArchive[optimizedAsset]).toBeDefined()
+    expect(optimizedArchive[asset]).toBeUndefined()
+
+    imported.windowBackground.source = activateVideoVariant(optimized.reference, 'original')
+    await store.update(imported)
+    await expect(store.exportSharePackage(imported, join(root, 'original-active-export.cdstheme'))).rejects.toThrow('请先转换视频')
+    await expect(store.assertRuntimeVideoCompatibility(imported.id)).rejects.toThrow('1 个视频需要转换')
+
+    imported.windowBackground.source = activateVideoVariant(imported.windowBackground.source, 'optimized')
+    await store.update(imported)
+    await expect(store.exportSharePackage(imported, join(root, 'optimized-active-export.cdstheme'))).resolves.toBeUndefined()
+    await expect(store.assertRuntimeVideoCompatibility(imported.id)).resolves.toBeUndefined()
     expect((await readdir(store.themesRoot)).filter((name) => name.startsWith('.cdstheme-import-'))).toHaveLength(0)
   })
 

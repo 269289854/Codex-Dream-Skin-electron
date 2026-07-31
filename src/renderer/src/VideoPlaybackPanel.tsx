@@ -54,6 +54,8 @@ function VideoRoleRow({ role, label, reference, inspection, optimizing, onOptimi
   }
 
   const activeVariant = reference.videoVariants?.[reference.videoVariants.active]
+  const activeVersion = reference.videoVariants?.active ?? 'original'
+  const hasOptimizedVersion = Boolean(reference.videoVariants)
   const width = inspection?.width ?? activeVariant?.width
   const height = inspection?.height ?? activeVariant?.height
   const frameRate = inspection?.frameRate ?? activeVariant?.frameRate
@@ -69,10 +71,10 @@ function VideoRoleRow({ role, label, reference, inspection, optimizing, onOptimi
     <header><Video size={14} /><strong>{label}</strong>{needsConversion ? <span className="video-load-badge"><Zap size={12} />需转换</span> : highLoad && <span className="video-load-badge"><Gauge size={12} />高负载</span>}</header>
     <p>{detail}</p>
     {inspection?.bitRate ? <small>{formatBitRate(inspection.bitRate)}</small> : null}
-    {reference.videoVariants && <div className="segmented-control video-variant-switch" aria-label={`${label}视频版本`}>
-        <button type="button" className={reference.videoVariants.active === 'original' ? 'active' : ''} aria-pressed={reference.videoVariants.active === 'original'} onClick={() => onActivateVariant(role, 'original')}>原片</button>
-        <button type="button" className={reference.videoVariants.active === 'optimized' ? 'active' : ''} aria-pressed={reference.videoVariants.active === 'optimized'} onClick={() => onActivateVariant(role, 'optimized')}>优化版</button>
-      </div>}
+    <div className="segmented-control video-variant-switch" aria-label={`${label}视频版本`}>
+      <button type="button" className={activeVersion === 'original' ? 'active' : ''} aria-pressed={activeVersion === 'original'} onClick={() => onActivateVariant(role, 'original')}>原片</button>
+      <button type="button" className={activeVersion === 'optimized' ? 'active' : ''} aria-pressed={activeVersion === 'optimized'} disabled={!hasOptimizedVersion} title={hasOptimizedVersion ? undefined : '尚未生成优化版'} onClick={() => onActivateVariant(role, 'optimized')}>优化版</button>
+    </div>
     <button className="secondary-command optimize-video-command" type="button" disabled={optimizing || !inspection} onClick={() => onOptimize(role)}>
       <Zap size={14} />{optimizing ? '正在转换' : reference.videoVariants ? '重新生成优化版' : needsConversion ? '转换视频' : highLoad ? '优化视频' : '生成优化版'}
     </button>
