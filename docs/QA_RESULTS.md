@@ -1,6 +1,27 @@
 # 平台验收结果
 
-## macOS Universal 验收
+本文档分别记录当前版本的自动化检查和过去版本的真实平台验收。历史结果只证明对应日期、版本与环境下的行为，不能视为当前版本已经完成同等实机验证。
+
+## 当前 v1.1.1 自动化检查（Windows）
+
+### 检查环境与结果
+
+- 日期：2026-08-02。
+- 系统：Windows x64。
+- Studio：`1.1.1` 源码工作区。
+- `npm test`：46 个测试文件、500 项测试全部通过。
+- `npm run test:config`：严格 UTF-8 配置安装和作用域恢复测试通过。
+- `npm run build`：Node 与 Web TypeScript 检查、主进程、preload 和 renderer 生产构建通过。
+
+本轮自动化测试覆盖主题模型和迁移、双语本地化与 IPC 错误、素材校验和持久化、视频预检与转码、主题分享、Studio 媒体协议、Codex 生命周期、Windows/macOS 平台驱动、应用更新、Studio UI 及双平台发布契约。
+
+### 未执行的当前版本验收
+
+- 未运行 `npm run package:win`，因此不声明 Windows `1.1.1` 安装包、卸载或自动更新已在本轮验证。
+- 未连接真实官方 Codex 执行检测、配置安装、启动、注入、停止、会话恢复或配置恢复。
+- 未在 macOS 上重新运行 `1.1.1` 的 Universal 打包、安装、启动或真实官方 Codex 验收。
+
+## macOS Universal 历史验收（Studio 1.0.8）
 
 ### 验收环境
 
@@ -44,7 +65,7 @@ git diff --check
 - 真实官方 Codex 的启动、停止、注入、会话恢复和配置作用域恢复仍需在不承载活动任务的 macOS 环境完成破坏性验收。
 - Linux、Apple 开发者签名和公证不在首版范围内。
 
-## Windows 历史验收
+## Windows 历史验收（Studio 0.1.0）
 
 ### 验收环境
 
@@ -69,4 +90,4 @@ npm run package:win
 - “恢复并重启 Codex”关闭调试端口、清除主题外观键并归档配置备份。
 - 恢复前后 `[desktop]` 及其嵌套子表和中文路径内容保持一致。
 
-当前 macOS 主机没有 PowerShell、Wine 或 NSIS，因此本次 macOS 支持变更没有重新执行 `npm run test:config`、Windows x64 安装包或 Windows 自动更新实机回归；这些项目必须在 Windows x64 环境复验，不能视为本轮已通过。
+该次 macOS 验收所在主机没有 PowerShell、Wine 或 NSIS，因此当时的 macOS 支持变更没有重新执行 `npm run test:config`、Windows x64 安装包或 Windows 自动更新实机回归；这些项目不能视为该轮已通过。

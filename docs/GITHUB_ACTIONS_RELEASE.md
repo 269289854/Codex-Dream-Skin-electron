@@ -2,7 +2,7 @@
 
 本文档是 Codex Dream Skin Studio 的 GitHub Actions 构建与发布标准。后续维护者或自动化代理处理 Windows/macOS 发布时，应先阅读本文档，再核对当前 `package.json`、工作区状态和 GitHub 仓库设置。
 
-本文档描述的是目标工作流。仅创建本文档不会启用 GitHub Actions；仓库中还必须存在 `.github/workflows/release.yml`。
+仓库已经安装 `.github/workflows/release.yml`，并通过自动化测试确保它与本文档内嵌的标准 Workflow 保持同步。修改任一副本时必须同步更新另一副本并运行对应契约测试。
 
 ## 发布契约
 
@@ -13,7 +13,7 @@
 - macOS Runner：标准 `macos-15` arm64
 - Windows 产物：x64 NSIS 安装包、对应 `.blockmap` 和 `latest.yml`
 - macOS 产物：同时支持 Intel 与 Apple Silicon 的 Universal DMG 和 ZIP
-- 正式 Release 标签：`v<package.json version>`，例如 `v1.0.10`
+- 正式 Release 标签：`v<package.json version>`
 - 临时 Actions 构建产物：保留 7 天
 
 `package.json` 中的脚本是构建行为的权威来源：
@@ -28,11 +28,10 @@ Windows 的 `npm run test:config` 依赖 PowerShell，只在 Windows Job 中运�
 ## 一次性配置
 
 1. 确认 GitHub 仓库的 Actions 功能已启用。
-2. 新增 `.github/workflows/release.yml`，内容使用下文的标准 Workflow。
-3. 如果组织策略限制 `GITHUB_TOKEN`，在 `Settings -> Actions -> General -> Workflow permissions` 中允许 Workflow 获得写入 Release 所需的 `contents: write` 权限。
-4. 将 Workflow 提交到默认分支。
-5. 先通过 `workflow_dispatch` 手动运行一次，确认 Windows 和 macOS 临时产物均可下载。
-6. 手动构建通过后，再使用版本标签触发正式 Release。
+2. 核对 `.github/workflows/release.yml` 与下文的标准 Workflow 完全一致。
+3. 如果组织策略限制 `GITHUB_TOKEN`，在 `Settings -> Actions -> General -> Workflow permissions` 中允许 Release Job 获得 `contents: write` 权限。
+4. 通过 `workflow_dispatch` 手动运行一次，确认 Windows 和 macOS 临时产物均可下载。
+5. 手动构建通过后，再使用版本标签触发正式 Release。
 
 不要把 GitHub Token、Apple 账号、证书密码或其他密钥写入 Workflow、源码、日志或本文档。
 
@@ -239,13 +238,14 @@ git pull --ff-only
 git fetch --tags
 ```
 
-更新版本号时使用 `npm version --no-git-tag-version`，让版本提交和标签创建保持显式可审查：
+更新版本号时设置待发布版本，并使用 `npm version --no-git-tag-version`，让版本提交和标签创建保持显式可审查。执行前必须将示例中的 `X.Y.Z` 替换为实际版本：
 
 ```powershell
-npm version 1.0.10 --no-git-tag-version
+$releaseVersion = 'X.Y.Z'
+npm version $releaseVersion --no-git-tag-version
 ```
 
-同步更新 `CHANGELOG.md`，然后在 Windows 本地完成提交前检查：
+同步更新 `CHANGELOG.md` 和 `docs/releases/v$releaseVersion.md`，然后在 Windows 本地完成提交前检查：
 
 ```powershell
 npm ci
@@ -258,11 +258,11 @@ git diff --check
 检查通过后提交版本元数据，创建与 `package.json` 完全一致的 annotated tag：
 
 ```powershell
-git add package.json package-lock.json CHANGELOG.md
-git commit -m "chore(release): 发布 v1.0.10"
-git tag -a v1.0.10 -m "v1.0.10"
+git add package.json package-lock.json CHANGELOG.md "docs/releases/v$releaseVersion.md"
+git commit -m "chore(release): 发布 v$releaseVersion"
+git tag -a "v$releaseVersion" -m "v$releaseVersion"
 git push origin main
-git push origin v1.0.10
+git push origin "v$releaseVersion"
 ```
 
 推送标签后，GitHub Actions 会并行构建 Windows 和 macOS，只有两个平台都成功后才创建或更新正式 Release。

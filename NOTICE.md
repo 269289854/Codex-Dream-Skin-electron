@@ -10,7 +10,7 @@ Codex Dream Skin Studio 的源代码和项目文档采用 [MIT License](LICENSE)
 
 ## 项目来源
 
-本项目基于 MIT 授权的 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 迁移并继续开发，在原有主题注入工具基础上增加了 Windows Electron 工作台、主题配置、实时预览、媒体处理、主题分享、运行恢复和安全校验等功能。
+本项目基于 MIT 授权的 [Fei-Away/Codex-Dream-Skin](https://github.com/Fei-Away/Codex-Dream-Skin) 迁移并继续开发，在原有主题注入工具基础上增加了支持 Windows 和 macOS 的 Electron 工作台、主题配置、实时预览、媒体处理、主题分享、运行恢复和安全校验等功能。
 
 原项目的版权和许可信息仍受其原许可证约束；本项目的修改部分由本项目贡献者维护，并继续以 MIT License 发布。
 
@@ -18,7 +18,7 @@ Codex Dream Skin Studio 的源代码和项目文档采用 [MIT License](LICENSE)
 
 Codex、OpenAI 以及相关产品名称、标识和商标归其各自权利人所有。本项目是独立的第三方桌面主题工具，与 OpenAI 没有隶属、授权、赞助或官方支持关系。
 
-本项目不会修改 WindowsApps 中的 Codex 安装文件、`app.asar`、官方签名或其他官方程序文件。使用本工具前，请确认你有权在自己的 Windows 环境中运行相关软件，并遵守 Codex 及 Microsoft 的适用条款。
+本项目不会修改 WindowsApps 中的 Codex 安装文件、macOS Codex 应用包、`app.asar`、官方签名或其他官方程序文件。使用本工具前，请确认你有权在自己的 Windows 或 macOS 环境中运行相关软件，并遵守 Codex、OpenAI、Microsoft 和 Apple 的适用条款。
 
 ## 内置字体
 
@@ -30,8 +30,9 @@ Codex、OpenAI 以及相关产品名称、标识和商标归其各自权利人�
 | Noto Serif SC（思源宋体） | Google Noto Fonts / Adobe Source Han Serif | [OFL-1.1](resources/shared/fonts/licenses/Noto-Serif-SC-OFL.txt) |
 | LXGW WenKai（霞鹜文楷） | LXGW WenKai contributors | [OFL-1.1](resources/shared/fonts/licenses/LXGW-WenKai-OFL.txt) |
 | JetBrains Mono | JetBrains | [OFL-1.1](resources/shared/fonts/licenses/JetBrains-Mono-OFL.txt) |
+| Dancing Script | Dancing Script contributors | [OFL-1.1](resources/shared/fonts/licenses/Dancing-Script-OFL.txt) |
 
-项目依赖和其他第三方组件可能采用各自的许可证；如需再分发或修改相关组件，请同时遵守其随附的许可证和版权声明。
+安装包还包含用于本地视频优化的 FFmpeg，并使用 Fontkit 校验导入字体；版本、来源和许可证见 [第三方组件声明](THIRD_PARTY_NOTICES.md)。项目依赖和其他第三方组件可能采用各自的许可证；如需再分发或修改相关组件，请同时遵守其随附的许可证和版权声明。
 
 ## 用户导入内容
 
