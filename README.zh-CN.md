@@ -6,7 +6,7 @@ Codex Dream Skin Studio 是一款面向官方 Codex 桌面应用的非官方可�
 
 Studio 不会修改 Codex 安装文件、`app.asar`、应用签名或 WindowsApps 中的文件。修改相关 Codex 配置前会先创建备份，并提供完整的引导式恢复流程。
 
-![自定义后的 Codex 首页](docs/skin-07.jpg)
+![Codex Dream Skin Studio 中文主题编辑器](docs/studio-overview-zh-CN.png)
 
 ## 主要功能
 

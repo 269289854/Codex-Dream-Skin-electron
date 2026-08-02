@@ -6,7 +6,7 @@ Codex Dream Skin Studio is an unofficial visual theme editor for the official Co
 
 The Studio does not modify the Codex installation, `app.asar`, application signature, or files inside WindowsApps. It backs up the relevant Codex configuration before making changes and provides a guided restore workflow.
 
-![A customized Codex home screen](docs/skin-07.jpg)
+![Codex Dream Skin Studio theme editor in English](docs/studio-overview-en.png)
 
 ## Features
 
