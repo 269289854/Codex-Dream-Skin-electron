@@ -223,14 +223,45 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row:hove
   color: var(--dream-sidebar-project-hover-text) !important;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon > :is(img, .dream-builtin-icon) {
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon {
+  position: relative;
+  margin-left: 0 !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon > * {
+  opacity: 0 !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon::after {
+  content: attr(data-dream-sidebar-project-icon-glyph);
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 16px;
   height: 16px;
+  transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
-  object-fit: contain;
+  background-image: var(--dream-sidebar-project-icon-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
   font-size: 16px;
   line-height: 1;
+  pointer-events: none;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon[data-dream-sidebar-project-icon-kind="builtin"]::after {
+  background-color: currentColor;
+  background-image: none;
+  -webkit-mask-image: var(--dream-sidebar-project-icon-mask, none);
+  mask-image: var(--dream-sidebar-project-icon-mask, none);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 /* Kept for cleanup and older payloads; current Codex project rows have no selected state. */

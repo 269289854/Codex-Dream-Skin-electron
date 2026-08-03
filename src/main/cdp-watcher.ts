@@ -109,7 +109,11 @@ export class CdpWatcher {
   async inject(): Promise<CdpSnapshot> {
     const targets = await this.targets()
     await Promise.all(targets.map(async (target) => {
-      await this.evaluate(target, this.payload)
+      const result = await this.evaluate(target, this.payload)
+      if (isRendererReloadRequest(result)) {
+        await this.command(target, 'Page.reload', { ignoreCache: true })
+        await this.injectAfterReload(target)
+      }
       if (this.mediaBindings.length > 0) await this.bindMedia(target)
     }))
     const snapshot = { connected: true, targetCount: targets.length }
@@ -145,7 +149,7 @@ export class CdpWatcher {
         projects.set(project.id, project)
       }
     }
-    return [...projects.values()].sort((a, b) => a.label.localeCompare(b.label))
+    return [...projects.values()]
   }
 
   async stop(removeTheme: boolean): Promise<CdpSnapshot> {
@@ -171,6 +175,20 @@ export class CdpWatcher {
     if (this.timer) return
     const generation = ++this.watchGeneration
     this.timer = setInterval(() => void this.tick(generation), 2500)
+  }
+
+  private async injectAfterReload(target: CdpTarget): Promise<void> {
+    let lastError: unknown
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      try {
+        const result = await this.evaluate(target, this.payload)
+        if (!isRendererReloadRequest(result)) return
+      } catch (reason) {
+        lastError = reason
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('Codex 页面重载后无法应用主题。')
   }
 
   private async cleanupTargets(): Promise<void> {
@@ -330,4 +348,8 @@ export class CdpWatcher {
       socket.once('close', () => { if (!settled) finish(new Error('CDP 会话意外关闭。')) })
     })
   }
+}
+
+function isRendererReloadRequest(value: unknown): boolean {
+  return Boolean(value && typeof value === 'object' && (value as { reloading?: unknown }).reloading === true)
 }

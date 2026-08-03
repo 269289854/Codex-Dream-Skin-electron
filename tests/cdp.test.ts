@@ -47,7 +47,7 @@ describe('CDP theme target selection', () => {
 })
 
 describe('CDP project discovery', () => {
-  it('merges duplicate projects from verified targets and keeps the latest target value', async () => {
+  it('preserves Codex DOM order while merging duplicate projects from verified targets', async () => {
     const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
     const internals = watcher as unknown as {
       targets: () => Promise<Array<{ id: string }>>
@@ -59,8 +59,8 @@ describe('CDP project discovery', () => {
       : [{ id: 'project-1', label: 'Alpha', kind: 'workspace' }])
 
     await expect(watcher.listProjects()).resolves.toEqual([
-      { id: 'project-1', label: 'Alpha', kind: 'workspace' },
-      { id: 'project-2', label: 'Zulu', kind: 'local' }
+      { id: 'project-2', label: 'Zulu', kind: 'local' },
+      { id: 'project-1', label: 'Alpha', kind: 'workspace' }
     ])
   })
 
@@ -94,6 +94,27 @@ describe('CDP project discovery', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
+  })
+})
+
+describe('CDP renderer migration', () => {
+  it('reloads a verified target when the renderer requests a clean React remount', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    watcher.setPayload('valid-payload', 'studio-1234567890abcdef12345678')
+    const internals = watcher as unknown as {
+      targets: () => Promise<Array<{ id: string }>>
+      evaluate: (target: { id: string }, expression: string) => Promise<unknown>
+      command: (target: { id: string }, method: string, params: Record<string, unknown>) => Promise<unknown>
+    }
+    internals.targets = vi.fn().mockResolvedValue([{ id: 'page-1' }])
+    internals.evaluate = vi.fn()
+      .mockResolvedValueOnce({ installed: false, reloading: true })
+      .mockResolvedValueOnce({ installed: true })
+    internals.command = vi.fn().mockResolvedValue({})
+
+    await expect(watcher.inject()).resolves.toEqual({ connected: true, targetCount: 1 })
+    expect(internals.command).toHaveBeenCalledWith({ id: 'page-1' }, 'Page.reload', { ignoreCache: true })
+    expect(internals.evaluate).toHaveBeenCalledTimes(2)
   })
 })
 

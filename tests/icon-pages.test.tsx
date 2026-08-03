@@ -170,15 +170,28 @@ describe('icon management pages', () => {
         setWeightOverride,
         assignProject,
         clearProjectAssignment: async () => settings,
-        listProjects: async () => [{ id: 'project-1', label: 'Sample Project', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' }],
-        refreshProjects: async () => [{ id: 'project-1', label: 'Sample Project', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' }]
+        listProjects: async () => [
+          { id: 'project-1', label: 'Zulu', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' },
+          { id: 'project-2', label: 'Alpha', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' },
+          { id: 'project-3', label: 'Zebra', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' }
+        ],
+        refreshProjects: async () => []
       }
     } as unknown as StudioApi
     ;(browserWindow as unknown as { studio: StudioApi }).studio = studio
 
     await act(async () => root.render(<ProjectIconsPage themes={[{ id: themeId, name: 'Dream', active: true, system: false, updatedAt: '2026-08-03T00:00:00.000Z' }]} currentThemeId={themeId} revision={0} onChanged={vi.fn()} onError={vi.fn()} />))
-    await vi.waitFor(() => expect(container.textContent).toContain('Sample Project'))
+    await vi.waitFor(() => expect(container.textContent).toContain('Zulu'))
     expect(container.textContent).toContain('仅本机')
+    const projectLabels = (): string[] => [...container.querySelectorAll('.project-assignment-copy strong')].map((node) => node.textContent ?? '')
+    expect(projectLabels()).toEqual(['Zulu', 'Alpha', 'Zebra'])
+
+    const search = container.querySelector<HTMLInputElement>('.project-search input')
+    if (!search) throw new Error('Project search input is missing.')
+    act(() => setInput(search, 'z'))
+    expect(projectLabels()).toEqual(['Zulu', 'Zebra'])
+    act(() => setInput(search, ''))
+    expect(projectLabels()).toEqual(['Zulu', 'Alpha', 'Zebra'])
 
     const customToggle = [...container.querySelectorAll<HTMLElement>('.library-toggle-row')].find((row) => row.textContent?.includes('Pixel Set'))?.querySelector<HTMLInputElement>('input')
     if (!customToggle) throw new Error('Custom library toggle is missing.')

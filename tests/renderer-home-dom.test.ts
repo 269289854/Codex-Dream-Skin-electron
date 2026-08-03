@@ -1124,7 +1124,7 @@ describe('renderer home DOM adaptation', () => {
     expect(projectAction?.classList.contains('dream-sidebar-project-row')).toBe(false)
   })
 
-  it('uses stable project icons without replacing project controls and restores the native icon', () => {
+  it('uses stable project icons without taking ownership of native project nodes', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')
     window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `
@@ -1134,18 +1134,85 @@ describe('renderer home DOM adaptation', () => {
           <span>Project</span><button data-project-menu>Menu</button>
         </div>
       </div>`)
+    const row = window.document.querySelector('[data-app-action-sidebar-project-row]')
+    const icon = window.document.querySelector('[data-sidebar-project-drop-zone="project-icon"]') as unknown as HTMLElement | null
+    const nativeIcon = icon?.querySelector('[data-native-project-icon]')
+    let clicks = 0
+    row?.addEventListener('click', () => { clicks += 1 })
     inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
-      pool: [{ ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star' }],
+      pool: [{ ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star', dataUrl: 'data:image/svg+xml;base64,PHN2Zy8+' }],
       assignments: []
     })
 
-    const icon = window.document.querySelector('[data-sidebar-project-drop-zone="project-icon"]')
-    expect(icon?.textContent).toBe(BUILTIN_ICON_GLYPHS.star)
+    expect(nativeIcon?.parentElement).toBe(icon)
+    expect(icon?.children).toHaveLength(1)
+    expect(icon?.getAttribute('data-dream-sidebar-project-icon-glyph')).toBe('')
+    expect(icon?.getAttribute('data-dream-sidebar-project-icon-kind')).toBe('builtin')
+    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-image')).toBe('none')
+    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-mask')).toContain('data:image/svg+xml;base64,PHN2Zy8+')
     expect(window.document.querySelector('[data-project-menu]')?.textContent).toBe('Menu')
+    icon?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }) as unknown as Event)
+    expect(clicks).toBe(1)
     stateOf(window).ensure()
-    expect(icon?.querySelectorAll('.dream-builtin-icon')).toHaveLength(1)
+    expect(nativeIcon?.parentElement).toBe(icon)
+    expect(icon?.children).toHaveLength(1)
+
+    expect(() => icon?.removeChild(nativeIcon as Node)).not.toThrow()
+    const replacement = window.document.createElement('svg') as unknown as SVGElement
+    replacement.setAttribute('data-native-project-icon-replacement', '')
+    icon?.appendChild(replacement)
+    stateOf(window).ensure()
+    expect(icon?.querySelector('[data-native-project-icon-replacement]')).toBe(replacement)
+    expect(icon?.children).toHaveLength(1)
+
     stateOf(window).cleanup()
+    expect(icon?.classList.contains('dream-sidebar-project-icon')).toBe(false)
+    expect(icon?.hasAttribute('data-dream-sidebar-project-icon-glyph')).toBe(false)
+    expect(icon?.hasAttribute('data-dream-sidebar-project-icon-kind')).toBe(false)
+    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-image')).toBe('')
+    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-mask')).toBe('')
+    expect(icon?.querySelector('[data-native-project-icon-replacement]')).toBe(replacement)
+  })
+
+  it('renders project image data through owned styles and uses the GIF poster for reduced motion', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `
+      <div role="listitem" data-sidebar-project-kind="local">
+        <div data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-row role="button">
+          <span data-sidebar-project-drop-zone="project-icon"><svg data-native-project-icon></svg></span>
+        </div>
+      </div>`)
+    window.matchMedia = vi.fn(() => ({ matches: true })) as unknown as typeof window.matchMedia
+    const animated = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='
+    const poster = 'data:image/png;base64,iVBORw0KGgo='
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+      pool: [{ ref: { libraryId: 'custom', iconId: 'animated' }, weight: 1, dataUrl: animated, posterDataUrl: poster }],
+      assignments: []
+    })
+
+    const icon = window.document.querySelector('[data-sidebar-project-drop-zone="project-icon"]') as unknown as HTMLElement | null
+    expect(icon?.children).toHaveLength(1)
     expect(icon?.querySelector('[data-native-project-icon]')).not.toBeNull()
+    expect(icon?.style.getPropertyValue('--dream-sidebar-project-icon-image')).toContain(poster)
+    expect(icon?.style.getPropertyValue('--dream-sidebar-project-icon-image')).not.toContain(animated)
+  })
+
+  it('reloads instead of running legacy project icon cleanup against React-owned nodes', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `
+      <div data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-row>
+        <span class="dream-sidebar-project-icon" data-sidebar-project-drop-zone="project-icon"><span class="dream-builtin-icon">*</span></span>
+      </div>`)
+    const cleanup = vi.fn()
+    ;(window as unknown as Record<string, unknown>).__CODEX_DREAM_SKIN_STATE__ = { version: 'legacy-project-icons', cleanup }
+
+    inject(window)
+
+    expect(cleanup).not.toHaveBeenCalled()
+    expect(window.document.querySelector('.dream-sidebar-project-icon > .dream-builtin-icon')).not.toBeNull()
   })
 
   it('drags the polaroid within the shell without creating a preview update', () => {

@@ -74,6 +74,9 @@ describe('ProjectIconStore', () => {
     await icons.assignProject(themeId, 'project-1', { libraryId: library.id, iconId: icon.id })
 
     const runtime = await icons.compileRuntimeConfig(themeId)
+    const systemStar = runtime.pool.find((entry) => entry.builtinName === 'star')?.dataUrl
+    expect(systemStar).toMatch(/^data:image\/svg\+xml;base64,/)
+    expect(Buffer.from(systemStar?.split(',')[1] ?? '', 'base64').toString('utf8')).toContain('lucide-star')
     expect(runtime.pool.find((entry) => entry.ref.iconId === icon.id)).toMatchObject({ weight: 8, dataUrl: expect.stringContaining('data:image/png;base64,') })
     expect(runtime.assignments).toEqual([expect.objectContaining({ projectId: 'project-1', icon: expect.objectContaining({ dataUrl: expect.any(String) }) })])
     expect(await icons.listCachedProjects()).toEqual([expect.objectContaining({ id: 'project-1', label: '示例项目' })])
@@ -113,6 +116,32 @@ describe('ProjectIconStore', () => {
     expect((await icons.getThemeSettings(themeId)).enabledLibraryIds).toEqual([])
     expect(await icons.listCachedProjects()).toEqual([
       expect.objectContaining({ id: 'concurrent-project', label: '并发项目' })
+    ])
+  })
+
+  it('keeps the current Codex order ahead of historical cached projects', async () => {
+    const { icons } = await createStores()
+    await icons.cacheProjects([
+      { id: 'old-a', label: 'Alpha', kind: 'local' },
+      { id: 'old-b', label: 'Beta', kind: 'local' }
+    ])
+
+    await expect(icons.cacheProjects([
+      { id: 'new-z', label: 'Zulu', kind: 'local' },
+      { id: 'old-b', label: 'Beta updated', kind: 'workspace' }
+    ])).resolves.toEqual([
+      expect.objectContaining({ id: 'new-z', label: 'Zulu' }),
+      expect.objectContaining({ id: 'old-b', label: 'Beta updated', kind: 'workspace' }),
+      expect.objectContaining({ id: 'old-a', label: 'Alpha' })
+    ])
+
+    await expect(icons.cacheProjects([
+      { id: 'old-a', label: 'Alpha', kind: 'local' },
+      { id: 'new-z', label: 'Zulu', kind: 'local' }
+    ])).resolves.toEqual([
+      expect.objectContaining({ id: 'old-a' }),
+      expect.objectContaining({ id: 'new-z' }),
+      expect.objectContaining({ id: 'old-b' })
     ])
   })
 

@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { copyFile, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import sharp from 'sharp'
+import { builtinIcons } from '../shared/builtin-icons'
 import {
   MAX_PROJECT_ICON_LIBRARY_ENTRIES,
   PROJECT_ICON_LIBRARY_VERSION,
@@ -40,6 +43,23 @@ const MAX_ICON_BYTES = 30 * 1024 * 1024
 const SUPPORTED_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'])
 const LIBRARY_DELETE_PATTERN = /^\.library-delete-([0-9a-f-]{36})-[0-9a-f-]{36}$/i
 const CONTROLLED_TEMP_FILE_PATTERN = /\.[0-9a-f-]{36}\.tmp$/i
+const systemIconDataUrls = new Map<SystemIconName, string>()
+
+function systemIconDataUrl(name: SystemIconName): string {
+  const cached = systemIconDataUrls.get(name)
+  if (cached) return cached
+  const Icon = builtinIcons[name]
+  if (!Icon) throw new Error(`System icon is unavailable: ${name}`)
+  const svg = renderToStaticMarkup(createElement(Icon, {
+    xmlns: 'http://www.w3.org/2000/svg',
+    width: 24,
+    height: 24,
+    color: '#000'
+  }))
+  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`
+  systemIconDataUrls.set(name, dataUrl)
+  return dataUrl
+}
 
 export interface ResolvedProjectIconMedia {
   path: string
@@ -330,9 +350,13 @@ export class ProjectIconStore {
     const incoming = input.map((project) => cachedCodexProjectSchema.parse({ ...(project as object), lastSeenAt: now }))
     let projects: CachedCodexProject[] = []
     await this.updateSettings((settings) => {
-      const merged = new Map(settings.projects.map((project) => [project.id, project]))
-      for (const project of incoming) merged.set(project.id, project)
-      projects = [...merged.values()].sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt) || a.label.localeCompare(b.label)).slice(0, 1000)
+      const current = new Map<string, CachedCodexProject>()
+      for (const project of incoming) current.set(project.id, project)
+      const currentIds = new Set(current.keys())
+      projects = [
+        ...current.values(),
+        ...settings.projects.filter((project) => !currentIds.has(project.id))
+      ].slice(0, 1000)
       return { ...settings, projects }
     })
     return structuredClone(projects)
@@ -434,7 +458,7 @@ export class ProjectIconStore {
       if (isSystemLibrary(library)) {
         const icon = library.icons.find((entry) => entry.id === ref.iconId)
         if (!icon) return null
-        const candidate = { ref, weight, builtinName: icon.builtinName }
+        const candidate = { ref, weight, builtinName: icon.builtinName, dataUrl: systemIconDataUrl(icon.builtinName) }
         assetCache.set(key, candidate)
         return candidate
       }

@@ -8,7 +8,6 @@
   const HEADING_DECORATION_ID = "codex-dream-skin-heading-decoration";
   const WINDOW_BACKGROUND_ID = "codex-dream-skin-window-background";
   const projectAnchorRestorers = new WeakMap();
-  const projectIconRestorers = new WeakMap();
   const projectIconNodes = new Set();
   const sidebarNavRestorers = new WeakMap();
   const sidebarSearchRestorers = new WeakMap();
@@ -556,37 +555,36 @@
     return projectIconPool.at(-1) || null;
   };
   const restoreProjectIcon = (node) => {
-    const record = projectIconRestorers.get(node);
-    if (!record) return;
-    if (node.isConnected) {
-      node.innerHTML = record.html;
-      if (record.className === null) node.removeAttribute("class");
-      else node.setAttribute("class", record.className);
-    }
-    projectIconRestorers.delete(node);
+    node.classList.remove("dream-sidebar-project-icon");
+    node.removeAttribute("data-dream-sidebar-project-icon-glyph");
+    node.removeAttribute("data-dream-sidebar-project-icon-kind");
+    node.style.removeProperty("--dream-sidebar-project-icon-image");
+    node.style.removeProperty("--dream-sidebar-project-icon-mask");
     projectIconNodes.delete(node);
   };
   const renderProjectIcon = (node, candidate) => {
-    node.replaceChildren();
     node.classList.add("dream-sidebar-project-icon");
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
     const source = reducedMotion && candidate.posterDataUrl ? candidate.posterDataUrl : candidate.dataUrl;
-    if (typeof source === "string" && source.startsWith("data:image/")) {
-      const image = document.createElement("img");
-      image.className = "dream-custom-icon";
-      image.src = source;
-      image.alt = "";
-      image.draggable = false;
-      node.appendChild(image);
+    if (typeof candidate.builtinName === "string" && typeof source === "string" && source.startsWith("data:image/svg+xml")) {
+      node.setAttribute("data-dream-sidebar-project-icon-glyph", "");
+      node.setAttribute("data-dream-sidebar-project-icon-kind", "builtin");
+      node.style.setProperty("--dream-sidebar-project-icon-image", "none");
+      node.style.setProperty("--dream-sidebar-project-icon-mask", `url(${JSON.stringify(source)})`);
       return;
     }
-    if (typeof candidate.builtinName === "string") {
-      const glyph = document.createElement("span");
-      glyph.className = "dream-builtin-icon";
-      glyph.textContent = themeConfig?.builtinGlyphs?.[candidate.builtinName] || "✦";
-      glyph.setAttribute("aria-hidden", "true");
-      node.appendChild(glyph);
+    if (typeof source === "string" && source.startsWith("data:image/")) {
+      node.setAttribute("data-dream-sidebar-project-icon-glyph", "");
+      node.setAttribute("data-dream-sidebar-project-icon-kind", "image");
+      node.style.setProperty("--dream-sidebar-project-icon-image", `url(${JSON.stringify(source)})`);
+      node.style.setProperty("--dream-sidebar-project-icon-mask", "none");
+      return;
     }
+    const glyph = typeof candidate.builtinName === "string" ? themeConfig?.builtinGlyphs?.[candidate.builtinName] || "✦" : "";
+    node.setAttribute("data-dream-sidebar-project-icon-glyph", glyph);
+    node.setAttribute("data-dream-sidebar-project-icon-kind", "glyph");
+    node.style.setProperty("--dream-sidebar-project-icon-image", "none");
+    node.style.setProperty("--dream-sidebar-project-icon-mask", "none");
   };
   const ensureSidebarProjectIcons = (sidebar) => {
     const activeNodes = new Set();
@@ -601,10 +599,7 @@
         continue;
       }
       activeNodes.add(node);
-      if (!projectIconRestorers.has(node)) {
-        projectIconRestorers.set(node, { html: node.innerHTML, className: node.getAttribute("class") });
-        projectIconNodes.add(node);
-      }
+      projectIconNodes.add(node);
       renderProjectIcon(node, candidate);
     }
     for (const node of [...projectIconNodes]) {
@@ -769,6 +764,11 @@
     window.__CODEX_DREAM_SKIN_DISABLED__ = false;
     previous.ensure();
     return { installed: true, version: VERSION };
+  }
+  const requiresProjectIconRemount = previous?.version !== VERSION
+    && Boolean(document.querySelector(".dream-sidebar-project-icon > :is(.dream-builtin-icon, img.dream-custom-icon)"));
+  if (requiresProjectIconRemount) {
+    return { installed: false, version: VERSION, reloading: true };
   }
   if (previous?.cleanup) previous.cleanup();
   if (previous?.observer) previous.observer.disconnect();
