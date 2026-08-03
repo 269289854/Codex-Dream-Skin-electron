@@ -554,8 +554,8 @@ describe('renderer home DOM adaptation', () => {
           <div data-local-conversation-item-target-ids="tool-2"><p>工具活动结果</p></div>
         </section>
         <div data-response-annotation-conversation data-empty-response>无正文标记</div>
-        <div data-content-search-unit-key="turn-1:assistant" data-streaming-assistant>
-          <div data-selected-text-overlay-target><p>正在生成的 Codex 正文</p></div>
+        <div data-content-search-unit-key="turn-1:assistant" data-streaming-assistant style="display: contents">
+          <div data-streaming-assistant-surface><div data-selected-text-overlay-target><p>正在生成的 Codex 正文</p></div></div>
         </div>
       </main>`
     inject(window)
@@ -573,7 +573,8 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('[data-local-conversation-item-target-ids]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-tool-only-assistant]')?.classList.contains('dream-conversation-plan-bubble')).toBe(false)
     expect(window.document.querySelector('[data-empty-response]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
-    expect(window.document.querySelector('[data-streaming-assistant]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-streaming-assistant]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-streaming-assistant-surface]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
     expect(window.document.querySelector('[data-streaming-assistant] [data-selected-text-overlay-target]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-tool-result]')?.className).toBe('')
     expect(window.document.querySelector('[data-file-diff-card]')?.className).toBe('')
@@ -601,6 +602,80 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-conversation-plan-bubble')).toBeNull()
     stateOf(window).cleanup()
     expect(window.document.querySelector('[data-user-message-bubble]')?.className).toBe('')
+  })
+
+  it('tracks streaming Codex prose through semantic mutations without styling display-contents wrappers', async () => {
+    const window = createWindow()
+    const waitForContentSync = async (condition?: () => boolean): Promise<void> => {
+      if (!condition) {
+        await new Promise((resolve) => window.setTimeout(resolve, 320))
+        return
+      }
+      const deadline = Date.now() + 2000
+      while (!condition() && Date.now() < deadline) {
+        await new Promise((resolve) => window.setTimeout(resolve, 25))
+      }
+    }
+    window.document.body.innerHTML = '<main class="main-surface"></main>'
+    inject(window)
+
+    const streamingAssistant = window.document.createElement('div')
+    streamingAssistant.setAttribute('data-content-search-unit-key', 'turn-2:assistant')
+    streamingAssistant.style.display = 'contents'
+    streamingAssistant.innerHTML = '<div data-streaming-assistant-surface><div data-selected-text-overlay-target><p>流式正文第一段</p></div></div>'
+    window.document.querySelector('main')?.append(streamingAssistant)
+    await waitForContentSync(() => Boolean(streamingAssistant.querySelector('[data-streaming-assistant-surface]')?.classList.contains('dream-conversation-codex-bubble')))
+    const streamingSurface = streamingAssistant.querySelector('[data-streaming-assistant-surface]')
+    const streamingParagraph = streamingSurface?.querySelector('p')
+    if (!(streamingSurface instanceof window.HTMLElement) || !(streamingParagraph instanceof window.HTMLElement)) {
+      throw new Error('Streaming assistant fixture is incomplete.')
+    }
+    expect(streamingAssistant.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(streamingSurface.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelectorAll('.dream-conversation-codex-bubble')).toHaveLength(1)
+
+    const streamingText = streamingParagraph.firstChild
+    if (!(streamingText instanceof window.Text)) throw new Error('Streaming assistant text fixture is missing.')
+    streamingText.data = '流式正文第一段已更新'
+    await waitForContentSync()
+    expect(streamingSurface.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+
+    streamingSurface.querySelector('[data-selected-text-overlay-target]')?.append(window.document.createElement('p'))
+    await waitForContentSync()
+    expect(streamingSurface.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelectorAll('.dream-conversation-codex-bubble')).toHaveLength(1)
+
+    const completedSurface = window.document.createElement('div')
+    completedSurface.setAttribute('data-response-annotation-conversation', 'conversation-1')
+    completedSurface.innerHTML = '<div data-selected-text-overlay-target><p>已完成的 Codex 正文</p></div>'
+    streamingAssistant.append(completedSurface)
+    streamingAssistant.setAttribute('data-content-search-unit-key', 'turn-2:message-1')
+    await waitForContentSync(() => completedSurface.classList.contains('dream-conversation-codex-bubble'))
+    expect(streamingSurface.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(completedSurface.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelectorAll('.dream-conversation-codex-bubble')).toHaveLength(1)
+
+    const excludedAssistant = window.document.createElement('div')
+    excludedAssistant.setAttribute('data-content-search-unit-key', 'turn-3:assistant')
+    excludedAssistant.style.display = 'contents'
+    excludedAssistant.innerHTML = '<div><div data-selected-text-overlay-target><p>工具前说明</p></div><div data-tool-result>工具结果</div></div>'
+    const emptyAssistant = window.document.createElement('div')
+    emptyAssistant.setAttribute('data-content-search-unit-key', 'turn-4:assistant')
+    emptyAssistant.innerHTML = '<div data-selected-text-overlay-target> </div>'
+    const planAssistant = window.document.createElement('div')
+    planAssistant.setAttribute('data-content-search-unit-key', 'turn-5:assistant')
+    planAssistant.style.display = 'contents'
+    planAssistant.innerHTML = '<div data-plan-card style="background-color: rgb(229, 231, 235)"><div data-selected-text-overlay-target><p>流式计划</p></div></div>'
+    window.document.querySelector('main')?.append(excludedAssistant, emptyAssistant, planAssistant)
+    stateOf(window).ensure()
+    expect(excludedAssistant.querySelector('.dream-conversation-codex-bubble')).toBeNull()
+    expect(emptyAssistant.querySelector('.dream-conversation-codex-bubble')).toBeNull()
+    expect(planAssistant.querySelector('.dream-conversation-codex-bubble')).toBeNull()
+    expect(planAssistant.querySelector('[data-plan-card]')?.classList.contains('dream-conversation-plan-bubble')).toBe(true)
+
+    stateOf(window).cleanup()
+    expect(window.document.querySelector('.dream-conversation-codex-bubble')).toBeNull()
+    expect(window.document.querySelector('.dream-conversation-plan-bubble')).toBeNull()
   })
 
   it('applies role-specific frame variables without adding message children and clears them on cleanup', () => {

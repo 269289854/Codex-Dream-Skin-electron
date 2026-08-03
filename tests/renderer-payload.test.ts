@@ -26,7 +26,7 @@ describe('renderer injection template', () => {
     expect(template).toContain('data-dream-account-menu-item')
     expect(template).toContain('dream-account-menu-background')
     expect(template).toContain('ensureAccountMenuBackground')
-    expect(template).toContain('attributeFilter: ["data-state", "hidden", "aria-hidden", "lang"]')
+    expect(template).toContain('attributeFilter: ["data-state", "hidden", "aria-hidden", "lang", "data-response-annotation-conversation", "data-content-search-unit-key"]')
     expect(template).toContain('[data-local-conversation-item-target-ids]')
     expect(template).toContain('ensureToolActivityBubbles()')
     expect(template).toContain('clearToolActivityBubbles()')

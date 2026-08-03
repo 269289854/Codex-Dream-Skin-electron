@@ -1574,11 +1574,30 @@
       '[data-tool-result]',
       '[data-file-diff-card]'
     ].join(',');
+    const findStreamingCodexBubbleSurface = (candidate) => {
+      const contentNode = candidate.matches(codexContentSelector)
+        ? candidate
+        : [...candidate.querySelectorAll(codexContentSelector)].find((content) =>
+          content instanceof HTMLElement &&
+          !content.closest(excludedAssistantSelector) &&
+          Boolean(content.textContent?.trim())
+        );
+      if (!(contentNode instanceof HTMLElement)) return null;
+      let current = contentNode;
+      let surface = null;
+      while (current instanceof HTMLElement && current !== candidate) {
+        const display = window.getComputedStyle(current).display;
+        if (display !== 'contents' && display !== 'none') surface = current;
+        current = current.parentElement;
+      }
+      return surface;
+    };
     document.querySelectorAll('[data-content-search-unit-key$=":assistant"]').forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
       if (node.querySelector(responseAnnotationSelector)) return;
       if (node.matches(excludedAssistantSelector) || node.querySelector(excludedAssistantSelector)) return;
-      if (node.matches(codexContentSelector) || node.querySelector(codexContentSelector)) codexBubbles.add(node);
+      const surface = findStreamingCodexBubbleSurface(node);
+      if (surface) codexBubbles.add(surface);
     });
     const planMarkerSelector = [
       '[data-generated-plan]',
@@ -2641,7 +2660,13 @@
     else if (relevant.some(mutationNeedsFullEnsure)) scheduleEnsure();
     else if (relevant.length > 0) scheduleContentSync();
   });
-  observer.observe(document.documentElement, { childList: true, characterData: true, attributes: true, attributeFilter: ["data-state", "hidden", "aria-hidden", "lang"], subtree: true });
+  observer.observe(document.documentElement, {
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ["data-state", "hidden", "aria-hidden", "lang", "data-response-annotation-conversation", "data-content-search-unit-key"],
+    subtree: true
+  });
   const resizeHandler = scheduleEnsure;
   window.addEventListener("resize", resizeHandler);
   if (document.fonts?.ready) {
