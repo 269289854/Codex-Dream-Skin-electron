@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { Check, FolderCog, LockKeyhole, RefreshCw, Search, Shuffle } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Check, ChevronDown, FolderCog, LockKeyhole, RefreshCw, Search, Shuffle } from 'lucide-react'
 import type { CachedCodexProject, IconLibrary, IconLibrarySummary, ProjectIconRef, ThemeProjectIconSettings } from '../../shared/project-icons'
 import { projectIconRefKey, resolveProjectIconWeight, selectStableProjectIcon, SYSTEM_ICON_LIBRARY_ID, type RuntimeProjectIconCandidate } from '../../shared/project-icons'
 import type { ThemeSummary } from '../../shared/theme'
@@ -25,6 +26,7 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
   const [refreshing, setRefreshing] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [notice, setNotice] = React.useState<LocalizedMessage | null>(null)
+  const [openProjectId, setOpenProjectId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (!themes.some((theme) => theme.id === themeId)) setThemeId(currentThemeId)
@@ -46,6 +48,7 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
 
   React.useEffect(() => {
     let active = true
+    setOpenProjectId(null)
     setBusy(true)
     void load(themeId).catch((reason) => {
       if (active) onError(localizedMessageFrom(reason))
@@ -89,6 +92,7 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
 
   const refreshProjects = async (): Promise<void> => {
     if (refreshing) return
+    setOpenProjectId(null)
     setRefreshing(true)
     setNotice(null)
     try {
@@ -140,7 +144,7 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
     <section className="project-icons-main" aria-busy={busy || refreshing}>
       <header className="utility-header project-icons-header"><div><span className="eyebrow">{t('项目分配')}</span><h1>{themes.find((theme) => theme.id === themeId)?.name ?? t('项目图标')}</h1></div><div className="utility-actions"><button type="button" disabled={refreshing} onClick={() => void refreshProjects()}><RefreshCw className={refreshing ? 'is-spinning' : ''} size={15} />{refreshing ? t('刷新中') : t('刷新项目')}</button></div></header>
       {notice && <div className="utility-notice" role="status"><Check size={14} /><span>{tm(notice)}</span></div>}
-      <div className="project-search"><Search size={15} /><input value={query} placeholder={t('搜索项目')} aria-label={t('搜索项目')} onInput={(event) => setQuery(event.currentTarget.value)} /><span>{visibleProjects.length}</span></div>
+      <div className="project-search"><Search size={15} /><input value={query} placeholder={t('搜索项目')} aria-label={t('搜索项目')} onInput={(event) => { setOpenProjectId(null); setQuery(event.currentTarget.value) }} /><span>{visibleProjects.length}</span></div>
       {visibleProjects.length ? <div className="project-assignment-list">
         {visibleProjects.map((project) => {
           const assignment = settings?.assignments.find((entry) => entry.projectId === project.id)
@@ -149,10 +153,17 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
           return <article className="project-assignment-row" key={project.id}>
             <span className="project-assignment-preview">{selectedEntry ? <LibraryIconPreview libraryId={selectedEntry.library.id} icon={selectedEntry.icon} size={23} /> : <FolderCog size={21} />}</span>
             <span className="project-assignment-copy"><strong>{project.label}</strong><small>{assignment ? t('已指定') : selected ? t('按优先级随机') : t('Codex 默认图标')}</small></span>
-            <label><span>{t('图标')}</span><select value={assignment ? projectIconRefKey(assignment.ref) : ''} disabled={busy} onChange={(event) => void assignProject(project.id, event.currentTarget.value)}>
-              <option value="">{t('随机（素材库优先级）')}</option>
-              {libraries.map((library) => <optgroup key={library.id} label={libraryLabel(library)}>{library.icons.map((icon) => <option key={icon.id} value={projectIconRefKey({ libraryId: library.id, iconId: icon.id })}>{iconLabel(icon)}</option>)}</optgroup>)}
-            </select></label>
+            <ProjectIconPicker
+              projectId={project.id}
+              projectLabel={project.label}
+              libraries={libraries}
+              assignment={assignment?.ref ?? null}
+              selectedEntry={selectedEntry}
+              open={openProjectId === project.id}
+              disabled={busy}
+              onOpenChange={(open) => setOpenProjectId(open ? project.id : null)}
+              onSelect={(value) => void assignProject(project.id, value)}
+            />
           </article>
         })}
       </div> : <div className="utility-empty"><FolderCog size={25} /><strong>{query ? t('没有匹配的项目') : t('暂无已发现的项目')}</strong>{!query && <button className="primary-button" type="button" disabled={refreshing} onClick={() => void refreshProjects()}><RefreshCw size={15} />{t('刷新项目')}</button>}</div>}
@@ -179,6 +190,171 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
       </div>
     </aside>
   </section>
+}
+
+interface ProjectIconPickerProps {
+  projectId: string
+  projectLabel: string
+  libraries: IconLibrary[]
+  assignment: ProjectIconRef | null
+  selectedEntry: { library: IconLibrary; icon: IconLibrary['icons'][number] } | null
+  open: boolean
+  disabled: boolean
+  onOpenChange: (open: boolean) => void
+  onSelect: (value: string) => void
+}
+
+interface ProjectIconPickerPosition {
+  left: number
+  top?: number
+  bottom?: number
+  width: number
+  maxHeight: number
+}
+
+function ProjectIconPicker({ projectId, projectLabel, libraries, assignment, selectedEntry, open, disabled, onOpenChange, onSelect }: ProjectIconPickerProps): React.JSX.Element {
+  const [iconQuery, setIconQuery] = React.useState('')
+  const [position, setPosition] = React.useState<ProjectIconPickerPosition | null>(null)
+  const fieldRef = React.useRef<HTMLDivElement>(null)
+  const triggerRef = React.useRef<HTMLButtonElement>(null)
+  const menuRef = React.useRef<HTMLDivElement>(null)
+  const searchRef = React.useRef<HTMLInputElement>(null)
+  const listId = `${React.useId()}-project-icon-options`
+  const randomLabel = t('随机（素材库优先级）')
+  const currentLabel = assignment
+    ? selectedEntry ? iconLabel(selectedEntry.icon) : `${assignment.libraryId}:${assignment.iconId}`
+    : randomLabel
+  const normalizedIconQuery = iconQuery.trim().toLocaleLowerCase()
+  const showRandom = !normalizedIconQuery || randomLabel.toLocaleLowerCase().includes(normalizedIconQuery)
+  const visibleLibraries = libraries.map((library) => {
+    const label = libraryLabel(library)
+    const libraryMatches = [label, library.name].some((value) => value.toLocaleLowerCase().includes(normalizedIconQuery))
+    const icons = !normalizedIconQuery || libraryMatches ? library.icons : library.icons.filter((icon) => {
+      const values = [iconLabel(icon), icon.name, 'builtinName' in icon ? icon.builtinName : '']
+      return values.some((value) => value.toLocaleLowerCase().includes(normalizedIconQuery))
+    })
+    return { library, label, icons }
+  }).filter((entry) => entry.icons.length > 0)
+
+  const setOpen = (nextOpen: boolean): void => {
+    if (disabled) return
+    if (nextOpen) setIconQuery('')
+    onOpenChange(nextOpen)
+  }
+
+  React.useLayoutEffect(() => {
+    if (!open) return undefined
+    const updatePosition = (): void => {
+      if (triggerRef.current) setPosition(resolveProjectIconPickerPosition(triggerRef.current.getBoundingClientRect()))
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [open])
+
+  React.useLayoutEffect(() => {
+    if (!open) return undefined
+    const frame = window.requestAnimationFrame(() => searchRef.current?.focus())
+    return () => window.cancelAnimationFrame(frame)
+  }, [open])
+
+  React.useEffect(() => {
+    if (!open) return undefined
+    const closeOnOutsidePointer = (event: PointerEvent): void => {
+      const target = event.target as Node
+      if (!fieldRef.current?.contains(target) && !menuRef.current?.contains(target)) onOpenChange(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      onOpenChange(false)
+      triggerRef.current?.focus()
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointer)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [onOpenChange, open])
+
+  React.useEffect(() => {
+    if (open && disabled) onOpenChange(false)
+  }, [disabled, onOpenChange, open])
+
+  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      setOpen(true)
+    }
+  }
+
+  const select = (value: string): void => {
+    onOpenChange(false)
+    onSelect(value)
+  }
+
+  const menu = open ? <div
+    className="project-icon-picker-menu"
+    ref={menuRef}
+    style={position ? {
+      left: position.left,
+      top: position.top,
+      bottom: position.bottom,
+      width: position.width,
+      maxHeight: position.maxHeight,
+      '--project-icon-picker-max-height': `${position.maxHeight}px`
+    } as React.CSSProperties : { visibility: 'hidden' }}
+  >
+    <label className="project-icon-picker-search"><Search size={15} aria-hidden="true" /><input ref={searchRef} value={iconQuery} placeholder={t('搜索图标')} aria-label={t('搜索图标')} onInput={(event) => setIconQuery(event.currentTarget.value)} /></label>
+    <div className="project-icon-picker-options" id={listId} role="listbox" aria-label={t('{label}图标', { label: projectLabel })}>
+      {showRandom && <button className={!assignment ? 'project-icon-picker-option active' : 'project-icon-picker-option'} type="button" role="option" aria-selected={!assignment} data-icon-name="__random" title={randomLabel} onClick={() => select('')}>
+        <span className="project-icon-picker-option-icon"><Shuffle size={26} aria-hidden="true" /></span><span>{randomLabel}</span>
+      </button>}
+      {visibleLibraries.map(({ library, label, icons }) => <React.Fragment key={library.id}>
+        <div className="project-icon-picker-group-label" role="presentation">{label}</div>
+        {icons.map((icon) => {
+          const ref = { libraryId: library.id, iconId: icon.id }
+          const key = projectIconRefKey(ref)
+          const active = assignment ? projectIconRefKey(assignment) === key : false
+          const label = iconLabel(icon)
+          return <button className={active ? 'project-icon-picker-option active' : 'project-icon-picker-option'} type="button" role="option" aria-selected={active} data-icon-name={key} title={label} key={icon.id} disabled={disabled} onClick={() => select(key)}>
+            <span className="project-icon-picker-option-icon"><LibraryIconPreview libraryId={library.id} icon={icon} size={26} /></span><span>{label}</span>
+          </button>
+        })}
+      </React.Fragment>)}
+      {!showRandom && visibleLibraries.length === 0 && <div className="project-icon-picker-empty" role="status">{t('没有匹配的图标')}</div>}
+    </div>
+  </div> : null
+
+  return <div className="project-icon-picker-field" ref={fieldRef} data-project-id={projectId}>
+    <span>{t('图标')}</span>
+    <button className="project-icon-picker-trigger" ref={triggerRef} type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} aria-controls={listId} title={currentLabel} onClick={() => setOpen(!open)} onKeyDown={handleTriggerKeyDown}>
+      <span className="project-icon-picker-trigger-icon">{selectedEntry ? <LibraryIconPreview libraryId={selectedEntry.library.id} icon={selectedEntry.icon} size={20} /> : <Shuffle size={19} aria-hidden="true" />}</span>
+      <span className="project-icon-picker-trigger-label">{currentLabel}</span>
+      <ChevronDown size={14} aria-hidden="true" />
+    </button>
+    {menu && createPortal(menu, document.body)}
+  </div>
+}
+
+function resolveProjectIconPickerPosition(rect: DOMRect): ProjectIconPickerPosition {
+  const viewportPadding = 12
+  const gap = 4
+  const width = Math.min(420, Math.max(300, window.innerWidth - viewportPadding * 2))
+  const left = Math.min(Math.max(viewportPadding, rect.right - width), Math.max(viewportPadding, window.innerWidth - width - viewportPadding))
+  const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding - gap)
+  const spaceAbove = Math.max(0, rect.top - viewportPadding - gap)
+  const openAbove = spaceBelow < 260 && spaceAbove > spaceBelow
+  const availableHeight = openAbove ? spaceAbove : spaceBelow
+  const maxHeight = Math.max(160, Math.min(360, availableHeight))
+  return openAbove
+    ? { left, bottom: window.innerHeight - rect.top + gap, width, maxHeight }
+    : { left, top: rect.bottom + gap, width, maxHeight }
 }
 
 function parseRefKey(value: string): ProjectIconRef {

@@ -45,6 +45,8 @@ describe('internationalization', () => {
     expect(translate('en-US', '稳定随机 · 优先级 1-10')).toBe('Stable random · Priority 1-10')
     expect(translate('en-US', '项目图标配置仅保存在本机')).toBe('Project icon settings are stored only on this device')
     expect(translate('en-US', '已刷新 {count} 个 Codex 项目。', { count: 3 })).toBe('Refreshed 3 Codex projects.')
+    expect(translate('en-US', '搜索图标')).toBe('Search icons')
+    expect(translate('en-US', '没有匹配的图标')).toBe('No matching icons')
   })
 
   it('retranslates structured messages with nested values and joined parts', () => {
