@@ -19,6 +19,12 @@ export interface ImageInspection {
   pages: number
 }
 
+export function assertSafeSvgSource(source: string): void {
+  if (source.length > 2_000_000 || /<(?:script|foreignObject|iframe|object|embed)\b|<!DOCTYPE|<!ENTITY|(?:href|src)\s*=\s*["']\s*(?:https?:|file:|javascript:)/i.test(source)) {
+    throw new Error('SVG 包含不支持的内容或外部引用。')
+  }
+}
+
 export async function inspectImageBytes(
   bytes: Buffer,
   extension: string,

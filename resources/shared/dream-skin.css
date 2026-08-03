@@ -223,6 +223,16 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row:hove
   color: var(--dream-sidebar-project-hover-text) !important;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon > :is(img, .dream-builtin-icon) {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  object-fit: contain;
+  font-size: 16px;
+  line-height: 1;
+}
+
 /* Kept for cleanup and older payloads; current Codex project rows have no selected state. */
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row-selected {
   background: var(--dream-sidebar-project-row-selected) !important;

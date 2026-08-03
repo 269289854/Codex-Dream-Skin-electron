@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { basename, extname, join } from 'node:path'
 import electronUpdater from 'electron-updater'
 import { ProfileStore } from './profile-store'
+import { ProjectIconStore } from './project-icon-store'
+import { ThemeShareService } from './theme-share-service'
 import { CodexService } from './codex-service'
 import { AppUpdateService, ElectronAppUpdateDriver, isAppUpdateEnabled } from './app-update-service'
 import { createStudioInstanceData, resolveStudioInstanceAction } from './app-lifecycle'
@@ -16,12 +18,16 @@ import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetIns
 import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, assertVideoImportDecisionCompatible, resolveVideoOutputSize, videoImportDecisionSchema, videoTranscodeSettingsSchema, type VideoTranscodeSettings } from '../shared/video-transcode'
 import { localizedMessage, localizedMessageFrom, setActiveLocale, t, type LocalizedMessage } from '../shared/i18n'
+import { SYSTEM_ICON_LIBRARY_ID } from '../shared/project-icons'
 
 const { autoUpdater } = electronUpdater
 
 let mainWindow: BrowserWindow | null = null
 let store: ProfileStore
+let projectIconStore: ProjectIconStore
+let themeShareService: ThemeShareService
 let studioMediaProtocol: StudioMediaProtocol
+let iconMediaProtocol: StudioMediaProtocol
 let codexService: CodexService
 let appUpdateService: AppUpdateService
 let tray: Tray | null = null
@@ -33,7 +39,10 @@ const operationControllers = new Map<string, AbortController>()
 const pendingVideoSelections = new PendingVideoSelectionRegistry()
 const appVersion = app.getVersion()
 const hasSingleInstanceLock = app.requestSingleInstanceLock(createStudioInstanceData(appVersion))
-protocol.registerSchemesAsPrivileged([{ scheme: 'studio-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'studio-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+  { scheme: 'studio-icon', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+])
 
 function showWindow(): void {
   if (mainWindow?.isMinimized()) mainWindow.restore()
@@ -164,13 +173,27 @@ function registerIpc(): void {
   ipcMain.handle('themes:get', (_event, id: string) => captureIpcResult(() => store.get(id)))
   ipcMain.handle('themes:create', (_event, input: unknown) => captureIpcResult(() => store.create(input)))
   ipcMain.handle('themes:get-default', (_event, id: string) => captureIpcResult(() => store.getDefault(id)))
-  ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => captureIpcResult(() => store.duplicate(profile, name)))
+  ipcMain.handle('themes:duplicate', (_event, profile: unknown, name: unknown) => captureIpcResult(async () => {
+    const duplicate = await store.duplicate(profile, name)
+    try {
+      if (profile && typeof profile === 'object' && 'id' in profile && typeof profile.id === 'string') {
+        await projectIconStore.copyThemeSettings(profile.id, duplicate.id)
+      }
+    } catch (error) {
+      await store.delete(duplicate.id).catch(() => undefined)
+      throw error
+    }
+    return duplicate
+  }))
   ipcMain.handle('themes:update', (_event, profile: unknown) => captureIpcResult(() => store.update(profile)))
   ipcMain.handle('themes:delete', (_event, id: unknown) => captureIpcResult(async () => {
     if (typeof id !== 'string') throw new Error('主题 ID 无效。')
+    const privateSettings = await projectIconStore.getThemeSettings(id)
+    await projectIconStore.deleteThemeSettings(id)
     try {
       await studioMediaProtocol.withThemeSuspended(id, () => store.delete(id))
     } catch (reason) {
+      await projectIconStore.restoreThemeSettings(id, privateSettings).catch(() => undefined)
       throw toThemeDeleteError(reason)
     }
   }))
@@ -257,6 +280,68 @@ function registerIpc(): void {
       operationControllers.delete(id)
     }
   }))
+  ipcMain.handle('icon-libraries:list', () => captureIpcResult(() => projectIconStore.listLibraries()))
+  ipcMain.handle('icon-libraries:get', (_event, id: unknown) => captureIpcResult(() => projectIconStore.getLibrary(id)))
+  ipcMain.handle('icon-libraries:create', (_event, name: unknown) => captureIpcResult(() => projectIconStore.createLibrary(name)))
+  ipcMain.handle('icon-libraries:rename', (_event, id: unknown, name: unknown) => captureIpcResult(() => projectIconStore.renameLibrary(id, name)))
+  ipcMain.handle('icon-libraries:delete', (_event, id: unknown) => captureIpcResult(async () => {
+    if (typeof id !== 'string') throw new Error('素材库 ID 无效。')
+    await iconMediaProtocol.withThemeSuspended(id, () => projectIconStore.deleteLibrary(id))
+  }))
+  ipcMain.handle('icon-libraries:import-assets', (_event, id: unknown) => captureIpcResult(async () => {
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, { title: t('选择图标素材'), properties: ['openFile', 'multiSelections'], filters: [{ name: t('图片和 GIF'), extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg'] }] })
+      : await dialog.showOpenDialog({ title: t('选择图标素材'), properties: ['openFile', 'multiSelections'], filters: [{ name: t('图片和 GIF'), extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg'] }] })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return projectIconStore.importAssets(id, result.filePaths)
+  }))
+  ipcMain.handle('icon-libraries:import-asset-paths', (_event, id: unknown, paths: unknown) => captureIpcResult(() => projectIconStore.importAssets(id, paths)))
+  ipcMain.handle('icon-libraries:export-package', (_event, id: unknown) => captureIpcResult(async () => {
+    const library = await projectIconStore.getLibrary(id)
+    if (library.id === SYSTEM_ICON_LIBRARY_ID) throw new Error('系统素材库不能导出。')
+    const safeName = library.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().slice(0, 80) || t('素材库')
+    const result = mainWindow
+      ? await dialog.showSaveDialog(mainWindow, { title: t('导出素材库'), defaultPath: `${safeName}.cdsicons`, filters: [{ name: 'Codex Dream Icons', extensions: ['cdsicons'] }] })
+      : await dialog.showSaveDialog({ title: t('导出素材库'), defaultPath: `${safeName}.cdsicons`, filters: [{ name: 'Codex Dream Icons', extensions: ['cdsicons'] }] })
+    if (result.canceled || !result.filePath) return null
+    const filePath = extname(result.filePath).toLowerCase() === '.cdsicons' ? result.filePath : `${result.filePath}.cdsicons`
+    const operationId = randomUUID()
+    const controller = new AbortController()
+    operationControllers.set(operationId, controller)
+    emitProgress({ id: operationId, kind: 'icon-library-export', phase: 'started', processedBytes: 0, totalBytes: null, message: localizedMessage('正在导出素材库') })
+    try {
+      await projectIconStore.exportLibraryPackage(library.id, filePath, controller.signal)
+      emitProgress({ id: operationId, kind: 'icon-library-export', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('素材库导出完成') })
+      return { filePath }
+    } catch (error) {
+      emitProgress({ id: operationId, kind: 'icon-library-export', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(error, '素材库导出失败') })
+      throw error
+    } finally {
+      operationControllers.delete(operationId)
+    }
+  }))
+  ipcMain.handle('icon-libraries:import-package', () => captureIpcResult(async () => {
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, { title: t('导入素材库'), properties: ['openFile'], filters: [{ name: 'Codex Dream Icons', extensions: ['cdsicons'] }] })
+      : await dialog.showOpenDialog({ title: t('导入素材库'), properties: ['openFile'], filters: [{ name: 'Codex Dream Icons', extensions: ['cdsicons'] }] })
+    if (result.canceled || !result.filePaths[0]) return null
+    return importIconLibraryPackage(result.filePaths[0])
+  }))
+  ipcMain.handle('icon-libraries:import-package-path', (_event, path: unknown) => captureIpcResult(() => importIconLibraryPackage(path)))
+  ipcMain.handle('icon-libraries:update-icon', (_event, libraryId: unknown, iconId: unknown, update: unknown) => captureIpcResult(() => projectIconStore.updateIcon(libraryId, iconId, update)))
+  ipcMain.handle('icon-libraries:delete-icon', (_event, libraryId: unknown, iconId: unknown) => captureIpcResult(() => projectIconStore.deleteIcon(libraryId, iconId)))
+  ipcMain.handle('icon-libraries:get-preview-url', (_event, libraryId: unknown, iconId: unknown) => captureIpcResult(async () => {
+    await projectIconStore.resolvePreview(libraryId, iconId)
+    return `studio-icon://${encodeURIComponent(String(libraryId))}/${encodeURIComponent(String(iconId))}`
+  }))
+  ipcMain.handle('icon-libraries:copy-to-theme', (_event, themeId: unknown, ref: unknown) => captureIpcResult(() => projectIconStore.copyIconToTheme(themeId, ref)))
+  ipcMain.handle('project-icons:get-theme-settings', (_event, themeId: unknown) => captureIpcResult(() => projectIconStore.getThemeSettings(themeId)))
+  ipcMain.handle('project-icons:set-enabled-libraries', (_event, themeId: unknown, ids: unknown) => captureIpcResult(() => projectIconStore.setEnabledLibraries(themeId, ids)))
+  ipcMain.handle('project-icons:set-weight-override', (_event, themeId: unknown, ref: unknown, enabled: unknown, weight: unknown) => captureIpcResult(() => projectIconStore.setWeightOverride(themeId, ref, enabled, weight)))
+  ipcMain.handle('project-icons:assign-project', (_event, themeId: unknown, projectId: unknown, ref: unknown) => captureIpcResult(() => projectIconStore.assignProject(themeId, projectId, ref)))
+  ipcMain.handle('project-icons:clear-project-assignment', (_event, themeId: unknown, projectId: unknown) => captureIpcResult(() => projectIconStore.clearProjectAssignment(themeId, projectId)))
+  ipcMain.handle('project-icons:list-projects', () => captureIpcResult(() => projectIconStore.listCachedProjects()))
+  ipcMain.handle('project-icons:refresh-projects', () => captureIpcResult(async () => projectIconStore.cacheProjects(await codexService.listProjects())))
   ipcMain.handle('assets:commit-video-selection', (_event, themeId: unknown, selectionId: unknown, decisionInput: unknown) => captureIpcResult(async () => {
     if (typeof themeId !== 'string' || typeof selectionId !== 'string') throw new Error('视频选择参数无效。')
     const parsedDecision = videoImportDecisionSchema.safeParse(decisionInput)
@@ -332,7 +417,7 @@ function registerIpc(): void {
   ipcMain.handle('operations:cancel', (_event, id: unknown) => captureIpcResult(() => {
     if (typeof id === 'string') operationControllers.get(id)?.abort()
   }))
-  ipcMain.handle('share:export', (_event, profile: unknown) => captureIpcResult(async () => {
+  ipcMain.handle('share:export', (_event, profile: unknown, includeIconLibraries: unknown) => captureIpcResult(async () => {
     const name = typeof profile === 'object' && profile !== null && 'name' in profile && typeof profile.name === 'string' ? profile.name : t('主题')
     const safeName = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().slice(0, 80) || t('主题')
     const result = mainWindow
@@ -345,7 +430,7 @@ function registerIpc(): void {
     const controller = new AbortController()
     operationControllers.set(id, controller)
     try {
-      await store.exportSharePackage(profile, filePath, controller.signal)
+      await themeShareService.exportTheme(profile, filePath, includeIconLibraries, controller.signal)
       emitProgress({ id, kind: 'share-export', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('主题导出完成') })
       return { filePath }
     } catch (error) {
@@ -365,7 +450,7 @@ function registerIpc(): void {
     const controller = new AbortController()
     operationControllers.set(id, controller)
     try {
-      const profile = await store.importSharePackage(result.filePaths[0], controller.signal)
+      const profile = await themeShareService.importTheme(result.filePaths[0], controller.signal)
       emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('主题导入完成') })
       return profile
     } catch (error) {
@@ -381,7 +466,7 @@ function registerIpc(): void {
     const controller = new AbortController()
     operationControllers.set(id, controller)
     try {
-      const profile = await store.importSharePackage(path, controller.signal)
+      const profile = await themeShareService.importTheme(path, controller.signal)
       emitProgress({ id, kind: 'share-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('主题导入完成') })
       return profile
     } catch (error) {
@@ -484,16 +569,21 @@ if (!hasSingleInstanceLock) {
       resourcesRoot: sharedResourcesRoot
     })
     await store.initialize()
+    projectIconStore = new ProjectIconStore(studioRoot, store)
+    await projectIconStore.initialize()
+    themeShareService = new ThemeShareService(store, projectIconStore)
     setActiveLocale(await store.getLocale())
     studioMediaProtocol = new StudioMediaProtocol((themeId, asset) => store.resolveReferencedMedia(themeId, asset))
+    iconMediaProtocol = new StudioMediaProtocol((libraryId, iconId) => projectIconStore.resolvePreview(libraryId, iconId))
     protocol.handle('studio-media', async (request) => studioMediaProtocol.handleRequest(request))
+    protocol.handle('studio-icon', async (request) => iconMediaProtocol.handleRequest(request))
     const platformDriver = process.platform === 'win32'
       ? new WindowsCodexDriver(store.root, platformResourcesRoot)
       : new MacCodexDriver(store.root, app.getPath('home'))
     codexService = new CodexService(store, sharedResourcesRoot, platformDriver, appVersion, (status) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('runtime:status', status)
       try { updateTray() } catch (error) { console.error('Failed to update tray:', error) }
-    })
+    }, projectIconStore)
     appUpdateService = new AppUpdateService(
       new ElectronAppUpdateDriver(autoUpdater, () => { quitting = true }),
       app.getVersion(),
@@ -512,6 +602,23 @@ if (!hasSingleInstanceLock) {
       else showWindow()
     })
   })
+}
+
+async function importIconLibraryPackage(path: unknown): Promise<Awaited<ReturnType<ProjectIconStore['importLibraryPackage']>>> {
+  const operationId = randomUUID()
+  const controller = new AbortController()
+  operationControllers.set(operationId, controller)
+  emitProgress({ id: operationId, kind: 'icon-library-import', phase: 'started', processedBytes: 0, totalBytes: null, message: localizedMessage('正在导入素材库') })
+  try {
+    const library = await projectIconStore.importLibraryPackage(path, controller.signal)
+    emitProgress({ id: operationId, kind: 'icon-library-import', phase: 'completed', processedBytes: 0, totalBytes: null, message: localizedMessage('素材库导入完成') })
+    return library
+  } catch (error) {
+    emitProgress({ id: operationId, kind: 'icon-library-import', phase: controller.signal.aborted ? 'cancelled' : 'failed', processedBytes: 0, totalBytes: null, message: localizedMessageFrom(error, '素材库导入失败') })
+    throw error
+  } finally {
+    operationControllers.delete(operationId)
+  }
 }
 
 function emitProgress(progress: OperationProgress): void {

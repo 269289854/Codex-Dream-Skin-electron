@@ -1,4 +1,5 @@
 import WebSocket from 'ws'
+import { codexProjectSchema, type CodexProject } from '../shared/project-icons'
 
 // Runtime CSS embeds selected font files as Base64. The sidebar now supports
 // independent font slots, so the legacy 20 MB ceiling rejected valid themes
@@ -126,6 +127,25 @@ export class CdpWatcher {
     const snapshot = { connected, targetCount: targets.length }
     this.onSnapshot(snapshot)
     return snapshot
+  }
+
+  async listProjects(): Promise<CodexProject[]> {
+    const targets = await this.targets()
+    const results = await Promise.all(targets.map((target) => this.evaluate(target, `(() =>
+      [...document.querySelectorAll('[data-app-action-sidebar-project-row]')].map((row) => ({
+        id: row.getAttribute('data-app-action-sidebar-project-id'),
+        label: row.getAttribute('data-app-action-sidebar-project-label'),
+        kind: row.closest('[data-sidebar-project-kind]')?.getAttribute('data-sidebar-project-kind') || 'local'
+      })))()`)))
+    const projects = new Map<string, CodexProject>()
+    for (const result of results) {
+      if (!Array.isArray(result) || result.length > 1000) throw new Error('Codex 项目列表无效。')
+      for (const candidate of result) {
+        const project = codexProjectSchema.parse(candidate)
+        projects.set(project.id, project)
+      }
+    }
+    return [...projects.values()].sort((a, b) => a.label.localeCompare(b.label))
   }
 
   async stop(removeTheme: boolean): Promise<CdpSnapshot> {

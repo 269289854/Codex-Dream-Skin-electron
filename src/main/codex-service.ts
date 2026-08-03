@@ -14,6 +14,7 @@ import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
 import { resolveConversationBubbles } from '../shared/conversation-bubbles'
 import type { ThemeProfile } from '../shared/theme'
+import type { CodexProject } from '../shared/project-icons'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS_BY_LOCALE, splitHeadingTemplate } from '../shared/home-layout'
 import {
   LocalizedError,
@@ -25,6 +26,7 @@ import {
 import { buildThemeVariableDeclarations } from '../shared/runtime-theme'
 import { CdpWatcher, type CdpMediaBinding, type CdpSnapshot } from './cdp-watcher'
 import type { ProfileStore } from './profile-store'
+import type { ProjectIconStore } from './project-icon-store'
 import { buildRuntimeFontCss } from './theme-fonts'
 import { budgetDataUrls } from './embedded-assets'
 import {
@@ -89,11 +91,17 @@ export class CodexService {
     private readonly resourcesRoot: string,
     private readonly platformDriver: CodexPlatformDriver,
     private readonly studioVersion: string,
-    private readonly onStatus: (status: RuntimeStatus) => void
+    private readonly onStatus: (status: RuntimeStatus) => void,
+    private readonly projectIcons?: ProjectIconStore
   ) {}
 
   getStatus(): RuntimeStatus { return { ...this.status } }
   isActive(): boolean { return this.status.phase === 'active' || this.status.phase === 'injecting' || this.status.phase === 'starting' }
+
+  async listProjects(): Promise<CodexProject[]> {
+    if (!this.watcher || !this.isActive()) throw new Error('请先启动并应用主题，再刷新 Codex 项目。')
+    return this.watcher.listProjects()
+  }
 
   async resume(): Promise<void> {
     const generation = this.beginSessionIntent()
@@ -625,7 +633,11 @@ export class CodexService {
     const hero = profile.hero.source
       ? profile.hero.source.kind === 'image' ? compiled.assets[profile.hero.source.asset] : TRANSPARENT_PNG
       : profile.hero.sourceImage ? compiled.assets[profile.hero.sourceImage] : TRANSPARENT_PNG
-    const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot, budgetDataUrls(compiled.assets))
+    const embeddedBudget = budgetDataUrls(compiled.assets)
+    const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot, embeddedBudget)
+    const projectIcons = this.projectIcons
+      ? await this.projectIcons.compileRuntimeConfig(themeId, embeddedBudget)
+      : { pool: [], assignments: [] }
     const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const gifPosterDataUrl = (source?: { asset: string; mimeType: string } | null): string | null =>
       source?.mimeType === 'image/gif' ? compiled.assets[gifPosterAssetKey(source.asset)] ?? null : null
@@ -672,6 +684,7 @@ export class CodexService {
           : { mode: accountMenuBackground.mode, style: buildAccountMenuBackgroundStyle(accountMenuBackground), dataUrl: null }
       },
       icons,
+      projectIcons,
       decorations: {
         ...profile.decorations,
         composerMelody: {

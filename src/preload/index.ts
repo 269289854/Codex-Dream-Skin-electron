@@ -45,8 +45,33 @@ const api: StudioApi = {
     selectIcon: (themeId) => invokeIpcResult('assets:select', themeId, 'icon'),
     selectFont: (themeId) => invokeIpcResult('assets:select', themeId, 'font')
   },
+  iconLibraries: {
+    list: () => invokeIpcResult('icon-libraries:list'),
+    get: (id) => invokeIpcResult('icon-libraries:get', id),
+    create: (name) => invokeIpcResult('icon-libraries:create', name),
+    rename: (id, name) => invokeIpcResult('icon-libraries:rename', id, name),
+    delete: (id) => invokeIpcResult('icon-libraries:delete', id),
+    importAssets: (id) => invokeIpcResult('icon-libraries:import-assets', id),
+    importAssetPaths: (id, paths) => invokeIpcResult('icon-libraries:import-asset-paths', id, paths),
+    exportPackage: (id) => invokeIpcResult('icon-libraries:export-package', id),
+    importPackage: () => invokeIpcResult('icon-libraries:import-package'),
+    importPackagePath: (path) => invokeIpcResult('icon-libraries:import-package-path', path),
+    updateIcon: (libraryId, iconId, update) => invokeIpcResult('icon-libraries:update-icon', libraryId, iconId, update),
+    deleteIcon: (libraryId, iconId) => invokeIpcResult('icon-libraries:delete-icon', libraryId, iconId),
+    getPreviewUrl: (libraryId, iconId) => invokeIpcResult('icon-libraries:get-preview-url', libraryId, iconId),
+    copyToTheme: (themeId, ref) => invokeIpcResult('icon-libraries:copy-to-theme', themeId, ref)
+  },
+  projectIcons: {
+    getThemeSettings: (themeId) => invokeIpcResult('project-icons:get-theme-settings', themeId),
+    setEnabledLibraries: (themeId, libraryIds) => invokeIpcResult('project-icons:set-enabled-libraries', themeId, libraryIds),
+    setWeightOverride: (themeId, ref, enabled, weight) => invokeIpcResult('project-icons:set-weight-override', themeId, ref, enabled, weight),
+    assignProject: (themeId, projectId, ref) => invokeIpcResult('project-icons:assign-project', themeId, projectId, ref),
+    clearProjectAssignment: (themeId, projectId) => invokeIpcResult('project-icons:clear-project-assignment', themeId, projectId),
+    listProjects: () => invokeIpcResult('project-icons:list-projects'),
+    refreshProjects: () => invokeIpcResult('project-icons:refresh-projects')
+  },
   share: {
-    exportTheme: (profile) => invokeIpcResult('share:export', profile),
+    exportTheme: (profile, includeIconLibraries) => invokeIpcResult('share:export', profile, includeIconLibraries),
     importTheme: () => invokeIpcResult('share:import'),
     importThemePath: (path) => invokeIpcResult('share:import-path', path)
   },

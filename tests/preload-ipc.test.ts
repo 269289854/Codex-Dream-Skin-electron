@@ -45,6 +45,18 @@ describe('preload share import IPC results', () => {
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(2, 'share:import-path', 'C:\\Shares\\theme.cdstheme')
   })
 
+  it('forwards theme library options and independent icon package paths', async () => {
+    const profile = createDefaultTheme('11111111-1111-4111-8111-111111111111', '分享主题')
+    electronMocks.invoke
+      .mockResolvedValueOnce({ ok: true, value: { filePath: 'C:\\Shares\\theme.cdstheme' } })
+      .mockResolvedValueOnce({ ok: true, value: { id: '22222222-2222-4222-8222-222222222222', name: 'Imported' } })
+
+    await studio.share.exportTheme(profile, true)
+    await studio.iconLibraries.importPackagePath('C:\\Shares\\icons.cdsicons')
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(1, 'share:export', profile, true)
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(2, 'icon-libraries:import-package-path', 'C:\\Shares\\icons.cdsicons')
+  })
+
   it('throws clean serialized errors without Electron remote-method wrappers', async () => {
     const error = localizedMessage('分享包校验失败。')
     electronMocks.invoke.mockResolvedValue({ ok: false, error })

@@ -10,6 +10,7 @@ import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
 import { createDefaultTheme } from '../src/shared/theme'
 import { builtinIconLabels, builtinIconOptions, builtinIcons } from '../src/renderer/src/icons'
 import { DEFAULT_LOCALE, setActiveLocale } from '../src/shared/i18n'
+import { ThemeIconLibraryContext } from '../src/renderer/src/library-icons'
 
 const GLOBAL_KEYS = ['window', 'document', 'navigator', 'Element', 'HTMLElement', 'Node', 'Event', 'InputEvent', 'MouseEvent', 'PointerEvent'] as const
 
@@ -44,6 +45,10 @@ describe('editor appearance controls', () => {
     browserWindow.document.body.append(element)
     container = element as unknown as HTMLElement
     root = createRoot(container)
+    Object.defineProperty(browserWindow, 'studio', {
+      configurable: true,
+      value: { iconLibraries: { getPreviewUrl: vi.fn().mockResolvedValue('studio-icon://library/icon') } }
+    })
   })
 
   afterEach(() => {
@@ -231,6 +236,41 @@ describe('editor appearance controls', () => {
     act(() => button.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent))
     expect(onImport).toHaveBeenCalledOnce()
     expect(container.querySelector('img.custom-icon')?.getAttribute('src')).toBe('data:image/png;base64,AA==')
+  })
+
+  it('selects a custom library icon through the theme copy boundary', () => {
+    const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
+    const onChange = vi.fn()
+    const selectIcon = vi.fn().mockResolvedValue(undefined)
+    const libraryId = '11111111-1111-4111-8111-111111111111'
+    const iconId = '22222222-2222-4222-8222-222222222222'
+    const library = {
+      version: 1 as const,
+      id: libraryId,
+      name: '项目素材',
+      updatedAt: new Date().toISOString(),
+      icons: [{
+        id: iconId,
+        name: '自定义星标',
+        asset: `assets/${iconId}.png`,
+        mimeType: 'image/png' as const,
+        defaultEnabled: true,
+        defaultWeight: 3,
+        originalName: 'star.png',
+        width: 24,
+        height: 24,
+        sha256: '0'.repeat(64)
+      }]
+    }
+    act(() => root.render(React.createElement(
+      ThemeIconLibraryContext.Provider,
+      { value: { libraries: [library], busy: false, selectIcon } },
+      React.createElement(ThemeIconControl, { slot: 'composer', profile, assets: {}, onChange, onImport: vi.fn() })
+    )))
+    act(() => container.querySelector<HTMLButtonElement>('.icon-picker-trigger')?.click())
+    act(() => container.querySelector<HTMLButtonElement>(`[data-icon-name="${libraryId}:${iconId}"]`)?.click())
+    expect(selectIcon).toHaveBeenCalledWith('composer', { libraryId, iconId })
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('labels GIF icons and uses their compiled poster only when requested', () => {

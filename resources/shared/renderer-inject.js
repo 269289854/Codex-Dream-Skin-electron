@@ -8,6 +8,8 @@
   const HEADING_DECORATION_ID = "codex-dream-skin-heading-decoration";
   const WINDOW_BACKGROUND_ID = "codex-dream-skin-window-background";
   const projectAnchorRestorers = new WeakMap();
+  const projectIconRestorers = new WeakMap();
+  const projectIconNodes = new Set();
   const sidebarNavRestorers = new WeakMap();
   const sidebarSearchRestorers = new WeakMap();
   const sidebarSearchButtons = new Set();
@@ -526,6 +528,89 @@
     return candidates.find((node) => aliases.some((alias) => node.textContent.trim().toLowerCase() === alias)) || candidates.at(-1) || button;
   };
   const findSidebarNavIconNode = (button) => [...button.querySelectorAll("span")].find((node) => node.querySelector(":scope > svg")) || button.querySelector("svg")?.parentElement || null;
+  const projectIconConfig = themeConfig?.projectIcons && typeof themeConfig.projectIcons === "object" ? themeConfig.projectIcons : { pool: [], assignments: [] };
+  const projectIconPool = Array.isArray(projectIconConfig.pool) ? projectIconConfig.pool.filter((candidate) => candidate && Number.isInteger(candidate.weight) && candidate.weight >= 1 && candidate.weight <= 10) : [];
+  const projectIconAssignments = new Map(Array.isArray(projectIconConfig.assignments)
+    ? projectIconConfig.assignments.filter((entry) => entry && typeof entry.projectId === "string" && entry.icon).map((entry) => [entry.projectId, entry.icon])
+    : []);
+  const projectIconKey = (candidate) => `${candidate?.ref?.libraryId || ""}:${candidate?.ref?.iconId || ""}`;
+  const projectIconFingerprint = projectIconPool.map((candidate) => `${projectIconKey(candidate)}=${candidate.weight}`).join("|");
+  const stableProjectIconHash = (value) => {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  };
+  const selectProjectIcon = (projectId) => {
+    const assigned = projectIconAssignments.get(projectId);
+    if (assigned) return assigned;
+    const total = projectIconPool.reduce((sum, candidate) => sum + candidate.weight, 0);
+    if (total <= 0) return null;
+    let target = stableProjectIconHash(`${themeConfig?.themeId || ""}\u0000${projectId}\u0000${projectIconFingerprint}`) % total;
+    for (const candidate of projectIconPool) {
+      if (target < candidate.weight) return candidate;
+      target -= candidate.weight;
+    }
+    return projectIconPool.at(-1) || null;
+  };
+  const restoreProjectIcon = (node) => {
+    const record = projectIconRestorers.get(node);
+    if (!record) return;
+    if (node.isConnected) {
+      node.innerHTML = record.html;
+      if (record.className === null) node.removeAttribute("class");
+      else node.setAttribute("class", record.className);
+    }
+    projectIconRestorers.delete(node);
+    projectIconNodes.delete(node);
+  };
+  const renderProjectIcon = (node, candidate) => {
+    node.replaceChildren();
+    node.classList.add("dream-sidebar-project-icon");
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    const source = reducedMotion && candidate.posterDataUrl ? candidate.posterDataUrl : candidate.dataUrl;
+    if (typeof source === "string" && source.startsWith("data:image/")) {
+      const image = document.createElement("img");
+      image.className = "dream-custom-icon";
+      image.src = source;
+      image.alt = "";
+      image.draggable = false;
+      node.appendChild(image);
+      return;
+    }
+    if (typeof candidate.builtinName === "string") {
+      const glyph = document.createElement("span");
+      glyph.className = "dream-builtin-icon";
+      glyph.textContent = themeConfig?.builtinGlyphs?.[candidate.builtinName] || "✦";
+      glyph.setAttribute("aria-hidden", "true");
+      node.appendChild(glyph);
+    }
+  };
+  const ensureSidebarProjectIcons = (sidebar) => {
+    const activeNodes = new Set();
+    const rows = sidebar ? [...sidebar.querySelectorAll('[data-app-action-sidebar-project-row]')] : [];
+    for (const row of rows) {
+      const projectId = row.getAttribute("data-app-action-sidebar-project-id");
+      const node = row.querySelector('[data-sidebar-project-drop-zone="project-icon"]');
+      if (!projectId || !(node instanceof HTMLElement)) continue;
+      const candidate = selectProjectIcon(projectId);
+      if (!candidate) {
+        restoreProjectIcon(node);
+        continue;
+      }
+      activeNodes.add(node);
+      if (!projectIconRestorers.has(node)) {
+        projectIconRestorers.set(node, { html: node.innerHTML, className: node.getAttribute("class") });
+        projectIconNodes.add(node);
+      }
+      renderProjectIcon(node, candidate);
+    }
+    for (const node of [...projectIconNodes]) {
+      if (!node.isConnected || !activeNodes.has(node)) restoreProjectIcon(node);
+    }
+  };
   const findSidebarSearchIconNode = (button) => {
     const directIcon = button.querySelector(":scope > svg, :scope > .dream-custom-icon");
     if (directIcon) return button;
@@ -658,12 +743,14 @@
         document.querySelectorAll(`.${className}`).forEach((node) => node.classList.remove(className));
       }
       ensureSidebarSearchIcons(null);
+      ensureSidebarProjectIcons(null);
       ensureSidebarNavigation();
       return;
     }
     ensureSidebarNavigation();
     ensureSidebarFixedCopy();
     ensureSidebarSearchIcons(sidebar);
+    ensureSidebarProjectIcons(sidebar);
     replaceMarks(".dream-sidebar-header", "dream-sidebar-header", [...sidebar.querySelectorAll(":scope > header, :scope > div > header")]);
     replaceMarks(".dream-sidebar-search-button", "dream-sidebar-search-button", [...sidebar.querySelectorAll('button[aria-label*="搜索"], button[aria-label*="Search" i]')]);
     replaceMarks(".dream-sidebar-project-row", "dream-sidebar-project-row", [...sidebar.querySelectorAll('[role="listitem"][data-sidebar-project-kind] > span > [role="button"], [data-project-id], [data-testid*="project" i]')]);
@@ -2490,6 +2577,7 @@
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));
     document.querySelectorAll(".dream-sidebar-mode-button").forEach(clearSidebarModeIcon);
     for (const button of [...sidebarSearchButtons]) restoreSidebarSearch(button);
+    for (const node of [...projectIconNodes]) restoreProjectIcon(node);
     document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => { if (node instanceof HTMLElement) restoreSidebarNav(node); node.removeAttribute("data-dream-sidebar-nav"); });
     clearAccountMenu();
     for (const [labelNode, record] of sidebarCopyRestorers) {

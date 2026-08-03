@@ -2,8 +2,8 @@ import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download, ExternalLink,
-  GitBranch, Home, Image, Languages, Laptop, LogOut, MessageSquare, MonitorPlay, Palette, Play,
-  Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
+  FolderCog, GitBranch, Home, Image, Languages, Laptop, LibraryBig, LogOut, MessageSquare, MonitorPlay,
+  Palette, Play, Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppInfo, AppUpdateStatus, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoImportDecision, VideoMediaRole, VideoSourceSelection } from '../../shared/contracts'
 import { ACCOUNT_MENU_ITEMS, buildAccountMenuBackgroundStyle } from '../../shared/account-menu'
@@ -43,6 +43,10 @@ import { BrandSignatureControls } from './BrandSignatureControls'
 import { appUpdateDisabledMessage, studioPlatformLabel } from './platform-ui'
 import { activeThemeCopy, setActiveContentLocale } from './content-locale'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../../shared/video-transcode'
+import type { IconLibrary, ProjectIconRef } from '../../shared/project-icons'
+import { IconLibraryPage } from './IconLibraryPage'
+import { ProjectIconsPage } from './ProjectIconsPage'
+import { ThemeIconLibraryContext } from './library-icons'
 import {
   ICON_PREVIEW_TARGETS,
   findPreviewTarget,
@@ -90,6 +94,10 @@ export function App(): React.JSX.Element {
   const [themes, setThemes] = useState<ThemeSummary[]>([])
   const [draft, setDraft] = useState<ThemeProfile | null>(null)
   const [assets, setAssets] = useState<Record<string, string>>({})
+  const [activeView, setActiveView] = useState<'theme' | 'projectIcons' | 'iconLibrary'>('theme')
+  const [themeIconLibraries, setThemeIconLibraries] = useState<IconLibrary[]>([])
+  const [iconLibraryRevision, setIconLibraryRevision] = useState(0)
+  const [themeIconLibraryBusy, setThemeIconLibraryBusy] = useState(false)
   const [activeInspector, setActiveInspector] = useState<'visual' | 'icons' | 'runtime'>('visual')
   const [error, setError] = useState<LocalizedMessage | null>(null)
   const [notice, setNotice] = useState<LocalizedMessage | null>(null)
@@ -100,6 +108,9 @@ export function App(): React.JSX.Element {
   const [duplicateName, setDuplicateName] = useState('')
   const [duplicateBusy, setDuplicateBusy] = useState(false)
   const [duplicateError, setDuplicateError] = useState<LocalizedMessage | null>(null)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [exportIncludeIconLibraries, setExportIncludeIconLibraries] = useState(true)
+  const [preferredIconLibraryId, setPreferredIconLibraryId] = useState<string | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
   const [mediaBusy, setMediaBusy] = useState(false)
   const [themeOperationBusy, setThemeOperationBusy] = useState(false)
@@ -182,6 +193,31 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+
+  const handleIconDataChanged = useCallback((): void => {
+    setIconLibraryRevision((revision) => revision + 1)
+  }, [])
+
+  const handleIconFeatureError = useCallback((message: LocalizedMessage): void => {
+    setError(message)
+  }, [])
+
+  useEffect(() => {
+    const themeId = draft?.id
+    if (!themeId) {
+      setThemeIconLibraries([])
+      return undefined
+    }
+    let active = true
+    void window.studio.projectIcons.getThemeSettings(themeId).then(async (settings) => {
+      const libraries = (await Promise.all(settings.enabledLibraryIds.map((id) => window.studio.iconLibraries.get(id).catch(() => null))))
+        .filter((library): library is IconLibrary => library !== null)
+      if (active) setThemeIconLibraries(libraries)
+    }).catch((reason) => {
+      if (active) setError(messageOf(reason))
+    })
+    return () => { active = false }
+  }, [draft?.id, iconLibraryRevision])
 
   const refreshThemes = useCallback(async (generation?: number) => {
     const next = await window.studio.themes.list()
@@ -628,8 +664,9 @@ export function App(): React.JSX.Element {
     setShareBusy(true)
     setError(null)
     try {
-      const result = await window.studio.share.exportTheme(profile)
+      const result = await window.studio.share.exportTheme(profile, exportIncludeIconLibraries)
       if (result && isThemeOperationCurrent(token)) setNotice(localizedMessage('主题已导出为“{name}”', { name: result.filePath.split(/[\\/]/).pop() ?? localizedMessage('分享文件') }))
+      if (result && isThemeOperationCurrent(token)) setExportDialogOpen(false)
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
@@ -685,12 +722,33 @@ export function App(): React.JSX.Element {
       setError(localizedMessage('当前版本不支持主题分享。'))
       return
     }
+    const path = window.studio.files.getPathForFile(file)
+    const extension = path.toLowerCase().split('.').pop()
+    if (extension === 'cdsicons') {
+      if (shareBusy) return
+      setShareBusy(true)
+      setError(null)
+      try {
+        const imported = await window.studio.iconLibraries.importPackagePath(path)
+        setPreferredIconLibraryId(imported.id)
+        setActiveView('iconLibrary')
+        handleIconDataChanged()
+      } catch (reason) {
+        setError(messageOf(reason))
+      } finally {
+        setShareBusy(false)
+      }
+      return
+    }
+    if (extension !== 'cdstheme') {
+      setError(localizedMessage('请选择 .cdstheme 主题文件或 .cdsicons 素材库文件。'))
+      return
+    }
     const token = beginThemeOperation(loadedThemeIdRef.current)
     if (!token) return
     setShareBusy(true)
     setError(null)
     try {
-      const path = window.studio.files.getPathForFile(file)
       const profile = await window.studio.share.importThemePath(path)
       if (!await switchThemeWithinOperation(token, profile.id, profile)) throw new Error('主题切换已失效，请重试。')
       await finishThemeImport(token, profile)
@@ -935,6 +993,32 @@ export function App(): React.JSX.Element {
     } catch (reason) {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
+      finishThemeOperation(token)
+    }
+  }
+
+  const selectLibraryIcon = async (slot: IconSlot, ref: ProjectIconRef): Promise<void> => {
+    if (!draft) return
+    const token = beginThemeOperation(draft.id)
+    if (!token) return
+    setThemeIconLibraryBusy(true)
+    try {
+      const selected = await window.studio.iconLibraries.copyToTheme(draft.id, ref)
+      if (!isThemeOperationCurrent(token)) return
+      if (selected.kind === 'builtin') {
+        changeForThemeOperation(token, (profile) => { profile.icons[slot] = { kind: 'builtin', name: selected.name } })
+      } else {
+        const imported = selected.imported
+        mergeAssetsForThemeOperation(token, {
+          [imported.relativePath]: imported.dataUrl,
+          ...(imported.gifPosterDataUrl ? { [gifPosterAssetKey(imported.relativePath)]: imported.gifPosterDataUrl } : {})
+        })
+        changeForThemeOperation(token, (profile) => { profile.icons[slot] = { kind: 'asset', asset: imported.relativePath } })
+      }
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+    } finally {
+      setThemeIconLibraryBusy(false)
       finishThemeOperation(token)
     }
   }
@@ -1197,6 +1281,7 @@ export function App(): React.JSX.Element {
   const updatePanelDisabled = !appUpdate || appUpdate.phase === 'disabled' || appUpdate.phase === 'checking' || appUpdate.phase === 'downloading' || appUpdateCheckBusy
 
   return (
+    <ThemeIconLibraryContext.Provider value={{ libraries: themeIconLibraries, busy: themeIconLibraryBusy, selectIcon: selectLibraryIcon }}>
     <main
       className="studio-shell"
       data-platform={appInfo?.platform ?? 'unknown'}
@@ -1221,6 +1306,11 @@ export function App(): React.JSX.Element {
       <header className="titlebar">
         <span className="brand-mark"><Sparkles size={16} /></span>
         <strong>Codex Dream Skin Studio</strong>
+        <nav className="top-view-tabs" aria-label={t('工作区')}>
+          <button type="button" className={activeView === 'theme' ? 'active' : ''} aria-current={activeView === 'theme' ? 'page' : undefined} onClick={() => { setActiveView('theme'); setPreviewSelection(null) }}><Palette size={14} />{t('主题编辑')}</button>
+          <button type="button" className={activeView === 'projectIcons' ? 'active' : ''} aria-current={activeView === 'projectIcons' ? 'page' : undefined} onClick={() => { setActiveView('projectIcons'); setPreviewSelection(null) }}><FolderCog size={14} />{t('项目图标')}</button>
+          <button type="button" className={activeView === 'iconLibrary' ? 'active' : ''} aria-current={activeView === 'iconLibrary' ? 'page' : undefined} onClick={() => { setActiveView('iconLibrary'); setPreviewSelection(null) }}><LibraryBig size={14} />{t('素材库')}</button>
+        </nav>
         <span className="title-status">{t(studioPlatformLabel(appInfo?.platform ?? null))}</span>
         <label className="locale-select" title={t('语言')}><Languages size={14} aria-hidden="true" /><select aria-label={t('语言')} value={locale} onChange={(event) => {
           const nextLocale = event.currentTarget.value as SupportedLocale
@@ -1238,7 +1328,7 @@ export function App(): React.JSX.Element {
         </div>}
       </header>
       {error && <div className="error-banner"><span>{tm(error)}</span><button onClick={() => setError(null)}>{t('关闭')}</button></div>}
-      {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>{t('释放 .cdstheme 文件以导入主题')}</strong><span>{t('将创建新的本地主题，不会覆盖现有主题')}</span></div>}
+      {shareDropActive && <div className="share-drop-zone" role="status"><Upload size={22} /><strong>{t('释放 .cdstheme 或 .cdsicons 文件以导入')}</strong><span>{t('导入会创建新的本地主题或素材库')}</span></div>}
       {createDialogOpen && <CreateThemeDialog onClose={() => setCreateDialogOpen(false)} onCreate={createTheme} />}
       {videoTranscodeDialog && <VideoTranscodeDialog
         key={`${videoTranscodeDialog.kind}:${videoTranscodeDialog.selectionId ?? videoTranscodeDialog.sourceAsset}`}
@@ -1253,6 +1343,16 @@ export function App(): React.JSX.Element {
         onCancel={closeVideoTranscodeDialog}
         onSubmit={(decision) => { void submitVideoTranscode(decision) }}
       />}
+      {exportDialogOpen && <div className="theme-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !shareBusy) setExportDialogOpen(false) }}>
+        <section className="theme-dialog" role="dialog" aria-modal="true" aria-labelledby="export-theme-title">
+          <header><span><Download size={16} /></span><h2 id="export-theme-title">{t('导出主题')}</h2><button type="button" title={t('关闭')} disabled={shareBusy} onClick={() => setExportDialogOpen(false)}><X size={16} /></button></header>
+          <form onSubmit={(event) => { event.preventDefault(); void exportTheme() }} onKeyDown={(event) => { if (event.key === 'Escape' && !shareBusy) { event.preventDefault(); setExportDialogOpen(false) } }}>
+            <label className="theme-dialog-checkbox"><input type="checkbox" checked={exportIncludeIconLibraries} disabled={shareBusy} onChange={(event) => setExportIncludeIconLibraries(event.currentTarget.checked)} /><span><strong>{t('包含当前主题的素材库设置')}</strong><small>{t('启用的自定义素材库将随主题分享')}</small></span></label>
+            <p className="theme-dialog-privacy">{t('项目列表和手动图标分配始终只保存在本机。')}</p>
+            <footer><button className="secondary-command" type="button" disabled={shareBusy} onClick={() => setExportDialogOpen(false)}>{t('取消')}</button><button className="primary-button" type="submit" disabled={shareBusy}><Download size={14} />{shareBusy ? t('导出中') : t('导出')}</button></footer>
+          </form>
+        </section>
+      </div>}
       {duplicateDialogOpen && <div className="theme-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDuplicateDialog() }}>
         <section className="theme-dialog" role="dialog" aria-modal="true" aria-labelledby="duplicate-theme-title">
           <header><span><Copy size={16} /></span><h2 id="duplicate-theme-title">{t('复制主题')}</h2><button type="button" title={t('关闭')} disabled={duplicateBusy} onClick={closeDuplicateDialog}><X size={16} /></button></header>
@@ -1263,13 +1363,13 @@ export function App(): React.JSX.Element {
           </form>
         </section>
       </div>}
-      <section className="workspace">
+      {activeView === 'theme' ? <section className="workspace">
         <aside className="theme-sidebar">
           <div className="panel-heading"><div><span className="eyebrow">{t('主题列表')}</span><h2>{t('我的主题')}</h2></div><button className="icon-button" title={t('新建主题')} disabled={themeOperationBusy} onClick={() => { setNotice(null); setPreviewSelection(null); setCreateDialogOpen(true) }}><Plus size={17} /></button></div>
           <div className="theme-list">
             {themes.map((theme) => <button key={theme.id} className={theme.id === draft.id ? 'theme-item active' : 'theme-item'} disabled={themeOperationBusy} onClick={() => { if (theme.id !== draft.id) void loadTheme(theme.id).catch(() => undefined) }}><span className="theme-swatch" style={{ background: `linear-gradient(145deg, ${draft.id === theme.id ? draft.colors.accent : '#9ab4b8'}, ${draft.id === theme.id ? draft.colors.pink : '#d2dcde'})` }} /><span><strong>{theme.name}</strong><small>{t(theme.system ? theme.active ? '系统主题 · 当前' : '系统主题' : theme.active ? '自定义主题 · 当前' : '自定义主题')}</small></span></button>)}
           </div>
-          <div className="theme-actions"><button type="button" title={t('导出主题')} disabled={themeOperationBusy} onClick={() => void exportTheme()}><Download size={15} /></button><button type="button" title={t('导入主题')} disabled={themeOperationBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title={t('复制主题')} disabled={themeOperationBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={t(systemThemeSelected ? '系统主题不能删除' : '删除主题')} disabled={themeOperationBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
+          <div className="theme-actions"><button type="button" title={t('导出主题')} disabled={themeOperationBusy} onClick={() => setExportDialogOpen(true)}><Download size={15} /></button><button type="button" title={t('导入主题')} disabled={themeOperationBusy} onClick={() => void importTheme()}><Upload size={15} /></button><button type="button" title={t('复制主题')} disabled={themeOperationBusy} onClick={openDuplicateDialog}><Copy size={15} /></button><button type="button" title={t(systemThemeSelected ? '系统主题不能删除' : '删除主题')} disabled={themeOperationBusy || systemThemeSelected} onClick={() => void deleteTheme()}><Trash2 size={15} /></button></div>
           {notice && <div className="theme-success" role="status"><Check size={13} /><span>{tm(notice)}</span><button type="button" title={t('关闭提示')} onClick={() => setNotice(null)}><X size={13} /></button></div>}
           {operationProgress && <div className="operation-progress" role="status"><span>{tm(operationProgress.message)}</span>{operationProgress.totalBytes ? <small>{Math.round(operationProgress.processedBytes / operationProgress.totalBytes * 100)}%</small> : <small>{t('处理中')}</small>}<button type="button" title={t('取消操作')} onClick={() => void window.studio.operations?.cancel(operationProgress.id)}>{t('取消')}</button></div>}
           <nav className="sidebar-nav">
@@ -1435,8 +1535,11 @@ export function App(): React.JSX.Element {
             {runtimeBusy && <div className="runtime-progress">{t('操作进行中')}</div>}
           </>}
         </aside>
-      </section>
+      </section> : activeView === 'projectIcons'
+        ? <ProjectIconsPage themes={themes} currentThemeId={draft.id} revision={iconLibraryRevision} onChanged={handleIconDataChanged} onError={handleIconFeatureError} />
+        : <IconLibraryPage preferredLibraryId={preferredIconLibraryId} operationProgress={operationProgress} onChanged={handleIconDataChanged} onError={handleIconFeatureError} />}
     </main>
+    </ThemeIconLibraryContext.Provider>
   )
 }
 

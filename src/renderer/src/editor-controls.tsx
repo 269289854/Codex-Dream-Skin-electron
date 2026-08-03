@@ -13,11 +13,13 @@ import {
 import { HOME_ACTION_FALLBACK_BUILTINS } from '../../shared/home-layout'
 import { resolveBuiltinIconGlyph } from '../../shared/icon-glyphs'
 import { iconGifPosterAssetKey } from '../../shared/icon-assets'
+import { SYSTEM_ICON_LIBRARY_ID } from '../../shared/project-icons'
 import type { IconSlot, ThemeColors, ThemeProfile } from '../../shared/theme'
 import { t } from '../../shared/i18n'
 import { BUILTIN_FONTS, type FontSelection } from '../../shared/typography'
 import type { TypographySlot } from './preview-editing'
 import { builtinIconLabels, builtinIconOptions, builtinIcons } from './icons'
+import { LibraryIconPreview, ThemeIconLibraryContext } from './library-icons'
 
 export const colorLabels: Record<keyof ThemeColors, string> = {
   surface: '背景', ink: '正文', accent: '强调', pink: '粉色', lavender: '淡紫', border: '边框', success: '成功', danger: '危险'
@@ -211,6 +213,7 @@ interface ThemeIconControlProps { slot: IconSlot; profile: ThemeProfile; assets:
 
 export function ThemeIconControl({ slot, profile, assets, onChange, onImport, highlighted = false }: ThemeIconControlProps): React.JSX.Element {
   const source = profile.icons[slot]
+  const libraryContext = React.useContext(ThemeIconLibraryContext)
   const [open, setOpen] = React.useState(false)
   const pickerRef = React.useRef<HTMLDivElement>(null)
   const listId = `icon-picker-options-${slot}`
@@ -256,7 +259,21 @@ export function ThemeIconControl({ slot, profile, assets, onChange, onImport, hi
             <span className="icon-picker-option-icon"><RenderIcon slot={slot} profile={{ ...profile, icons: { ...profile.icons, [slot]: { kind: 'builtin', name: 'image' } } }} assets={assets} /></span>
             <span>{t('自定义图片 / GIF')}</span>
           </button>
-          {builtinIconOptions.map((name) => {
+          {libraryContext.libraries.map((library) => <React.Fragment key={library.id}>
+            <div className="icon-picker-group-label" role="presentation">{library.id === SYSTEM_ICON_LIBRARY_ID ? t(library.name) : library.name}</div>
+            {library.icons.map((icon) => {
+              const active = source.kind === 'builtin' && 'builtinName' in icon && source.name === icon.builtinName
+              return <button className={active ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={active} data-icon-name={'builtinName' in icon ? icon.builtinName : `${library.id}:${icon.id}`} key={icon.id} disabled={libraryContext.busy} onClick={() => {
+                setOpen(false)
+                if ('builtinName' in icon) onChange(icon.builtinName)
+                else void libraryContext.selectIcon(slot, { libraryId: library.id, iconId: icon.id })
+              }}>
+                <span className="icon-picker-option-icon"><LibraryIconPreview libraryId={library.id} icon={icon} size={16} /></span>
+                <span>{'builtinName' in icon ? t(builtinIconLabels[icon.builtinName] ?? icon.name) : icon.name}</span>
+              </button>
+            })}
+          </React.Fragment>)}
+          {libraryContext.libraries.length === 0 && builtinIconOptions.map((name) => {
             const Icon = builtinIcons[name] ?? Sparkles
             return <button className={currentName === name ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={currentName === name} data-icon-name={name} key={name} onClick={() => { onChange(name); setOpen(false) }}>
               <span className="icon-picker-option-icon"><Icon size={16} aria-hidden="true" /></span>

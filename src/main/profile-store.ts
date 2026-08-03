@@ -40,7 +40,7 @@ import {
 import { assertOptimizedVideoInspection, transcodeVideo } from './video-transcoder'
 import { commitVideoOutputs } from './video-output-commit'
 import { assertPortableVideoInspection, isPortableVideo } from './video-compatibility'
-import { inspectImageBytes, validateFontBytes } from './asset-validation'
+import { assertSafeSvgSource, inspectImageBytes, validateFontBytes } from './asset-validation'
 import { dataUrlByteLength, EmbeddedAssetBudget } from './embedded-assets'
 import { budgetSelectedBuiltinFonts } from './theme-fonts'
 import { VIDEO_OPTIMIZATION_NO_CHANGE_MESSAGE, createDefaultVideoTranscodeSettings, estimateVideoTranscodeStorageBytes, isMeaningfulVideoOptimization, parseVideoTranscodeSettings, type VideoTranscodeSettings } from '../shared/video-transcode'
@@ -83,7 +83,7 @@ export interface ProfileStoreDependencies {
 
 export interface ShareArchiveWriter {
   pipe: (stream: NodeJS.WritableStream) => void
-  append: (input: NodeJS.ReadableStream | Buffer, options: { name: string }) => void
+  append: (input: NodeJS.ReadableStream | Buffer, options: { name: string; store?: boolean }) => void
   on: (event: 'error', listener: (reason: unknown) => void) => unknown
   off: (event: 'error', listener: (reason: unknown) => void) => unknown
   finalize: () => Promise<void>
@@ -490,7 +490,7 @@ export class ProfileStore {
       let importedMetadata: { width: number; height: number } | null = null
       if (extension === '.svg') {
         const source = await readFile(sourcePath, 'utf8')
-        this.assertSafeSvg(source)
+        assertSafeSvgSource(source)
         await this.inspectImage(Buffer.from(source), extension)
         await sharp(Buffer.from(source)).png().toFile(temporary)
         importedMetadata = await this.inspectImage(temporary, '.png')
@@ -951,7 +951,7 @@ export class ProfileStore {
       metadata = videoInspection
     } else if (extension === '.svg') {
       const source = await readFile(sourcePath, 'utf8')
-      this.assertSafeSvg(source)
+      assertSafeSvgSource(source)
       metadata = await this.inspectImage(Buffer.from(source), extension, signal, '媒体导入已取消。')
     } else {
       metadata = await this.inspectImage(sourcePath, extension, signal, '媒体导入已取消。')
@@ -977,7 +977,7 @@ export class ProfileStore {
     try {
       if (extension === '.svg') {
         const source = await readFile(sourcePath, 'utf8')
-        this.assertSafeSvg(source)
+        assertSafeSvgSource(source)
         await sharp(Buffer.from(source)).png().toFile(temporary)
         this.throwIfAborted(signal, '媒体导入已取消。')
         metadata = await this.inspectImage(temporary, '.png', signal, '媒体导入已取消。')
@@ -1695,11 +1695,6 @@ export class ProfileStore {
     return 'image/jpeg'
   }
   private fontMediaType(format: ImportedFontFormat): string { return this.mediaType(`.${format}`) }
-  private assertSafeSvg(source: string): void {
-    if (source.length > 2_000_000 || /<(?:script|foreignObject|iframe|object|embed)\b|<!DOCTYPE|<!ENTITY|(?:href|src)\s*=\s*["']\s*(?:https?:|file:|javascript:)/i.test(source)) {
-      throw new Error('SVG 包含不支持的内容或外部引用。')
-    }
-  }
 }
 
 function numericMediaInfoValue(value: unknown): number {

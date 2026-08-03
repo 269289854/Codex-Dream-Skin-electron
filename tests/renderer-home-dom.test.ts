@@ -239,12 +239,13 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
 }, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }, brandSignature: RuntimeBrandSignature = { ...defaultProfile.brandSignature, dataUrl: null }, artDataUrl = 'data:image/png;base64,AA==', localized?: {
   copyByLocale: Record<'zh-CN' | 'en-US', Record<string, unknown>>
   actionsByLocale: Record<'zh-CN' | 'en-US', ReadonlyArray<Record<string, unknown>>>
-}): void {
+}, projectIcons: Record<string, unknown> = { pool: [], assignments: [] }): void {
   const runtimeConfig = {
     themeId,
     videoPlayback,
     media,
     icons,
+    projectIcons,
     composerBadge,
     brandSignature,
     conversationBubbles,
@@ -1121,6 +1122,30 @@ describe('renderer home DOM adaptation', () => {
     const projectAction = window.document.querySelector('[data-sidebar-project-kind] button[aria-label="项目设置"]')
     expect(projectRow?.classList.contains('dream-sidebar-project-row')).toBe(true)
     expect(projectAction?.classList.contains('dream-sidebar-project-row')).toBe(false)
+  })
+
+  it('uses stable project icons without replacing project controls and restores the native icon', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `
+      <div role="listitem" data-sidebar-project-kind="local">
+        <div data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-row role="button">
+          <span data-sidebar-project-drop-zone="project-icon" data-sidebar-project-kind="local"><svg data-native-project-icon></svg></span>
+          <span>Project</span><button data-project-menu>Menu</button>
+        </div>
+      </div>`)
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+      pool: [{ ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star' }],
+      assignments: []
+    })
+
+    const icon = window.document.querySelector('[data-sidebar-project-drop-zone="project-icon"]')
+    expect(icon?.textContent).toBe(BUILTIN_ICON_GLYPHS.star)
+    expect(window.document.querySelector('[data-project-menu]')?.textContent).toBe('Menu')
+    stateOf(window).ensure()
+    expect(icon?.querySelectorAll('.dream-builtin-icon')).toHaveLength(1)
+    stateOf(window).cleanup()
+    expect(icon?.querySelector('[data-native-project-icon]')).not.toBeNull()
   })
 
   it('drags the polaroid within the shell without creating a preview update', () => {

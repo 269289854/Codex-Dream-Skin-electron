@@ -14,7 +14,9 @@ The Studio does not modify the Codex installation, `app.asar`, application signa
 - Use PNG, JPEG, WebP, SVG, GIF, MP4, or WebM assets for hero media, polaroids, full-window backgrounds, and conversation backgrounds.
 - Customize colors, gradients, layered masks, typography, icons, particles, home-page copy, cards, the composer, and chat bubbles.
 - Preview both the home page and conversation view, with quick editing from preview elements.
-- Export complete themes as portable `.cdstheme` files and import them on either supported platform.
+- Manage a protected system icon library and multiple custom libraries with PNG, JPEG, WebP, safe SVG, and GIF assets, priorities, and portable `.cdsicons` import/export.
+- Assign project icons locally, or let each theme choose a deterministic weighted random icon from its enabled libraries. Explicit project assignments stay private on the current device.
+- Export complete themes as portable `.cdstheme` files, optionally including enabled custom icon libraries, and import them on either supported platform.
 - Detect and connect only to a verified official Codex installation, then reinject, verify, stop, or fully restore the theme from the Studio.
 - Use the Studio interface in English or Simplified Chinese.
 
@@ -36,7 +38,7 @@ The installed app does not require Node.js. Current macOS builds are unsigned an
 3. Select **Save theme**, open **Runtime**, run **Detect Codex**, and then select **Start and apply**. Confirm a Codex restart when prompted.
 4. After later edits, save and select **Reinject**. When you want to remove the theme and restore the previous Codex configuration, select **Restore and restart Codex**.
 
-Themes can also be exported or imported as self-contained `.cdstheme` files. See the [Chinese user guide](docs/USER_GUIDE.md) for detailed media limits, theme sharing, runtime behavior, data locations, and troubleshooting.
+Themes can also be exported or imported as self-contained `.cdstheme` files. The export dialog can include the current theme's shareable icon-library settings and custom libraries, while project discovery history and manual assignments are never included. Icon libraries can also be shared independently as `.cdsicons` files. See the [Chinese user guide](docs/USER_GUIDE.md) for detailed media limits, sharing behavior, runtime behavior, data locations, and troubleshooting.
 
 ## Safety and privacy
 
@@ -44,6 +46,7 @@ Themes can also be exported or imported as self-contained `.cdstheme` files. See
 - The runtime connection is restricted to verified local Codex processes and loopback CDP endpoints owned by those processes.
 - Imported paths, file types, media headers, asset sizes, SVG content, and shared-theme archives are validated before use.
 - The renderer cannot directly access Node.js, the filesystem, PowerShell, system tools, or arbitrary CDP addresses.
+- Project IDs and labels are read only from verified Codex pages, cached locally for configuration, and excluded from both `.cdstheme` and `.cdsicons` packages together with manual assignments.
 - Preview fixtures and committed screenshots use public or fictional data and do not synchronize personal Codex projects, tasks, accounts, or teams.
 
 For the complete boundaries, see [Privacy and example data](docs/PRIVACY.md).

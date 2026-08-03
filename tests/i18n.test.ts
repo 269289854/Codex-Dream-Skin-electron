@@ -40,6 +40,11 @@ describe('internationalization', () => {
     expect(translate('en-US', '快捷编辑')).toBe('Quick Edit')
     expect(translate('en-US', '字体文件')).toBe('Fonts')
     expect(translate('en-US', '图片和视频')).toBe('Images and Video')
+    expect(translate('en-US', '主题编辑')).toBe('Theme Editor')
+    expect(translate('en-US', '素材库')).toBe('Icon Library')
+    expect(translate('en-US', '稳定随机 · 优先级 1-10')).toBe('Stable random · Priority 1-10')
+    expect(translate('en-US', '项目图标配置仅保存在本机')).toBe('Project icon settings are stored only on this device')
+    expect(translate('en-US', '已刷新 {count} 个 Codex 项目。', { count: 3 })).toBe('Refreshed 3 Codex projects.')
   })
 
   it('retranslates structured messages with nested values and joined parts', () => {

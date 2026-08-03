@@ -46,6 +46,57 @@ describe('CDP theme target selection', () => {
   })
 })
 
+describe('CDP project discovery', () => {
+  it('merges duplicate projects from verified targets and keeps the latest target value', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    const internals = watcher as unknown as {
+      targets: () => Promise<Array<{ id: string }>>
+      evaluate: (target: { id: string }) => Promise<unknown>
+    }
+    internals.targets = vi.fn().mockResolvedValue([{ id: 'page-1' }, { id: 'page-2' }])
+    internals.evaluate = vi.fn(async (target) => target.id === 'page-1'
+      ? [{ id: 'project-2', label: 'Zulu', kind: 'local' }, { id: 'project-1', label: 'Old label', kind: 'local' }]
+      : [{ id: 'project-1', label: 'Alpha', kind: 'workspace' }])
+
+    await expect(watcher.listProjects()).resolves.toEqual([
+      { id: 'project-1', label: 'Alpha', kind: 'workspace' },
+      { id: 'project-2', label: 'Zulu', kind: 'local' }
+    ])
+  })
+
+  it('rejects invalid project data returned by a page', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    const internals = watcher as unknown as {
+      targets: () => Promise<Array<{ id: string }>>
+      evaluate: () => Promise<unknown>
+    }
+    internals.targets = vi.fn().mockResolvedValue([{ id: 'page-1' }])
+    internals.evaluate = vi.fn().mockResolvedValue([{ id: '../private/path', label: 'Private', kind: 'local' }])
+
+    await expect(watcher.listProjects()).rejects.toThrow()
+  })
+
+  it('rejects a changed browser identity before evaluating project rows', async () => {
+    let port = 0
+    const server = createServer((request, response) => {
+      response.setHeader('content-type', 'application/json')
+      if (request.url === '/json/version') {
+        response.end(JSON.stringify({ webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/browser/other-browser` }))
+      } else {
+        response.end('[]')
+      }
+    })
+    try {
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+      port = (server.address() as AddressInfo).port
+      const watcher = new CdpWatcher(port, 'browser-1', () => undefined, () => undefined)
+      await expect(watcher.listProjects()).rejects.toThrow('浏览器身份')
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+})
+
 describe('CDP cleanup', () => {
   it('waits for an in-flight reinjection before removing the theme', async () => {
     const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)

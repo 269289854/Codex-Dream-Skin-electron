@@ -7,6 +7,7 @@ import type { AppUpdateStatus, CompiledTheme, ImportedFontAsset, ImportedMediaAs
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { gifPosterAssetKey } from '../src/shared/gif'
 import { LocalizedError, localizedMessage, translateLocalizedMessage, type SupportedLocale } from '../src/shared/i18n'
+import { createDefaultThemeProjectIconSettings, createSystemIconLibrary } from '../src/shared/project-icons'
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../src/shared/video-transcode'
 import { App } from '../src/renderer/src/App'
@@ -26,6 +27,27 @@ const runtimeStatus: RuntimeStatus = {
   backupAvailable: false,
   lastError: null,
   message: localizedMessage('等待检测 Codex')
+}
+
+const CUSTOM_ICON_LIBRARY_ID = '33333333-3333-4333-8333-333333333333'
+const CUSTOM_LIBRARY_ICON_ID = '44444444-4444-4444-8444-444444444444'
+const CUSTOM_ICON_LIBRARY = {
+  version: 1 as const,
+  id: CUSTOM_ICON_LIBRARY_ID,
+  name: '主题素材库',
+  updatedAt: '2026-08-03T00:00:00.000Z',
+  icons: [{
+    id: CUSTOM_LIBRARY_ICON_ID,
+    name: '星光发送',
+    asset: `assets/${CUSTOM_LIBRARY_ICON_ID}.png`,
+    mimeType: 'image/png' as const,
+    defaultEnabled: true,
+    defaultWeight: 4,
+    originalName: 'starlight.png',
+    width: 32,
+    height: 32,
+    sha256: '0'.repeat(64)
+  }]
 }
 
 describe('Studio preview editing interaction', () => {
@@ -54,6 +76,8 @@ describe('Studio preview editing interaction', () => {
   let exportTheme: ReturnType<typeof vi.fn>
   let importTheme: ReturnType<typeof vi.fn>
   let importThemePath: ReturnType<typeof vi.fn>
+  let importIconLibraryPackagePath: ReturnType<typeof vi.fn>
+  let copyIconToTheme: ReturnType<typeof vi.fn>
   let getPathForFile: ReturnType<typeof vi.fn>
   let createTheme: ReturnType<typeof vi.fn>
   let appUpdateStatus: AppUpdateStatus
@@ -151,6 +175,20 @@ describe('Studio preview editing interaction', () => {
     exportTheme = vi.fn(async () => ({ filePath: 'C:\\Shares\\design.cdstheme' }))
     importTheme = vi.fn(async () => null)
     importThemePath = vi.fn(async () => { throw new Error('未设置拖放导入结果') })
+    importIconLibraryPackagePath = vi.fn(async () => ({ version: 1, id: '33333333-3333-4333-8333-333333333333', name: '拖放素材库', updatedAt: new Date().toISOString(), icons: [] }))
+    copyIconToTheme = vi.fn(async (_themeId: string, ref: { libraryId: string; iconId: string }) => ref.libraryId === CUSTOM_ICON_LIBRARY_ID
+      ? {
+          kind: 'asset' as const,
+          imported: {
+            relativePath: 'assets/icon-from-library.png',
+            dataUrl: 'data:image/png;base64,aWNvbg==',
+            mediaType: 'image/png',
+            originalName: 'starlight.png',
+            width: 32,
+            height: 32
+          }
+        }
+      : { kind: 'builtin' as const, name: ref.iconId as ReturnType<typeof createSystemIconLibrary>['icons'][number]['builtinName'] })
     getPathForFile = vi.fn(() => 'C:\\Shares\\design.cdstheme')
     appUpdateStatus = { phase: 'up-to-date', currentVersion: '1.0.3', availableVersion: null, downloadPercent: null, error: null }
     appUpdateListener = null
@@ -174,6 +212,9 @@ describe('Studio preview editing interaction', () => {
       themeProfiles.push(created)
       return created
     })
+    const projectIconApiUnavailable = async (): Promise<never> => {
+      throw new Error('No project icon API result configured.')
+    }
     const studio: StudioApi = {
       app: {
         getInfo: async () => ({ version: 'test', platform: 'win32' }),
@@ -233,6 +274,34 @@ describe('Studio preview editing interaction', () => {
       selectIcon,
       selectFont: async () => selectedFontAsset
     },
+      iconLibraries: {
+        list: async () => [
+          { id: 'system', name: '系统图标', system: true, iconCount: createSystemIconLibrary().icons.length, updatedAt: createSystemIconLibrary().updatedAt },
+          { id: CUSTOM_ICON_LIBRARY.id, name: CUSTOM_ICON_LIBRARY.name, system: false, iconCount: CUSTOM_ICON_LIBRARY.icons.length, updatedAt: CUSTOM_ICON_LIBRARY.updatedAt }
+        ],
+        get: async (id) => id === CUSTOM_ICON_LIBRARY_ID ? CUSTOM_ICON_LIBRARY : createSystemIconLibrary(),
+        create: projectIconApiUnavailable,
+        rename: projectIconApiUnavailable,
+        delete: async () => undefined,
+        importAssets: async () => null,
+        importAssetPaths: projectIconApiUnavailable,
+        exportPackage: projectIconApiUnavailable,
+        importPackage: async () => null,
+        importPackagePath: importIconLibraryPackagePath,
+        updateIcon: projectIconApiUnavailable,
+        deleteIcon: projectIconApiUnavailable,
+        getPreviewUrl: async () => 'studio-icon://library/icon',
+        copyToTheme: copyIconToTheme
+      },
+      projectIcons: {
+        getThemeSettings: async () => ({ ...createDefaultThemeProjectIconSettings(), enabledLibraryIds: ['system', CUSTOM_ICON_LIBRARY_ID] }),
+        setEnabledLibraries: projectIconApiUnavailable,
+        setWeightOverride: projectIconApiUnavailable,
+        assignProject: projectIconApiUnavailable,
+        clearProjectAssignment: projectIconApiUnavailable,
+        listProjects: async () => [],
+        refreshProjects: async () => []
+      },
       share: {
         exportTheme,
         importTheme,
@@ -438,6 +507,12 @@ describe('Studio preview editing interaction', () => {
     })
     await act(async () => {
       exportButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    const exportSubmit = container.querySelector<HTMLButtonElement>('.theme-dialog button[type="submit"]')
+    if (!exportSubmit) throw new Error('Export dialog submit button is missing.')
+    await act(async () => {
+      exportSubmit.click()
       await Promise.resolve()
     })
     expect(container.querySelector('.error-banner')?.textContent).toContain(translateLocalizedMessage('en-US', nestedError))
@@ -1079,11 +1154,20 @@ describe('Studio preview editing interaction', () => {
     exportTheme.mockImplementationOnce(() => new Promise((resolve) => { finishExport = resolve }))
     await act(async () => {
       exportButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
-      exportButton.dispatchEvent(new browserWindow.MouseEvent('click', { bubbles: true }) as unknown as MouseEvent)
+      await Promise.resolve()
+    })
+    const exportSubmit = container.querySelector<HTMLButtonElement>('.theme-dialog button[type="submit"]')
+    const includeLibraries = container.querySelector<HTMLInputElement>('.theme-dialog-checkbox input')
+    if (!exportSubmit || !includeLibraries) throw new Error('Share export options are missing.')
+    expect(includeLibraries.checked).toBe(true)
+    await act(async () => {
+      exportSubmit.click()
+      exportSubmit.click()
       await Promise.resolve()
     })
     expect(exportTheme).toHaveBeenCalledTimes(1)
     expect((exportTheme.mock.calls[0]?.[0] as ThemeProfile).copy['zh-CN'].brandTitle).toBe('尚未保存的分享标题')
+    expect(exportTheme.mock.calls[0]?.[1]).toBe(true)
     expect(exportButton.disabled).toBe(true)
     await act(async () => {
       finishExport?.({ filePath: 'C:\\Shares\\design.cdstheme' })
@@ -1208,6 +1292,18 @@ describe('Studio preview editing interaction', () => {
     expect(importThemePath).toHaveBeenCalledWith('C:\\Shares\\design.cdstheme')
     expect(activateTheme).toHaveBeenCalledWith(imported.id)
     expect(container.querySelector('.share-drop-zone')).toBeNull()
+
+    const iconPackage = new browserWindow.File(['icons'], 'icons.cdsicons')
+    getPathForFile.mockReturnValueOnce('C:\\Shares\\icons.cdsicons')
+    const iconDrop = new browserWindow.Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(iconDrop, 'dataTransfer', { value: { types: ['Files'], files: [iconPackage], dropEffect: 'copy' } })
+    await act(async () => {
+      shell.dispatchEvent(iconDrop as unknown as Event)
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(importIconLibraryPackagePath).toHaveBeenCalledWith('C:\\Shares\\icons.cdsicons')
+    expect(container.querySelector('.icon-library-page')).not.toBeNull()
   })
 
   it('opens the most specific nested target and closes with Escape or outside click', () => {
@@ -2310,6 +2406,32 @@ describe('Studio preview editing interaction', () => {
       await new Promise((resolve) => browserWindow.setTimeout(resolve, 20))
     })
     expect(selectIcon).toHaveBeenCalledTimes(2)
+  })
+
+  it('copies a selected library icon into the current theme before saving', async () => {
+    const composerIcon = container.querySelector('[data-preview-target="icon-composer"]')
+    if (!composerIcon) throw new Error('Composer icon target is missing.')
+    pointerDown(composerIcon)
+    const trigger = container.querySelector<HTMLButtonElement>('[role="dialog"] [data-icon-slot="composer"] .icon-picker-trigger')
+    if (!trigger) throw new Error('Composer icon selector is missing.')
+    act(() => trigger.click())
+    const libraryOption = container.querySelector<HTMLButtonElement>(`[role="dialog"] [data-icon-name="${CUSTOM_ICON_LIBRARY_ID}:${CUSTOM_LIBRARY_ICON_ID}"]`)
+    if (!libraryOption) throw new Error('Custom library icon option is missing.')
+    await act(async () => {
+      libraryOption.click()
+      await Promise.resolve()
+      await new Promise((resolve) => browserWindow.setTimeout(resolve, 0))
+    })
+    expect(copyIconToTheme).toHaveBeenCalledWith(profile.id, { libraryId: CUSTOM_ICON_LIBRARY_ID, iconId: CUSTOM_LIBRARY_ICON_ID })
+    expect(container.querySelector<HTMLImageElement>('[data-preview-target="icon-composer"] img.custom-icon')?.src).toBe('data:image/png;base64,aWNvbg==')
+
+    const save = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('保存主题'))
+    if (!save) throw new Error('Save command is missing.')
+    await act(async () => {
+      save.click()
+      await Promise.resolve()
+    })
+    expect(savedProfiles.at(-1)?.icons.composer).toEqual({ kind: 'asset', asset: 'assets/icon-from-library.png' })
   })
 
   it('opens search quick editing and imports a GIF without replacing the preview button', async () => {

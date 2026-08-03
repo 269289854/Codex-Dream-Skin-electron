@@ -2,6 +2,7 @@ import type { CreateThemeInput, MediaReference, ThemeProfile, ThemeSummary } fro
 import type { LocalizedMessage, SupportedLocale } from './i18n'
 import type { ImportedFontFormat } from './typography'
 import type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
+import type { CachedCodexProject, IconLibrary, IconLibrarySummary, ProjectIconRef, SystemIconName, ThemeProjectIconSettings } from './project-icons'
 export type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
 
 export interface AppInfo {
@@ -84,7 +85,7 @@ export interface CompiledTheme {
 
 export interface OperationProgress {
   id: string
-  kind: 'media-import' | 'theme-copy' | 'share-export' | 'share-import'
+  kind: 'media-import' | 'theme-copy' | 'share-export' | 'share-import' | 'icon-library-export' | 'icon-library-import'
   phase: 'started' | 'copying' | 'validating' | 'optimizing' | 'writing' | 'completed' | 'failed' | 'cancelled'
   processedBytes: number
   totalBytes: number | null
@@ -154,8 +155,36 @@ export interface StudioApi {
     selectIcon: (themeId: string) => Promise<ImportedAsset | null>
     selectFont: (themeId: string) => Promise<ImportedFontAsset | null>
   }
+  iconLibraries: {
+    list: () => Promise<IconLibrarySummary[]>
+    get: (id: string) => Promise<IconLibrary>
+    create: (name: string) => Promise<IconLibrary>
+    rename: (id: string, name: string) => Promise<IconLibrary>
+    delete: (id: string) => Promise<void>
+    importAssets: (id: string) => Promise<IconLibrary | null>
+    importAssetPaths: (id: string, paths: string[]) => Promise<IconLibrary>
+    exportPackage: (id: string) => Promise<{ filePath: string } | null>
+    importPackage: () => Promise<IconLibrary | null>
+    importPackagePath: (path: string) => Promise<IconLibrary>
+    updateIcon: (libraryId: string, iconId: string, update: { name?: string; defaultEnabled?: boolean; defaultWeight?: number }) => Promise<IconLibrary>
+    deleteIcon: (libraryId: string, iconId: string) => Promise<IconLibrary>
+    getPreviewUrl: (libraryId: string, iconId: string) => Promise<string>
+    copyToTheme: (themeId: string, ref: ProjectIconRef) => Promise<
+      | { kind: 'builtin'; name: SystemIconName }
+      | { kind: 'asset'; imported: ImportedAsset }
+    >
+  }
+  projectIcons: {
+    getThemeSettings: (themeId: string) => Promise<ThemeProjectIconSettings>
+    setEnabledLibraries: (themeId: string, libraryIds: string[]) => Promise<ThemeProjectIconSettings>
+    setWeightOverride: (themeId: string, ref: ProjectIconRef, enabled: boolean, weight: number) => Promise<ThemeProjectIconSettings>
+    assignProject: (themeId: string, projectId: string, ref: ProjectIconRef) => Promise<ThemeProjectIconSettings>
+    clearProjectAssignment: (themeId: string, projectId: string) => Promise<ThemeProjectIconSettings>
+    listProjects: () => Promise<CachedCodexProject[]>
+    refreshProjects: () => Promise<CachedCodexProject[]>
+  }
   share: {
-    exportTheme: (profile: ThemeProfile) => Promise<{ filePath: string } | null>
+    exportTheme: (profile: ThemeProfile, includeIconLibraries: boolean) => Promise<{ filePath: string } | null>
     importTheme: () => Promise<ThemeProfile | null>
     importThemePath: (path: string) => Promise<ThemeProfile>
   }
