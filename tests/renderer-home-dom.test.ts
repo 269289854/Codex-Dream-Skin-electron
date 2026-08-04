@@ -769,8 +769,8 @@ describe('renderer home DOM adaptation', () => {
     expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
     expect(streamingSurface?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(streaming.childNodes).toHaveLength(2)
-    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*z-index: -1;/)
-    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::after \{\s*z-index: -2;/)
+    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*z-index: 1;/)
+    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::after \{\s*z-index: 1;/)
     expect(dreamSkinCss).toContain('padding-block: max(var(--dream-codex-bubble-content-padding), var(--dream-codex-bubble-frame-width))')
 
     streamingSurface?.append(window.document.createElement('p'))
@@ -1698,6 +1698,22 @@ describe('renderer home DOM adaptation', () => {
     expect(layer?.style.getPropertyValue('--dream-particle-view-width')).toBe('920px')
     expect(layer?.style.getPropertyValue('--dream-particle-view-height')).toBe('614px')
     expect(layer?.style.getPropertyValue('--dream-particle-negative-width')).toBe('-1016px')
+  })
+
+  it('mounts the particle overlay inside the Codex root stacking context', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `<div id="root">${homeFixture('Particle-Layer')}</div>`
+
+    inject(window)
+
+    const host = window.document.getElementById('codex-dream-skin-particle-layer')
+    expect(host?.parentElement?.id).toBe('root')
+    expect(host?.classList.contains('dream-particle-layer')).toBe(true)
+    expect(host?.getAttribute('aria-hidden')).toBe('true')
+    expect(host?.querySelector('.dream-sparkles')).not.toBeNull()
+
+    stateOf(window).cleanup()
+    expect(window.document.getElementById('codex-dream-skin-particle-layer')).toBeNull()
   })
 
   it('keeps every particle visible while applying deterministic performance budgets', () => {

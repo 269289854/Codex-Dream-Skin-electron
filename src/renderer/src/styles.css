@@ -280,18 +280,20 @@ button { cursor: pointer; }
 .composer-decoration-directions { grid-template-columns: repeat(2,minmax(0,1fr)); }.composer-decoration-directions button { display: flex; align-items: center; justify-content: center; gap: 5px; }
 .legacy-color-grid { display: grid; gap: 8px; }.legacy-color-grid > div { padding: 7px; border: 1px solid #dce6e7; border-radius: 4px; }
 
-.preview-message.bubble { position: relative; isolation: isolate; }
+.preview-message.bubble { position: relative; isolation: auto; }
 .preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]) { box-sizing: border-box; overflow: visible; padding: var(--dream-preview-bubble-content-padding); border-radius: 0; background: transparent !important; }
 .preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::before,.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { content: ""; box-sizing: border-box; position: absolute; pointer-events: none; }
-.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::before { z-index: -1; inset: 0; }
-.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { z-index: -2; inset: 0; border-radius: 7px; }
+.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::before { z-index: 1; inset: 0; }
+.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { z-index: 1; inset: 0; border-radius: 7px; }
 .preview-message.user.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { background: var(--dream-conversation-user-message); }
 .preview-message.user.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]):hover::after,.preview-message.user.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])[data-preview-state="hover"]::after { background: var(--dream-conversation-user-message-hover); }
 .preview-message.assistant.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { background: var(--dream-conversation-message); }
 .preview-message.assistant.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]):hover::after,.preview-message.assistant.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])[data-preview-state="hover"]::after { background: var(--dream-conversation-message-hover); }
 .preview-message.assistant.plan.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])::after { background: var(--dream-conversation-plan-message); }
 .preview-message.assistant.plan.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]):hover::after,.preview-message.assistant.plan.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"])[data-preview-state="hover"]::after { background: var(--dream-conversation-plan-message-hover); }
-.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]) > * { position: relative; z-index: 2; }
+.preview-message.bubble[data-dream-bubble-frame]:not([data-dream-bubble-frame="none"]) > * { position: relative; z-index: 3; }
+.preview-conversation-surface > :not(.preview-conversation-background) { z-index: auto; }
+.preview-primary-command { position: relative; z-index: 3; }
 .preview-message.bubble[data-dream-bubble-frame="nineSlice"] { padding-block: max(var(--dream-preview-bubble-content-padding), var(--dream-preview-bubble-frame-width)) !important; padding-inline: max(var(--dream-preview-bubble-content-padding), calc(var(--dream-preview-bubble-frame-width) * 2)) !important; }
 .preview-message.bubble[data-dream-bubble-frame="nineSlice"]::after { inset: calc(var(--dream-preview-bubble-frame-width) * .6667) calc(var(--dream-preview-bubble-frame-width) * .5) !important; border-radius: calc(var(--dream-preview-bubble-frame-width) * .5) !important; }
 .preview-message.bubble[data-dream-bubble-frame="nineSlice"]::before { border-style: solid; border-color: transparent; border-width: 0; border-image-source: var(--dream-preview-bubble-frame-source); border-image-slice: var(--dream-preview-bubble-frame-slice); border-image-width: var(--dream-preview-bubble-frame-border-widths); border-image-repeat: stretch; }

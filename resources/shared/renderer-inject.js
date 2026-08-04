@@ -270,14 +270,17 @@
       document.getElementById(PARTICLE_LAYER_ID)?.remove();
       return;
     }
+    const root = document.getElementById("root");
+    const particleParent = root instanceof HTMLElement ? root : document.body;
+    if (!(particleParent instanceof HTMLElement)) return;
     let host = document.getElementById(PARTICLE_LAYER_ID);
     if (!(host instanceof HTMLElement)) {
       host = document.createElement("div");
       host.id = PARTICLE_LAYER_ID;
       host.className = "dream-particle-layer";
       host.setAttribute("aria-hidden", "true");
-      document.body.appendChild(host);
     }
+    if (host.parentElement !== particleParent) particleParent.appendChild(host);
     host.style.left = `${Math.round(shellBox?.left ?? 0)}px`;
     host.style.top = `${Math.round(shellBox?.top ?? 0)}px`;
     host.style.width = `${Math.round(shellBox?.width ?? 0)}px`;

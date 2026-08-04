@@ -548,13 +548,26 @@ html.codex-dream-skin [role="main"] {
 
 html.codex-dream-skin .dream-conversation-viewport {
   position: relative !important;
-  isolation: isolate !important;
+  isolation: auto !important;
+  content-visibility: visible !important;
   background: transparent !important;
+}
+
+/* Codex isolates the conversation surface outside the injected layer. Flatten those
+   native contexts so particle z-index 2 can sit between media and message text. */
+html.codex-dream-skin :not(#codex-dream-skin-particle-layer):is(main, .isolate):has(.dream-conversation-viewport) {
+  isolation: auto !important;
+}
+
+/* Activity rows use an inline translateY wrapper, which otherwise traps their
+   text below the fixed particle layer even when the offset is zero. */
+html.codex-dream-skin :not(#codex-dream-skin-particle-layer)[style*="transform"]:has(.dream-conversation-tool-bubble) {
+  transform: none !important;
 }
 
 html.codex-dream-skin .dream-conversation-surface {
   position: relative !important;
-  z-index: 1 !important;
+  z-index: auto !important;
   background: transparent !important;
 }
 
@@ -595,7 +608,7 @@ html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-c
   box-sizing: border-box;
   display: block;
   position: relative;
-  isolation: isolate;
+  isolation: auto;
   width: fit-content;
   max-width: 100%;
   padding: 16px 18px;
@@ -606,7 +619,7 @@ html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-c
 html.codex-dream-skin .dream-conversation-plan-bubble {
   box-sizing: border-box;
   position: relative;
-  isolation: isolate;
+  isolation: auto;
   max-width: 100%;
   color: var(--dream-conversation-plan-text);
 }
@@ -647,7 +660,7 @@ html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::before,
 html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::before,
 html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::before {
-  z-index: -1;
+  z-index: 1;
   inset: 0;
   border-width: 0;
 }
@@ -655,7 +668,7 @@ html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-
 html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble::after,
 html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble::after,
 html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble::after {
-  z-index: -2;
+  z-index: 1;
   inset: 0;
   border-radius: 7px;
 }
@@ -684,14 +697,13 @@ html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-
   background: var(--dream-conversation-plan-message-hover);
 }
 
-html.codex-dream-skin[data-dream-user-bubble-frame]:not([data-dream-user-bubble-frame="none"]) .dream-conversation-user-bubble > *,
-html.codex-dream-skin[data-dream-codex-bubble-frame]:not([data-dream-codex-bubble-frame="none"]) .dream-conversation-codex-bubble > * {
+html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble, .dream-conversation-plan-bubble, .dream-conversation-tool-bubble) > * {
   position: relative;
-  z-index: 2;
+  z-index: 3;
 }
 
 html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble > :is(.relative.flex.h-10, .relative.overflow-hidden) {
-  z-index: 2;
+  z-index: 3;
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame="nineSlice"] .dream-conversation-user-bubble {

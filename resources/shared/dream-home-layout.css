@@ -1,6 +1,6 @@
 .dream-layout-root {
   position: relative !important;
-  isolation: isolate;
+  isolation: auto;
   width: calc(100% - 44px) !important;
   max-width: none !important;
   height: 390px !important;
@@ -345,6 +345,7 @@ html.codex-dream-skin main.main-surface.dream-home-shell .app-shell-main-content
 
 .dream-project-bar {
   position: relative;
+  z-index: 3;
   padding-top: 28px !important;
   border: 1px solid var(--dream-project-chip-border) !important;
   border-bottom: 0 !important;
@@ -386,6 +387,7 @@ html.codex-dream-skin main.main-surface.dream-home-shell .app-shell-main-content
 
 .dream-composer {
   position: relative !important;
+  z-index: 3;
   border: 2px solid var(--dream-composer-border) !important;
   border-radius: 22px !important;
   background: var(--dream-composer) !important;

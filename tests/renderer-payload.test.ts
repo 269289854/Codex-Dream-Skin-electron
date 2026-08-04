@@ -153,4 +153,29 @@ describe('renderer injection template', () => {
     expect(surfaceRule).toContain('background-color: transparent !important')
     expect(shadowRule).toContain('filter: var(--dream-polaroid-shadow-filter, none)')
   })
+
+  it('keeps runtime particles above media and bubble frames while preserving text layering', async () => {
+    const [template, particleCss, skinCss, homeLayoutCss] = await Promise.all([
+      readFile(join(process.cwd(), 'resources', 'shared', 'renderer-inject.js'), 'utf8'),
+      readFile(join(process.cwd(), 'resources', 'shared', 'dream-particle-effects.css'), 'utf8'),
+      readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8'),
+      readFile(join(process.cwd(), 'resources', 'shared', 'dream-home-layout.css'), 'utf8')
+    ])
+
+    expect(template).toContain('const particleParent = root instanceof HTMLElement ? root : document.body')
+    expect(template).toContain('if (host.parentElement !== particleParent) particleParent.appendChild(host)')
+    expect(particleCss).toMatch(/\.dream-particle-layer\s*\{[^}]*z-index:\s*2;/)
+    expect(particleCss).toContain('pointer-events: none')
+    expect(skinCss).toMatch(/\.dream-conversation-viewport\s*\{[^}]*isolation:\s*auto !important/)
+    expect(skinCss).toMatch(/\.dream-conversation-viewport\s*\{[^}]*content-visibility:\s*visible !important/)
+    expect(skinCss).toMatch(/:not\(#codex-dream-skin-particle-layer\):is\(main, \.isolate\):has\(\.dream-conversation-viewport\)[\s\S]*?isolation:\s*auto !important/)
+    expect(skinCss).toMatch(/:not\(#codex-dream-skin-particle-layer\)\[style\*="transform"\]:has\(\.dream-conversation-tool-bubble\)\s*\{[^}]*transform:\s*none !important/)
+    expect(skinCss).toMatch(/\.dream-conversation-surface\s*\{[^}]*z-index:\s*auto !important/)
+    expect(skinCss).toMatch(/\.dream-conversation-user-bubble::before[\s\S]*?\{\s*z-index:\s*1;/)
+    expect(skinCss).toContain('dream-conversation-tool-bubble) > *')
+    expect(skinCss).toContain('z-index: 3;')
+    expect(homeLayoutCss).toMatch(/\.dream-layout-root\s*\{[^}]*isolation:\s*auto;/)
+    expect(homeLayoutCss).toMatch(/\.dream-composer\s*\{[^}]*z-index:\s*3;/)
+    expect(homeLayoutCss).toMatch(/\.dream-project-bar\s*\{[^}]*z-index:\s*3;/)
+  })
 })

@@ -1,6 +1,6 @@
 .dream-particle-layer {
   position: fixed;
-  z-index: 0;
+  z-index: 2;
   pointer-events: none;
   overflow: hidden;
 }

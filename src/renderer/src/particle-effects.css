@@ -1,6 +1,6 @@
 .preview-sparkles {
   position: absolute;
-  z-index: 6;
+  z-index: 2;
   inset: var(--dream-particle-top, 66px) 0 0;
   overflow: hidden;
   pointer-events: none;
