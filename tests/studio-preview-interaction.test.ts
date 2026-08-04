@@ -93,6 +93,7 @@ describe('Studio preview editing interaction', () => {
   let operationProgressListener: ((progress: OperationProgress) => void) | null
   let runtimeStatusListener: ((status: RuntimeStatus) => void) | null
   let emitReducedMotion: (matches: boolean) => void
+  let emitResizeObservers: () => void
   let persistedLocale: SupportedLocale
   let setLocalePreference: ReturnType<typeof vi.fn>
 
@@ -338,12 +339,15 @@ describe('Studio preview editing interaction', () => {
     }
     ;(browserWindow as unknown as { studio: StudioApi }).studio = studio
 
+    const resizeObservers = new Set<ResizeObserverStub>()
     class ResizeObserverStub {
-      constructor(private readonly callback: ResizeObserverCallback) {}
+      constructor(private readonly callback: ResizeObserverCallback) { resizeObservers.add(this) }
       observe(): void { this.callback([], this as unknown as ResizeObserver) }
       unobserve(): void {}
-      disconnect(): void {}
+      disconnect(): void { resizeObservers.delete(this) }
+      emit(): void { this.callback([], this as unknown as ResizeObserver) }
     }
+    emitResizeObservers = () => resizeObservers.forEach((observer) => observer.emit())
 
     const values: Record<(typeof GLOBAL_KEYS)[number], unknown> = {
       window: browserWindow,
@@ -364,8 +368,9 @@ describe('Studio preview editing interaction', () => {
     Object.defineProperty(browserWindow.HTMLElement.prototype, 'getBoundingClientRect', {
       configurable: true,
       value() {
-        const width = this.classList?.contains('preview-stage') ? 900 : this.hasAttribute?.('data-preview-target') ? 120 : 1280
-        const height = this.classList?.contains('preview-stage') ? 700 : this.hasAttribute?.('data-preview-target') ? 60 : 820
+        const previewStage = this.classList?.contains('preview-stage')
+        const width = previewStage ? (this.isConnected ? 900 : 0) : this.hasAttribute?.('data-preview-target') ? 120 : 1280
+        const height = previewStage ? (this.isConnected ? 700 : 0) : this.hasAttribute?.('data-preview-target') ? 60 : 820
         return { x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height, toJSON: () => ({}) }
       }
     })
@@ -436,6 +441,31 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
   }
+
+  it('restores the fitted preview after switching top-level tabs', async () => {
+    const clickTab = (label: string): void => {
+      const button = [...container.querySelectorAll<HTMLButtonElement>('.top-view-tabs button')]
+        .find((candidate) => candidate.textContent?.includes(label))
+      if (!button) throw new Error(`Top-level tab is missing: ${label}`)
+      button.click()
+    }
+    const initialFrame = container.querySelector<HTMLElement>('.preview-frame')
+    expect(initialFrame?.style.width).toBe('900px')
+
+    await act(async () => {
+      clickTab('项目图标')
+      await Promise.resolve()
+    })
+    expect(container.querySelector('.preview-stage')).toBeNull()
+
+    act(() => emitResizeObservers())
+
+    await act(async () => {
+      clickTab('主题编辑')
+      await Promise.resolve()
+    })
+    expect(container.querySelector<HTMLElement>('.preview-frame')?.style.width).toBe('900px')
+  })
 
   it('keeps the Studio and theme content languages independent', async () => {
     const localeSelect = container.querySelector<HTMLSelectElement>('.locale-select select')

@@ -365,18 +365,20 @@ export function App(): React.JSX.Element {
     duplicateInputRef.current?.select()
   }, [duplicateDialogOpen])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (activeView !== 'theme') return
     const stage = previewStageRef.current
     if (!stage) return
     const updateScale = (): void => {
       const bounds = stage.getBoundingClientRect()
+      if (bounds.width <= 0 || bounds.height <= 0) return
       setPreviewScale(Math.max(.1, Math.min(bounds.width / HOME_PREVIEW_VIEWPORT.width, bounds.height / HOME_PREVIEW_VIEWPORT.height)))
     }
     const observer = new ResizeObserver(updateScale)
     observer.observe(stage)
     updateScale()
     return () => observer.disconnect()
-  }, [draft?.id])
+  }, [activeView, draft?.id])
 
   const updatePopoverPosition = useCallback((): void => {
     const stage = previewStageRef.current

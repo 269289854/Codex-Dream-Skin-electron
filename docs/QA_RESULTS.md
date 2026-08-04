@@ -10,11 +10,11 @@
 - 系统：Windows x64。
 - Studio：`1.1.1` 源码工作区。
 - `npm run typecheck`：Node、Web 和测试 TypeScript 检查通过。
-- `npm test`：49 个测试文件、540 项测试全部通过。
+- `npm test`：49 个测试文件、541 项测试全部通过。
 - `npm run test:config`：严格 UTF-8 配置安装和作用域恢复测试通过。
 - `npm run build`：Node 与 Web TypeScript 检查、主进程、preload 和 renderer 生产构建通过。
 
-本轮自动化测试覆盖主题模型和迁移、双语本地化与 IPC 错误、素材校验和持久化、视频预检与转码、主题分享、Studio 媒体协议、项目/会话图标与素材库持久化、v1 到 v2 私有配置迁移、10,000 条会话缓存上限、稳定优先级随机与项目图标排除、会话树搜索和全局开关、原生会话槽位渲染与清理、`.cdsicons` 导入导出、包含素材库的 `.cdstheme` v3 分享及项目/会话隐私排除、Codex 生命周期、Windows/macOS 平台驱动、应用更新、Studio UI 及双平台发布契约。
+本轮自动化测试覆盖主题模型和迁移、双语本地化与 IPC 错误、素材校验和持久化、视频预检与转码、主题分享、Studio 媒体协议、项目/会话图标与素材库持久化、v1 到 v2 私有配置迁移、10,000 条会话缓存上限、稳定优先级随机与项目图标排除、会话树搜索和全局开关、原生会话槽位渲染与清理、顶层页面切换后的预览尺寸重算、`.cdsicons` 导入导出、包含素材库的 `.cdstheme` v3 分享及项目/会话隐私排除、Codex 生命周期、Windows/macOS 平台驱动、应用更新、Studio UI 及双平台发布契约。
 
 ### 当前版本真实 Electron 视觉检查
 
