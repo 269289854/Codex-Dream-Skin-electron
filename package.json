@@ -45,7 +45,7 @@
     "@types/ws": "^8.18.1",
     "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^35.0.0",
+    "electron": "^43.2.0",
     "electron-builder": "^26.0.12",
     "electron-vite": "^3.0.0",
     "happy-dom": "^20.10.6",

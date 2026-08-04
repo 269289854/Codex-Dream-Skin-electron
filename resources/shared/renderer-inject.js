@@ -7,6 +7,7 @@
   const PROJECT_PROXY_ID = "codex-dream-skin-project-proxy";
   const HEADING_DECORATION_ID = "codex-dream-skin-heading-decoration";
   const WINDOW_BACKGROUND_ID = "codex-dream-skin-window-background";
+  const PARTICLE_LAYER_ID = "codex-dream-skin-particle-layer";
   const projectAnchorRestorers = new WeakMap();
   const projectIconNodes = new Set();
   const sessionIconNodes = new Set();
@@ -266,14 +267,27 @@
     if (!chrome || config?.visible === false || particles.length === 0) {
       bindSparkleIterationLayer(null);
       document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
+      document.getElementById(PARTICLE_LAYER_ID)?.remove();
       return;
     }
-    let layer = chrome.querySelector(":scope > .dream-sparkles");
+    let host = document.getElementById(PARTICLE_LAYER_ID);
+    if (!(host instanceof HTMLElement)) {
+      host = document.createElement("div");
+      host.id = PARTICLE_LAYER_ID;
+      host.className = "dream-particle-layer";
+      host.setAttribute("aria-hidden", "true");
+      document.body.appendChild(host);
+    }
+    host.style.left = `${Math.round(shellBox?.left ?? 0)}px`;
+    host.style.top = `${Math.round(shellBox?.top ?? 0)}px`;
+    host.style.width = `${Math.round(shellBox?.width ?? 0)}px`;
+    host.style.height = `${Math.round(shellBox?.height ?? 0)}px`;
+    let layer = host.querySelector(":scope > .dream-sparkles");
     if (!layer) {
       layer = document.createElement("div");
       layer.className = "dream-sparkles";
       layer.setAttribute("aria-hidden", "true");
-      chrome.prepend(layer);
+      host.appendChild(layer);
     }
     const supportedEffects = new Set(["twinkle", "float", "rain", "meteor", "snow"]);
     const effect = supportedEffects.has(config?.effect) ? config.effect : "twinkle";
@@ -2603,7 +2617,6 @@
         chrome.innerHTML = `
           <div class="dream-brand"><span class="dream-note">♫</span><span><b></b><small></small></span></div>
           <div class="dream-signature"></div>
-          <div class="dream-sparkles" aria-hidden="true"></div>
           <div class="dream-polaroid"><div class="dream-polaroid-shadow"><div class="dream-polaroid-surface"></div></div></div>`;
         document.body.appendChild(chrome);
       }
@@ -2700,6 +2713,7 @@
     clearWindowBackground();
     bindSparkleIterationLayer(null);
     document.querySelectorAll(".dream-sparkles").forEach((node) => node.remove());
+    document.getElementById(PARTICLE_LAYER_ID)?.remove();
     document.querySelectorAll(".dream-wave").forEach((node) => node.remove());
     document.querySelectorAll(".dream-quick-mode-banner").forEach((node) => node.classList.remove("dream-quick-mode-banner"));
     document.querySelectorAll(".dream-native-suggestions").forEach((node) => node.classList.remove("dream-native-suggestions"));

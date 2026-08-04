@@ -46,7 +46,7 @@ html.codex-dream-skin.dream-window-background-active main.main-surface > header.
   background: transparent !important;
 }
 
-html.codex-dream-skin.dream-window-background-active #root {
+html.codex-dream-skin #root {
   position: relative !important;
   z-index: 1 !important;
 }
