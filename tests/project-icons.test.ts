@@ -9,6 +9,7 @@ import {
   SYSTEM_ICON_LIBRARY_ID,
   createSystemIconLibrary,
   selectStableProjectIcon,
+  selectStableSessionIcon,
   type ProjectIconPrivateSettings,
   type RuntimeProjectIconCandidate
 } from '../src/shared/project-icons'
@@ -45,6 +46,10 @@ describe('project icon model', () => {
     const first = selectStableProjectIcon('00000000-0000-4000-8000-000000000001', 'project-1', candidates)
     expect(selectStableProjectIcon('00000000-0000-4000-8000-000000000001', 'project-1', candidates)).toEqual(first)
     expect(selectStableProjectIcon('00000000-0000-4000-8000-000000000001', 'project-1', [])).toBeNull()
+    const session = selectStableSessionIcon('00000000-0000-4000-8000-000000000001', 'project-1', 'local:session-1', candidates, first)
+    expect(session?.ref).not.toEqual(first?.ref)
+    expect(selectStableSessionIcon('00000000-0000-4000-8000-000000000001', 'project-1', 'local:session-1', first ? [first] : [], first)).toBeNull()
+    expect(selectStableSessionIcon('00000000-0000-4000-8000-000000000001', 'project-1', 'local:session-1', candidates, first)).toEqual(session)
   })
 })
 
@@ -70,8 +75,10 @@ describe('ProjectIconStore', () => {
 
     await icons.setEnabledLibraries(themeId, [SYSTEM_ICON_LIBRARY_ID, library.id])
     await icons.setWeightOverride(themeId, { libraryId: library.id, iconId: icon.id }, true, 8)
-    await icons.cacheProjects([{ id: 'project-1', label: '示例项目', kind: 'local' }])
+    await icons.cacheProjects([{ id: 'project-1', label: '示例项目', kind: 'local', sessions: [{ id: 'local:session-1', title: '隐私会话标题' }] }])
     await icons.assignProject(themeId, 'project-1', { libraryId: library.id, iconId: icon.id })
+    await icons.assignSession(themeId, 'project-1', 'local:session-1', { libraryId: 'system', iconId: 'heart' })
+    await expect(icons.setSessionIconsEnabled(false)).resolves.toBe(false)
 
     const runtime = await icons.compileRuntimeConfig(themeId)
     const systemStar = runtime.pool.find((entry) => entry.builtinName === 'star')?.dataUrl
@@ -79,11 +86,15 @@ describe('ProjectIconStore', () => {
     expect(Buffer.from(systemStar?.split(',')[1] ?? '', 'base64').toString('utf8')).toContain('lucide-star')
     expect(runtime.pool.find((entry) => entry.ref.iconId === icon.id)).toMatchObject({ weight: 8, dataUrl: expect.stringContaining('data:image/png;base64,') })
     expect(runtime.assignments).toEqual([expect.objectContaining({ projectId: 'project-1', icon: expect.objectContaining({ dataUrl: expect.any(String) }) })])
-    expect(await icons.listCachedProjects()).toEqual([expect.objectContaining({ id: 'project-1', label: '示例项目' })])
+    expect(runtime.showSessionIcons).toBe(false)
+    expect(runtime.sessionAssignments).toEqual([expect.objectContaining({ projectId: 'project-1', sessionId: 'local:session-1', icon: expect.objectContaining({ builtinName: 'heart' }) })])
+    expect(await icons.listCachedProjects()).toEqual([expect.objectContaining({ id: 'project-1', label: '示例项目', sessions: [expect.objectContaining({ id: 'local:session-1', title: '隐私会话标题' })] })])
 
     const shareable = await icons.getShareableThemeSettings(themeId)
     expect(shareable).not.toHaveProperty('assignments')
+    expect(shareable).not.toHaveProperty('sessionAssignments')
     expect(JSON.stringify(shareable)).not.toContain('project-1')
+    expect(JSON.stringify(shareable)).not.toContain('local:session-1')
   })
 
   it('serializes project caching with private theme setting updates', async () => {
@@ -108,7 +119,7 @@ describe('ProjectIconStore', () => {
 
     const themeUpdate = icons.setEnabledLibraries(themeId, [])
     await firstWriteStarted
-    const projectUpdate = icons.cacheProjects([{ id: 'concurrent-project', label: '并发项目', kind: 'local' }])
+    const projectUpdate = icons.cacheProjects([{ id: 'concurrent-project', label: '并发项目', kind: 'local', sessions: [] }])
     await new Promise<void>((resolve) => setImmediate(resolve))
     releaseFirstWrite()
     await Promise.all([themeUpdate, projectUpdate])
@@ -122,13 +133,13 @@ describe('ProjectIconStore', () => {
   it('keeps the current Codex order ahead of historical cached projects', async () => {
     const { icons } = await createStores()
     await icons.cacheProjects([
-      { id: 'old-a', label: 'Alpha', kind: 'local' },
-      { id: 'old-b', label: 'Beta', kind: 'local' }
+      { id: 'old-a', label: 'Alpha', kind: 'local', sessions: [] },
+      { id: 'old-b', label: 'Beta', kind: 'local', sessions: [] }
     ])
 
     await expect(icons.cacheProjects([
-      { id: 'new-z', label: 'Zulu', kind: 'local' },
-      { id: 'old-b', label: 'Beta updated', kind: 'workspace' }
+      { id: 'new-z', label: 'Zulu', kind: 'local', sessions: [] },
+      { id: 'old-b', label: 'Beta updated', kind: 'workspace', sessions: [] }
     ])).resolves.toEqual([
       expect.objectContaining({ id: 'new-z', label: 'Zulu' }),
       expect.objectContaining({ id: 'old-b', label: 'Beta updated', kind: 'workspace' }),
@@ -136,13 +147,31 @@ describe('ProjectIconStore', () => {
     ])
 
     await expect(icons.cacheProjects([
-      { id: 'old-a', label: 'Alpha', kind: 'local' },
-      { id: 'new-z', label: 'Zulu', kind: 'local' }
+      { id: 'old-a', label: 'Alpha', kind: 'local', sessions: [] },
+      { id: 'new-z', label: 'Zulu', kind: 'local', sessions: [] }
     ])).resolves.toEqual([
       expect.objectContaining({ id: 'old-a' }),
       expect.objectContaining({ id: 'new-z' }),
       expect.objectContaining({ id: 'old-b' })
     ])
+  })
+
+  it('keeps every newly discovered session ahead of historical sessions at the global cache limit', async () => {
+    const { icons } = await createStores()
+    const historicalSessions = Array.from({ length: 10_000 }, (_, index) => ({
+      id: `local:historical-${index}`,
+      title: `Historical ${index}`
+    }))
+    await icons.cacheProjects([{ id: 'project-a', label: 'Project A', kind: 'local', sessions: historicalSessions }])
+
+    const cached = await icons.cacheProjects([
+      { id: 'project-a', label: 'Project A', kind: 'local', sessions: [{ id: 'local:current-a', title: 'Current A' }] },
+      { id: 'project-b', label: 'Project B', kind: 'local', sessions: [{ id: 'local:current-b', title: 'Current B' }] }
+    ])
+
+    expect(cached.reduce((count, project) => count + project.sessions.length, 0)).toBe(10_000)
+    expect(cached[0]?.sessions[0]?.id).toBe('local:current-a')
+    expect(cached[1]?.sessions).toEqual([expect.objectContaining({ id: 'local:current-b' })])
   })
 
   it('copies private theme settings locally and removes broken references on deletion', async () => {
@@ -155,14 +184,18 @@ describe('ProjectIconStore', () => {
     if (!icon) throw new Error('Imported icon missing.')
     await icons.setEnabledLibraries(themeId, [library.id])
     await icons.assignProject(themeId, 'project-2', { libraryId: library.id, iconId: icon.id })
+    await icons.assignSession(themeId, 'project-2', 'local:session-2', { libraryId: library.id, iconId: icon.id })
 
     const duplicate = await profiles.duplicate(await profiles.get(themeId), '副本')
     await icons.copyThemeSettings(themeId, duplicate.id)
     expect((await icons.getThemeSettings(duplicate.id)).assignments).toHaveLength(1)
+    expect((await icons.getThemeSettings(duplicate.id)).sessionAssignments).toHaveLength(1)
 
     await icons.deleteIcon(library.id, icon.id)
     expect((await icons.getThemeSettings(themeId)).assignments).toEqual([])
     expect((await icons.getThemeSettings(duplicate.id)).assignments).toEqual([])
+    expect((await icons.getThemeSettings(themeId)).sessionAssignments).toEqual([])
+    expect((await icons.getThemeSettings(duplicate.id)).sessionAssignments).toEqual([])
     await icons.deleteLibrary(library.id)
     expect((await icons.getThemeSettings(themeId)).enabledLibraryIds).toEqual([])
   })
@@ -183,6 +216,32 @@ describe('ProjectIconStore', () => {
     const corrupt = new ProjectIconStore(root, profiles)
     await expect(corrupt.initialize()).rejects.toThrow()
     expect(await readFile(settingsPath, 'utf8')).toBe('{invalid json')
+  })
+
+  it('migrates v1 private settings without losing project assignments', async () => {
+    const { root, profiles, themeId } = await createStores()
+    const settingsPath = join(root, 'project-icons.json')
+    await writeFile(settingsPath, `${JSON.stringify({
+      version: 1,
+      themes: {
+        [themeId]: {
+          enabledLibraryIds: ['system'],
+          weightOverrides: [],
+          assignments: [{ projectId: 'legacy-project', ref: { libraryId: 'system', iconId: 'star' } }]
+        }
+      },
+      projects: [{ id: 'legacy-project', label: 'Legacy', kind: 'local', lastSeenAt: '2026-08-01T00:00:00.000Z' }]
+    }, null, 2)}\n`, 'utf8')
+
+    const migrated = new ProjectIconStore(root, profiles)
+    await migrated.initialize()
+    expect(await migrated.getSessionIconsEnabled()).toBe(true)
+    expect(await migrated.getThemeSettings(themeId)).toMatchObject({
+      assignments: [{ projectId: 'legacy-project', ref: { libraryId: 'system', iconId: 'star' } }],
+      sessionAssignments: []
+    })
+    expect(await migrated.listCachedProjects()).toEqual([expect.objectContaining({ id: 'legacy-project', sessions: [] })])
+    expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toMatchObject({ version: 2, showSessionIcons: true })
   })
 
   it('removes controlled temporary files inside library asset directories on startup', async () => {

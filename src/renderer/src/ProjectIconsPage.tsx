@@ -1,8 +1,8 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, FolderCog, LockKeyhole, RefreshCw, Search, Shuffle } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, FolderCog, LockKeyhole, MessageCircle, RefreshCw, Search, Shuffle } from 'lucide-react'
 import type { CachedCodexProject, IconLibrary, IconLibrarySummary, ProjectIconRef, ThemeProjectIconSettings } from '../../shared/project-icons'
-import { projectIconRefKey, resolveProjectIconWeight, selectStableProjectIcon, SYSTEM_ICON_LIBRARY_ID, type RuntimeProjectIconCandidate } from '../../shared/project-icons'
+import { projectIconRefKey, resolveProjectIconWeight, selectStableProjectIcon, selectStableSessionIcon, SYSTEM_ICON_LIBRARY_ID, type RuntimeProjectIconCandidate } from '../../shared/project-icons'
 import type { ThemeSummary } from '../../shared/theme'
 import { localizedMessage, localizedMessageFrom, t, tm, type LocalizedMessage } from '../../shared/i18n'
 import { builtinIconLabels } from './icons'
@@ -22,33 +22,37 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
   const [libraries, setLibraries] = React.useState<IconLibrary[]>([])
   const [settings, setSettings] = React.useState<ThemeProjectIconSettings | null>(null)
   const [projects, setProjects] = React.useState<CachedCodexProject[]>([])
+  const [sessionIconsEnabled, setSessionIconsEnabled] = React.useState(true)
   const [busy, setBusy] = React.useState(false)
   const [refreshing, setRefreshing] = React.useState(false)
   const [query, setQuery] = React.useState('')
   const [notice, setNotice] = React.useState<LocalizedMessage | null>(null)
-  const [openProjectId, setOpenProjectId] = React.useState<string | null>(null)
+  const [openPickerId, setOpenPickerId] = React.useState<string | null>(null)
+  const [expandedProjectIds, setExpandedProjectIds] = React.useState<Set<string>>(() => new Set())
 
   React.useEffect(() => {
     if (!themes.some((theme) => theme.id === themeId)) setThemeId(currentThemeId)
   }, [currentThemeId, themeId, themes])
 
   const load = React.useCallback(async (selectedThemeId: string): Promise<void> => {
-    const [nextSummaries, nextSettings, nextProjects] = await Promise.all([
+    const [nextSummaries, nextSettings, nextProjects, nextSessionIconsEnabled] = await Promise.all([
       window.studio.iconLibraries.list(),
       window.studio.projectIcons.getThemeSettings(selectedThemeId),
-      window.studio.projectIcons.listProjects()
+      window.studio.projectIcons.listProjects(),
+      window.studio.projectIcons.getSessionIconsEnabled()
     ])
     const nextLibraries = (await Promise.all(nextSummaries.map((summary) => window.studio.iconLibraries.get(summary.id).catch(() => null))))
       .filter((library): library is IconLibrary => library !== null)
     setSummaries(nextSummaries)
     setSettings(nextSettings)
     setProjects(nextProjects)
+    setSessionIconsEnabled(nextSessionIconsEnabled)
     setLibraries(nextLibraries)
   }, [])
 
   React.useEffect(() => {
     let active = true
-    setOpenProjectId(null)
+    setOpenPickerId(null)
     setBusy(true)
     void load(themeId).catch((reason) => {
       if (active) onError(localizedMessageFrom(reason))
@@ -78,6 +82,19 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
     }
   }
 
+  const toggleSessionIcons = async (enabled: boolean): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    try {
+      setSessionIconsEnabled(await window.studio.projectIcons.setSessionIconsEnabled(enabled))
+      onChanged()
+    } catch (reason) {
+      onError(localizedMessageFrom(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const setIconWeight = async (ref: ProjectIconRef, enabled: boolean, weight: number): Promise<void> => {
     if (!settings || busy) return
     setBusy(true)
@@ -92,18 +109,43 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
 
   const refreshProjects = async (): Promise<void> => {
     if (refreshing) return
-    setOpenProjectId(null)
+    setOpenPickerId(null)
     setRefreshing(true)
     setNotice(null)
     try {
       const next = await window.studio.projectIcons.refreshProjects()
       setProjects(next)
-      setNotice(localizedMessage('已刷新 {count} 个 Codex 项目。', { count: next.length }))
+      const sessionCount = next.reduce((count, project) => count + project.sessions.length, 0)
+      setNotice(localizedMessage('已刷新 {projectCount} 个 Codex 项目和 {sessionCount} 个会话。', { projectCount: next.length, sessionCount }))
     } catch (reason) {
       onError(localizedMessageFrom(reason))
     } finally {
       setRefreshing(false)
     }
+  }
+
+  const assignSession = async (projectId: string, sessionId: string, value: string): Promise<void> => {
+    if (!settings || busy) return
+    setBusy(true)
+    try {
+      const next = value
+        ? await window.studio.projectIcons.assignSession(themeId, projectId, sessionId, parseRefKey(value))
+        : await window.studio.projectIcons.clearSessionAssignment(themeId, projectId, sessionId)
+      updateSettings(next)
+    } catch (reason) {
+      onError(localizedMessageFrom(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggleProjectExpanded = (projectId: string): void => {
+    setExpandedProjectIds((current) => {
+      const next = new Set(current)
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
+      return next
+    })
   }
 
   const assignProject = async (projectId: string, value: string): Promise<void> => {
@@ -128,12 +170,13 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
     return effective.enabled ? [{ ref, weight: effective.weight }] : []
   })) : []
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const visibleProjects = projects.filter((project) => !normalizedQuery || project.label.toLocaleLowerCase().includes(normalizedQuery))
+  const visibleProjects = projects.filter((project) => !normalizedQuery || project.label.toLocaleLowerCase().includes(normalizedQuery) || project.sessions.some((session) => session.title.toLocaleLowerCase().includes(normalizedQuery)))
 
   return <section className="utility-workspace project-icons-page">
     <aside className="utility-sidebar">
-      <div className="panel-heading"><div><span className="eyebrow">{t('当前主题')}</span><h2>{t('项目图标')}</h2></div><span className="privacy-badge" title={t('项目图标配置仅保存在本机')}><LockKeyhole size={13} />{t('仅本机')}</span></div>
+      <div className="panel-heading"><div><span className="eyebrow">{t('当前主题')}</span><h2>{t('项目图标')}</h2></div><span className="privacy-badge" title={t('项目与会话图标配置仅保存在本机')}><LockKeyhole size={13} />{t('仅本机')}</span></div>
       <label className="utility-select-field"><span>{t('主题')}</span><select value={themeId} disabled={busy} onChange={(event) => { setNotice(null); setThemeId(event.currentTarget.value) }}>{themes.map((theme) => <option key={theme.id} value={theme.id}>{theme.name}</option>)}</select></label>
+      <label className="session-icon-toggle"><span><strong>{t('显示会话图标')}</strong><small>{t('控制 Codex 侧边栏中的会话标记')}</small></span><input type="checkbox" checked={sessionIconsEnabled} disabled={busy} onChange={(event) => void toggleSessionIcons(event.currentTarget.checked)} /></label>
       <div className="utility-section-heading"><strong>{t('随机素材库')}</strong><span>{settings?.enabledLibraryIds.length ?? 0}</span></div>
       <div className="library-toggle-list">
         {summaries.map((summary) => <label key={summary.id} className="library-toggle-row"><span className="utility-list-icon"><FolderCog size={15} /></span><span><strong>{summary.system ? t(summary.name) : summary.name}</strong><small>{t('{count} 个图标', { count: summary.iconCount })}</small></span><input type="checkbox" checked={settings?.enabledLibraryIds.includes(summary.id) ?? false} disabled={busy} onChange={(event) => void toggleLibrary(summary.id, event.currentTarget.checked)} /></label>)}
@@ -142,31 +185,57 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
     </aside>
 
     <section className="project-icons-main" aria-busy={busy || refreshing}>
-      <header className="utility-header project-icons-header"><div><span className="eyebrow">{t('项目分配')}</span><h1>{themes.find((theme) => theme.id === themeId)?.name ?? t('项目图标')}</h1></div><div className="utility-actions"><button type="button" disabled={refreshing} onClick={() => void refreshProjects()}><RefreshCw className={refreshing ? 'is-spinning' : ''} size={15} />{refreshing ? t('刷新中') : t('刷新项目')}</button></div></header>
+      <header className="utility-header project-icons-header"><div><span className="eyebrow">{t('项目与会话分配')}</span><h1>{themes.find((theme) => theme.id === themeId)?.name ?? t('项目图标')}</h1></div><div className="utility-actions"><button type="button" disabled={refreshing} onClick={() => void refreshProjects()}><RefreshCw className={refreshing ? 'is-spinning' : ''} size={15} />{refreshing ? t('刷新中') : t('刷新项目与会话')}</button></div></header>
       {notice && <div className="utility-notice" role="status"><Check size={14} /><span>{tm(notice)}</span></div>}
-      <div className="project-search"><Search size={15} /><input value={query} placeholder={t('搜索项目')} aria-label={t('搜索项目')} onInput={(event) => { setOpenProjectId(null); setQuery(event.currentTarget.value) }} /><span>{visibleProjects.length}</span></div>
+      <div className="project-search"><Search size={15} /><input value={query} placeholder={t('搜索项目或会话')} aria-label={t('搜索项目或会话')} onInput={(event) => { setOpenPickerId(null); setQuery(event.currentTarget.value) }} /><span>{visibleProjects.length}</span></div>
       {visibleProjects.length ? <div className="project-assignment-list">
         {visibleProjects.map((project) => {
           const assignment = settings?.assignments.find((entry) => entry.projectId === project.id)
-          const selected = assignment?.ref ?? selectStableProjectIcon(themeId, project.id, randomCandidates)?.ref ?? null
+          const projectCandidate = assignment
+            ? randomCandidates.find((candidate) => projectIconRefKey(candidate.ref) === projectIconRefKey(assignment.ref)) ?? { ref: assignment.ref, weight: 1 }
+            : selectStableProjectIcon(themeId, project.id, randomCandidates)
+          const selected = assignment?.ref ?? projectCandidate?.ref ?? null
           const selectedEntry = selected ? findLibraryIcon(libraries, selected) : null
-          return <article className="project-assignment-row" key={project.id}>
-            <span className="project-assignment-preview">{selectedEntry ? <LibraryIconPreview libraryId={selectedEntry.library.id} icon={selectedEntry.icon} size={23} /> : <FolderCog size={21} />}</span>
-            <span className="project-assignment-copy"><strong>{project.label}</strong><small>{assignment ? t('已指定') : selected ? t('按优先级随机') : t('Codex 默认图标')}</small></span>
-            <ProjectIconPicker
-              projectId={project.id}
-              projectLabel={project.label}
+          const matchingSessions = normalizedQuery && !project.label.toLocaleLowerCase().includes(normalizedQuery)
+            ? project.sessions.filter((session) => session.title.toLocaleLowerCase().includes(normalizedQuery))
+            : project.sessions
+          const expanded = expandedProjectIds.has(project.id) || Boolean(normalizedQuery && matchingSessions.length)
+          const panelId = `project-sessions-${project.id.replace(/[^A-Za-z0-9_-]/g, '-')}`
+          return <article className="project-assignment-group" key={project.id}>
+            <div className="project-assignment-row">
+              <button className="project-disclosure" type="button" aria-label={expanded ? t('折叠项目会话') : t('展开项目会话')} aria-expanded={expanded} aria-controls={panelId} onClick={() => toggleProjectExpanded(project.id)}>{expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}</button>
+              <span className="project-assignment-preview">{selectedEntry ? <LibraryIconPreview libraryId={selectedEntry.library.id} icon={selectedEntry.icon} size={23} /> : <FolderCog size={21} />}</span>
+              <span className="project-assignment-copy"><strong>{project.label}</strong><small>{assignment ? t('已指定') : selected ? t('按优先级随机') : t('Codex 默认图标')} · {t('{count} 个会话', { count: project.sessions.length })}</small></span>
+              <ProjectIconPicker
+              targetId={`project:${project.id}`}
+              targetLabel={project.label}
               libraries={libraries}
               assignment={assignment?.ref ?? null}
               selectedEntry={selectedEntry}
-              open={openProjectId === project.id}
+              open={openPickerId === `project:${project.id}`}
               disabled={busy}
-              onOpenChange={(open) => setOpenProjectId(open ? project.id : null)}
+              onOpenChange={(open) => setOpenPickerId(open ? `project:${project.id}` : null)}
               onSelect={(value) => void assignProject(project.id, value)}
             />
+            </div>
+            {expanded && <div className="session-assignment-list" id={panelId}>
+              {matchingSessions.map((session) => {
+                const sessionAssignment = settings?.sessionAssignments.find((entry) => entry.projectId === project.id && entry.sessionId === session.id)
+                const randomSessionCandidate = selectStableSessionIcon(themeId, project.id, session.id, randomCandidates, projectCandidate)
+                const sessionSelected = sessionAssignment?.ref ?? randomSessionCandidate?.ref ?? null
+                const sessionEntry = sessionSelected ? findLibraryIcon(libraries, sessionSelected) : null
+                const pickerId = `session:${project.id}:${session.id}`
+                return <div className="session-assignment-row" key={session.id}>
+                  <span className="session-assignment-preview">{sessionEntry ? <LibraryIconPreview libraryId={sessionEntry.library.id} icon={sessionEntry.icon} size={18} /> : <MessageCircle size={17} />}</span>
+                  <span className="project-assignment-copy"><strong>{session.title}</strong><small>{sessionAssignment ? t('已指定') : sessionSelected ? t('按优先级随机') : t('Codex 默认图标')}</small></span>
+                  <ProjectIconPicker targetId={pickerId} targetLabel={session.title} libraries={libraries} assignment={sessionAssignment?.ref ?? null} selectedEntry={sessionEntry} open={openPickerId === pickerId} disabled={busy} onOpenChange={(open) => setOpenPickerId(open ? pickerId : null)} onSelect={(value) => void assignSession(project.id, session.id, value)} />
+                </div>
+              })}
+              {matchingSessions.length === 0 && <div className="session-assignment-empty">{t('该项目暂无已发现的会话')}</div>}
+            </div>}
           </article>
         })}
-      </div> : <div className="utility-empty"><FolderCog size={25} /><strong>{query ? t('没有匹配的项目') : t('暂无已发现的项目')}</strong>{!query && <button className="primary-button" type="button" disabled={refreshing} onClick={() => void refreshProjects()}><RefreshCw size={15} />{t('刷新项目')}</button>}</div>}
+      </div> : <div className="utility-empty"><FolderCog size={25} /><strong>{query ? t('没有匹配的项目或会话') : t('暂无已发现的项目')}</strong>{!query && <button className="primary-button" type="button" disabled={refreshing} onClick={() => void refreshProjects()}><RefreshCw size={15} />{t('刷新项目与会话')}</button>}</div>}
     </section>
 
     <aside className="project-priority-panel">
@@ -193,8 +262,8 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
 }
 
 interface ProjectIconPickerProps {
-  projectId: string
-  projectLabel: string
+  targetId: string
+  targetLabel: string
   libraries: IconLibrary[]
   assignment: ProjectIconRef | null
   selectedEntry: { library: IconLibrary; icon: IconLibrary['icons'][number] } | null
@@ -212,7 +281,7 @@ interface ProjectIconPickerPosition {
   maxHeight: number
 }
 
-function ProjectIconPicker({ projectId, projectLabel, libraries, assignment, selectedEntry, open, disabled, onOpenChange, onSelect }: ProjectIconPickerProps): React.JSX.Element {
+function ProjectIconPicker({ targetId, targetLabel, libraries, assignment, selectedEntry, open, disabled, onOpenChange, onSelect }: ProjectIconPickerProps): React.JSX.Element {
   const [iconQuery, setIconQuery] = React.useState('')
   const [position, setPosition] = React.useState<ProjectIconPickerPosition | null>(null)
   const fieldRef = React.useRef<HTMLDivElement>(null)
@@ -311,7 +380,7 @@ function ProjectIconPicker({ projectId, projectLabel, libraries, assignment, sel
     } as React.CSSProperties : { visibility: 'hidden' }}
   >
     <label className="project-icon-picker-search"><Search size={15} aria-hidden="true" /><input ref={searchRef} value={iconQuery} placeholder={t('搜索图标')} aria-label={t('搜索图标')} onInput={(event) => setIconQuery(event.currentTarget.value)} /></label>
-    <div className="project-icon-picker-options" id={listId} role="listbox" aria-label={t('{label}图标', { label: projectLabel })}>
+    <div className="project-icon-picker-options" id={listId} role="listbox" aria-label={t('{label}图标', { label: targetLabel })}>
       {showRandom && <button className={!assignment ? 'project-icon-picker-option active' : 'project-icon-picker-option'} type="button" role="option" aria-selected={!assignment} data-icon-name="__random" title={randomLabel} onClick={() => select('')}>
         <span className="project-icon-picker-option-icon"><Shuffle size={26} aria-hidden="true" /></span><span>{randomLabel}</span>
       </button>}
@@ -331,7 +400,7 @@ function ProjectIconPicker({ projectId, projectLabel, libraries, assignment, sel
     </div>
   </div> : null
 
-  return <div className="project-icon-picker-field" ref={fieldRef} data-project-id={projectId}>
+  return <div className="project-icon-picker-field" ref={fieldRef} data-icon-target-id={targetId}>
     <span>{t('图标')}</span>
     <button className="project-icon-picker-trigger" ref={triggerRef} type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} aria-controls={listId} title={currentLabel} onClick={() => setOpen(!open)} onKeyDown={handleTriggerKeyDown}>
       <span className="project-icon-picker-trigger-icon">{selectedEntry ? <LibraryIconPreview libraryId={selectedEntry.library.id} icon={selectedEntry.icon} size={20} /> : <Shuffle size={19} aria-hidden="true" />}</span>

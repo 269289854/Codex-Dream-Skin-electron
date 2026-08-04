@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import sharp from 'sharp'
 import { builtinIcons } from '../shared/builtin-icons'
 import {
+  MAX_CACHED_CODEX_SESSIONS,
   MAX_PROJECT_ICON_LIBRARY_ENTRIES,
   PROJECT_ICON_LIBRARY_VERSION,
   PROJECT_ICON_SETTINGS_VERSION,
@@ -14,7 +15,9 @@ import {
   createDefaultThemeProjectIconSettings,
   createSystemIconLibrary,
   customIconLibrarySchema,
+  discoveredCodexProjectSchema,
   projectIconPrivateSettingsSchema,
+  projectIconPrivateSettingsV1Schema,
   projectIconRefKey,
   projectIconRefSchema,
   resolveProjectIconWeight,
@@ -90,10 +93,12 @@ export class ProjectIconStore {
     await mkdir(this.librariesRoot, { recursive: true })
     await this.cleanupStartupArtifacts()
     try {
-      await this.readSettings()
+      const raw = await this.readJsonWithRecovery(this.settingsPath, (content) => JSON.parse(content) as unknown)
+      const current = projectIconPrivateSettingsSchema.safeParse(raw)
+      if (!current.success) await this.writeSettings(migratePrivateSettings(raw))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      await this.writeSettings({ version: PROJECT_ICON_SETTINGS_VERSION, themes: {}, projects: [] })
+      await this.writeSettings({ version: PROJECT_ICON_SETTINGS_VERSION, showSessionIcons: true, themes: {}, projects: [] })
     }
   }
 
@@ -192,7 +197,8 @@ export class ProjectIconStore {
         const themes = Object.fromEntries(Object.entries(settings.themes).map(([themeId, theme]) => [themeId, {
           enabledLibraryIds: theme.enabledLibraryIds.filter((id) => id !== library.id),
           weightOverrides: theme.weightOverrides.filter((entry) => entry.ref.libraryId !== library.id),
-          assignments: theme.assignments.filter((entry) => entry.ref.libraryId !== library.id)
+          assignments: theme.assignments.filter((entry) => entry.ref.libraryId !== library.id),
+          sessionAssignments: theme.sessionAssignments.filter((entry) => entry.ref.libraryId !== library.id)
         }]))
         return { ...settings, themes }
       })
@@ -274,7 +280,8 @@ export class ProjectIconStore {
         themes: Object.fromEntries(Object.entries(settings.themes).map(([themeId, theme]) => [themeId, {
           ...theme,
           weightOverrides: theme.weightOverrides.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId)),
-          assignments: theme.assignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId))
+          assignments: theme.assignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId)),
+          sessionAssignments: theme.sessionAssignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId))
         }]))
       }))
     } catch (error) {
@@ -290,6 +297,16 @@ export class ProjectIconStore {
     await this.profiles.get(themeId)
     const settings = await this.readSettings()
     return structuredClone(settings.themes[themeId] ?? createDefaultThemeProjectIconSettings())
+  }
+
+  async getSessionIconsEnabled(): Promise<boolean> {
+    return (await this.readSettings()).showSessionIcons
+  }
+
+  async setSessionIconsEnabled(input: unknown): Promise<boolean> {
+    const enabled = parseBoolean(input)
+    await this.updateSettings((settings) => ({ ...settings, showSessionIcons: enabled }))
+    return enabled
   }
 
   async setEnabledLibraries(themeIdInput: unknown, idsInput: unknown): Promise<ThemeProjectIconSettings> {
@@ -344,19 +361,76 @@ export class ProjectIconStore {
     }))
   }
 
+  async assignSession(
+    themeIdInput: unknown,
+    projectIdInput: unknown,
+    sessionIdInput: unknown,
+    refInput: unknown
+  ): Promise<ThemeProjectIconSettings> {
+    const themeId = parseUuid(themeIdInput, '主题 ID 无效。')
+    await this.profiles.get(themeId)
+    const projectId = cachedCodexProjectSchema.shape.id.parse(projectIdInput)
+    const sessionId = discoveredCodexProjectSchema.shape.sessions.element.shape.id.parse(sessionIdInput)
+    const ref = projectIconRefSchema.parse(refInput)
+    await this.assertIconExists(ref)
+    return this.updateTheme(themeId, (current) => ({
+      ...current,
+      sessionAssignments: [
+        ...current.sessionAssignments.filter((entry) => !(entry.projectId === projectId && entry.sessionId === sessionId)),
+        { projectId, sessionId, ref }
+      ]
+    }))
+  }
+
+  async clearSessionAssignment(
+    themeIdInput: unknown,
+    projectIdInput: unknown,
+    sessionIdInput: unknown
+  ): Promise<ThemeProjectIconSettings> {
+    const themeId = parseUuid(themeIdInput, '主题 ID 无效。')
+    await this.profiles.get(themeId)
+    const projectId = cachedCodexProjectSchema.shape.id.parse(projectIdInput)
+    const sessionId = discoveredCodexProjectSchema.shape.sessions.element.shape.id.parse(sessionIdInput)
+    return this.updateTheme(themeId, (current) => ({
+      ...current,
+      sessionAssignments: current.sessionAssignments.filter((entry) => !(entry.projectId === projectId && entry.sessionId === sessionId))
+    }))
+  }
+
   async cacheProjects(input: unknown): Promise<CachedCodexProject[]> {
     if (!Array.isArray(input) || input.length > 1000) throw new Error('Codex 项目列表无效。')
+    const sessionCount = input.reduce((count, project) => {
+      if (!project || typeof project !== 'object' || !Array.isArray((project as { sessions?: unknown }).sessions)) return count
+      return count + (project as { sessions: unknown[] }).sessions.length
+    }, 0)
+    if (sessionCount > MAX_CACHED_CODEX_SESSIONS) throw new Error('Codex 会话列表无效。')
     const now = new Date().toISOString()
-    const incoming = input.map((project) => cachedCodexProjectSchema.parse({ ...(project as object), lastSeenAt: now }))
+    const discovered = input.map((project) => discoveredCodexProjectSchema.parse(project))
     let projects: CachedCodexProject[] = []
     await this.updateSettings((settings) => {
-      const current = new Map<string, CachedCodexProject>()
-      for (const project of incoming) current.set(project.id, project)
-      const currentIds = new Set(current.keys())
-      projects = [
-        ...current.values(),
-        ...settings.projects.filter((project) => !currentIds.has(project.id))
+      const previous = new Map(settings.projects.map((project) => [project.id, project]))
+      const incoming = new Map<string, CachedCodexProject>()
+      const currentSessionIds = new Map<string, Set<string>>()
+      for (const project of discovered) {
+        const currentSessions = new Map(project.sessions.map((session) => [session.id, { ...session, lastSeenAt: now }]))
+        currentSessionIds.set(project.id, new Set(currentSessions.keys()))
+        incoming.set(project.id, cachedCodexProjectSchema.parse({ ...project, lastSeenAt: now, sessions: [...currentSessions.values()] }))
+      }
+      const incomingIds = new Set(incoming.keys())
+      const mergedProjects = [
+        ...incoming.values(),
+        ...settings.projects.filter((project) => !incomingIds.has(project.id))
       ].slice(0, 1000)
+      let remainingSessions = MAX_CACHED_CODEX_SESSIONS - [...incoming.values()].reduce((count, project) => count + project.sessions.length, 0)
+      projects = mergedProjects.map((project) => {
+        const currentSessions = incoming.get(project.id)?.sessions ?? []
+        const currentIds = currentSessionIds.get(project.id) ?? new Set<string>()
+        const historicalSessions = (previous.get(project.id)?.sessions ?? [])
+          .filter((session) => !currentIds.has(session.id))
+          .slice(0, remainingSessions)
+        remainingSessions -= historicalSessions.length
+        return { ...project, sessions: [...currentSessions, ...historicalSessions] }
+      })
       return { ...settings, projects }
     })
     return structuredClone(projects)
@@ -396,7 +470,7 @@ export class ProjectIconStore {
     }))
   }
 
-  async getShareableThemeSettings(themeIdInput: unknown): Promise<Omit<ThemeProjectIconSettings, 'assignments'>> {
+  async getShareableThemeSettings(themeIdInput: unknown): Promise<Pick<ThemeProjectIconSettings, 'enabledLibraryIds' | 'weightOverrides'>> {
     const settings = await this.getThemeSettings(themeIdInput)
     return { enabledLibraryIds: settings.enabledLibraryIds, weightOverrides: settings.weightOverrides }
   }
@@ -407,7 +481,8 @@ export class ProjectIconStore {
     const parsed = themeProjectIconSettingsSchema.parse({
       enabledLibraryIds: candidate.enabledLibraryIds ?? [SYSTEM_ICON_LIBRARY_ID],
       weightOverrides: candidate.weightOverrides ?? [],
-      assignments: []
+      assignments: [],
+      sessionAssignments: []
     })
     const available = new Set((await this.listLibraries()).map((library) => library.id))
     if (parsed.enabledLibraryIds.some((id) => !available.has(id)) || parsed.weightOverrides.some((entry) => !available.has(entry.ref.libraryId))) {
@@ -417,7 +492,8 @@ export class ProjectIconStore {
     const next = {
       enabledLibraryIds: parsed.enabledLibraryIds,
       weightOverrides: parsed.weightOverrides,
-      assignments: []
+      assignments: [],
+      sessionAssignments: []
     }
     return this.updateTheme(themeId, () => next)
   }
@@ -440,7 +516,9 @@ export class ProjectIconStore {
 
   async compileRuntimeConfig(themeIdInput: unknown, budget = new EmbeddedAssetBudget()): Promise<RuntimeProjectIconConfig> {
     const themeId = parseUuid(themeIdInput, '主题 ID 无效。')
-    const settings = await this.getThemeSettings(themeId)
+    await this.profiles.get(themeId)
+    const privateSettings = await this.readSettings()
+    const settings = privateSettings.themes[themeId] ?? createDefaultThemeProjectIconSettings()
     const libraryCache = new Map<string, IconLibrary>()
     const assetCache = new Map<string, RuntimeProjectIconCandidate>()
     const loadLibrary = async (id: string): Promise<IconLibrary | null> => {
@@ -493,7 +571,12 @@ export class ProjectIconStore {
       const icon = await candidateFor(assignment.ref, 1)
       if (icon) assignments.push({ projectId: assignment.projectId, icon })
     }
-    return { pool, assignments }
+    const sessionAssignments: RuntimeProjectIconConfig['sessionAssignments'] = []
+    for (const assignment of settings.sessionAssignments) {
+      const icon = await candidateFor(assignment.ref, 1)
+      if (icon) sessionAssignments.push({ projectId: assignment.projectId, sessionId: assignment.sessionId, icon })
+    }
+    return { showSessionIcons: privateSettings.showSessionIcons, pool, assignments, sessionAssignments }
   }
 
   async resolvePreview(libraryIdInput: unknown, iconIdInput: unknown): Promise<ResolvedProjectIconMedia> {
@@ -761,4 +844,17 @@ async function syncFile(path: string): Promise<void> {
 
 function isSystemLibrary(library: IconLibrary): library is SystemIconLibrary {
   return library.id === SYSTEM_ICON_LIBRARY_ID
+}
+
+function migratePrivateSettings(input: unknown): ProjectIconPrivateSettings {
+  const legacy = projectIconPrivateSettingsV1Schema.parse(input)
+  return projectIconPrivateSettingsSchema.parse({
+    version: PROJECT_ICON_SETTINGS_VERSION,
+    showSessionIcons: true,
+    themes: Object.fromEntries(Object.entries(legacy.themes).map(([themeId, theme]) => [themeId, {
+      ...theme,
+      sessionAssignments: []
+    }])),
+    projects: legacy.projects.map((project) => ({ ...project, sessions: [] }))
+  })
 }

@@ -1,8 +1,9 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { WebSocketServer } from 'ws'
+import { Window } from 'happy-dom'
 import { describe, expect, it, vi } from 'vitest'
-import { CdpWatcher, isCdpUnavailableError, isSafeCdpWebSocketUrl, isThemeCdpTargetUrl, MAX_THEME_PAYLOAD_BYTES } from '../src/main/cdp-watcher'
+import { CdpWatcher, isCdpUnavailableError, isSafeCdpWebSocketUrl, isThemeCdpTargetUrl, MAX_THEME_PAYLOAD_BYTES, PROJECT_DISCOVERY_EXPRESSION } from '../src/main/cdp-watcher'
 
 const runtimeVersion = `studio-${'a'.repeat(24)}`
 
@@ -47,6 +48,101 @@ describe('CDP theme target selection', () => {
 })
 
 describe('CDP project discovery', () => {
+  it('temporarily expands projects and complete session lists before restoring both states', async () => {
+    const window = new Window()
+    window.document.body.innerHTML = `
+      <div data-sidebar-project-kind="local">
+        <div data-app-action-sidebar-project-row data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-collapsed="true"></div>
+      </div>`
+    const row = window.document.querySelector('[data-app-action-sidebar-project-row]') as unknown as HTMLElement | null
+    if (!row) throw new Error('Project row fixture is missing.')
+    row.addEventListener('click', () => {
+      const collapsed = row.getAttribute('data-app-action-sidebar-project-collapsed') === 'true'
+      row.setAttribute('data-app-action-sidebar-project-collapsed', collapsed ? 'false' : 'true')
+      if (!collapsed) {
+        window.document.querySelector('[data-app-action-sidebar-project-list-id]')?.remove()
+        return
+      }
+      row.insertAdjacentHTML('afterend', `
+        <div data-app-action-sidebar-project-list-id="project-1" data-app-action-sidebar-project-show-all="false">
+          <div role="list">
+            <div role="listitem"><div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-1" data-app-action-sidebar-thread-title="First"></div></div>
+            <div role="listitem"><button type="button">Show all</button></div>
+          </div>
+        </div>`)
+      const list = window.document.querySelector('[data-app-action-sidebar-project-list-id]') as unknown as HTMLElement | null
+      const button = list?.querySelector('button') as HTMLButtonElement | null | undefined
+      button?.addEventListener('click', () => {
+        const showingAll = list?.getAttribute('data-app-action-sidebar-project-show-all') === 'true'
+        list?.setAttribute('data-app-action-sidebar-project-show-all', showingAll ? 'false' : 'true')
+        if (showingAll) list?.querySelector('[data-session-extra]')?.remove()
+        else {
+          button.closest('[role="listitem"]')?.insertAdjacentHTML('beforebegin', '<div role="listitem" data-session-extra><div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-2" data-app-action-sidebar-thread-title="Second"></div></div>')
+          button.closest('[role="listitem"]')?.remove()
+        }
+      })
+    })
+
+    const result = await window.eval(PROJECT_DISCOVERY_EXPRESSION) as Array<{ id: string; sessions: Array<{ id: string; title: string }> }>
+    expect(result).toEqual([{ id: 'project-1', label: 'Project', kind: 'local', sessions: [{ id: 'local:session-1', title: 'First' }, { id: 'local:session-2', title: 'Second' }] }])
+    expect(row.getAttribute('data-app-action-sidebar-project-collapsed')).toBe('true')
+    expect(window.document.querySelector('[data-app-action-sidebar-project-list-id]')).toBeNull()
+    await window.close()
+  })
+
+  it('does not activate an irreversible show-all control for an originally expanded project', async () => {
+    const window = new Window()
+    window.document.body.innerHTML = `
+      <div data-sidebar-project-kind="local">
+        <div data-app-action-sidebar-project-row data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-collapsed="false"></div>
+        <div data-app-action-sidebar-project-list-id="project-1" data-app-action-sidebar-project-show-all="false">
+          <div role="list"><div role="listitem"><div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-1" data-app-action-sidebar-thread-title="First"></div></div><div role="listitem" data-show-all-item><button type="button">Show all</button></div></div>
+        </div>
+      </div>`
+    const row = window.document.querySelector('[data-app-action-sidebar-project-row]') as unknown as HTMLElement | null
+    if (!row) throw new Error('Project row fixture is missing.')
+    let projectClicks = 0
+    row.addEventListener('click', () => { projectClicks += 1 })
+    const showAll = window.document.querySelector('[data-show-all-item] button') as HTMLButtonElement | null
+    let showAllClicks = 0
+    showAll?.addEventListener('click', () => {
+      showAllClicks += 1
+      const list = window.document.querySelector('[data-app-action-sidebar-project-list-id]')
+      list?.setAttribute('data-app-action-sidebar-project-show-all', 'true')
+      showAll.closest('[data-show-all-item]')?.remove()
+      list?.querySelector('[role="list"]')?.insertAdjacentHTML('beforeend', '<div role="listitem"><div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-2" data-app-action-sidebar-thread-title="Second"></div></div>')
+    })
+
+    const result = await window.eval(PROJECT_DISCOVERY_EXPRESSION) as Array<{ sessions: Array<{ id: string }> }>
+    expect(result[0]?.sessions.map((session) => session.id)).toEqual(['local:session-1'])
+    expect(projectClicks).toBe(0)
+    expect(showAllClicks).toBe(0)
+    expect(row.getAttribute('data-app-action-sidebar-project-collapsed')).toBe('false')
+    expect(window.document.querySelector('[data-app-action-sidebar-project-list-id]')?.getAttribute('data-app-action-sidebar-project-show-all')).toBe('false')
+    await window.close()
+  })
+
+  it('reports a failed sidebar restoration after still attempting the original project state', async () => {
+    const window = new Window()
+    window.document.body.innerHTML = `
+      <div data-sidebar-project-kind="local">
+        <div data-app-action-sidebar-project-row data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-collapsed="true"></div>
+      </div>`
+    const row = window.document.querySelector('[data-app-action-sidebar-project-row]') as unknown as HTMLElement | null
+    if (!row) throw new Error('Project row fixture is missing.')
+    let clicks = 0
+    row.addEventListener('click', () => {
+      clicks += 1
+      if (clicks !== 1) return
+      row.setAttribute('data-app-action-sidebar-project-collapsed', 'false')
+      row.insertAdjacentHTML('afterend', '<div data-app-action-sidebar-project-list-id="project-1" data-app-action-sidebar-project-show-all="true"></div>')
+    })
+
+    await expect(window.eval(PROJECT_DISCOVERY_EXPRESSION)).rejects.toThrow(/Codex sidebar state could not be restored/)
+    expect(clicks).toBe(2)
+    await window.close()
+  })
+
   it('preserves Codex DOM order while merging duplicate projects from verified targets', async () => {
     const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
     const internals = watcher as unknown as {
@@ -55,12 +151,12 @@ describe('CDP project discovery', () => {
     }
     internals.targets = vi.fn().mockResolvedValue([{ id: 'page-1' }, { id: 'page-2' }])
     internals.evaluate = vi.fn(async (target) => target.id === 'page-1'
-      ? [{ id: 'project-2', label: 'Zulu', kind: 'local' }, { id: 'project-1', label: 'Old label', kind: 'local' }]
-      : [{ id: 'project-1', label: 'Alpha', kind: 'workspace' }])
+      ? [{ id: 'project-2', label: 'Zulu', kind: 'local', sessions: [] }, { id: 'project-1', label: 'Old label', kind: 'local', sessions: [{ id: 'local:session-1', title: 'Old title' }] }]
+      : [{ id: 'project-1', label: 'Alpha', kind: 'workspace', sessions: [{ id: 'local:session-1', title: 'Updated title' }, { id: 'local:session-2', title: 'Second' }] }])
 
     await expect(watcher.listProjects()).resolves.toEqual([
-      { id: 'project-2', label: 'Zulu', kind: 'local' },
-      { id: 'project-1', label: 'Alpha', kind: 'workspace' }
+      { id: 'project-2', label: 'Zulu', kind: 'local', sessions: [] },
+      { id: 'project-1', label: 'Alpha', kind: 'workspace', sessions: [{ id: 'local:session-1', title: 'Updated title' }, { id: 'local:session-2', title: 'Second' }] }
     ])
   })
 

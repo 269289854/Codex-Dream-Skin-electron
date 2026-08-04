@@ -14,7 +14,7 @@ import { getPolaroidLayout, polaroidShadowFilter } from '../shared/polaroid'
 import { mediaFlipCssTransform } from '../shared/media'
 import { resolveConversationBubbles } from '../shared/conversation-bubbles'
 import type { ThemeProfile } from '../shared/theme'
-import type { CodexProject } from '../shared/project-icons'
+import type { DiscoveredCodexProject } from '../shared/project-icons'
 import { HOME_ACTION_FALLBACK_BUILTINS, HOME_ACTIONS_BY_LOCALE, splitHeadingTemplate } from '../shared/home-layout'
 import {
   LocalizedError,
@@ -98,7 +98,7 @@ export class CodexService {
   getStatus(): RuntimeStatus { return { ...this.status } }
   isActive(): boolean { return this.status.phase === 'active' || this.status.phase === 'injecting' || this.status.phase === 'starting' }
 
-  async listProjects(): Promise<CodexProject[]> {
+  async listProjects(): Promise<DiscoveredCodexProject[]> {
     if (!this.watcher || !this.isActive()) throw new Error('请先启动并应用主题，再刷新 Codex 项目。')
     return this.watcher.listProjects()
   }
@@ -637,7 +637,7 @@ export class CodexService {
     const fontCss = await buildRuntimeFontCss(profile, compiled.assets, this.resourcesRoot, embeddedBudget)
     const projectIcons = this.projectIcons
       ? await this.projectIcons.compileRuntimeConfig(themeId, embeddedBudget)
-      : { pool: [], assignments: [] }
+      : { showSessionIcons: true, pool: [], assignments: [], sessionAssignments: [] }
     const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const gifPosterDataUrl = (source?: { asset: string; mimeType: string } | null): string | null =>
       source?.mimeType === 'image/gif' ? compiled.assets[gifPosterAssetKey(source.asset)] ?? null : null

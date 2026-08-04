@@ -63,10 +63,14 @@ const api: StudioApi = {
   },
   projectIcons: {
     getThemeSettings: (themeId) => invokeIpcResult('project-icons:get-theme-settings', themeId),
+    getSessionIconsEnabled: () => invokeIpcResult('project-icons:get-session-icons-enabled'),
+    setSessionIconsEnabled: (enabled) => invokeIpcResult('project-icons:set-session-icons-enabled', enabled),
     setEnabledLibraries: (themeId, libraryIds) => invokeIpcResult('project-icons:set-enabled-libraries', themeId, libraryIds),
     setWeightOverride: (themeId, ref, enabled, weight) => invokeIpcResult('project-icons:set-weight-override', themeId, ref, enabled, weight),
     assignProject: (themeId, projectId, ref) => invokeIpcResult('project-icons:assign-project', themeId, projectId, ref),
     clearProjectAssignment: (themeId, projectId) => invokeIpcResult('project-icons:clear-project-assignment', themeId, projectId),
+    assignSession: (themeId, projectId, sessionId, ref) => invokeIpcResult('project-icons:assign-session', themeId, projectId, sessionId, ref),
+    clearSessionAssignment: (themeId, projectId, sessionId) => invokeIpcResult('project-icons:clear-session-assignment', themeId, projectId, sessionId),
     listProjects: () => invokeIpcResult('project-icons:list-projects'),
     refreshProjects: () => invokeIpcResult('project-icons:refresh-projects')
   },

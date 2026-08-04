@@ -176,10 +176,14 @@ export interface StudioApi {
   }
   projectIcons: {
     getThemeSettings: (themeId: string) => Promise<ThemeProjectIconSettings>
+    getSessionIconsEnabled: () => Promise<boolean>
+    setSessionIconsEnabled: (enabled: boolean) => Promise<boolean>
     setEnabledLibraries: (themeId: string, libraryIds: string[]) => Promise<ThemeProjectIconSettings>
     setWeightOverride: (themeId: string, ref: ProjectIconRef, enabled: boolean, weight: number) => Promise<ThemeProjectIconSettings>
     assignProject: (themeId: string, projectId: string, ref: ProjectIconRef) => Promise<ThemeProjectIconSettings>
     clearProjectAssignment: (themeId: string, projectId: string) => Promise<ThemeProjectIconSettings>
+    assignSession: (themeId: string, projectId: string, sessionId: string, ref: ProjectIconRef) => Promise<ThemeProjectIconSettings>
+    clearSessionAssignment: (themeId: string, projectId: string, sessionId: string) => Promise<ThemeProjectIconSettings>
     listProjects: () => Promise<CachedCodexProject[]>
     refreshProjects: () => Promise<CachedCodexProject[]>
   }

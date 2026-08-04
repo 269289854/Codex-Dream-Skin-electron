@@ -15,7 +15,7 @@ The Studio does not modify the Codex installation, `app.asar`, application signa
 - Customize colors, gradients, layered masks, typography, icons, particles, home-page copy, cards, the composer, and chat bubbles.
 - Preview both the home page and conversation view, with quick editing from preview elements.
 - Manage a protected system icon library and multiple custom libraries with PNG, JPEG, WebP, safe SVG, and GIF assets, priorities, and portable `.cdsicons` import/export.
-- Assign project icons locally, or let each theme choose a deterministic weighted random icon from its enabled libraries. Explicit project assignments stay private on the current device.
+- Assign local marker icons to Codex projects and sessions, or let each theme choose deterministic weighted random icons from its enabled libraries. Random session icons exclude their parent project's icon, and a global switch controls whether session markers are shown.
 - Export complete themes as portable `.cdstheme` files, optionally including enabled custom icon libraries, and import them on either supported platform.
 - Detect and connect only to a verified official Codex installation, then reinject, verify, stop, or fully restore the theme from the Studio.
 - Use the Studio interface in English or Simplified Chinese.
@@ -38,7 +38,7 @@ The installed app does not require Node.js. Current macOS builds are unsigned an
 3. Select **Save theme**, open **Runtime**, run **Detect Codex**, and then select **Start and apply**. Confirm a Codex restart when prompted.
 4. After later edits, save and select **Reinject**. When you want to remove the theme and restore the previous Codex configuration, select **Restore and restart Codex**.
 
-Themes can also be exported or imported as self-contained `.cdstheme` files. The export dialog can include the current theme's shareable icon-library settings and custom libraries, while project discovery history and manual assignments are never included. Icon libraries can also be shared independently as `.cdsicons` files. See the [Chinese user guide](docs/USER_GUIDE.md) for detailed media limits, sharing behavior, runtime behavior, data locations, and troubleshooting.
+Themes can also be exported or imported as self-contained `.cdstheme` files. The export dialog can include the current theme's shareable icon-library settings and custom libraries, while project and session discovery history, titles, and manual assignments are never included. Icon libraries can also be shared independently as `.cdsicons` files. See the [Chinese user guide](docs/USER_GUIDE.md) for detailed media limits, sharing behavior, runtime behavior, data locations, and troubleshooting.
 
 ## Safety and privacy
 

@@ -264,6 +264,46 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon[dat
   mask-size: contain;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon {
+  position: relative;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon > * {
+  opacity: 0 !important;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon::after {
+  content: attr(data-dream-sidebar-session-icon-glyph);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  background-image: var(--dream-sidebar-session-icon-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon[data-dream-sidebar-session-icon-kind="builtin"]::after {
+  background-color: currentColor;
+  background-image: none;
+  -webkit-mask-image: var(--dream-sidebar-session-icon-mask, none);
+  mask-image: var(--dream-sidebar-session-icon-mask, none);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
 /* Kept for cleanup and older payloads; current Codex project rows have no selected state. */
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-row-selected {
   background: var(--dream-sidebar-project-row-selected) !important;

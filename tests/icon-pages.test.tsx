@@ -156,7 +156,7 @@ describe('icon management pages', () => {
   it('configures theme libraries, priorities, cached projects, and explicit assignments', async () => {
     const system = createSystemIconLibrary()
     const custom = customLibrary([customIcon(), customGifIcon()])
-    let settings: ThemeProjectIconSettings = { enabledLibraryIds: ['system'], weightOverrides: [], assignments: [] }
+    let settings: ThemeProjectIconSettings = { enabledLibraryIds: ['system'], weightOverrides: [], assignments: [], sessionAssignments: [] }
     const setEnabledLibraries = vi.fn(async (_themeId: string, ids: string[]) => {
       settings = { ...settings, enabledLibraryIds: ids }
       return settings
@@ -173,6 +173,19 @@ describe('icon management pages', () => {
       settings = { ...settings, assignments: settings.assignments.filter((assignment) => assignment.projectId !== projectId) }
       return settings
     })
+    let sessionIconsEnabled = true
+    const setSessionIconsEnabled = vi.fn(async (enabled: boolean) => {
+      sessionIconsEnabled = enabled
+      return enabled
+    })
+    const assignSession = vi.fn(async (_themeId: string, projectId: string, sessionId: string, ref) => {
+      settings = { ...settings, sessionAssignments: [{ projectId, sessionId, ref }] }
+      return settings
+    })
+    const clearSessionAssignment = vi.fn(async (_themeId: string, projectId: string, sessionId: string) => {
+      settings = { ...settings, sessionAssignments: settings.sessionAssignments.filter((assignment) => !(assignment.projectId === projectId && assignment.sessionId === sessionId)) }
+      return settings
+    })
     const studio = {
       iconLibraries: {
         list: async () => [
@@ -184,14 +197,18 @@ describe('icon management pages', () => {
       },
       projectIcons: {
         getThemeSettings: async () => settings,
+        getSessionIconsEnabled: async () => sessionIconsEnabled,
+        setSessionIconsEnabled,
         setEnabledLibraries,
         setWeightOverride,
         assignProject,
         clearProjectAssignment,
+        assignSession,
+        clearSessionAssignment,
         listProjects: async () => [
-          { id: 'project-1', label: 'Zulu', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' },
-          { id: 'project-2', label: 'Alpha', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' },
-          { id: 'project-3', label: 'Zebra', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z' }
+          { id: 'project-1', label: 'Zulu', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z', sessions: [{ id: 'local:session-1', title: 'Needle Session', lastSeenAt: '2026-08-03T00:00:00.000Z' }] },
+          { id: 'project-2', label: 'Alpha', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z', sessions: [] },
+          { id: 'project-3', label: 'Zebra', kind: 'local', lastSeenAt: '2026-08-03T00:00:00.000Z', sessions: [] }
         ],
         refreshProjects: async () => []
       }
@@ -201,15 +218,23 @@ describe('icon management pages', () => {
     await act(async () => root.render(<ProjectIconsPage themes={[{ id: themeId, name: 'Dream', active: true, system: false, updatedAt: '2026-08-03T00:00:00.000Z' }]} currentThemeId={themeId} revision={0} onChanged={vi.fn()} onError={vi.fn()} />))
     await vi.waitFor(() => expect(container.textContent).toContain('Zulu'))
     expect(container.textContent).toContain('仅本机')
-    const projectLabels = (): string[] => [...container.querySelectorAll('.project-assignment-copy strong')].map((node) => node.textContent ?? '')
+    const projectLabels = (): string[] => [...container.querySelectorAll('.project-assignment-row > .project-assignment-copy strong')].map((node) => node.textContent ?? '')
     expect(projectLabels()).toEqual(['Zulu', 'Alpha', 'Zebra'])
 
     const search = container.querySelector<HTMLInputElement>('.project-search input')
     if (!search) throw new Error('Project search input is missing.')
     act(() => setInput(search, 'z'))
     expect(projectLabels()).toEqual(['Zulu', 'Zebra'])
+    act(() => setInput(search, 'needle'))
+    expect(projectLabels()).toEqual(['Zulu'])
+    expect(container.textContent).toContain('Needle Session')
     act(() => setInput(search, ''))
     expect(projectLabels()).toEqual(['Zulu', 'Alpha', 'Zebra'])
+
+    const sessionToggle = container.querySelector<HTMLInputElement>('.session-icon-toggle input')
+    if (!sessionToggle) throw new Error('Session icon toggle is missing.')
+    await act(async () => sessionToggle.click())
+    expect(setSessionIconsEnabled).toHaveBeenCalledWith(false)
 
     const customToggle = [...container.querySelectorAll<HTMLElement>('.library-toggle-row')].find((row) => row.textContent?.includes('Pixel Set'))?.querySelector<HTMLInputElement>('input')
     if (!customToggle) throw new Error('Custom library toggle is missing.')
@@ -264,6 +289,20 @@ describe('icon management pages', () => {
     await act(async () => randomOption.click())
     expect(clearProjectAssignment).toHaveBeenCalledWith(themeId, 'project-1')
     await vi.waitFor(() => expect(assignmentTrigger.textContent).toContain('随机（素材库优先级）'))
+
+    const disclosure = container.querySelector<HTMLButtonElement>('.project-disclosure')
+    if (!disclosure) throw new Error('Project disclosure is missing.')
+    await act(async () => disclosure.click())
+    expect(disclosure.getAttribute('aria-expanded')).toBe('true')
+    const sessionRow = container.querySelector<HTMLElement>('.session-assignment-row')
+    expect(sessionRow?.textContent).toContain('Needle Session')
+    const sessionTrigger = sessionRow?.querySelector<HTMLButtonElement>('.project-icon-picker-trigger')
+    if (!sessionTrigger) throw new Error('Session assignment picker is missing.')
+    await act(async () => sessionTrigger.click())
+    const sessionOption = picker()?.querySelector<HTMLButtonElement>(`[data-icon-name="${libraryId}:${iconId}"]`)
+    if (!sessionOption) throw new Error('Custom session icon option is missing.')
+    await act(async () => sessionOption.click())
+    expect(assignSession).toHaveBeenCalledWith(themeId, 'project-1', 'local:session-1', { libraryId, iconId })
 
     setActiveLocale('en-US')
     await act(async () => root.render(<ProjectIconsPage themes={[{ id: themeId, name: 'Dream', active: true, system: false, updatedAt: '2026-08-03T00:00:00.000Z' }]} currentThemeId={themeId} revision={1} onChanged={vi.fn()} onError={vi.fn()} />))

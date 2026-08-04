@@ -295,10 +295,14 @@ describe('Studio preview editing interaction', () => {
       },
       projectIcons: {
         getThemeSettings: async () => ({ ...createDefaultThemeProjectIconSettings(), enabledLibraryIds: ['system', CUSTOM_ICON_LIBRARY_ID] }),
+        getSessionIconsEnabled: async () => true,
+        setSessionIconsEnabled: projectIconApiUnavailable,
         setEnabledLibraries: projectIconApiUnavailable,
         setWeightOverride: projectIconApiUnavailable,
         assignProject: projectIconApiUnavailable,
         clearProjectAssignment: projectIconApiUnavailable,
+        assignSession: projectIconApiUnavailable,
+        clearSessionAssignment: projectIconApiUnavailable,
         listProjects: async () => [],
         refreshProjects: async () => []
       },

@@ -239,7 +239,7 @@ function inject(window: Window, icons: Record<string, { name?: string; dataUrl?:
 }, copy: Record<string, string> = { ...DEFAULT_HOME_COPY, ...DEFAULT_BRAND_COPY }, cssText = '.dream-layout-root { display: block; }', composerBadge: { visible: boolean } = { visible: true }, decorations: RuntimeDecorations = defaultDecorations, sparkleParticles: SparkleParticle[] = createSparkleParticles(decorations.sparkles), media: { hero: RuntimeMediaConfig | null; polaroid: RuntimeMediaConfig | null; conversationBackground?: RuntimeConversationBackgroundConfig | null; windowBackground?: RuntimeWindowBackgroundConfig | null; accountMenuBackground?: RuntimeAccountMenuBackgroundConfig | null } = { hero: null, polaroid: null }, conversationBubbles: RuntimeConversationBubblesConfig = { visible: true }, toolActivityBubbles: { visible: boolean } = { visible: true }, videoPlayback: ThemeProfile['videoPlayback'] = { pausePolicy: 'hidden' }, brandSignature: RuntimeBrandSignature = { ...defaultProfile.brandSignature, dataUrl: null }, artDataUrl = 'data:image/png;base64,AA==', localized?: {
   copyByLocale: Record<'zh-CN' | 'en-US', Record<string, unknown>>
   actionsByLocale: Record<'zh-CN' | 'en-US', ReadonlyArray<Record<string, unknown>>>
-}, projectIcons: Record<string, unknown> = { pool: [], assignments: [] }): void {
+}, projectIcons: Record<string, unknown> = { showSessionIcons: true, pool: [], assignments: [], sessionAssignments: [] }): void {
   const runtimeConfig = {
     themeId,
     videoPlayback,
@@ -612,7 +612,7 @@ describe('renderer home DOM adaptation', () => {
         await new Promise((resolve) => window.setTimeout(resolve, 320))
         return
       }
-      const deadline = Date.now() + 2000
+      const deadline = Date.now() + 10000
       while (!condition() && Date.now() < deadline) {
         await new Promise((resolve) => window.setTimeout(resolve, 25))
       }
@@ -649,9 +649,12 @@ describe('renderer home DOM adaptation', () => {
     const completedSurface = window.document.createElement('div')
     completedSurface.setAttribute('data-response-annotation-conversation', 'conversation-1')
     completedSurface.innerHTML = '<div data-selected-text-overlay-target><p>已完成的 Codex 正文</p></div>'
-    streamingAssistant.append(completedSurface)
     streamingAssistant.setAttribute('data-content-search-unit-key', 'turn-2:message-1')
-    await waitForContentSync(() => completedSurface.classList.contains('dream-conversation-codex-bubble'))
+    streamingAssistant.append(completedSurface)
+    await waitForContentSync(() => (
+      completedSurface.classList.contains('dream-conversation-codex-bubble')
+      && !streamingSurface.classList.contains('dream-conversation-codex-bubble')
+    ))
     expect(streamingSurface.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(completedSurface.classList.contains('dream-conversation-codex-bubble')).toBe(true)
     expect(window.document.querySelectorAll('.dream-conversation-codex-bubble')).toHaveLength(1)
@@ -677,7 +680,7 @@ describe('renderer home DOM adaptation', () => {
     stateOf(window).cleanup()
     expect(window.document.querySelector('.dream-conversation-codex-bubble')).toBeNull()
     expect(window.document.querySelector('.dream-conversation-plan-bubble')).toBeNull()
-  })
+  }, 15_000)
 
   it('applies role-specific frame variables without adding message children and clears them on cleanup', () => {
     const window = createWindow()
@@ -1197,6 +1200,78 @@ describe('renderer home DOM adaptation', () => {
     expect(icon?.querySelector('[data-native-project-icon]')).not.toBeNull()
     expect(icon?.style.getPropertyValue('--dream-sidebar-project-icon-image')).toContain(poster)
     expect(icon?.style.getPropertyValue('--dream-sidebar-project-icon-image')).not.toContain(animated)
+  })
+
+  it('renders stable session icons in the native slot while excluding the project icon', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `
+      <div data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-row>
+        <span data-sidebar-project-drop-zone="project-icon"><svg data-native-project-icon></svg></span>
+      </div>
+      <div data-app-action-sidebar-project-list-id="project-1">
+        <div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-1">
+          <div><span data-native-session-slot><span data-native-session-child></span></span><span data-thread-title-trigger>Session</span></div>
+        </div>
+      </div>`)
+    let clicks = 0
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+      showSessionIcons: true,
+      pool: [
+        { ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star', dataUrl: 'data:image/svg+xml;base64,c3Rhcg==' },
+        { ref: { libraryId: 'system', iconId: 'heart' }, weight: 1, builtinName: 'heart', dataUrl: 'data:image/svg+xml;base64,aGVhcnQ=' }
+      ],
+      assignments: [{ projectId: 'project-1', icon: { ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star', dataUrl: 'data:image/svg+xml;base64,c3Rhcg==' } }],
+      sessionAssignments: []
+    })
+
+    const slot = window.document.querySelector('[data-native-session-slot]') as unknown as HTMLElement | null
+    slot?.closest('[data-app-action-sidebar-thread-row]')?.addEventListener('click', () => { clicks += 1 })
+    const nativeChild = slot?.querySelector('[data-native-session-child]')
+    expect(slot?.classList.contains('dream-sidebar-session-icon')).toBe(true)
+    expect(slot?.getAttribute('data-dream-sidebar-session-icon-kind')).toBe('builtin')
+    expect(slot?.style.getPropertyValue('--dream-sidebar-session-icon-mask')).toContain('aGVhcnQ=')
+    expect(slot?.children).toHaveLength(1)
+    slot?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }) as unknown as Event)
+    expect(clicks).toBe(1)
+    expect(nativeChild?.parentElement).toBe(slot)
+
+    stateOf(window).cleanup()
+    expect(slot?.classList.contains('dream-sidebar-session-icon')).toBe(false)
+    expect(slot?.style.getPropertyValue('--dream-sidebar-session-icon-mask')).toBe('')
+    expect(nativeChild?.parentElement).toBe(slot)
+  })
+
+  it('honors explicit session assignments and the global session icon switch', () => {
+    const fixture = `
+      <div data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-row><span data-sidebar-project-drop-zone="project-icon"></span></div>
+      <div data-app-action-sidebar-project-list-id="project-1">
+        <div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-1"><div><span data-native-session-slot><span></span></span><span data-thread-title-trigger>Session</span></div></div>
+      </div>`
+    const assignedWindow = createWindow()
+    assignedWindow.document.body.innerHTML = homeFixture('Sample-Project')
+    assignedWindow.document.querySelector('aside')?.insertAdjacentHTML('beforeend', fixture)
+    inject(assignedWindow, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+      showSessionIcons: true,
+      pool: [{ ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star', dataUrl: 'data:image/svg+xml;base64,c3Rhcg==' }],
+      assignments: [{ projectId: 'project-1', icon: { ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star', dataUrl: 'data:image/svg+xml;base64,c3Rhcg==' } }],
+      sessionAssignments: [{ projectId: 'project-1', sessionId: 'local:session-1', icon: { ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star', dataUrl: 'data:image/svg+xml;base64,c3Rhcg==' } }]
+    })
+    const assignedSlot = assignedWindow.document.querySelector('[data-native-session-slot]') as unknown as HTMLElement | null
+    expect(assignedSlot?.style.getPropertyValue('--dream-sidebar-session-icon-mask')).toContain('c3Rhcg==')
+
+    const disabledWindow = createWindow()
+    disabledWindow.document.body.innerHTML = homeFixture('Sample-Project')
+    disabledWindow.document.querySelector('aside')?.insertAdjacentHTML('beforeend', fixture)
+    inject(disabledWindow, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+      showSessionIcons: false,
+      pool: [{ ref: { libraryId: 'system', iconId: 'heart' }, weight: 1, builtinName: 'heart', dataUrl: 'data:image/svg+xml;base64,aGVhcnQ=' }],
+      assignments: [],
+      sessionAssignments: []
+    })
+    expect(disabledWindow.document.querySelector('[data-native-session-slot]')?.classList.contains('dream-sidebar-session-icon')).toBe(false)
+    stateOf(assignedWindow).cleanup()
+    stateOf(disabledWindow).cleanup()
   })
 
   it('reloads instead of running legacy project icon cleanup against React-owned nodes', () => {

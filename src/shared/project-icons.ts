@@ -2,8 +2,9 @@ import { z } from 'zod'
 
 export const SYSTEM_ICON_LIBRARY_ID = 'system'
 export const PROJECT_ICON_LIBRARY_VERSION = 1 as const
-export const PROJECT_ICON_SETTINGS_VERSION = 1 as const
+export const PROJECT_ICON_SETTINGS_VERSION = 2 as const
 export const MAX_PROJECT_ICON_LIBRARY_ENTRIES = 128
+export const MAX_CACHED_CODEX_SESSIONS = 10_000
 
 export const SYSTEM_ICON_NAMES = [
   'music', 'sparkles', 'wand-sparkles', 'image', 'send', 'folder-code', 'square-pen',
@@ -31,6 +32,7 @@ const uuidSchema = z.string().uuid()
 const libraryIdSchema = z.union([z.literal(SYSTEM_ICON_LIBRARY_ID), uuidSchema])
 const iconIdSchema = z.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/)
 const projectIdSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9._:-]+$/)
+const sessionIdSchema = z.string().min(1).max(240).regex(/^[A-Za-z0-9._:-]+$/)
 const weightSchema = z.number().int().min(1).max(10)
 
 export const projectIconRefSchema = z.object({
@@ -88,10 +90,23 @@ const projectAssignmentSchema = z.object({
   ref: projectIconRefSchema
 }).strict()
 
-export const themeProjectIconSettingsSchema = z.object({
+const sessionAssignmentSchema = z.object({
+  projectId: projectIdSchema,
+  sessionId: sessionIdSchema,
+  ref: projectIconRefSchema
+}).strict()
+
+const legacyThemeProjectIconSettingsSchema = z.object({
   enabledLibraryIds: z.array(libraryIdSchema).max(32),
   weightOverrides: z.array(weightOverrideSchema).max(4096),
   assignments: z.array(projectAssignmentSchema).max(1000)
+}).strict()
+
+export const themeProjectIconSettingsSchema = z.object({
+  enabledLibraryIds: z.array(libraryIdSchema).max(32),
+  weightOverrides: z.array(weightOverrideSchema).max(4096),
+  assignments: z.array(projectAssignmentSchema).max(1000),
+  sessionAssignments: z.array(sessionAssignmentSchema).max(MAX_CACHED_CODEX_SESSIONS)
 }).strict()
 
 export const codexProjectSchema = z.object({
@@ -100,14 +115,35 @@ export const codexProjectSchema = z.object({
   kind: z.string().trim().min(1).max(40)
 }).strict()
 
-export const cachedCodexProjectSchema = codexProjectSchema.extend({
+export const codexSessionSchema = z.object({
+  id: sessionIdSchema,
+  title: z.string().trim().min(1).max(500)
+}).strict()
+
+export const discoveredCodexProjectSchema = codexProjectSchema.extend({
+  sessions: z.array(codexSessionSchema).max(MAX_CACHED_CODEX_SESSIONS)
+}).strict()
+
+export const cachedCodexSessionSchema = codexSessionSchema.extend({
   lastSeenAt: z.string().datetime()
+}).strict()
+
+export const cachedCodexProjectSchema = codexProjectSchema.extend({
+  lastSeenAt: z.string().datetime(),
+  sessions: z.array(cachedCodexSessionSchema).max(MAX_CACHED_CODEX_SESSIONS)
 }).strict()
 
 export const projectIconPrivateSettingsSchema = z.object({
   version: z.literal(PROJECT_ICON_SETTINGS_VERSION),
+  showSessionIcons: z.boolean(),
   themes: z.record(uuidSchema, themeProjectIconSettingsSchema),
   projects: z.array(cachedCodexProjectSchema).max(1000)
+}).strict()
+
+export const projectIconPrivateSettingsV1Schema = z.object({
+  version: z.literal(1),
+  themes: z.record(uuidSchema, legacyThemeProjectIconSettingsSchema),
+  projects: z.array(codexProjectSchema.extend({ lastSeenAt: z.string().datetime() }).strict()).max(1000)
 }).strict()
 
 export type ProjectIconRef = z.infer<typeof projectIconRefSchema>
@@ -119,6 +155,8 @@ export type IconLibrary = z.infer<typeof iconLibrarySchema>
 export type ThemeProjectIconSettings = z.infer<typeof themeProjectIconSettingsSchema>
 export type CachedCodexProject = z.infer<typeof cachedCodexProjectSchema>
 export type CodexProject = z.infer<typeof codexProjectSchema>
+export type CodexSession = z.infer<typeof codexSessionSchema>
+export type DiscoveredCodexProject = z.infer<typeof discoveredCodexProjectSchema>
 export type ProjectIconPrivateSettings = z.infer<typeof projectIconPrivateSettingsSchema>
 
 export interface IconLibrarySummary {
@@ -138,8 +176,10 @@ export interface RuntimeProjectIconCandidate {
 }
 
 export interface RuntimeProjectIconConfig {
+  showSessionIcons: boolean
   pool: RuntimeProjectIconCandidate[]
   assignments: Array<{ projectId: string; icon: RuntimeProjectIconCandidate }>
+  sessionAssignments: Array<{ projectId: string; sessionId: string; icon: RuntimeProjectIconCandidate }>
 }
 
 export function createSystemIconLibrary(): SystemIconLibrary {
@@ -162,7 +202,8 @@ export function createDefaultThemeProjectIconSettings(): ThemeProjectIconSetting
   return {
     enabledLibraryIds: [SYSTEM_ICON_LIBRARY_ID],
     weightOverrides: [],
-    assignments: []
+    assignments: [],
+    sessionAssignments: []
   }
 }
 
@@ -195,6 +236,29 @@ export function selectStableProjectIcon(
     target -= candidate.weight
   }
   return usable[usable.length - 1] ?? null
+}
+
+export function selectStableSessionIcon(
+  themeId: string,
+  projectId: string,
+  sessionId: string,
+  candidates: RuntimeProjectIconCandidate[],
+  projectIcon: RuntimeProjectIconCandidate | null
+): RuntimeProjectIconCandidate | null {
+  const projectKey = projectIcon ? projectIconRefKey(projectIcon.ref) : null
+  const usable = projectKey
+    ? candidates.filter((candidate) => projectIconRefKey(candidate.ref) !== projectKey)
+    : candidates
+  const weighted = usable.filter((candidate) => Number.isInteger(candidate.weight) && candidate.weight >= 1 && candidate.weight <= 10)
+  const total = weighted.reduce((sum, candidate) => sum + candidate.weight, 0)
+  if (total === 0) return null
+  const fingerprint = weighted.map((candidate) => `${projectIconRefKey(candidate.ref)}=${candidate.weight}`).join('|')
+  let target = stableHash(`${themeId}\u0000${projectId}\u0000${sessionId}\u0000${fingerprint}`) % total
+  for (const candidate of weighted) {
+    if (target < candidate.weight) return candidate
+    target -= candidate.weight
+  }
+  return weighted[weighted.length - 1] ?? null
 }
 
 function stableHash(value: string): number {

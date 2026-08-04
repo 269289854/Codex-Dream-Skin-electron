@@ -57,6 +57,21 @@ describe('preload share import IPC results', () => {
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(2, 'icon-libraries:import-package-path', 'C:\\Shares\\icons.cdsicons')
   })
 
+  it('forwards session icon settings and assignments through serialized IPC', async () => {
+    electronMocks.invoke.mockResolvedValue({ ok: true, value: true })
+    const ref = { libraryId: 'system', iconId: 'star' }
+
+    await studio.projectIcons.getSessionIconsEnabled()
+    await studio.projectIcons.setSessionIconsEnabled(false)
+    await studio.projectIcons.assignSession('theme-id', 'project-id', 'session-id', ref)
+    await studio.projectIcons.clearSessionAssignment('theme-id', 'project-id', 'session-id')
+
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(1, 'project-icons:get-session-icons-enabled')
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(2, 'project-icons:set-session-icons-enabled', false)
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(3, 'project-icons:assign-session', 'theme-id', 'project-id', 'session-id', ref)
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(4, 'project-icons:clear-session-assignment', 'theme-id', 'project-id', 'session-id')
+  })
+
   it('throws clean serialized errors without Electron remote-method wrappers', async () => {
     const error = localizedMessage('分享包校验失败。')
     electronMocks.invoke.mockResolvedValue({ ok: false, error })

@@ -234,7 +234,7 @@ export function parseThemeShareCompositeManifest(input: unknown): ThemeShareComp
 function remapProjectIconSettings(
   settings: ThemeShareCompositeManifest['projectIconSettings'],
   mappings: Map<string, { libraryId: string; iconIds: Map<string, string> }>
-): Omit<ThemeProjectIconSettings, 'assignments'> {
+): Pick<ThemeProjectIconSettings, 'enabledLibraryIds' | 'weightOverrides'> {
   const remapRef = (ref: ProjectIconRef): ProjectIconRef => {
     if (ref.libraryId === SYSTEM_ICON_LIBRARY_ID) return ref
     const mapping = mappings.get(ref.libraryId)

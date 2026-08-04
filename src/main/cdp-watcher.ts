@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import { codexProjectSchema, type CodexProject } from '../shared/project-icons'
+import { discoveredCodexProjectSchema, type DiscoveredCodexProject } from '../shared/project-icons'
 
 // Runtime CSS embeds selected font files as Base64. The sidebar now supports
 // independent font slots, so the legacy 20 MB ceiling rejected valid themes
@@ -12,6 +12,73 @@ export interface CdpMediaBinding { role: 'hero' | 'polaroid' | 'conversationBack
 type CdpCommand = (method: string, params: Record<string, unknown>) => Promise<unknown>
 
 const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STATE__; if (state?.cleanup) return state.cleanup(); document.documentElement.classList.remove("codex-dream-skin", "dream-window-background-active"); document.getElementById("codex-dream-skin-style")?.remove(); document.getElementById("codex-dream-skin-chrome")?.remove(); document.getElementById("codex-dream-skin-window-background")?.remove(); return true; })()'
+export const PROJECT_DISCOVERY_EXPRESSION = `(() => (async () => {
+  const rows = [...document.querySelectorAll('[data-app-action-sidebar-project-row]')];
+  const waitFor = async (predicate, timeout = 1500) => {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      if (predicate()) return true;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return predicate();
+  };
+  const rowFor = (projectId) => [...document.querySelectorAll('[data-app-action-sidebar-project-row]')]
+    .find((row) => row.getAttribute('data-app-action-sidebar-project-id') === projectId) || null;
+  const listFor = (projectId) => [...document.querySelectorAll('[data-app-action-sidebar-project-list-id]')]
+    .find((list) => list.getAttribute('data-app-action-sidebar-project-list-id') === projectId) || null;
+  const showAllButton = (list) => [...list.querySelectorAll('button')].find((button) => {
+    const item = button.closest('[role="listitem"]');
+    return item && !item.querySelector('[data-app-action-sidebar-thread-row]');
+  }) || null;
+  const projectIds = rows.map((row) => row.getAttribute('data-app-action-sidebar-project-id')).filter(Boolean);
+  const expandedByStudio = [];
+  const showAllByStudio = [];
+  let discovered = [];
+  try {
+    for (const projectId of projectIds) {
+      const row = rowFor(projectId);
+      if (row?.getAttribute('data-app-action-sidebar-project-collapsed') === 'true') {
+        row.click();
+        expandedByStudio.push(projectId);
+      }
+    }
+    await waitFor(() => expandedByStudio.every((projectId) => rowFor(projectId)?.getAttribute('data-app-action-sidebar-project-collapsed') === 'false'));
+    for (const projectId of projectIds) {
+      if (!expandedByStudio.includes(projectId)) continue;
+      const list = listFor(projectId);
+      if (list?.getAttribute('data-app-action-sidebar-project-show-all') === 'false') {
+        const button = showAllButton(list);
+        if (button) {
+          button.click();
+          showAllByStudio.push(projectId);
+        }
+      }
+    }
+    await waitFor(() => showAllByStudio.every((projectId) => listFor(projectId)?.getAttribute('data-app-action-sidebar-project-show-all') === 'true'));
+    discovered = projectIds.map((projectId) => {
+      const row = rowFor(projectId);
+      const list = listFor(projectId);
+      return {
+        id: projectId,
+        label: row?.getAttribute('data-app-action-sidebar-project-label'),
+        kind: row?.closest('[data-sidebar-project-kind]')?.getAttribute('data-sidebar-project-kind') || 'local',
+        sessions: list ? [...list.querySelectorAll('[data-app-action-sidebar-thread-row]')].map((thread) => ({
+          id: thread.getAttribute('data-app-action-sidebar-thread-id'),
+          title: thread.getAttribute('data-app-action-sidebar-thread-title')
+        })) : []
+      };
+    });
+  } finally {
+    for (const projectId of [...expandedByStudio].reverse()) {
+      const row = rowFor(projectId);
+      if (row?.getAttribute('data-app-action-sidebar-project-collapsed') === 'false') row.click();
+    }
+    const projectsRestored = await waitFor(() => expandedByStudio.every((projectId) => rowFor(projectId)?.getAttribute('data-app-action-sidebar-project-collapsed') !== 'false'));
+    const listsRestored = await waitFor(() => expandedByStudio.every((projectId) => listFor(projectId) === null));
+    if (!listsRestored || !projectsRestored) throw new Error('Codex sidebar state could not be restored.');
+  }
+  return discovered;
+})())()`
 const RUNTIME_VERSION_PATTERN = /^studio-[0-9a-f]{24}$/
 const CDP_UNAVAILABLE_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'ECONNABORTED', 'EPIPE', 'UND_ERR_SOCKET'])
 const CDP_UNAVAILABLE_MESSAGES = [
@@ -133,20 +200,22 @@ export class CdpWatcher {
     return snapshot
   }
 
-  async listProjects(): Promise<CodexProject[]> {
+  async listProjects(): Promise<DiscoveredCodexProject[]> {
     const targets = await this.targets()
-    const results = await Promise.all(targets.map((target) => this.evaluate(target, `(() =>
-      [...document.querySelectorAll('[data-app-action-sidebar-project-row]')].map((row) => ({
-        id: row.getAttribute('data-app-action-sidebar-project-id'),
-        label: row.getAttribute('data-app-action-sidebar-project-label'),
-        kind: row.closest('[data-sidebar-project-kind]')?.getAttribute('data-sidebar-project-kind') || 'local'
-      })))()`)))
-    const projects = new Map<string, CodexProject>()
+    const results = await Promise.all(targets.map((target) => this.evaluate(target, PROJECT_DISCOVERY_EXPRESSION)))
+    const projects = new Map<string, DiscoveredCodexProject>()
     for (const result of results) {
       if (!Array.isArray(result) || result.length > 1000) throw new Error('Codex 项目列表无效。')
       for (const candidate of result) {
-        const project = codexProjectSchema.parse(candidate)
-        projects.set(project.id, project)
+        const project = discoveredCodexProjectSchema.parse(candidate)
+        const previous = projects.get(project.id)
+        if (!previous) {
+          projects.set(project.id, project)
+          continue
+        }
+        const sessions = new Map(previous.sessions.map((session) => [session.id, session]))
+        for (const session of project.sessions) sessions.set(session.id, session)
+        projects.set(project.id, { ...project, sessions: [...sessions.values()] })
       }
     }
     return [...projects.values()]

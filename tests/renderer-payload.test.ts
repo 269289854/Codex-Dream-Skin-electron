@@ -25,6 +25,8 @@ describe('renderer injection template', () => {
     expect(template).toContain('clearAccountMenu()')
     expect(template).toContain('--dream-sidebar-project-icon-image')
     expect(template).toContain('data-dream-sidebar-project-icon-glyph')
+    expect(template).toContain('--dream-sidebar-session-icon-image')
+    expect(template).toContain('data-dream-sidebar-session-icon-glyph')
     expect(template).toContain('requiresProjectIconRemount')
     expect(template).toContain('data-dream-account-menu-item')
     expect(template).toContain('dream-account-menu-background')
