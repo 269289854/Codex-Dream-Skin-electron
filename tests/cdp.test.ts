@@ -90,6 +90,52 @@ describe('CDP project discovery', () => {
     await window.close()
   })
 
+  it('discovers and restores sessions when background page timers are throttled', async () => {
+    const window = new Window()
+    window.document.body.innerHTML = `
+      <div data-sidebar-project-kind="local">
+        <div data-app-action-sidebar-project-row data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-collapsed="true"></div>
+      </div>`
+    const row = window.document.querySelector('[data-app-action-sidebar-project-row]') as unknown as HTMLElement | null
+    if (!row) throw new Error('Project row fixture is missing.')
+    row.addEventListener('click', () => {
+      const collapsed = row.getAttribute('data-app-action-sidebar-project-collapsed') === 'true'
+      void Promise.resolve().then(() => {
+        row.setAttribute('data-app-action-sidebar-project-collapsed', collapsed ? 'false' : 'true')
+        if (!collapsed) {
+          window.document.querySelector('[data-app-action-sidebar-project-list-id]')?.remove()
+          return
+        }
+        row.insertAdjacentHTML('afterend', `
+          <div data-app-action-sidebar-project-list-id="project-1" data-app-action-sidebar-project-show-all="false">
+            <div role="list">
+              <div role="listitem"><div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-1" data-app-action-sidebar-thread-title="First"></div></div>
+              <div role="listitem"><button type="button">Show all</button></div>
+            </div>
+          </div>`)
+        const list = window.document.querySelector('[data-app-action-sidebar-project-list-id]')
+        const button = list?.querySelector('button')
+        button?.addEventListener('click', () => {
+          void Promise.resolve().then(() => {
+            list?.setAttribute('data-app-action-sidebar-project-show-all', 'true')
+            button.closest('[role="listitem"]')?.insertAdjacentHTML('beforebegin', '<div role="listitem"><div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-2" data-app-action-sidebar-thread-title="Second"></div></div>')
+            button.closest('[role="listitem"]')?.remove()
+          })
+        })
+      })
+    })
+    const throttledSetTimeout = vi.fn(() => 1)
+    window.setTimeout = throttledSetTimeout as unknown as typeof window.setTimeout
+
+    const result = await window.eval(PROJECT_DISCOVERY_EXPRESSION) as Array<{ sessions: Array<{ id: string }> }>
+
+    expect(result[0]?.sessions.map((session) => session.id)).toEqual(['local:session-1', 'local:session-2'])
+    expect(row.getAttribute('data-app-action-sidebar-project-collapsed')).toBe('true')
+    expect(window.document.querySelector('[data-app-action-sidebar-project-list-id]')).toBeNull()
+    expect(throttledSetTimeout).toHaveBeenCalled()
+    await window.close()
+  })
+
   it('does not activate an irreversible show-all control for an originally expanded project', async () => {
     const window = new Window()
     window.document.body.innerHTML = `

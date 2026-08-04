@@ -15,12 +15,26 @@ const CLEANUP_EXPRESSION = '(() => { const state = window.__CODEX_DREAM_SKIN_STA
 export const PROJECT_DISCOVERY_EXPRESSION = `(() => (async () => {
   const rows = [...document.querySelectorAll('[data-app-action-sidebar-project-row]')];
   const waitFor = async (predicate, timeout = 1500) => {
-    const deadline = Date.now() + timeout;
-    while (Date.now() < deadline) {
-      if (predicate()) return true;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    return predicate();
+    if (predicate()) return true;
+    return await new Promise((resolve) => {
+      let settled = false;
+      let timer;
+      const observer = new MutationObserver(() => {
+        if (predicate()) finish(true);
+      });
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        clearTimeout(timer);
+        resolve(value);
+      };
+      observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+      timer = setTimeout(() => finish(predicate()), timeout);
+      queueMicrotask(() => {
+        if (predicate()) finish(true);
+      });
+    });
   };
   const rowFor = (projectId) => [...document.querySelectorAll('[data-app-action-sidebar-project-row]')]
     .find((row) => row.getAttribute('data-app-action-sidebar-project-id') === projectId) || null;
