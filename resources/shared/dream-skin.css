@@ -315,6 +315,12 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-task-row {
   color: var(--dream-sidebar-task-text) !important;
 }
 
+html.codex-dream-skin aside.app-shell-left-panel
+[data-app-action-sidebar-project-list-id]
+.dream-sidebar-task-row[data-app-action-sidebar-thread-row] {
+  padding-inline-start: 24px !important;
+}
+
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-task-row:hover {
   background: var(--dream-sidebar-task-row-hover) !important;
 }

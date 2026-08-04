@@ -229,6 +229,15 @@ describe('runtime appearance compilation', () => {
     expect(renderer).toContain('node.classList.toggle("dream-sidebar-task-row-selected", selected)')
   })
 
+  it('indents only real thread rows nested under projects', async () => {
+    const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
+    const projectThreadRule = css.match(/html\.codex-dream-skin aside\.app-shell-left-panel\s*\[data-app-action-sidebar-project-list-id\]\s*\.dream-sidebar-task-row\[data-app-action-sidebar-thread-row\]\s*\{([^}]*)\}/)?.[1]
+    const generalThreadRule = css.match(/html\.codex-dream-skin aside\.app-shell-left-panel \.dream-sidebar-task-row\s*\{([^}]*)\}/)?.[1]
+
+    expect(projectThreadRule).toContain('padding-inline-start: 24px !important')
+    expect(generalThreadRule).not.toContain('padding-inline-start')
+  })
+
   it('targets real project folder rows without adding a project selected state', async () => {
     const renderer = await readFile(join(resourcesRoot, 'renderer-inject.js'), 'utf8')
     const css = await readFile(join(resourcesRoot, 'dream-skin.css'), 'utf8')
