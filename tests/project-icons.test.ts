@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { unzipSync, zipSync } from 'fflate'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
+import { BuiltinIconAssetStore } from '../src/main/builtin-icon-assets'
 import { ProjectIconStore } from '../src/main/project-icon-store'
 import {
   SYSTEM_ICON_LIBRARY_ID,
@@ -18,6 +19,7 @@ import {
 
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64')
 const roots: string[] = []
+const builtinIconAssets = new BuiltinIconAssetStore(join(process.cwd(), 'icon'))
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -30,7 +32,7 @@ async function createStores(): Promise<{ root: string; profiles: ProfileStore; i
   await profiles.initialize()
   const themeId = (await profiles.list())[0]?.id
   if (!themeId) throw new Error('System theme was not created.')
-  const icons = new ProjectIconStore(root, profiles)
+  const icons = new ProjectIconStore(root, profiles, builtinIconAssets)
   await icons.initialize()
   return { root, profiles, icons, themeId }
 }
@@ -313,14 +315,14 @@ describe('ProjectIconStore', () => {
     const settingsPath = join(root, 'project-icons.json')
     await rename(settingsPath, `${settingsPath}.previous`)
 
-    const recovered = new ProjectIconStore(root, profiles)
+    const recovered = new ProjectIconStore(root, profiles, builtinIconAssets)
     await recovered.initialize()
     expect((await recovered.getThemeSettings(themeId)).assignments).toEqual([
       { projectId: 'project-recovery', ref: { libraryId: 'system', iconId: 'star' } }
     ])
 
     await writeFile(settingsPath, '{invalid json', 'utf8')
-    const corrupt = new ProjectIconStore(root, profiles)
+    const corrupt = new ProjectIconStore(root, profiles, builtinIconAssets)
     await expect(corrupt.initialize()).rejects.toThrow()
     expect(await readFile(settingsPath, 'utf8')).toBe('{invalid json')
   })
@@ -340,7 +342,7 @@ describe('ProjectIconStore', () => {
       projects: [{ id: 'legacy-project', label: 'Legacy', kind: 'local', lastSeenAt: '2026-08-01T00:00:00.000Z' }]
     }, null, 2)}\n`, 'utf8')
 
-    const migrated = new ProjectIconStore(root, profiles)
+    const migrated = new ProjectIconStore(root, profiles, builtinIconAssets)
     await migrated.initialize()
     expect(await migrated.getSessionIconsEnabled()).toBe(true)
     expect(await migrated.getThemeSettings(themeId)).toMatchObject({
@@ -374,7 +376,7 @@ describe('ProjectIconStore', () => {
       }]
     }, null, 2)}\n`, 'utf8')
 
-    const migrated = new ProjectIconStore(root, profiles)
+    const migrated = new ProjectIconStore(root, profiles, builtinIconAssets)
     await migrated.initialize()
     expect(await migrated.getSessionIconsEnabled()).toBe(false)
     expect(await migrated.getThemeSettings(themeId)).toMatchObject({
@@ -393,7 +395,7 @@ describe('ProjectIconStore', () => {
     const temporary = join(root, 'icon-libraries', library.id, 'assets', 'orphan.00000000-0000-4000-8000-000000000010.tmp')
     await writeFile(temporary, TEST_PNG)
 
-    const restarted = new ProjectIconStore(root, profiles)
+    const restarted = new ProjectIconStore(root, profiles, builtinIconAssets)
     await restarted.initialize()
     await expect(stat(temporary)).rejects.toMatchObject({ code: 'ENOENT' })
   })

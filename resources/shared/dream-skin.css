@@ -228,7 +228,7 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon {
   margin-left: 0 !important;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon > * {
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon > :not(.dream-sidebar-project-icon-image) {
   opacity: 0 !important;
 }
 
@@ -242,33 +242,34 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon::af
   transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
-  background-image: var(--dream-sidebar-project-icon-image, none);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
   font-size: 16px;
   line-height: 1;
   pointer-events: none;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon[data-dream-sidebar-project-icon-kind="builtin"]::after {
-  background-color: transparent;
-  background-image: var(--dream-sidebar-project-icon-image, none);
-  -webkit-mask-image: none;
-  mask-image: none;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon[data-dream-sidebar-project-icon-kind="builtin"]::after,
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon[data-dream-sidebar-project-icon-kind="image"]::after {
+  content: none;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon > .dream-sidebar-project-icon-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+  display: block;
+  object-fit: contain;
+  opacity: 1 !important;
+  pointer-events: none;
 }
 
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon {
   position: relative;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon > * {
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon > :not(.dream-sidebar-session-icon-image) {
   opacity: 0 !important;
 }
 
@@ -282,26 +283,27 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon::af
   transform: translate(-50%, -50%);
   display: grid;
   place-items: center;
-  background-image: var(--dream-sidebar-session-icon-image, none);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
   font-size: 15px;
   line-height: 1;
   pointer-events: none;
 }
 
-html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon[data-dream-sidebar-session-icon-kind="builtin"]::after {
-  background-color: transparent;
-  background-image: var(--dream-sidebar-session-icon-image, none);
-  -webkit-mask-image: none;
-  mask-image: none;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon[data-dream-sidebar-session-icon-kind="builtin"]::after,
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon[data-dream-sidebar-session-icon-kind="image"]::after {
+  content: none;
+}
+
+html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon > .dream-sidebar-session-icon-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  display: block;
+  object-fit: contain;
+  opacity: 1 !important;
+  pointer-events: none;
 }
 
 /* Kept for cleanup and older payloads; current Codex project rows have no selected state. */

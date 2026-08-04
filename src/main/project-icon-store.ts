@@ -69,7 +69,7 @@ export class ProjectIconStore {
   private readonly builtinIconAssets: BuiltinIconAssetStore
   private settingsTail: Promise<void> = Promise.resolve()
 
-  constructor(readonly root: string, private readonly profiles: ProfileStore, builtinIconAssets = new BuiltinIconAssetStore(resolve(process.cwd(), 'icon'))) {
+  constructor(readonly root: string, private readonly profiles: ProfileStore, builtinIconAssets: BuiltinIconAssetStore) {
     this.librariesRoot = join(root, 'icon-libraries')
     this.settingsPath = join(root, 'project-icons.json')
     this.builtinIconAssets = builtinIconAssets

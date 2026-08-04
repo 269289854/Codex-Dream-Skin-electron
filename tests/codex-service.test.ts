@@ -179,6 +179,43 @@ describe('CodexService operation queue', () => {
     expect(third.script).toContain('"sparklePolicy":{"mode":"performance"')
   })
 
+  it('includes builtin SVG data URLs for Codex slots and project icon assignments', async () => {
+    const root = join(tmpdir(), `codex-dream-skin-svg-payload-${process.pid}-${Date.now()}`)
+    const profile = createDefaultTheme('33333333-3333-4333-8333-333333333333')
+    const builtinSvg = 'data:image/svg+xml;base64,PHN2Zy8+'
+    const projectIcon = {
+      ref: { libraryId: 'system', iconId: 'star' },
+      weight: 1,
+      builtinName: 'star',
+      dataUrl: builtinSvg
+    }
+    const store = {
+      root,
+      themesRoot: join(root, 'themes'),
+      assertRuntimeVideoCompatibility: vi.fn().mockResolvedValue(undefined),
+      get: vi.fn().mockResolvedValue(profile),
+      compile: vi.fn().mockResolvedValue({ assets: {} })
+    }
+    const projectIcons = {
+      getSystemIconDataUrl: vi.fn().mockResolvedValue(builtinSvg),
+      compileRuntimeConfig: vi.fn().mockResolvedValue({
+        showSessionIcons: true,
+        pool: [projectIcon],
+        assignments: [{ projectId: 'sample-project', icon: projectIcon }],
+        sessionAssignments: [{ projectId: 'sample-project', sessionId: 'sample-session', icon: projectIcon }]
+      })
+    }
+    const service = new CodexService(store as never, join(process.cwd(), 'resources', 'shared'), createDriver(), '1.1.1', () => undefined, projectIcons as never)
+    const builder = service as unknown as { buildPayload(themeId: string): Promise<{ script: string; version: string }> }
+
+    const payload = await builder.buildPayload(profile.id)
+
+    expect(projectIcons.getSystemIconDataUrl).toHaveBeenCalled()
+    expect(payload.script).toContain(`"sidebarNavNewTask":{"name":"square-pen","dataUrl":"${builtinSvg}"}`)
+    expect(payload.script).toContain(`"projectIcons":{"showSessionIcons":true,"pool":[{"ref":{"libraryId":"system","iconId":"star"},"weight":1,"builtinName":"star","dataUrl":"${builtinSvg}"}`)
+    expect(payload.script).toContain('"sessionId":"sample-session"')
+  })
+
   it('blocks install, start, and reinjection before mutating runtime state when videos need conversion', async () => {
     const themeId = '11111111-1111-4111-8111-111111111111'
     const oldThemeId = '22222222-2222-4222-8222-222222222222'

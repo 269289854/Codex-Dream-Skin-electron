@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { unzipSync, zipSync } from 'fflate'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProfileStore } from '../src/main/profile-store'
+import { BuiltinIconAssetStore } from '../src/main/builtin-icon-assets'
 import { ProjectIconStore } from '../src/main/project-icon-store'
 import {
   THEME_SHARE_COMPOSITE_VERSION,
@@ -16,6 +17,7 @@ import { SYSTEM_ICON_LIBRARY_ID } from '../src/shared/project-icons'
 
 const TEST_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==', 'base64')
 const roots: string[] = []
+const builtinIconAssets = new BuiltinIconAssetStore(join(process.cwd(), 'icon'))
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -171,7 +173,7 @@ async function createStores(suffix: string): Promise<{
   roots.push(root)
   const profiles = new ProfileStore(root)
   await profiles.initialize()
-  const icons = new ProjectIconStore(root, profiles)
+  const icons = new ProjectIconStore(root, profiles, builtinIconAssets)
   await icons.initialize()
   return { root, profiles, icons, service: new ThemeShareService(profiles, icons) }
 }

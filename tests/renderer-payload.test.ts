@@ -23,10 +23,12 @@ describe('renderer injection template', () => {
     expect(template).toContain('themeConfig?.accountMenu')
     expect(template).toContain('ensureAccountMenu()')
     expect(template).toContain('clearAccountMenu()')
-    expect(template).toContain('--dream-sidebar-project-icon-image')
+    expect(template).toContain('dream-sidebar-project-icon-image')
     expect(template).toContain('data-dream-sidebar-project-icon-glyph')
-    expect(template).toContain('--dream-sidebar-session-icon-image')
+    expect(template).toContain('dream-sidebar-session-icon-image')
     expect(template).toContain('data-dream-sidebar-session-icon-glyph')
+    expect(template).not.toContain('--dream-sidebar-project-icon-mask')
+    expect(template).not.toContain('--dream-sidebar-session-icon-mask')
     expect(template).toContain('requiresProjectIconRemount')
     expect(template).toContain('data-dream-account-menu-item')
     expect(template).toContain('dream-account-menu-background')
@@ -90,12 +92,14 @@ describe('renderer injection template', () => {
   it('centers themed project icons and removes the native negative left offset', async () => {
     const css = await readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8')
     const hostRule = css.match(/\.dream-sidebar-project-icon\s*\{[^}]+\}/)?.[0]
-    const iconRule = css.match(/\.dream-sidebar-project-icon::after\s*\{[^}]+\}/)?.[0]
+    const iconRule = css.match(/\.dream-sidebar-project-icon > \.dream-sidebar-project-icon-image\s*\{[^}]+\}/)?.[0]
     expect(hostRule).toContain('margin-left: 0 !important')
     expect(iconRule).toContain('top: 50%')
     expect(iconRule).toContain('left: 50%')
     expect(iconRule).toContain('transform: translate(-50%, -50%)')
-    expect(iconRule).not.toContain('inset: 0')
+    expect(iconRule).toContain('object-fit: contain')
+    expect(css).not.toContain('--dream-sidebar-project-icon-mask')
+    expect(css).not.toContain('--dream-sidebar-session-icon-mask')
   })
 
   it('maps native menu highlighting to hover colors instead of selected colors', async () => {

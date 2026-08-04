@@ -24,6 +24,9 @@ describe('internationalization', () => {
 
   it('translates compound appearance labels and dynamic technical errors', () => {
     expect(translate('en-US', '新建任务')).toBe('New chat')
+    expect(translate('en-US', 'Git 拉取请求')).toBe('Git pull request')
+    expect(translate('en-US', '笔刷')).toBe('Brush')
+    expect(translate('en-US', '绘画笔')).toBe('Paintbrush')
     expect(translate('en-US', '项目标题悬停文字')).toBe('Projects heading hover text')
     expect(translate('en-US', '工具活动气泡悬停')).toBe('Tool activity bubble hover')
     expect(translate('en-US', '侧栏分区标题')).toBe('Sidebar section headings')
