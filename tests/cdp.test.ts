@@ -1,5 +1,6 @@
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { MessageChannel } from 'node:worker_threads'
 import { WebSocketServer } from 'ws'
 import { Window } from 'happy-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -92,6 +93,7 @@ describe('CDP project discovery', () => {
 
   it('discovers and restores sessions when background page timers are throttled', async () => {
     const window = new Window()
+    Object.assign(window, { MessageChannel })
     window.document.body.innerHTML = `
       <div data-sidebar-project-kind="local">
         <div data-app-action-sidebar-project-row data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-collapsed="true"></div>
@@ -168,8 +170,31 @@ describe('CDP project discovery', () => {
     await window.close()
   })
 
+  it('accepts a restored collapsed project while Codex retains its list node', async () => {
+    const window = new Window()
+    window.document.body.innerHTML = `
+      <div data-sidebar-project-kind="local">
+        <div data-app-action-sidebar-project-row data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-collapsed="true"></div>
+      </div>`
+    const row = window.document.querySelector('[data-app-action-sidebar-project-row]') as unknown as HTMLElement | null
+    if (!row) throw new Error('Project row fixture is missing.')
+    row.addEventListener('click', () => {
+      const collapsed = row.getAttribute('data-app-action-sidebar-project-collapsed') === 'true'
+      row.setAttribute('data-app-action-sidebar-project-collapsed', collapsed ? 'false' : 'true')
+      if (collapsed) row.insertAdjacentHTML('afterend', '<div data-app-action-sidebar-project-list-id="project-1" data-app-action-sidebar-project-show-all="true"><div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-1" data-app-action-sidebar-thread-title="First"></div></div>')
+    })
+
+    const result = await window.eval(PROJECT_DISCOVERY_EXPRESSION) as Array<{ sessions: Array<{ id: string }> }>
+
+    expect(result[0]?.sessions.map((session) => session.id)).toEqual(['local:session-1'])
+    expect(row.getAttribute('data-app-action-sidebar-project-collapsed')).toBe('true')
+    expect(window.document.querySelector('[data-app-action-sidebar-project-list-id]')).not.toBeNull()
+    await window.close()
+  })
+
   it('reports a failed sidebar restoration after still attempting the original project state', async () => {
     const window = new Window()
+    Object.assign(window, { MessageChannel })
     window.document.body.innerHTML = `
       <div data-sidebar-project-kind="local">
         <div data-app-action-sidebar-project-row data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-label="Project" data-app-action-sidebar-project-collapsed="true"></div>
@@ -183,9 +208,12 @@ describe('CDP project discovery', () => {
       row.setAttribute('data-app-action-sidebar-project-collapsed', 'false')
       row.insertAdjacentHTML('afterend', '<div data-app-action-sidebar-project-list-id="project-1" data-app-action-sidebar-project-show-all="true"></div>')
     })
+    const throttledSetTimeout = vi.fn(() => 1)
+    window.setTimeout = throttledSetTimeout as unknown as typeof window.setTimeout
 
     await expect(window.eval(PROJECT_DISCOVERY_EXPRESSION)).rejects.toThrow(/Codex sidebar state could not be restored/)
     expect(clicks).toBe(2)
+    expect(throttledSetTimeout).toHaveBeenCalled()
     await window.close()
   })
 
@@ -236,6 +264,54 @@ describe('CDP project discovery', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
+  })
+
+  it('serializes project discovery with the background watcher tick', async () => {
+    const watcher = new CdpWatcher(9335, 'browser-1', () => undefined, () => undefined)
+    let finishVerification!: (snapshot: { connected: boolean; targetCount: number }) => void
+    const verification = new Promise<{ connected: boolean; targetCount: number }>((resolve) => { finishVerification = resolve })
+    let finishDiscovery!: (projects: unknown[]) => void
+    const discovery = new Promise<unknown[]>((resolve) => { finishDiscovery = resolve })
+    const order: string[] = []
+    const internals = watcher as unknown as {
+      tick: () => Promise<void>
+      verify: () => Promise<{ connected: boolean; targetCount: number }>
+      targets: () => Promise<Array<{ id: string }>>
+      evaluate: () => Promise<unknown>
+    }
+    internals.verify = vi.fn(async () => {
+      order.push('verify-started')
+      const result = await verification
+      order.push('verify-finished')
+      return result
+    })
+    internals.targets = vi.fn().mockResolvedValue([{ id: 'page-1' }])
+    internals.evaluate = vi.fn(async () => {
+      order.push('discovery-started')
+      const result = await discovery
+      order.push('discovery-finished')
+      return result
+    })
+
+    const tick = internals.tick()
+    await vi.waitFor(() => expect(internals.verify).toHaveBeenCalledTimes(1))
+    const firstDiscovery = watcher.listProjects()
+    const secondDiscovery = watcher.listProjects()
+    await Promise.resolve()
+    expect(internals.evaluate).not.toHaveBeenCalled()
+
+    finishVerification({ connected: true, targetCount: 1 })
+    await vi.waitFor(() => expect(internals.evaluate).toHaveBeenCalledTimes(1))
+    const deferredTick = internals.tick()
+    await Promise.resolve()
+    expect(internals.verify).toHaveBeenCalledTimes(1)
+
+    finishDiscovery([{ id: 'project-1', label: 'Project', kind: 'local', sessions: [] }])
+    await Promise.all([tick, firstDiscovery, secondDiscovery, deferredTick])
+
+    expect(order).toEqual(['verify-started', 'verify-finished', 'discovery-started', 'discovery-finished'])
+    expect(internals.verify).toHaveBeenCalledTimes(1)
+    expect(internals.evaluate).toHaveBeenCalledTimes(1)
   })
 })
 

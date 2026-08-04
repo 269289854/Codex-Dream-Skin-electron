@@ -19,6 +19,8 @@ export const PROJECT_DISCOVERY_EXPRESSION = `(() => (async () => {
     return await new Promise((resolve) => {
       let settled = false;
       let timer;
+      const deadline = performance.now() + timeout;
+      const channel = new MessageChannel();
       const observer = new MutationObserver(() => {
         if (predicate()) finish(true);
       });
@@ -26,14 +28,19 @@ export const PROJECT_DISCOVERY_EXPRESSION = `(() => (async () => {
         if (settled) return;
         settled = true;
         observer.disconnect();
+        channel.port1.close();
+        channel.port2.close();
         clearTimeout(timer);
         resolve(value);
       };
+      channel.port1.onmessage = () => {
+        if (predicate()) finish(true);
+        else if (performance.now() >= deadline) finish(false);
+        else channel.port2.postMessage(null);
+      };
       observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true });
       timer = setTimeout(() => finish(predicate()), timeout);
-      queueMicrotask(() => {
-        if (predicate()) finish(true);
-      });
+      channel.port2.postMessage(null);
     });
   };
   const rowFor = (projectId) => [...document.querySelectorAll('[data-app-action-sidebar-project-row]')]
@@ -88,8 +95,7 @@ export const PROJECT_DISCOVERY_EXPRESSION = `(() => (async () => {
       if (row?.getAttribute('data-app-action-sidebar-project-collapsed') === 'false') row.click();
     }
     const projectsRestored = await waitFor(() => expandedByStudio.every((projectId) => rowFor(projectId)?.getAttribute('data-app-action-sidebar-project-collapsed') !== 'false'));
-    const listsRestored = await waitFor(() => expandedByStudio.every((projectId) => listFor(projectId) === null));
-    if (!listsRestored || !projectsRestored) throw new Error('Codex sidebar state could not be restored.');
+    if (!projectsRestored) throw new Error('Codex sidebar state could not be restored.');
   }
   return discovered;
 })())()`
@@ -156,6 +162,7 @@ export class CdpWatcher {
   private mediaBindings: CdpMediaBinding[] = []
   private watchGeneration = 0
   private activeTick: Promise<void> | null = null
+  private activeDiscovery: Promise<DiscoveredCodexProject[]> | null = null
 
   constructor(
     readonly port: number,
@@ -215,6 +222,17 @@ export class CdpWatcher {
   }
 
   async listProjects(): Promise<DiscoveredCodexProject[]> {
+    if (this.activeDiscovery) return this.activeDiscovery
+    const operation = this.discoverProjects()
+    this.activeDiscovery = operation
+    void operation.finally(() => {
+      if (this.activeDiscovery === operation) this.activeDiscovery = null
+    }).catch(() => undefined)
+    return operation
+  }
+
+  private async discoverProjects(): Promise<DiscoveredCodexProject[]> {
+    if (this.activeTick) await this.activeTick
     const targets = await this.targets()
     const results = await Promise.all(targets.map((target) => this.evaluate(target, PROJECT_DISCOVERY_EXPRESSION)))
     const projects = new Map<string, DiscoveredCodexProject>()
@@ -241,6 +259,7 @@ export class CdpWatcher {
     if (this.timer) clearInterval(this.timer)
     this.timer = null
     if (this.activeTick) await this.activeTick
+    if (this.activeDiscovery) await this.activeDiscovery.catch(() => undefined)
     if (removeTheme) {
       try {
         await this.cleanupTargets()
@@ -300,6 +319,7 @@ export class CdpWatcher {
 
   private tick(generation = this.watchGeneration): Promise<void> {
     if (generation !== this.watchGeneration) return Promise.resolve()
+    if (this.activeDiscovery) return this.activeDiscovery.then(() => undefined, () => undefined)
     if (this.activeTick) return this.activeTick
     const operation = this.performTick(generation)
     this.activeTick = operation
