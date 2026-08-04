@@ -1065,6 +1065,21 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('.dream-sidebar-tasks-title')).toBeNull()
   })
 
+  it('renders a builtin SVG data URL for sidebar navigation without a mask', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <aside class="app-shell-left-panel">
+        <nav><button type="button"><span class="native-icon"><svg><path d="native" /></svg></span><span>新建任务</span></button></nav>
+      </aside><main class="main-surface"><div role="main"><article>Reply</article></div></main>`
+    const dataUrl = 'data:image/svg+xml;base64,PHN2Zy8+'
+    inject(window, { sidebarNavNewTask: { name: 'square-pen', dataUrl } })
+
+    const icon = window.document.querySelector('.dream-sidebar-nav-icon') as HTMLElement | null
+    expect(icon?.querySelector<HTMLImageElement>(':scope > .dream-custom-icon')?.src).toContain(dataUrl)
+    expect(icon?.querySelector(':scope > svg')).toBeNull()
+    expect(icon?.getAttribute('style') ?? '').not.toContain('mask')
+  })
+
   it('rebinds recreated section titles and keeps equal custom labels independent', () => {
     const window = createWindow()
     window.document.body.innerHTML = `
@@ -1148,17 +1163,16 @@ describe('renderer home DOM adaptation', () => {
     })
 
     expect(nativeIcon?.parentElement).toBe(icon)
-    expect(icon?.children).toHaveLength(1)
+    expect(icon?.children).toHaveLength(2)
     expect(icon?.getAttribute('data-dream-sidebar-project-icon-glyph')).toBe('')
     expect(icon?.getAttribute('data-dream-sidebar-project-icon-kind')).toBe('builtin')
-    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-image')).toContain('data:image/svg+xml;base64,PHN2Zy8+')
-    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-mask')).toBe('none')
+    expect(icon?.querySelector<HTMLImageElement>(':scope > .dream-sidebar-project-icon-image')?.src).toContain('data:image/svg+xml;base64,PHN2Zy8+')
     expect(window.document.querySelector('[data-project-menu]')?.textContent).toBe('Menu')
     icon?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }) as unknown as Event)
     expect(clicks).toBe(1)
     stateOf(window).ensure()
     expect(nativeIcon?.parentElement).toBe(icon)
-    expect(icon?.children).toHaveLength(1)
+    expect(icon?.children).toHaveLength(2)
 
     expect(() => icon?.removeChild(nativeIcon as Node)).not.toThrow()
     const replacement = window.document.createElement('svg') as unknown as SVGElement
@@ -1166,18 +1180,17 @@ describe('renderer home DOM adaptation', () => {
     icon?.appendChild(replacement)
     stateOf(window).ensure()
     expect(icon?.querySelector('[data-native-project-icon-replacement]')).toBe(replacement)
-    expect(icon?.children).toHaveLength(1)
+    expect(icon?.children).toHaveLength(2)
 
     stateOf(window).cleanup()
     expect(icon?.classList.contains('dream-sidebar-project-icon')).toBe(false)
     expect(icon?.hasAttribute('data-dream-sidebar-project-icon-glyph')).toBe(false)
     expect(icon?.hasAttribute('data-dream-sidebar-project-icon-kind')).toBe(false)
-    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-image')).toBe('')
-    expect((icon as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-sidebar-project-icon-mask')).toBe('')
+    expect(icon?.querySelector(':scope > .dream-sidebar-project-icon-image')).toBeNull()
     expect(icon?.querySelector('[data-native-project-icon-replacement]')).toBe(replacement)
   })
 
-  it('renders project image data through owned styles and uses the GIF poster for reduced motion', () => {
+  it('renders project image data through an owned image and uses the GIF poster for reduced motion', () => {
     const window = createWindow()
     window.document.body.innerHTML = homeFixture('Sample-Project')
     window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `
@@ -1196,10 +1209,10 @@ describe('renderer home DOM adaptation', () => {
     })
 
     const icon = window.document.querySelector('[data-sidebar-project-drop-zone="project-icon"]') as unknown as HTMLElement | null
-    expect(icon?.children).toHaveLength(1)
+    expect(icon?.children).toHaveLength(2)
     expect(icon?.querySelector('[data-native-project-icon]')).not.toBeNull()
-    expect(icon?.style.getPropertyValue('--dream-sidebar-project-icon-image')).toContain(poster)
-    expect(icon?.style.getPropertyValue('--dream-sidebar-project-icon-image')).not.toContain(animated)
+    expect(icon?.querySelector<HTMLImageElement>(':scope > .dream-sidebar-project-icon-image')?.src).toContain(poster)
+    expect(icon?.querySelector<HTMLImageElement>(':scope > .dream-sidebar-project-icon-image')?.src).not.toContain(animated)
   })
 
   it('renders stable session icons in the native slot while excluding the project icon', () => {
@@ -1230,16 +1243,15 @@ describe('renderer home DOM adaptation', () => {
     const nativeChild = slot?.querySelector('[data-native-session-child]')
     expect(slot?.classList.contains('dream-sidebar-session-icon')).toBe(true)
     expect(slot?.getAttribute('data-dream-sidebar-session-icon-kind')).toBe('builtin')
-    expect(slot?.style.getPropertyValue('--dream-sidebar-session-icon-image')).toContain('aGVhcnQ=')
-    expect(slot?.style.getPropertyValue('--dream-sidebar-session-icon-mask')).toBe('none')
-    expect(slot?.children).toHaveLength(1)
+    expect(slot?.querySelector<HTMLImageElement>(':scope > .dream-sidebar-session-icon-image')?.src).toContain('aGVhcnQ=')
+    expect(slot?.children).toHaveLength(2)
     slot?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }) as unknown as Event)
     expect(clicks).toBe(1)
     expect(nativeChild?.parentElement).toBe(slot)
 
     stateOf(window).cleanup()
     expect(slot?.classList.contains('dream-sidebar-session-icon')).toBe(false)
-    expect(slot?.style.getPropertyValue('--dream-sidebar-session-icon-mask')).toBe('')
+    expect(slot?.querySelector(':scope > .dream-sidebar-session-icon-image')).toBeNull()
     expect(nativeChild?.parentElement).toBe(slot)
   })
 
@@ -1272,22 +1284,22 @@ describe('renderer home DOM adaptation', () => {
     const projectSlots = [...window.document.querySelectorAll('[data-sidebar-project-drop-zone="project-icon"]')] as unknown as HTMLElement[]
     const renderedProjects = projectSlots.filter((slot) => slot.classList.contains('dream-sidebar-project-icon'))
     expect(renderedProjects).toHaveLength(4)
-    expect(new Set(renderedProjects.map((slot) => slot.style.getPropertyValue('--dream-sidebar-project-icon-image'))).size).toBe(4)
-    const project1Image = projectSlots[0]?.style.getPropertyValue('--dream-sidebar-project-icon-image')
+    expect(new Set(renderedProjects.map((slot) => slot.querySelector<HTMLImageElement>(':scope > .dream-sidebar-project-icon-image')?.src)).size).toBe(4)
+    const project1Image = projectSlots[0]?.querySelector<HTMLImageElement>(':scope > .dream-sidebar-project-icon-image')?.src
 
     const sessionSlots = [...window.document.querySelectorAll('[data-native-session-slot]')] as unknown as HTMLElement[]
     const renderedSessions = sessionSlots.filter((slot) => slot.classList.contains('dream-sidebar-session-icon'))
     expect(renderedSessions).toHaveLength(3)
-    expect(new Set(renderedSessions.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-image'))).size).toBe(3)
-    expect(renderedSessions.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-image'))).not.toContain(project1Image)
+    expect(new Set(renderedSessions.map((slot) => slot.querySelector<HTMLImageElement>(':scope > .dream-sidebar-session-icon-image')?.src)).size).toBe(3)
+    expect(renderedSessions.map((slot) => slot.querySelector<HTMLImageElement>(':scope > .dream-sidebar-session-icon-image')?.src)).not.toContain(project1Image)
 
-    const projectImages = projectSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-project-icon-image'))
-    const sessionImages = sessionSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-image'))
+    const projectImages = projectSlots.map((slot) => slot.querySelector<HTMLImageElement>(':scope > .dream-sidebar-project-icon-image')?.src)
+    const sessionImages = sessionSlots.map((slot) => slot.querySelector<HTMLImageElement>(':scope > .dream-sidebar-session-icon-image')?.src)
     window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', '<div data-app-action-sidebar-project-id="project-6" data-app-action-sidebar-project-row><span data-sidebar-project-drop-zone="project-icon"><svg></svg></span></div>')
     window.document.querySelector('[data-app-action-sidebar-project-list-id="project-1"]')?.insertAdjacentHTML('beforeend', '<div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-5"><div><span data-native-session-slot><span></span></span><span data-thread-title-trigger>Session 5</span></div></div>')
     stateOf(window).ensure()
-    expect(projectSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-project-icon-image'))).toEqual(projectImages)
-    expect(sessionSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-image'))).toEqual(sessionImages)
+    expect(projectSlots.map((slot) => slot.querySelector<HTMLImageElement>(':scope > .dream-sidebar-project-icon-image')?.src)).toEqual(projectImages)
+    expect(sessionSlots.map((slot) => slot.querySelector<HTMLImageElement>(':scope > .dream-sidebar-session-icon-image')?.src)).toEqual(sessionImages)
     expect(window.document.querySelector('[data-app-action-sidebar-project-id="project-6"] [data-sidebar-project-drop-zone="project-icon"]')?.classList.contains('dream-sidebar-project-icon')).toBe(false)
     expect(window.document.querySelector('[data-app-action-sidebar-thread-id="local:session-5"] [data-native-session-slot]')?.classList.contains('dream-sidebar-session-icon')).toBe(false)
   })
@@ -1308,7 +1320,7 @@ describe('renderer home DOM adaptation', () => {
       sessionAssignments: [{ projectId: 'project-1', sessionId: 'local:session-1', icon: { ref: { libraryId: 'system', iconId: 'star' }, weight: 1, builtinName: 'star', dataUrl: 'data:image/svg+xml;base64,c3Rhcg==' } }]
     })
     const assignedSlot = assignedWindow.document.querySelector('[data-native-session-slot]') as unknown as HTMLElement | null
-    expect(assignedSlot?.style.getPropertyValue('--dream-sidebar-session-icon-image')).toContain('c3Rhcg==')
+    expect(assignedSlot?.querySelector<HTMLImageElement>(':scope > .dream-sidebar-session-icon-image')?.src).toContain('c3Rhcg==')
 
     const disabledWindow = createWindow()
     disabledWindow.document.body.innerHTML = homeFixture('Sample-Project')

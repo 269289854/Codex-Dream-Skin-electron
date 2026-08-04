@@ -306,10 +306,15 @@ describe('editor appearance controls', () => {
 
   it('names the default sidebar icons without special original-icon labels', () => {
     expect(builtinIconLabels['square-pen']).toBe('新建任务')
-    expect(builtinIconLabels['git-pull-request']).toBe('拉取请求')
+    expect(builtinIconLabels['git-pull-request']).toBe('Git 拉取请求')
     expect(builtinIconLabels['grid-2x2']).toBe('站点')
     expect(builtinIconLabels['clock-3']).toBe('已安排')
     expect(builtinIconLabels['at-sign']).toBe('插件')
+    expect(builtinIconLabels.brush).toBe('笔刷')
+    expect(builtinIconLabels.paintbrush).toBe('绘画笔')
+    expect(new Set([
+      builtinIconLabels['git-pull-request'], builtinIconLabels['pull-request'], builtinIconLabels.brush, builtinIconLabels.paintbrush
+    ]).size).toBe(4)
   })
 
   it('renders the SVG assets for injected sidebar and brand preview slots', () => {
