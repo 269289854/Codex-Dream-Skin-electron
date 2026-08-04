@@ -1,16 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { copyFile, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
 import sharp from 'sharp'
-import { builtinIcons } from '../shared/builtin-icons'
 import {
   MAX_CACHED_CODEX_SESSIONS,
   MAX_PROJECT_ICON_LIBRARY_ENTRIES,
   PROJECT_ICON_LIBRARY_VERSION,
   PROJECT_ICON_SETTINGS_VERSION,
   SYSTEM_ICON_LIBRARY_ID,
+  SYSTEM_ICON_NAMES,
   cachedCodexProjectSchema,
   allocateStableUniqueIcons,
   createDefaultThemeProjectIconSettings,
@@ -44,29 +42,12 @@ import { dataUrlByteLength, EmbeddedAssetBudget } from './embedded-assets'
 import { prepareIconGif } from './icon-assets'
 import type { ProfileStore } from './profile-store'
 import { exportIconLibraryPackage, extractIconLibraryPackage } from './icon-library-share'
+import { BuiltinIconAssetStore } from './builtin-icon-assets'
 
 const MAX_ICON_BYTES = 30 * 1024 * 1024
 const SUPPORTED_EXTENSIONS = new Set(['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'])
 const LIBRARY_DELETE_PATTERN = /^\.library-delete-([0-9a-f-]{36})-[0-9a-f-]{36}$/i
 const CONTROLLED_TEMP_FILE_PATTERN = /\.[0-9a-f-]{36}\.tmp$/i
-const systemIconDataUrls = new Map<SystemIconName, string>()
-
-function systemIconDataUrl(name: SystemIconName): string {
-  const cached = systemIconDataUrls.get(name)
-  if (cached) return cached
-  const Icon = builtinIcons[name]
-  if (!Icon) throw new Error(`System icon is unavailable: ${name}`)
-  const svg = renderToStaticMarkup(createElement(Icon, {
-    xmlns: 'http://www.w3.org/2000/svg',
-    width: 24,
-    height: 24,
-    color: '#000'
-  }))
-  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`
-  systemIconDataUrls.set(name, dataUrl)
-  return dataUrl
-}
-
 export interface ResolvedProjectIconMedia {
   path: string
   mimeType: string
@@ -85,11 +66,18 @@ export type ThemeIconLibrarySelection =
 export class ProjectIconStore {
   readonly librariesRoot: string
   private readonly settingsPath: string
+  private readonly builtinIconAssets: BuiltinIconAssetStore
   private settingsTail: Promise<void> = Promise.resolve()
 
-  constructor(readonly root: string, private readonly profiles: ProfileStore) {
+  constructor(readonly root: string, private readonly profiles: ProfileStore, builtinIconAssets = new BuiltinIconAssetStore(resolve(process.cwd(), 'icon'))) {
     this.librariesRoot = join(root, 'icon-libraries')
     this.settingsPath = join(root, 'project-icons.json')
+    this.builtinIconAssets = builtinIconAssets
+  }
+
+  getSystemIconDataUrl(name: string): Promise<string | null> {
+    if (!SYSTEM_ICON_NAMES.includes(name as SystemIconName)) return Promise.resolve(null)
+    return this.builtinIconAssets.getDataUrl(name as SystemIconName)
   }
 
   async initialize(): Promise<void> {
@@ -628,7 +616,7 @@ export class ProjectIconStore {
       if (isSystemLibrary(library)) {
         const icon = library.icons.find((entry) => entry.id === ref.iconId)
         if (!icon) return null
-        const candidate = { ref, weight, builtinName: icon.builtinName, dataUrl: systemIconDataUrl(icon.builtinName) }
+        const candidate = { ref, weight, builtinName: icon.builtinName, dataUrl: await this.builtinIconAssets.getDataUrl(icon.builtinName) }
         assetCache.set(key, candidate)
         return candidate
       }

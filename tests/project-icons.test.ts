@@ -111,7 +111,9 @@ describe('ProjectIconStore', () => {
     const runtime = await icons.compileRuntimeConfig(themeId)
     const systemStar = runtime.pool.find((entry) => entry.builtinName === 'star')?.dataUrl
     expect(systemStar).toMatch(/^data:image\/svg\+xml;base64,/)
-    expect(Buffer.from(systemStar?.split(',')[1] ?? '', 'base64').toString('utf8')).toContain('lucide-star')
+    const systemStarSvg = Buffer.from(systemStar?.split(',')[1] ?? '', 'base64').toString('utf8')
+    expect(systemStarSvg).toContain('viewBox="0 0 64 64"')
+    expect(systemStarSvg).toContain('#FFE5A5')
     expect(runtime.pool.find((entry) => entry.ref.iconId === icon.id)).toMatchObject({ weight: 8, dataUrl: expect.stringContaining('data:image/png;base64,') })
     expect(runtime.assignments).toEqual([expect.objectContaining({ projectId: 'project-1', icon: expect.objectContaining({ dataUrl: expect.any(String) }) })])
     expect(runtime.showSessionIcons).toBe(false)

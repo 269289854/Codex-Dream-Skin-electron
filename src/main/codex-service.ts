@@ -641,14 +641,17 @@ export class CodexService {
     const css = `${baseCss}\n${homeLayoutCss}\n${particleEffectsCss}\n${fontCss}\n${buildDynamicThemeCss(profile, compiled.assets)}\n`
     const gifPosterDataUrl = (source?: { asset: string; mimeType: string } | null): string | null =>
       source?.mimeType === 'image/gif' ? compiled.assets[gifPosterAssetKey(source.asset)] ?? null : null
-    const icons = Object.fromEntries(Object.entries(profile.icons).map(([slot, source]) => [slot,
+    const icons = Object.fromEntries(await Promise.all(Object.entries(profile.icons).map(async ([slot, source]) => [slot,
       source.kind === 'asset'
         ? {
             dataUrl: compiled.assets[source.asset],
             posterDataUrl: source.asset.toLowerCase().endsWith('.gif') ? compiled.assets[gifPosterAssetKey(source.asset)] : undefined
           }
-        : { name: source.name }
-    ]))
+        : {
+            name: source.name,
+            ...(this.projectIcons && await this.projectIcons.getSystemIconDataUrl(source.name).then((dataUrl) => dataUrl ? { dataUrl } : {}))
+          }
+    ])))
     const { overlay, ...conversationBackground } = profile.conversationBackground
     const windowBackground = profile.windowBackground
     const windowBackgroundSource = windowBackground.source

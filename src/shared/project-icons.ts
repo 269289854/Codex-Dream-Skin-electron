@@ -17,7 +17,11 @@ export const SYSTEM_ICON_NAMES = [
   'file', 'file-code', 'code', 'terminal', 'copy', 'download', 'external', 'link',
   'paperclip', 'pencil', 'brush', 'palette', 'camera', 'video', 'mic', 'play', 'rocket',
   'lightbulb', 'shield', 'lock', 'key', 'eye', 'info', 'list', 'more-horizontal',
-  'map-pin', 'smile', 'thumbs-up', 'trash'
+  'map-pin', 'smile', 'thumbs-up', 'trash',
+  'cube', 'grid', 'nodes', 'chat', 'planet', 'shirt', 'git-branch', 'pull-request', 'bug',
+  'database', 'server', 'api', 'brackets', 'function', 'package', 'wrench', 'paintbrush',
+  'layout', 'component', 'checklist', 'calendar-check', 'target', 'flag', 'book', 'message',
+  'at', 'upload', 'film', 'wand', 'rainbow', 'flower', 'leaf', 'gem', 'crown', 'help'
 ] as const
 
 export type SystemIconName = typeof SYSTEM_ICON_NAMES[number]

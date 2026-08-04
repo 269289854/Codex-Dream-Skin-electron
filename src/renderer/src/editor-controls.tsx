@@ -20,6 +20,7 @@ import { BUILTIN_FONTS, type FontSelection } from '../../shared/typography'
 import type { TypographySlot } from './preview-editing'
 import { builtinIconLabels, builtinIconOptions, builtinIcons } from './icons'
 import { LibraryIconPreview, ThemeIconLibraryContext } from './library-icons'
+import { builtinIconAssetUrl } from './builtin-icon-assets'
 
 export const colorLabels: Record<keyof ThemeColors, string> = {
   surface: '背景', ink: '正文', accent: '强调', pink: '粉色', lavender: '淡紫', border: '边框', success: '成功', danger: '危险'
@@ -275,8 +276,9 @@ export function ThemeIconControl({ slot, profile, assets, onChange, onImport, hi
           </React.Fragment>)}
           {libraryContext.libraries.length === 0 && builtinIconOptions.map((name) => {
             const Icon = builtinIcons[name] ?? Sparkles
+            const assetUrl = builtinIconAssetUrl(name)
             return <button className={currentName === name ? 'icon-picker-option active' : 'icon-picker-option'} type="button" role="option" aria-selected={currentName === name} data-icon-name={name} key={name} onClick={() => { onChange(name); setOpen(false) }}>
-              <span className="icon-picker-option-icon"><Icon size={16} aria-hidden="true" /></span>
+              <span className="icon-picker-option-icon">{assetUrl ? <img className="library-icon-image builtin-icon-image" src={assetUrl} alt="" draggable={false} /> : <Icon size={16} aria-hidden="true" />}</span>
               <span>{t(builtinIconLabels[name] ?? name)}</span>
             </button>
           })}
@@ -297,6 +299,8 @@ export function RenderIcon({ slot, profile, assets, injected = false, fallbackGl
       : assets[source.asset]
     return <img className="custom-icon" src={sourceUrl} alt="" draggable={false} />
   }
+  const builtinUrl = builtinIconAssetUrl(source.name)
+  if (builtinUrl) return <img className="custom-icon builtin-icon-image" src={builtinUrl} alt="" draggable={false} />
   const fallbackBuiltin = HOME_ACTION_FALLBACK_BUILTINS[slot as keyof typeof HOME_ACTION_FALLBACK_BUILTINS]
   if (fallbackGlyph && source.name === fallbackBuiltin) return <span className="builtin-icon-glyph" aria-hidden="true">{fallbackGlyph}</span>
   if (injected) return <span className="builtin-icon-glyph" aria-hidden="true">{resolveBuiltinIconGlyph(source.name)}</span>

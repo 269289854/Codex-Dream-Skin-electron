@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IconLibraryPage } from '../src/renderer/src/IconLibraryPage'
 import { ProjectIconsPage } from '../src/renderer/src/ProjectIconsPage'
-import { createDefaultThemeProjectIconSettings, createSystemIconLibrary, type CustomIconLibrary, type IconLibrary, type ThemeProjectIconSettings } from '../src/shared/project-icons'
+import { createDefaultThemeProjectIconSettings, createSystemIconLibrary, SYSTEM_ICON_NAMES, type CustomIconLibrary, type IconLibrary, type ThemeProjectIconSettings } from '../src/shared/project-icons'
 import type { StudioApi } from '../src/shared/contracts'
 import { setActiveLocale } from '../src/shared/i18n'
 
@@ -253,8 +253,8 @@ describe('icon management pages', () => {
     await act(async () => assignmentTrigger.click())
     const picker = (): HTMLElement | null => browserWindow.document.querySelector('.project-icon-picker-menu') as unknown as HTMLElement | null
     expect(picker()).not.toBeNull()
-    expect(picker()?.querySelectorAll('.project-icon-picker-option svg').length).toBeGreaterThan(1)
-    await act(async () => vi.waitFor(() => expect(picker()?.querySelectorAll('.project-icon-picker-option img')).toHaveLength(2)))
+    expect(picker()?.querySelectorAll('.project-icon-picker-option img.builtin-icon-image')).toHaveLength(SYSTEM_ICON_NAMES.length)
+    await act(async () => vi.waitFor(() => expect(picker()?.querySelectorAll('.project-icon-picker-option img.library-icon-image:not(.builtin-icon-image)')).toHaveLength(2)))
     expect(picker()?.querySelector<HTMLImageElement>(`[data-icon-name="${libraryId}:${iconId}"] img`)?.src).toBe(`studio-icon://${libraryId}/${iconId}`)
     expect(picker()?.querySelector<HTMLImageElement>(`[data-icon-name="${libraryId}:${gifIconId}"] img`)?.src).toBe(`studio-icon://${libraryId}/${gifIconId}`)
     expect([...picker()!.querySelectorAll('.project-icon-picker-group-label')].map((node) => node.textContent)).toEqual(['系统图标', 'Pixel Set'])
@@ -313,7 +313,7 @@ describe('icon management pages', () => {
     const englishTrigger = container.querySelector<HTMLButtonElement>('.project-icon-picker-trigger')
     await act(async () => englishTrigger?.click())
     expect(browserWindow.document.querySelector<HTMLInputElement>('.project-icon-picker-search input')?.placeholder).toBe('Search icons')
-    await act(async () => vi.waitFor(() => expect(browserWindow.document.querySelectorAll('.project-icon-picker-option img')).toHaveLength(2)))
+    await act(async () => vi.waitFor(() => expect(browserWindow.document.querySelectorAll('.project-icon-picker-option img.library-icon-image:not(.builtin-icon-image)')).toHaveLength(2)))
     await act(async () => englishTrigger?.click())
   })
 })

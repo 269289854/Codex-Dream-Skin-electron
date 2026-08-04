@@ -1,4 +1,5 @@
 import { builtinIcons } from '../../shared/builtin-icons'
+import { SYSTEM_ICON_NAMES } from '../../shared/project-icons'
 
 export { builtinIcons }
 
@@ -14,7 +15,13 @@ export const builtinIconLabels: Readonly<Record<string, string>> = Object.freeze
   'file-code': '代码文件', code: '代码', terminal: '终端', copy: '复制', download: '下载', external: '外链', link: '链接', paperclip: '附件',
   pencil: '铅笔', brush: '画笔', palette: '调色板', camera: '相机', video: '视频', mic: '麦克风', play: '播放', rocket: '火箭',
   lightbulb: '灵感', shield: '盾牌', lock: '锁定', key: '钥匙', eye: '查看', info: '信息', list: '列表', 'more-horizontal': '更多',
-  'map-pin': '地图定位', smile: '笑脸', 'thumbs-up': '点赞', trash: '删除'
+  'map-pin': '地图定位', smile: '笑脸', 'thumbs-up': '点赞', trash: '删除',
+  cube: '立方体', grid: '网格', nodes: '节点', chat: '聊天', planet: '行星', shirt: '衣服',
+  'git-branch': '分支', 'pull-request': '拉取请求', bug: '故障', database: '数据库', server: '服务器',
+  api: 'API', brackets: '括号', function: '函数', package: '软件包', wrench: '工具', paintbrush: '画笔',
+  layout: '布局', component: '组件', checklist: '清单', 'calendar-check': '日历完成', target: '目标',
+  flag: '旗帜', book: '书本', message: '消息', at: '艾特', upload: '上传', film: '胶片', wand: '魔法棒',
+  rainbow: '彩虹', flower: '花朵', leaf: '叶子', gem: '宝石', crown: '皇冠', help: '帮助'
 })
 
-export const builtinIconOptions = Object.keys(builtinIcons)
+export const builtinIconOptions = [...SYSTEM_ICON_NAMES]

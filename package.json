@@ -70,6 +70,7 @@
     "files": [
       "dist-electron/**/*",
       "dist/**/*",
+      "icon/**/*",
       "THIRD_PARTY_NOTICES.md",
       "package.json"
     ],

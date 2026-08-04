@@ -252,10 +252,10 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon::af
 }
 
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-project-icon[data-dream-sidebar-project-icon-kind="builtin"]::after {
-  background-color: currentColor;
-  background-image: none;
-  -webkit-mask-image: var(--dream-sidebar-project-icon-mask, none);
-  mask-image: var(--dream-sidebar-project-icon-mask, none);
+  background-color: transparent;
+  background-image: var(--dream-sidebar-project-icon-image, none);
+  -webkit-mask-image: none;
+  mask-image: none;
   -webkit-mask-position: center;
   mask-position: center;
   -webkit-mask-repeat: no-repeat;
@@ -292,10 +292,10 @@ html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon::af
 }
 
 html.codex-dream-skin aside.app-shell-left-panel .dream-sidebar-session-icon[data-dream-sidebar-session-icon-kind="builtin"]::after {
-  background-color: currentColor;
-  background-image: none;
-  -webkit-mask-image: var(--dream-sidebar-session-icon-mask, none);
-  mask-image: var(--dream-sidebar-session-icon-mask, none);
+  background-color: transparent;
+  background-image: var(--dream-sidebar-session-icon-image, none);
+  -webkit-mask-image: none;
+  mask-image: none;
   -webkit-mask-position: center;
   mask-position: center;
   -webkit-mask-repeat: no-repeat;

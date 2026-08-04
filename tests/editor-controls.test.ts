@@ -8,7 +8,8 @@ import type { ThemePaint } from '../src/shared/appearance'
 import { BUILTIN_ICON_GLYPHS } from '../src/shared/icon-glyphs'
 import { iconGifPosterAssetKey } from '../src/shared/icon-assets'
 import { createDefaultTheme } from '../src/shared/theme'
-import { builtinIconLabels, builtinIconOptions, builtinIcons } from '../src/renderer/src/icons'
+import { builtinIconLabels, builtinIconOptions } from '../src/renderer/src/icons'
+import { builtinIconAssetUrl } from '../src/renderer/src/builtin-icon-assets'
 import { DEFAULT_LOCALE, setActiveLocale } from '../src/shared/i18n'
 import { ThemeIconLibraryContext } from '../src/renderer/src/library-icons'
 
@@ -289,9 +290,9 @@ describe('editor appearance controls', () => {
     expect(container.querySelector<HTMLImageElement>('img.custom-icon')?.src).toBe(poster)
   })
 
-  it('offers at least 50 visual builtin icons with runtime glyph fallbacks', () => {
-    expect(builtinIconOptions.length).toBeGreaterThanOrEqual(50)
-    expect(Object.values(builtinIcons)).toHaveLength(builtinIconOptions.length)
+  it('offers the complete SVG system icon set with glyph fallbacks', () => {
+    expect(builtinIconOptions).toHaveLength(116)
+    expect(builtinIconOptions.every((name) => Boolean(builtinIconAssetUrl(name)))).toBe(true)
     expect(builtinIconOptions.every((name) => Boolean(BUILTIN_ICON_GLYPHS[name]))).toBe(true)
 
     const profile = createDefaultTheme('00000000-0000-0000-0000-000000000000')
@@ -300,7 +301,7 @@ describe('editor appearance controls', () => {
     if (!trigger) throw new Error('Icon picker trigger is missing.')
     act(() => trigger.click())
     expect(container.querySelectorAll('.icon-picker-option[data-icon-name]:not([data-icon-name="__asset"])')).toHaveLength(builtinIconOptions.length)
-    expect(container.querySelectorAll('.icon-picker-option:not([data-icon-name="__asset"]) svg')).toHaveLength(builtinIconOptions.length)
+    expect(container.querySelectorAll('.icon-picker-option:not([data-icon-name="__asset"]) img.builtin-icon-image')).toHaveLength(builtinIconOptions.length)
   })
 
   it('names the default sidebar icons without special original-icon labels', () => {
@@ -311,21 +312,21 @@ describe('editor appearance controls', () => {
     expect(builtinIconLabels['at-sign']).toBe('插件')
   })
 
-  it('renders the runtime glyphs for injected sidebar and brand preview slots', () => {
+  it('renders the SVG assets for injected sidebar and brand preview slots', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     act(() => root.render(React.createElement('div', null,
       React.createElement(RenderIcon, { slot: 'sidebarMode', profile, assets: {}, injected: true }),
       React.createElement(RenderIcon, { slot: 'branding', profile, assets: {}, injected: true })
     )))
 
-    expect([...container.querySelectorAll('.builtin-icon-glyph')].map((node) => node.textContent)).toEqual(['♫', '✦'])
+    expect(container.querySelectorAll('img.builtin-icon-image')).toHaveLength(2)
   })
 
-  it('renders the native Codex-style upward arrow for the default composer icon', () => {
+  it('renders the pastel SVG for the default composer icon', () => {
     const profile = createDefaultTheme('00000000-0000-4000-8000-000000000000')
     act(() => root.render(React.createElement(RenderIcon, { slot: 'composer', profile, assets: {} })))
 
-    expect(container.querySelector('svg')?.classList.contains('lucide-arrow-up')).toBe(true)
+    expect(container.querySelector('img.builtin-icon-image')).not.toBeNull()
     expect(BUILTIN_ICON_GLYPHS.send).toBe('↑')
   })
 })

@@ -3,6 +3,7 @@ import { ImageOff } from 'lucide-react'
 import type { IconLibrary, ProjectIconRef, SystemLibraryIcon } from '../../shared/project-icons'
 import type { IconSlot } from '../../shared/theme'
 import { builtinIcons } from './icons'
+import { builtinIconAssetUrl } from './builtin-icon-assets'
 
 export interface ThemeIconLibraryContextValue {
   libraries: IconLibrary[]
@@ -37,12 +38,14 @@ export function LibraryIconPreview({
   icon: IconLibrary['icons'][number]
   size?: number
 }): React.JSX.Element {
-  const systemIcon = isSystemIcon(icon) ? builtinIcons[icon.builtinName] : null
+  const systemIconName = isSystemIcon(icon) ? icon.builtinName : null
+  const systemIconUrl = systemIconName ? builtinIconAssetUrl(systemIconName) : null
+  const systemIcon = systemIconName ? builtinIcons[systemIconName] : null
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [failed, setFailed] = React.useState(false)
 
   React.useEffect(() => {
-    if (systemIcon) return undefined
+    if (systemIconUrl || systemIcon) return undefined
     let active = true
     const key = `${libraryId}:${icon.id}`
     const request = previewUrlCache.get(key) ?? window.studio.iconLibraries.getPreviewUrl(libraryId, icon.id)
@@ -54,8 +57,9 @@ export function LibraryIconPreview({
       if (active) setFailed(true)
     })
     return () => { active = false }
-  }, [icon.id, libraryId, systemIcon])
+  }, [icon.id, libraryId, systemIcon, systemIconUrl])
 
+  if (systemIconUrl) return <img className="library-icon-image builtin-icon-image" src={systemIconUrl} alt="" draggable={false} />
   if (systemIcon) {
     const Icon = systemIcon
     return <Icon aria-hidden="true" size={size} />

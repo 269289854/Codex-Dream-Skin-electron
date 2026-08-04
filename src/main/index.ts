@@ -11,6 +11,7 @@ import { createStudioInstanceData, resolveStudioInstanceAction } from './app-lif
 import { isSupportedDesktopPlatform } from './codex-platform'
 import { MacCodexDriver } from './macos-codex-driver'
 import { WindowsCodexDriver } from './windows-codex-driver'
+import { BuiltinIconAssetStore } from './builtin-icon-assets'
 import { PendingVideoSelectionRegistry } from './pending-video-selections'
 import { StudioMediaProtocol, toThemeDeleteError } from './studio-media-protocol'
 import { captureIpcResult } from '../shared/ipc-result'
@@ -553,6 +554,7 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     if (!isSupportedDesktopPlatform(process.platform)) throw new Error('Codex Dream Skin Studio 仅支持 Windows 和 macOS。')
     const sharedResourcesRoot = app.isPackaged ? join(process.resourcesPath, 'shared') : join(app.getAppPath(), 'resources', 'shared')
+    const builtinIconRoot = join(app.getAppPath(), 'icon')
     const platformResourcesRoot = app.isPackaged
       ? join(process.resourcesPath, process.platform === 'win32' ? 'windows' : 'macos')
       : join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'windows' : 'macos')
@@ -573,7 +575,7 @@ if (!hasSingleInstanceLock) {
       resourcesRoot: sharedResourcesRoot
     })
     await store.initialize()
-    projectIconStore = new ProjectIconStore(studioRoot, store)
+    projectIconStore = new ProjectIconStore(studioRoot, store, new BuiltinIconAssetStore(builtinIconRoot))
     await projectIconStore.initialize()
     themeShareService = new ThemeShareService(store, projectIconStore)
     setActiveLocale(await store.getLocale())

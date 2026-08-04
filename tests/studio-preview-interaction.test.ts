@@ -11,6 +11,7 @@ import { createDefaultThemeProjectIconSettings, createSystemIconLibrary } from '
 import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../src/shared/video-transcode'
 import { App } from '../src/renderer/src/App'
+import { builtinIconAssetUrl } from '../src/renderer/src/builtin-icon-assets'
 import { ICON_PREVIEW_TARGETS, PREVIEW_TARGETS } from '../src/renderer/src/preview-editing'
 
 const GLOBAL_KEYS = [
@@ -2598,7 +2599,7 @@ describe('Studio preview editing interaction', () => {
     act(() => setInputValue(selectedColor, '#654321'))
 
     expect(container.querySelector('[data-preview-target="sidebar-nav-new-task"]')?.textContent).toContain('快速创建')
-    expect(container.querySelector('[data-preview-target="sidebar-nav-new-task"]')?.textContent).toContain('★')
+    expect(container.querySelector<HTMLImageElement>('[data-preview-target="sidebar-nav-new-task"] img.builtin-icon-image')?.getAttribute('src')).toBe(builtinIconAssetUrl('star'))
     expect(pullRequests.textContent).toBe(originalPullRequests)
     expect(canvas.style.getPropertyValue('--dream-font-sidebar-nav-new-task')).toContain('Dream JetBrains Mono')
     expect(canvas.style.getPropertyValue('--dream-sidebar-nav-new-task-text')).toBe('#123456')
@@ -2661,7 +2662,7 @@ describe('Studio preview editing interaction', () => {
     act(() => setInputValue(hoverBackground, '#abcdef'))
 
     expect(usage.getAttribute('data-preview-state')).toBe('hover')
-    expect(usage.textContent).toContain('★')
+    expect(usage.querySelector<HTMLImageElement>('img.builtin-icon-image')?.getAttribute('src')).toBe(builtinIconAssetUrl('star'))
     expect(team.textContent).toContain('演示团队')
     expect(canvas.style.getPropertyValue('--dream-font-account-menu-usage')).toContain('Dream JetBrains Mono')
     expect(canvas.style.getPropertyValue('--dream-account-menu-usage-hover-text')).toBe('#123456')
@@ -3051,7 +3052,7 @@ describe('Studio preview editing interaction', () => {
     randomRain.mockRestore()
     expect(container.querySelector<HTMLElement>('[data-preview-target="sparkles"]')?.style.getPropertyValue('--dream-particle-x')).not.toBe(rainOriginalX)
     expect(container.querySelectorAll<HTMLElement>('[data-preview-target="sparkles"]')[1]?.style.getPropertyValue('--dream-sparkle-color')).toBe('#20bcc3')
-    expect(container.querySelector('[data-preview-target="sparkles"] .builtin-icon-glyph')?.textContent).toBe('★')
+    expect(container.querySelector<HTMLImageElement>('[data-preview-target="sparkles"] img.builtin-icon-image')?.getAttribute('src')).toBe(builtinIconAssetUrl('star'))
 
     const more = [...container.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent?.includes('更多设置'))
     if (!more) throw new Error('Particle more settings command is missing.')

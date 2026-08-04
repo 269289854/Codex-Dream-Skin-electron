@@ -605,8 +605,8 @@
     if (typeof candidate.builtinName === "string" && typeof source === "string" && source.startsWith("data:image/svg+xml")) {
       node.setAttribute("data-dream-sidebar-project-icon-glyph", "");
       node.setAttribute("data-dream-sidebar-project-icon-kind", "builtin");
-      node.style.setProperty("--dream-sidebar-project-icon-image", "none");
-      node.style.setProperty("--dream-sidebar-project-icon-mask", `url(${JSON.stringify(source)})`);
+      node.style.setProperty("--dream-sidebar-project-icon-image", `url(${JSON.stringify(source)})`);
+      node.style.setProperty("--dream-sidebar-project-icon-mask", "none");
       return;
     }
     if (typeof source === "string" && source.startsWith("data:image/")) {
@@ -663,8 +663,8 @@
     if (typeof candidate.builtinName === "string" && typeof source === "string" && source.startsWith("data:image/svg+xml")) {
       node.setAttribute("data-dream-sidebar-session-icon-glyph", "");
       node.setAttribute("data-dream-sidebar-session-icon-kind", "builtin");
-      node.style.setProperty("--dream-sidebar-session-icon-image", "none");
-      node.style.setProperty("--dream-sidebar-session-icon-mask", `url(${JSON.stringify(source)})`);
+      node.style.setProperty("--dream-sidebar-session-icon-image", `url(${JSON.stringify(source)})`);
+      node.style.setProperty("--dream-sidebar-session-icon-mask", "none");
       return;
     }
     if (typeof source === "string" && source.startsWith("data:image/")) {
