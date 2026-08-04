@@ -68,6 +68,9 @@ describe('theme sharing with icon libraries', () => {
       'theme.cdstheme'
     ].sort())
     expect(manifestText).not.toContain('assignments')
+    expect(manifestText).not.toContain('allocationFingerprint')
+    expect(manifestText).not.toContain('randomAssignments')
+    expect(manifestText).not.toContain('randomSessionAssignments')
     expect(manifestText).not.toContain('projects')
     expect(manifestText).not.toContain('project-private-001')
     expect(manifestText).not.toContain('Private Workspace')

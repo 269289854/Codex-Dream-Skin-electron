@@ -12,12 +12,15 @@ import {
   PROJECT_ICON_SETTINGS_VERSION,
   SYSTEM_ICON_LIBRARY_ID,
   cachedCodexProjectSchema,
+  allocateStableUniqueIcons,
   createDefaultThemeProjectIconSettings,
   createSystemIconLibrary,
   customIconLibrarySchema,
   discoveredCodexProjectSchema,
   projectIconPrivateSettingsSchema,
   projectIconPrivateSettingsV1Schema,
+  projectIconPrivateSettingsV2Schema,
+  projectIconPoolFingerprint,
   projectIconRefKey,
   projectIconRefSchema,
   resolveProjectIconWeight,
@@ -195,10 +198,13 @@ export class ProjectIconStore {
     try {
       await this.updateSettings((settings) => {
         const themes = Object.fromEntries(Object.entries(settings.themes).map(([themeId, theme]) => [themeId, {
+          ...theme,
           enabledLibraryIds: theme.enabledLibraryIds.filter((id) => id !== library.id),
           weightOverrides: theme.weightOverrides.filter((entry) => entry.ref.libraryId !== library.id),
           assignments: theme.assignments.filter((entry) => entry.ref.libraryId !== library.id),
-          sessionAssignments: theme.sessionAssignments.filter((entry) => entry.ref.libraryId !== library.id)
+          sessionAssignments: theme.sessionAssignments.filter((entry) => entry.ref.libraryId !== library.id),
+          randomAssignments: theme.randomAssignments.filter((entry) => entry.ref.libraryId !== library.id),
+          randomSessionAssignments: theme.randomSessionAssignments.filter((entry) => entry.ref.libraryId !== library.id)
         }]))
         return { ...settings, themes }
       })
@@ -281,7 +287,9 @@ export class ProjectIconStore {
           ...theme,
           weightOverrides: theme.weightOverrides.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId)),
           assignments: theme.assignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId)),
-          sessionAssignments: theme.sessionAssignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId))
+          sessionAssignments: theme.sessionAssignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId)),
+          randomAssignments: theme.randomAssignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId)),
+          randomSessionAssignments: theme.randomSessionAssignments.filter((entry) => !(entry.ref.libraryId === library.id && entry.ref.iconId === iconId))
         }]))
       }))
     } catch (error) {
@@ -295,8 +303,7 @@ export class ProjectIconStore {
   async getThemeSettings(themeIdInput: unknown): Promise<ThemeProjectIconSettings> {
     const themeId = parseUuid(themeIdInput, '主题 ID 无效。')
     await this.profiles.get(themeId)
-    const settings = await this.readSettings()
-    return structuredClone(settings.themes[themeId] ?? createDefaultThemeProjectIconSettings())
+    return this.reconcileThemeAllocations(themeId)
   }
 
   async getSessionIconsEnabled(): Promise<boolean> {
@@ -447,7 +454,12 @@ export class ProjectIconStore {
       ...settings,
       themes: {
         ...settings.themes,
-        [targetThemeId]: structuredClone(settings.themes[sourceThemeId] ?? createDefaultThemeProjectIconSettings())
+        [targetThemeId]: {
+          ...structuredClone(settings.themes[sourceThemeId] ?? createDefaultThemeProjectIconSettings()),
+          allocationFingerprint: '',
+          randomAssignments: [],
+          randomSessionAssignments: []
+        }
       }
     }))
   }
@@ -482,7 +494,10 @@ export class ProjectIconStore {
       enabledLibraryIds: candidate.enabledLibraryIds ?? [SYSTEM_ICON_LIBRARY_ID],
       weightOverrides: candidate.weightOverrides ?? [],
       assignments: [],
-      sessionAssignments: []
+      sessionAssignments: [],
+      allocationFingerprint: '',
+      randomAssignments: [],
+      randomSessionAssignments: []
     })
     const available = new Set((await this.listLibraries()).map((library) => library.id))
     if (parsed.enabledLibraryIds.some((id) => !available.has(id)) || parsed.weightOverrides.some((entry) => !available.has(entry.ref.libraryId))) {
@@ -493,7 +508,10 @@ export class ProjectIconStore {
       enabledLibraryIds: parsed.enabledLibraryIds,
       weightOverrides: parsed.weightOverrides,
       assignments: [],
-      sessionAssignments: []
+      sessionAssignments: [],
+      allocationFingerprint: '',
+      randomAssignments: [],
+      randomSessionAssignments: []
     }
     return this.updateTheme(themeId, () => next)
   }
@@ -514,11 +532,85 @@ export class ProjectIconStore {
     return { kind: 'asset', imported: await this.profiles.importAsset(themeId, this.resolveAsset(library.id, customIcon.asset), 'icon') }
   }
 
+  private async reconcileThemeAllocations(themeId: string): Promise<ThemeProjectIconSettings> {
+    let result = createDefaultThemeProjectIconSettings()
+    await this.updateSettings(async (privateSettings) => {
+      const current = privateSettings.themes[themeId] ?? createDefaultThemeProjectIconSettings()
+      const candidates = await this.collectWeightedCandidates(current)
+      const fingerprint = projectIconPoolFingerprint(candidates)
+      const cachedProjects = privateSettings.projects
+      const projectIds = cachedProjects.map((project) => project.id)
+      const manualProjects = current.assignments
+      const manualProjectIds = new Set(manualProjects.map((entry) => entry.projectId))
+      const cachedProjectAssignments = current.allocationFingerprint === fingerprint
+        ? current.randomAssignments.map((entry) => ({ targetId: entry.projectId, ref: entry.ref }))
+        : []
+      const allocatedProjects = allocateStableUniqueIcons(
+        `${themeId}\u0000projects`,
+        projectIds.filter((projectId) => !manualProjectIds.has(projectId)),
+        candidates,
+        manualProjects.map((entry) => entry.ref),
+        cachedProjectAssignments
+      )
+      const randomAssignments = allocatedProjects.map(({ targetId: projectId, icon }) => ({ projectId, ref: icon.ref }))
+      const finalProjectRefs = new Map(randomAssignments.map((entry) => [entry.projectId, entry.ref]))
+      for (const assignment of manualProjects) finalProjectRefs.set(assignment.projectId, assignment.ref)
+
+      const randomSessionAssignments: ThemeProjectIconSettings['randomSessionAssignments'] = []
+      for (const project of cachedProjects) {
+        const sessionIds = project.sessions.map((session) => session.id)
+        const manualSessions = current.sessionAssignments.filter((entry) => entry.projectId === project.id)
+        const manualSessionIds = new Set(manualSessions.map((entry) => entry.sessionId))
+        const cachedSessions = current.allocationFingerprint === fingerprint
+          ? current.randomSessionAssignments
+            .filter((entry) => entry.projectId === project.id)
+            .map((entry) => ({ targetId: entry.sessionId, ref: entry.ref }))
+          : []
+        const reservedRefs = manualSessions.map((entry) => entry.ref)
+        const projectRef = finalProjectRefs.get(project.id)
+        if (projectRef) reservedRefs.push(projectRef)
+        const allocatedSessions = allocateStableUniqueIcons(
+          `${themeId}\u0000sessions\u0000${project.id}`,
+          sessionIds.filter((sessionId) => !manualSessionIds.has(sessionId)),
+          candidates,
+          reservedRefs,
+          cachedSessions
+        )
+        randomSessionAssignments.push(...allocatedSessions.map(({ targetId: sessionId, icon }) => ({ projectId: project.id, sessionId, ref: icon.ref })))
+      }
+
+      const next = themeProjectIconSettingsSchema.parse({
+        ...current,
+        allocationFingerprint: fingerprint,
+        randomAssignments,
+        randomSessionAssignments
+      })
+      result = next
+      if (privateSettings.themes[themeId] && sameDerivedAllocations(current, next)) return privateSettings
+      return { ...privateSettings, themes: { ...privateSettings.themes, [themeId]: next } }
+    })
+    return structuredClone(result)
+  }
+
+  private async collectWeightedCandidates(settings: ThemeProjectIconSettings): Promise<RuntimeProjectIconCandidate[]> {
+    const candidates: RuntimeProjectIconCandidate[] = []
+    for (const libraryId of settings.enabledLibraryIds) {
+      const library = await this.getLibrary(libraryId).catch(() => null)
+      if (!library) continue
+      for (const icon of library.icons) {
+        const ref = { libraryId: library.id, iconId: icon.id }
+        const effective = resolveProjectIconWeight(settings, ref, { enabled: icon.defaultEnabled, weight: icon.defaultWeight })
+        if (effective.enabled) candidates.push({ ref, weight: effective.weight })
+      }
+    }
+    return candidates
+  }
+
   async compileRuntimeConfig(themeIdInput: unknown, budget = new EmbeddedAssetBudget()): Promise<RuntimeProjectIconConfig> {
     const themeId = parseUuid(themeIdInput, '主题 ID 无效。')
     await this.profiles.get(themeId)
+    const settings = await this.reconcileThemeAllocations(themeId)
     const privateSettings = await this.readSettings()
-    const settings = privateSettings.themes[themeId] ?? createDefaultThemeProjectIconSettings()
     const libraryCache = new Map<string, IconLibrary>()
     const assetCache = new Map<string, RuntimeProjectIconCandidate>()
     const loadLibrary = async (id: string): Promise<IconLibrary | null> => {
@@ -567,12 +659,16 @@ export class ProjectIconStore {
       }
     }
     const assignments: RuntimeProjectIconConfig['assignments'] = []
-    for (const assignment of settings.assignments) {
-      const icon = await candidateFor(assignment.ref, 1)
-      if (icon) assignments.push({ projectId: assignment.projectId, icon })
+    const finalProjectRefs = new Map(settings.randomAssignments.map((assignment) => [assignment.projectId, assignment.ref]))
+    for (const assignment of settings.assignments) finalProjectRefs.set(assignment.projectId, assignment.ref)
+    for (const [projectId, ref] of finalProjectRefs) {
+      const icon = await candidateFor(ref, 1)
+      if (icon) assignments.push({ projectId, icon })
     }
     const sessionAssignments: RuntimeProjectIconConfig['sessionAssignments'] = []
-    for (const assignment of settings.sessionAssignments) {
+    const finalSessionRefs = new Map(settings.randomSessionAssignments.map((assignment) => [`${assignment.projectId}\u0000${assignment.sessionId}`, assignment]))
+    for (const assignment of settings.sessionAssignments) finalSessionRefs.set(`${assignment.projectId}\u0000${assignment.sessionId}`, assignment)
+    for (const assignment of finalSessionRefs.values()) {
       const icon = await candidateFor(assignment.ref, 1)
       if (icon) sessionAssignments.push({ projectId: assignment.projectId, sessionId: assignment.sessionId, icon })
     }
@@ -656,22 +752,25 @@ export class ProjectIconStore {
     themeId: string,
     update: (current: ThemeProjectIconSettings) => ThemeProjectIconSettings
   ): Promise<ThemeProjectIconSettings> {
-    let result = createDefaultThemeProjectIconSettings()
     await this.updateSettings((settings) => {
-      result = themeProjectIconSettingsSchema.parse(update(settings.themes[themeId] ?? createDefaultThemeProjectIconSettings()))
+      const result = themeProjectIconSettingsSchema.parse(update(settings.themes[themeId] ?? createDefaultThemeProjectIconSettings()))
       return { ...settings, themes: { ...settings.themes, [themeId]: result } }
     })
-    return structuredClone(result)
+    return this.reconcileThemeAllocations(themeId)
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string): void {
     if (signal?.aborted) throw new Error(message)
   }
 
-  private async updateSettings(update: (settings: ProjectIconPrivateSettings) => ProjectIconPrivateSettings): Promise<void> {
+  private async updateSettings(
+    update: (settings: ProjectIconPrivateSettings) => ProjectIconPrivateSettings | Promise<ProjectIconPrivateSettings>
+  ): Promise<void> {
     const operation = this.settingsTail.then(async () => {
       const current = await this.readSettings()
-      await this.writeSettings(projectIconPrivateSettingsSchema.parse(update(current)))
+      const next = await update(current)
+      if (next === current) return
+      await this.writeSettings(projectIconPrivateSettingsSchema.parse(next))
     })
     this.settingsTail = operation.then(() => undefined, () => undefined)
     return operation
@@ -847,14 +946,36 @@ function isSystemLibrary(library: IconLibrary): library is SystemIconLibrary {
 }
 
 function migratePrivateSettings(input: unknown): ProjectIconPrivateSettings {
+  const version2 = projectIconPrivateSettingsV2Schema.safeParse(input)
+  if (version2.success) {
+    return projectIconPrivateSettingsSchema.parse({
+      ...version2.data,
+      version: PROJECT_ICON_SETTINGS_VERSION,
+      themes: Object.fromEntries(Object.entries(version2.data.themes).map(([themeId, theme]) => [themeId, {
+        ...theme,
+        allocationFingerprint: '',
+        randomAssignments: [],
+        randomSessionAssignments: []
+      }]))
+    })
+  }
   const legacy = projectIconPrivateSettingsV1Schema.parse(input)
   return projectIconPrivateSettingsSchema.parse({
     version: PROJECT_ICON_SETTINGS_VERSION,
     showSessionIcons: true,
     themes: Object.fromEntries(Object.entries(legacy.themes).map(([themeId, theme]) => [themeId, {
       ...theme,
-      sessionAssignments: []
+      sessionAssignments: [],
+      allocationFingerprint: '',
+      randomAssignments: [],
+      randomSessionAssignments: []
     }])),
     projects: legacy.projects.map((project) => ({ ...project, sessions: [] }))
   })
+}
+
+function sameDerivedAllocations(left: ThemeProjectIconSettings, right: ThemeProjectIconSettings): boolean {
+  return left.allocationFingerprint === right.allocationFingerprint
+    && JSON.stringify(left.randomAssignments) === JSON.stringify(right.randomAssignments)
+    && JSON.stringify(left.randomSessionAssignments) === JSON.stringify(right.randomSessionAssignments)
 }

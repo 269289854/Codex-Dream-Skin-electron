@@ -7,7 +7,9 @@ import { ProfileStore } from '../src/main/profile-store'
 import { ProjectIconStore } from '../src/main/project-icon-store'
 import {
   SYSTEM_ICON_LIBRARY_ID,
+  allocateStableUniqueIcons,
   createSystemIconLibrary,
+  projectIconPoolFingerprint,
   selectStableProjectIcon,
   selectStableSessionIcon,
   type ProjectIconPrivateSettings,
@@ -50,6 +52,32 @@ describe('project icon model', () => {
     expect(session?.ref).not.toEqual(first?.ref)
     expect(selectStableSessionIcon('00000000-0000-4000-8000-000000000001', 'project-1', 'local:session-1', first ? [first] : [], first)).toBeNull()
     expect(selectStableSessionIcon('00000000-0000-4000-8000-000000000001', 'project-1', 'local:session-1', candidates, first)).toEqual(session)
+  })
+
+  it('allocates weighted icons without replacement and retains cached results', () => {
+    const candidates: RuntimeProjectIconCandidate[] = [
+      { ref: { libraryId: 'system', iconId: 'star' }, weight: 1 },
+      { ref: { libraryId: 'system', iconId: 'heart' }, weight: 10 },
+      { ref: { libraryId: 'system', iconId: 'moon' }, weight: 3 }
+    ]
+    const first = allocateStableUniqueIcons('theme-projects', ['project-1', 'project-2'], candidates)
+    expect(new Set(first.map((entry) => entry.icon.ref.iconId)).size).toBe(2)
+
+    const retained = allocateStableUniqueIcons(
+      'theme-projects',
+      ['project-1', 'project-2', 'project-3'],
+      candidates,
+      [],
+      first.map((entry) => ({ targetId: entry.targetId, ref: entry.icon.ref }))
+    )
+    expect(retained.find((entry) => entry.targetId === 'project-1')?.icon.ref).toEqual(first.find((entry) => entry.targetId === 'project-1')?.icon.ref)
+    expect(retained.find((entry) => entry.targetId === 'project-2')?.icon.ref).toEqual(first.find((entry) => entry.targetId === 'project-2')?.icon.ref)
+    expect(new Set(retained.map((entry) => entry.icon.ref.iconId)).size).toBe(3)
+
+    const exhausted = allocateStableUniqueIcons('theme-projects', ['project-1', 'project-2', 'project-3'], candidates, [{ libraryId: 'system', iconId: 'star' }])
+    expect(exhausted).toHaveLength(2)
+    expect(exhausted.map((entry) => entry.icon.ref.iconId)).not.toContain('star')
+    expect(projectIconPoolFingerprint([...candidates].reverse())).toBe(projectIconPoolFingerprint(candidates))
   })
 })
 
@@ -156,6 +184,70 @@ describe('ProjectIconStore', () => {
     ])
   })
 
+  it('keeps project and sibling session random icons unique without moving existing allocations', async () => {
+    const { root, icons, themeId } = await createStores()
+    const library = await icons.createLibrary('去重素材')
+    const sources = ['one.png', 'two.png', 'three.png'].map((name) => join(root, name))
+    await Promise.all(sources.map((source) => writeFile(source, TEST_PNG)))
+    const imported = await icons.importAssets(library.id, sources)
+    const refs = imported.icons.map((icon) => ({ libraryId: library.id, iconId: icon.id }))
+    const firstRef = refs[0]
+    if (!firstRef) throw new Error('Test icon missing.')
+    await icons.setEnabledLibraries(themeId, [library.id])
+    await icons.cacheProjects([
+      { id: 'project-1', label: 'Project 1', kind: 'local', sessions: [] },
+      { id: 'project-2', label: 'Project 2', kind: 'local', sessions: [
+        { id: 'local:session-1', title: 'Session 1' },
+        { id: 'local:session-2', title: 'Session 2' },
+        { id: 'local:session-3', title: 'Session 3' }
+      ] },
+      { id: 'project-3', label: 'Project 3', kind: 'local', sessions: [
+        { id: 'local:session-4', title: 'Session 4' },
+        { id: 'local:session-5', title: 'Session 5' }
+      ] }
+    ])
+    await icons.assignProject(themeId, 'project-1', firstRef)
+    await icons.assignSession(themeId, 'project-2', 'local:session-1', firstRef)
+
+    const first = await icons.getThemeSettings(themeId)
+    const projectIcons = new Map(first.randomAssignments.map((entry) => [entry.projectId, entry.ref.iconId]))
+    expect(projectIcons.size).toBe(2)
+    expect(new Set(projectIcons.values()).size).toBe(2)
+    expect([...projectIcons.values()]).not.toContain(firstRef.iconId)
+
+    const project2Sessions = first.randomSessionAssignments.filter((entry) => entry.projectId === 'project-2')
+    expect(project2Sessions).toHaveLength(1)
+    expect(project2Sessions[0]?.ref.iconId).not.toBe(firstRef.iconId)
+    expect(project2Sessions[0]?.ref.iconId).not.toBe(projectIcons.get('project-2'))
+    const project3Sessions = first.randomSessionAssignments.filter((entry) => entry.projectId === 'project-3')
+    expect(project3Sessions).toHaveLength(2)
+    expect(new Set(project3Sessions.map((entry) => entry.ref.iconId)).size).toBe(2)
+    expect(project3Sessions.map((entry) => entry.ref.iconId)).not.toContain(projectIcons.get('project-3'))
+
+    await icons.cacheProjects([{ id: 'project-5', label: 'Project 5', kind: 'local', sessions: [] }])
+    const afterDiscovery = await icons.getThemeSettings(themeId)
+    for (const [projectId, iconId] of projectIcons) {
+      expect(afterDiscovery.randomAssignments.find((entry) => entry.projectId === projectId)?.ref.iconId).toBe(iconId)
+    }
+    expect(afterDiscovery.randomAssignments.some((entry) => entry.projectId === 'project-5')).toBe(false)
+
+    const previousFingerprint = afterDiscovery.allocationFingerprint
+    await icons.setWeightOverride(themeId, refs[1]!, true, 9)
+    const afterWeightChange = await icons.getThemeSettings(themeId)
+    expect(afterWeightChange.allocationFingerprint).not.toBe(previousFingerprint)
+    expect(new Set(afterWeightChange.randomAssignments.map((entry) => entry.ref.iconId)).size).toBe(afterWeightChange.randomAssignments.length)
+
+    const runtime = await icons.compileRuntimeConfig(themeId)
+    expect(runtime.assignments).toHaveLength(3)
+    expect(runtime.assignments.map((entry) => entry.projectId)).toContain('project-1')
+    expect(new Set(runtime.assignments.map((entry) => entry.icon.ref.iconId)).size).toBe(3)
+    expect(JSON.stringify(runtime)).not.toContain('Session 1')
+    const shareable = await icons.getShareableThemeSettings(themeId)
+    expect(shareable).not.toHaveProperty('allocationFingerprint')
+    expect(shareable).not.toHaveProperty('randomAssignments')
+    expect(shareable).not.toHaveProperty('randomSessionAssignments')
+  })
+
   it('keeps every newly discovered session ahead of historical sessions at the global cache limit', async () => {
     const { icons } = await createStores()
     const historicalSessions = Array.from({ length: 10_000 }, (_, index) => ({
@@ -185,9 +277,22 @@ describe('ProjectIconStore', () => {
     await icons.setEnabledLibraries(themeId, [library.id])
     await icons.assignProject(themeId, 'project-2', { libraryId: library.id, iconId: icon.id })
     await icons.assignSession(themeId, 'project-2', 'local:session-2', { libraryId: library.id, iconId: icon.id })
+    const sourceSettings = await icons.getThemeSettings(themeId)
+    await icons.restoreThemeSettings(themeId, {
+      ...sourceSettings,
+      allocationFingerprint: 'a'.repeat(64),
+      randomAssignments: [{ projectId: 'derived-project', ref: { libraryId: 'system', iconId: 'star' } }],
+      randomSessionAssignments: [{ projectId: 'derived-project', sessionId: 'local:derived-session', ref: { libraryId: 'system', iconId: 'heart' } }]
+    })
 
     const duplicate = await profiles.duplicate(await profiles.get(themeId), '副本')
     await icons.copyThemeSettings(themeId, duplicate.id)
+    const storedAfterCopy = JSON.parse(await readFile(join(root, 'project-icons.json'), 'utf8')) as ProjectIconPrivateSettings
+    expect(storedAfterCopy.themes[duplicate.id]).toMatchObject({
+      allocationFingerprint: '',
+      randomAssignments: [],
+      randomSessionAssignments: []
+    })
     expect((await icons.getThemeSettings(duplicate.id)).assignments).toHaveLength(1)
     expect((await icons.getThemeSettings(duplicate.id)).sessionAssignments).toHaveLength(1)
 
@@ -241,7 +346,43 @@ describe('ProjectIconStore', () => {
       sessionAssignments: []
     })
     expect(await migrated.listCachedProjects()).toEqual([expect.objectContaining({ id: 'legacy-project', sessions: [] })])
-    expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toMatchObject({ version: 2, showSessionIcons: true })
+    expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toMatchObject({ version: 3, showSessionIcons: true })
+  })
+
+  it('migrates v2 private settings without losing sessions or manual assignments', async () => {
+    const { root, profiles, themeId } = await createStores()
+    const settingsPath = join(root, 'project-icons.json')
+    await writeFile(settingsPath, `${JSON.stringify({
+      version: 2,
+      showSessionIcons: false,
+      themes: {
+        [themeId]: {
+          enabledLibraryIds: ['system'],
+          weightOverrides: [],
+          assignments: [{ projectId: 'project-v2', ref: { libraryId: 'system', iconId: 'star' } }],
+          sessionAssignments: [{ projectId: 'project-v2', sessionId: 'local:session-v2', ref: { libraryId: 'system', iconId: 'heart' } }]
+        }
+      },
+      projects: [{
+        id: 'project-v2',
+        label: 'Version 2',
+        kind: 'local',
+        lastSeenAt: '2026-08-01T00:00:00.000Z',
+        sessions: [{ id: 'local:session-v2', title: 'Private title', lastSeenAt: '2026-08-01T00:00:00.000Z' }]
+      }]
+    }, null, 2)}\n`, 'utf8')
+
+    const migrated = new ProjectIconStore(root, profiles)
+    await migrated.initialize()
+    expect(await migrated.getSessionIconsEnabled()).toBe(false)
+    expect(await migrated.getThemeSettings(themeId)).toMatchObject({
+      assignments: [{ projectId: 'project-v2', ref: { libraryId: 'system', iconId: 'star' } }],
+      sessionAssignments: [{ projectId: 'project-v2', sessionId: 'local:session-v2', ref: { libraryId: 'system', iconId: 'heart' } }],
+      randomAssignments: [],
+      randomSessionAssignments: [],
+      allocationFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/)
+    })
+    expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toMatchObject({ version: 3, showSessionIcons: false })
   })
 
   it('removes controlled temporary files inside library asset directories on startup', async () => {

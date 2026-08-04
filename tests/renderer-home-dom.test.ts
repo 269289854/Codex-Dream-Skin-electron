@@ -1242,6 +1242,55 @@ describe('renderer home DOM adaptation', () => {
     expect(nativeChild?.parentElement).toBe(slot)
   })
 
+  it('allocates unknown project and sibling session icons without replacement', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Sample-Project')
+    const projectRows = Array.from({ length: 5 }, (_, index) => `
+      <div data-app-action-sidebar-project-id="project-${index + 1}" data-app-action-sidebar-project-row>
+        <span data-sidebar-project-drop-zone="project-icon"><svg></svg></span>
+      </div>`).join('')
+    const sessionRows = Array.from({ length: 4 }, (_, index) => `
+      <div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-${index + 1}">
+        <div><span data-native-session-slot><span></span></span><span data-thread-title-trigger>Session ${index + 1}</span></div>
+      </div>`).join('')
+    window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', `${projectRows}<div data-app-action-sidebar-project-list-id="project-1">${sessionRows}</div>`)
+    const pool = ['star', 'heart', 'moon', 'sun'].map((iconId) => ({
+      ref: { libraryId: 'system', iconId },
+      weight: 1,
+      builtinName: iconId,
+      dataUrl: `data:image/svg+xml;base64,${Buffer.from(iconId).toString('base64')}`
+    }))
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+      showSessionIcons: true,
+      pool,
+      assignments: [],
+      sessionAssignments: []
+    })
+
+    const projectSlots = [...window.document.querySelectorAll('[data-sidebar-project-drop-zone="project-icon"]')] as unknown as HTMLElement[]
+    const renderedProjects = projectSlots.filter((slot) => slot.classList.contains('dream-sidebar-project-icon'))
+    expect(renderedProjects).toHaveLength(4)
+    expect(new Set(renderedProjects.map((slot) => slot.style.getPropertyValue('--dream-sidebar-project-icon-mask'))).size).toBe(4)
+    const project1Mask = projectSlots[0]?.style.getPropertyValue('--dream-sidebar-project-icon-mask')
+
+    const sessionSlots = [...window.document.querySelectorAll('[data-native-session-slot]')] as unknown as HTMLElement[]
+    const renderedSessions = sessionSlots.filter((slot) => slot.classList.contains('dream-sidebar-session-icon'))
+    expect(renderedSessions).toHaveLength(3)
+    expect(new Set(renderedSessions.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-mask'))).size).toBe(3)
+    expect(renderedSessions.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-mask'))).not.toContain(project1Mask)
+
+    const projectMasks = projectSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-project-icon-mask'))
+    const sessionMasks = sessionSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-mask'))
+    window.document.querySelector('aside')?.insertAdjacentHTML('beforeend', '<div data-app-action-sidebar-project-id="project-6" data-app-action-sidebar-project-row><span data-sidebar-project-drop-zone="project-icon"><svg></svg></span></div>')
+    window.document.querySelector('[data-app-action-sidebar-project-list-id="project-1"]')?.insertAdjacentHTML('beforeend', '<div data-app-action-sidebar-thread-row data-app-action-sidebar-thread-id="local:session-5"><div><span data-native-session-slot><span></span></span><span data-thread-title-trigger>Session 5</span></div></div>')
+    stateOf(window).ensure()
+    expect(projectSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-project-icon-mask'))).toEqual(projectMasks)
+    expect(sessionSlots.map((slot) => slot.style.getPropertyValue('--dream-sidebar-session-icon-mask'))).toEqual(sessionMasks)
+    expect(window.document.querySelector('[data-app-action-sidebar-project-id="project-6"] [data-sidebar-project-drop-zone="project-icon"]')?.classList.contains('dream-sidebar-project-icon')).toBe(false)
+    expect(window.document.querySelector('[data-app-action-sidebar-thread-id="local:session-5"] [data-native-session-slot]')?.classList.contains('dream-sidebar-session-icon')).toBe(false)
+  })
+
   it('honors explicit session assignments and the global session icon switch', () => {
     const fixture = `
       <div data-app-action-sidebar-project-id="project-1" data-app-action-sidebar-project-row><span data-sidebar-project-drop-zone="project-icon"></span></div>

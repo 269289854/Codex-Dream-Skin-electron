@@ -15,7 +15,7 @@ The Studio does not modify the Codex installation, `app.asar`, application signa
 - Customize colors, gradients, layered masks, typography, icons, particles, home-page copy, cards, the composer, and chat bubbles.
 - Preview both the home page and conversation view, with quick editing from preview elements.
 - Manage a protected system icon library and multiple custom libraries with PNG, JPEG, WebP, safe SVG, and GIF assets, priorities, and portable `.cdsicons` import/export.
-- Assign local marker icons to Codex projects and sessions, or let each theme choose deterministic weighted random icons from its enabled libraries. Random session icons exclude their parent project's icon, and a global switch controls whether session markers are shown.
+- Assign local marker icons to Codex projects and sessions, or let each theme choose deterministic weighted random icons without replacement. Random project icons stay unique across cached projects, sibling session icons stay unique and exclude their parent project's icon, and a global switch controls whether session markers are shown.
 - Export complete themes as portable `.cdstheme` files, optionally including enabled custom icon libraries, and import them on either supported platform.
 - Detect and connect only to a verified official Codex installation, then reinject, verify, stop, or fully restore the theme from the Studio.
 - Use the Studio interface in English or Simplified Chinese.

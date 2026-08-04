@@ -10,6 +10,8 @@
   const projectAnchorRestorers = new WeakMap();
   const projectIconNodes = new Set();
   const sessionIconNodes = new Set();
+  const runtimeProjectIconAssignments = new Map();
+  const runtimeSessionIconAssignments = new Map();
   const sidebarNavRestorers = new WeakMap();
   const sidebarSearchRestorers = new WeakMap();
   const sidebarSearchButtons = new Set();
@@ -539,7 +541,6 @@
       .map((entry) => [`${entry.projectId}\u0000${entry.sessionId}`, entry.icon])
     : []);
   const projectIconKey = (candidate) => `${candidate?.ref?.libraryId || ""}:${candidate?.ref?.iconId || ""}`;
-  const projectIconFingerprint = projectIconPool.map((candidate) => `${projectIconKey(candidate)}=${candidate.weight}`).join("|");
   const stableProjectIconHash = (value) => {
     let hash = 2166136261;
     for (let index = 0; index < value.length; index += 1) {
@@ -548,32 +549,46 @@
     }
     return hash >>> 0;
   };
-  const selectProjectIcon = (projectId) => {
-    const assigned = projectIconAssignments.get(projectId);
-    if (assigned) return assigned;
-    const total = projectIconPool.reduce((sum, candidate) => sum + candidate.weight, 0);
-    if (total <= 0) return null;
-    let target = stableProjectIconHash(`${themeConfig?.themeId || ""}\u0000${projectId}\u0000${projectIconFingerprint}`) % total;
-    for (const candidate of projectIconPool) {
-      if (target < candidate.weight) return candidate;
-      target -= candidate.weight;
+  const allocateUniqueRuntimeIcons = (seed, targetIds, reservedKeys, cachedAssignments) => {
+    const available = new Map(projectIconPool
+      .slice()
+      .sort((left, right) => projectIconKey(left).localeCompare(projectIconKey(right)))
+      .filter((candidate, index, pool) => index === 0 || projectIconKey(candidate) !== projectIconKey(pool[index - 1]))
+      .filter((candidate) => !reservedKeys.has(projectIconKey(candidate)))
+      .map((candidate) => [projectIconKey(candidate), candidate]));
+    const uniqueTargetIds = [...new Set(targetIds)];
+    const orderedTargets = uniqueTargetIds.slice().sort((left, right) => {
+      const delta = stableProjectIconHash(`${seed}\u0000target\u0000${left}`) - stableProjectIconHash(`${seed}\u0000target\u0000${right}`);
+      return delta || left.localeCompare(right);
+    });
+    const result = new Map();
+    for (const targetId of orderedTargets) {
+      const cached = cachedAssignments.get(targetId);
+      const key = projectIconKey(cached);
+      const candidate = available.get(key);
+      if (!candidate) continue;
+      result.set(targetId, candidate);
+      available.delete(key);
     }
-    return projectIconPool.at(-1) || null;
-  };
-  const selectSessionIcon = (projectId, sessionId) => {
-    const assigned = sessionIconAssignments.get(`${projectId}\u0000${sessionId}`);
-    if (assigned) return assigned;
-    const projectKey = projectIconKey(selectProjectIcon(projectId));
-    const pool = projectIconPool.filter((candidate) => projectIconKey(candidate) !== projectKey);
-    const total = pool.reduce((sum, candidate) => sum + candidate.weight, 0);
-    if (total <= 0) return null;
-    const fingerprint = pool.map((candidate) => `${projectIconKey(candidate)}=${candidate.weight}`).join("|");
-    let target = stableProjectIconHash(`${themeConfig?.themeId || ""}\u0000${projectId}\u0000${sessionId}\u0000${fingerprint}`) % total;
-    for (const candidate of pool) {
-      if (target < candidate.weight) return candidate;
-      target -= candidate.weight;
+    for (const targetId of orderedTargets) {
+      if (result.has(targetId) || available.size === 0) continue;
+      const pool = [...available.values()];
+      const total = pool.reduce((sum, candidate) => sum + candidate.weight, 0);
+      const fingerprint = pool.map((candidate) => `${projectIconKey(candidate)}=${candidate.weight}`).join("|");
+      let target = stableProjectIconHash(`${seed}\u0000${targetId}\u0000${fingerprint}`) % total;
+      let selected = pool.at(-1) || null;
+      for (const candidate of pool) {
+        if (target < candidate.weight) {
+          selected = candidate;
+          break;
+        }
+        target -= candidate.weight;
+      }
+      if (!selected) continue;
+      result.set(targetId, selected);
+      available.delete(projectIconKey(selected));
     }
-    return pool.at(-1) || null;
+    return result;
   };
   const restoreProjectIcon = (node) => {
     node.classList.remove("dream-sidebar-project-icon");
@@ -610,11 +625,17 @@
   const ensureSidebarProjectIcons = (sidebar) => {
     const activeNodes = new Set();
     const rows = sidebar ? [...sidebar.querySelectorAll('[data-app-action-sidebar-project-row]')] : [];
+    const unknownProjectIds = rows
+      .map((row) => row.getAttribute("data-app-action-sidebar-project-id"))
+      .filter((projectId) => projectId && !projectIconAssignments.has(projectId));
+    const reservedKeys = new Set([...projectIconAssignments.values()].map(projectIconKey));
+    const allocated = allocateUniqueRuntimeIcons(`${themeConfig?.themeId || ""}\u0000projects`, unknownProjectIds, reservedKeys, runtimeProjectIconAssignments);
+    for (const [projectId, candidate] of allocated) runtimeProjectIconAssignments.set(projectId, candidate);
     for (const row of rows) {
       const projectId = row.getAttribute("data-app-action-sidebar-project-id");
       const node = row.querySelector('[data-sidebar-project-drop-zone="project-icon"]');
       if (!projectId || !(node instanceof HTMLElement)) continue;
-      const candidate = selectProjectIcon(projectId);
+      const candidate = projectIconAssignments.get(projectId) || allocated.get(projectId) || null;
       if (!candidate) {
         restoreProjectIcon(node);
         continue;
@@ -662,13 +683,43 @@
   const ensureSidebarSessionIcons = (sidebar) => {
     const activeNodes = new Set();
     const rows = showSessionIcons && sidebar ? [...sidebar.querySelectorAll('[data-app-action-sidebar-thread-row]')] : [];
+    const rowsByProject = new Map();
+    for (const row of rows) {
+      const projectId = row.closest('[data-app-action-sidebar-project-list-id]')?.getAttribute("data-app-action-sidebar-project-list-id");
+      const sessionId = row.getAttribute("data-app-action-sidebar-thread-id");
+      if (!projectId || !sessionId) continue;
+      const group = rowsByProject.get(projectId) || [];
+      group.push({ row, sessionId });
+      rowsByProject.set(projectId, group);
+    }
+    const allocatedByKey = new Map();
+    for (const [projectId, group] of rowsByProject) {
+      const prefix = `${projectId}\u0000`;
+      const knownEntries = [...sessionIconAssignments.entries()].filter(([key]) => key.startsWith(prefix));
+      const reservedKeys = new Set(knownEntries.map(([, candidate]) => projectIconKey(candidate)));
+      const projectCandidate = projectIconAssignments.get(projectId) || runtimeProjectIconAssignments.get(projectId);
+      if (projectCandidate) reservedKeys.add(projectIconKey(projectCandidate));
+      const unknownSessionIds = group.map(({ sessionId }) => sessionId)
+        .filter((sessionId) => !sessionIconAssignments.has(`${projectId}\u0000${sessionId}`));
+      const cached = new Map(unknownSessionIds.flatMap((sessionId) => {
+        const candidate = runtimeSessionIconAssignments.get(`${projectId}\u0000${sessionId}`);
+        return candidate ? [[sessionId, candidate]] : [];
+      }));
+      const allocated = allocateUniqueRuntimeIcons(`${themeConfig?.themeId || ""}\u0000sessions\u0000${projectId}`, unknownSessionIds, reservedKeys, cached);
+      for (const [sessionId, candidate] of allocated) {
+        const key = `${projectId}\u0000${sessionId}`;
+        runtimeSessionIconAssignments.set(key, candidate);
+        allocatedByKey.set(key, candidate);
+      }
+    }
     for (const row of rows) {
       const sessionId = row.getAttribute("data-app-action-sidebar-thread-id");
       const projectId = row.closest('[data-app-action-sidebar-project-list-id]')?.getAttribute("data-app-action-sidebar-project-list-id");
       const title = row.querySelector('[data-thread-title-trigger]');
       const node = title?.previousElementSibling;
       if (!projectId || !sessionId || !(node instanceof HTMLElement)) continue;
-      const candidate = selectSessionIcon(projectId, sessionId);
+      const key = `${projectId}\u0000${sessionId}`;
+      const candidate = sessionIconAssignments.get(key) || allocatedByKey.get(key) || null;
       if (!candidate) {
         restoreSessionIcon(node);
         continue;
@@ -2656,6 +2707,8 @@
     for (const button of [...sidebarSearchButtons]) restoreSidebarSearch(button);
     for (const node of [...projectIconNodes]) restoreProjectIcon(node);
     for (const node of [...sessionIconNodes]) restoreSessionIcon(node);
+    runtimeProjectIconAssignments.clear();
+    runtimeSessionIconAssignments.clear();
     document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => { if (node instanceof HTMLElement) restoreSidebarNav(node); node.removeAttribute("data-dream-sidebar-nav"); });
     clearAccountMenu();
     for (const [labelNode, record] of sidebarCopyRestorers) {

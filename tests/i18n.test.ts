@@ -46,6 +46,7 @@ describe('internationalization', () => {
     expect(translate('en-US', '项目图标配置仅保存在本机')).toBe('Project icon settings are stored only on this device')
     expect(translate('en-US', '已刷新 {count} 个 Codex 项目。', { count: 3 })).toBe('Refreshed 3 Codex projects.')
     expect(translate('en-US', '显示会话图标')).toBe('Show session icons')
+    expect(translate('en-US', '随机素材已用尽 · Codex 默认图标')).toBe('Random icons exhausted · Codex default icon')
     expect(translate('en-US', '已刷新 {projectCount} 个 Codex 项目和 {sessionCount} 个会话。', { projectCount: 2, sessionCount: 5 })).toBe('Refreshed 2 Codex projects and 5 sessions.')
     expect(translate('en-US', '搜索图标')).toBe('Search icons')
     expect(translate('en-US', '没有匹配的图标')).toBe('No matching icons')

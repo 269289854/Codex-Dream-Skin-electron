@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IconLibraryPage } from '../src/renderer/src/IconLibraryPage'
 import { ProjectIconsPage } from '../src/renderer/src/ProjectIconsPage'
-import { createSystemIconLibrary, type CustomIconLibrary, type IconLibrary, type ThemeProjectIconSettings } from '../src/shared/project-icons'
+import { createDefaultThemeProjectIconSettings, createSystemIconLibrary, type CustomIconLibrary, type IconLibrary, type ThemeProjectIconSettings } from '../src/shared/project-icons'
 import type { StudioApi } from '../src/shared/contracts'
 import { setActiveLocale } from '../src/shared/i18n'
 
@@ -156,7 +156,7 @@ describe('icon management pages', () => {
   it('configures theme libraries, priorities, cached projects, and explicit assignments', async () => {
     const system = createSystemIconLibrary()
     const custom = customLibrary([customIcon(), customGifIcon()])
-    let settings: ThemeProjectIconSettings = { enabledLibraryIds: ['system'], weightOverrides: [], assignments: [], sessionAssignments: [] }
+    let settings: ThemeProjectIconSettings = createDefaultThemeProjectIconSettings()
     const setEnabledLibraries = vi.fn(async (_themeId: string, ids: string[]) => {
       settings = { ...settings, enabledLibraryIds: ids }
       return settings
@@ -218,6 +218,7 @@ describe('icon management pages', () => {
     await act(async () => root.render(<ProjectIconsPage themes={[{ id: themeId, name: 'Dream', active: true, system: false, updatedAt: '2026-08-03T00:00:00.000Z' }]} currentThemeId={themeId} revision={0} onChanged={vi.fn()} onError={vi.fn()} />))
     await vi.waitFor(() => expect(container.textContent).toContain('Zulu'))
     expect(container.textContent).toContain('仅本机')
+    expect(container.textContent).toContain('随机素材已用尽 · Codex 默认图标')
     const projectLabels = (): string[] => [...container.querySelectorAll('.project-assignment-row > .project-assignment-copy strong')].map((node) => node.textContent ?? '')
     expect(projectLabels()).toEqual(['Zulu', 'Alpha', 'Zebra'])
 
@@ -307,6 +308,7 @@ describe('icon management pages', () => {
     setActiveLocale('en-US')
     await act(async () => root.render(<ProjectIconsPage themes={[{ id: themeId, name: 'Dream', active: true, system: false, updatedAt: '2026-08-03T00:00:00.000Z' }]} currentThemeId={themeId} revision={1} onChanged={vi.fn()} onError={vi.fn()} />))
     await vi.waitFor(() => expect(container.textContent).toContain('System icons'))
+    expect(container.textContent).toContain('Random icons exhausted · Codex default icon')
     expect(container.textContent).not.toContain('系统图标')
     const englishTrigger = container.querySelector<HTMLButtonElement>('.project-icon-picker-trigger')
     await act(async () => englishTrigger?.click())

@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const SYSTEM_ICON_LIBRARY_ID = 'system'
 export const PROJECT_ICON_LIBRARY_VERSION = 1 as const
-export const PROJECT_ICON_SETTINGS_VERSION = 2 as const
+export const PROJECT_ICON_SETTINGS_VERSION = 3 as const
 export const MAX_PROJECT_ICON_LIBRARY_ENTRIES = 128
 export const MAX_CACHED_CODEX_SESSIONS = 10_000
 
@@ -102,11 +102,17 @@ const legacyThemeProjectIconSettingsSchema = z.object({
   assignments: z.array(projectAssignmentSchema).max(1000)
 }).strict()
 
-export const themeProjectIconSettingsSchema = z.object({
+export const themeProjectIconSettingsV2Schema = z.object({
   enabledLibraryIds: z.array(libraryIdSchema).max(32),
   weightOverrides: z.array(weightOverrideSchema).max(4096),
   assignments: z.array(projectAssignmentSchema).max(1000),
   sessionAssignments: z.array(sessionAssignmentSchema).max(MAX_CACHED_CODEX_SESSIONS)
+}).strict()
+
+export const themeProjectIconSettingsSchema = themeProjectIconSettingsV2Schema.extend({
+  allocationFingerprint: z.string().regex(/^(?:[0-9a-f]{64})?$/),
+  randomAssignments: z.array(projectAssignmentSchema).max(1000),
+  randomSessionAssignments: z.array(sessionAssignmentSchema).max(MAX_CACHED_CODEX_SESSIONS)
 }).strict()
 
 export const codexProjectSchema = z.object({
@@ -137,6 +143,13 @@ export const projectIconPrivateSettingsSchema = z.object({
   version: z.literal(PROJECT_ICON_SETTINGS_VERSION),
   showSessionIcons: z.boolean(),
   themes: z.record(uuidSchema, themeProjectIconSettingsSchema),
+  projects: z.array(cachedCodexProjectSchema).max(1000)
+}).strict()
+
+export const projectIconPrivateSettingsV2Schema = z.object({
+  version: z.literal(2),
+  showSessionIcons: z.boolean(),
+  themes: z.record(uuidSchema, themeProjectIconSettingsV2Schema),
   projects: z.array(cachedCodexProjectSchema).max(1000)
 }).strict()
 
@@ -203,7 +216,10 @@ export function createDefaultThemeProjectIconSettings(): ThemeProjectIconSetting
     enabledLibraryIds: [SYSTEM_ICON_LIBRARY_ID],
     weightOverrides: [],
     assignments: [],
-    sessionAssignments: []
+    sessionAssignments: [],
+    allocationFingerprint: '',
+    randomAssignments: [],
+    randomSessionAssignments: []
   }
 }
 
@@ -238,6 +254,75 @@ export function selectStableProjectIcon(
   return usable[usable.length - 1] ?? null
 }
 
+export interface StableUniqueIconAllocation {
+  targetId: string
+  icon: RuntimeProjectIconCandidate
+}
+
+export function projectIconPoolFingerprint(candidates: readonly RuntimeProjectIconCandidate[]): string {
+  const normalized = normalizeCandidates(candidates)
+    .map((candidate) => `${projectIconRefKey(candidate.ref)}=${candidate.weight}`)
+    .join('|')
+  return Array.from({ length: 8 }, (_, index) => stableHash(`${index}\u0000${normalized}`).toString(16).padStart(8, '0')).join('')
+}
+
+export function allocateStableUniqueIcons(
+  seed: string,
+  targetIds: readonly string[],
+  candidates: readonly RuntimeProjectIconCandidate[],
+  reservedRefs: readonly ProjectIconRef[] = [],
+  cachedAssignments: readonly { targetId: string; ref: ProjectIconRef }[] = []
+): StableUniqueIconAllocation[] {
+  const reservedKeys = new Set(reservedRefs.map(projectIconRefKey))
+  const available = new Map(normalizeCandidates(candidates)
+    .filter((candidate) => !reservedKeys.has(projectIconRefKey(candidate.ref)))
+    .map((candidate) => [projectIconRefKey(candidate.ref), candidate]))
+  const uniqueTargetIds = [...new Set(targetIds)]
+  const targetSet = new Set(uniqueTargetIds)
+  const cachedByTarget = new Map(cachedAssignments
+    .filter((assignment) => targetSet.has(assignment.targetId))
+    .map((assignment) => [assignment.targetId, assignment.ref]))
+  const orderedTargets = [...uniqueTargetIds].sort((left, right) => {
+    const delta = stableHash(`${seed}\u0000target\u0000${left}`) - stableHash(`${seed}\u0000target\u0000${right}`)
+    return delta || left.localeCompare(right)
+  })
+  const result = new Map<string, RuntimeProjectIconCandidate>()
+
+  for (const targetId of orderedTargets) {
+    const cachedRef = cachedByTarget.get(targetId)
+    if (!cachedRef) continue
+    const key = projectIconRefKey(cachedRef)
+    const candidate = available.get(key)
+    if (!candidate) continue
+    result.set(targetId, candidate)
+    available.delete(key)
+  }
+
+  for (const targetId of orderedTargets) {
+    if (result.has(targetId) || available.size === 0) continue
+    const pool = [...available.values()]
+    const total = pool.reduce((sum, candidate) => sum + candidate.weight, 0)
+    const fingerprint = pool.map((candidate) => `${projectIconRefKey(candidate.ref)}=${candidate.weight}`).join('|')
+    let target = stableHash(`${seed}\u0000${targetId}\u0000${fingerprint}`) % total
+    let selected = pool.at(-1)
+    for (const candidate of pool) {
+      if (target < candidate.weight) {
+        selected = candidate
+        break
+      }
+      target -= candidate.weight
+    }
+    if (!selected) continue
+    result.set(targetId, selected)
+    available.delete(projectIconRefKey(selected.ref))
+  }
+
+  return uniqueTargetIds.flatMap((targetId) => {
+    const icon = result.get(targetId)
+    return icon ? [{ targetId, icon }] : []
+  })
+}
+
 export function selectStableSessionIcon(
   themeId: string,
   projectId: string,
@@ -268,4 +353,14 @@ function stableHash(value: string): number {
     hash = Math.imul(hash, 16777619)
   }
   return hash >>> 0
+}
+
+function normalizeCandidates(candidates: readonly RuntimeProjectIconCandidate[]): RuntimeProjectIconCandidate[] {
+  const unique = new Map<string, RuntimeProjectIconCandidate>()
+  for (const candidate of candidates) {
+    if (!Number.isInteger(candidate.weight) || candidate.weight < 1 || candidate.weight > 10) continue
+    const key = projectIconRefKey(candidate.ref)
+    if (!unique.has(key)) unique.set(key, candidate)
+  }
+  return [...unique.values()].sort((left, right) => projectIconRefKey(left.ref).localeCompare(projectIconRefKey(right.ref)))
 }

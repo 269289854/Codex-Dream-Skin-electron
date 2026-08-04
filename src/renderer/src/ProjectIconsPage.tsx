@@ -2,7 +2,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, ChevronRight, FolderCog, LockKeyhole, MessageCircle, RefreshCw, Search, Shuffle } from 'lucide-react'
 import type { CachedCodexProject, IconLibrary, IconLibrarySummary, ProjectIconRef, ThemeProjectIconSettings } from '../../shared/project-icons'
-import { projectIconRefKey, resolveProjectIconWeight, selectStableProjectIcon, selectStableSessionIcon, SYSTEM_ICON_LIBRARY_ID, type RuntimeProjectIconCandidate } from '../../shared/project-icons'
+import { projectIconRefKey, resolveProjectIconWeight, SYSTEM_ICON_LIBRARY_ID, type RuntimeProjectIconCandidate } from '../../shared/project-icons'
 import type { ThemeSummary } from '../../shared/theme'
 import { localizedMessage, localizedMessageFrom, t, tm, type LocalizedMessage } from '../../shared/i18n'
 import { builtinIconLabels } from './icons'
@@ -115,6 +115,7 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
     try {
       const next = await window.studio.projectIcons.refreshProjects()
       setProjects(next)
+      setSettings(await window.studio.projectIcons.getThemeSettings(themeId))
       const sessionCount = next.reduce((count, project) => count + project.sessions.length, 0)
       setNotice(localizedMessage('已刷新 {projectCount} 个 Codex 项目和 {sessionCount} 个会话。', { projectCount: next.length, sessionCount }))
     } catch (reason) {
@@ -191,10 +192,8 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
       {visibleProjects.length ? <div className="project-assignment-list">
         {visibleProjects.map((project) => {
           const assignment = settings?.assignments.find((entry) => entry.projectId === project.id)
-          const projectCandidate = assignment
-            ? randomCandidates.find((candidate) => projectIconRefKey(candidate.ref) === projectIconRefKey(assignment.ref)) ?? { ref: assignment.ref, weight: 1 }
-            : selectStableProjectIcon(themeId, project.id, randomCandidates)
-          const selected = assignment?.ref ?? projectCandidate?.ref ?? null
+          const randomAssignment = settings?.randomAssignments.find((entry) => entry.projectId === project.id)
+          const selected = assignment?.ref ?? randomAssignment?.ref ?? null
           const selectedEntry = selected ? findLibraryIcon(libraries, selected) : null
           const matchingSessions = normalizedQuery && !project.label.toLocaleLowerCase().includes(normalizedQuery)
             ? project.sessions.filter((session) => session.title.toLocaleLowerCase().includes(normalizedQuery))
@@ -205,7 +204,7 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
             <div className="project-assignment-row">
               <button className="project-disclosure" type="button" aria-label={expanded ? t('折叠项目会话') : t('展开项目会话')} aria-expanded={expanded} aria-controls={panelId} onClick={() => toggleProjectExpanded(project.id)}>{expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}</button>
               <span className="project-assignment-preview">{selectedEntry ? <LibraryIconPreview libraryId={selectedEntry.library.id} icon={selectedEntry.icon} size={23} /> : <FolderCog size={21} />}</span>
-              <span className="project-assignment-copy"><strong>{project.label}</strong><small>{assignment ? t('已指定') : selected ? t('按优先级随机') : t('Codex 默认图标')} · {t('{count} 个会话', { count: project.sessions.length })}</small></span>
+              <span className="project-assignment-copy"><strong>{project.label}</strong><small>{assignment ? t('已指定') : randomAssignment ? t('按优先级随机') : randomCandidates.length ? t('随机素材已用尽 · Codex 默认图标') : t('Codex 默认图标')} · {t('{count} 个会话', { count: project.sessions.length })}</small></span>
               <ProjectIconPicker
               targetId={`project:${project.id}`}
               targetLabel={project.label}
@@ -221,13 +220,13 @@ export function ProjectIconsPage({ themes, currentThemeId, revision, onChanged, 
             {expanded && <div className="session-assignment-list" id={panelId}>
               {matchingSessions.map((session) => {
                 const sessionAssignment = settings?.sessionAssignments.find((entry) => entry.projectId === project.id && entry.sessionId === session.id)
-                const randomSessionCandidate = selectStableSessionIcon(themeId, project.id, session.id, randomCandidates, projectCandidate)
-                const sessionSelected = sessionAssignment?.ref ?? randomSessionCandidate?.ref ?? null
+                const randomSessionAssignment = settings?.randomSessionAssignments.find((entry) => entry.projectId === project.id && entry.sessionId === session.id)
+                const sessionSelected = sessionAssignment?.ref ?? randomSessionAssignment?.ref ?? null
                 const sessionEntry = sessionSelected ? findLibraryIcon(libraries, sessionSelected) : null
                 const pickerId = `session:${project.id}:${session.id}`
                 return <div className="session-assignment-row" key={session.id}>
                   <span className="session-assignment-preview">{sessionEntry ? <LibraryIconPreview libraryId={sessionEntry.library.id} icon={sessionEntry.icon} size={18} /> : <MessageCircle size={17} />}</span>
-                  <span className="project-assignment-copy"><strong>{session.title}</strong><small>{sessionAssignment ? t('已指定') : sessionSelected ? t('按优先级随机') : t('Codex 默认图标')}</small></span>
+                  <span className="project-assignment-copy"><strong>{session.title}</strong><small>{sessionAssignment ? t('已指定') : randomSessionAssignment ? t('按优先级随机') : randomCandidates.length ? t('随机素材已用尽 · Codex 默认图标') : t('Codex 默认图标')}</small></span>
                   <ProjectIconPicker targetId={pickerId} targetLabel={session.title} libraries={libraries} assignment={sessionAssignment?.ref ?? null} selectedEntry={sessionEntry} open={openPickerId === pickerId} disabled={busy} onOpenChange={(open) => setOpenPickerId(open ? pickerId : null)} onSelect={(value) => void assignSession(project.id, session.id, value)} />
                 </div>
               })}

@@ -797,6 +797,7 @@ const EN_MESSAGES: Readonly<Record<string, string>> = {
   '搜索图标': 'Search icons',
   '已指定': 'Assigned',
   '按优先级随机': 'Random by priority',
+  '随机素材已用尽 · Codex 默认图标': 'Random icons exhausted · Codex default icon',
   'Codex 默认图标': 'Codex default icon',
   '随机（素材库优先级）': 'Random (library priority)',
   '没有匹配的项目': 'No matching projects',
