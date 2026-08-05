@@ -1960,7 +1960,10 @@ describe('renderer home DOM adaptation', () => {
     let objectUrlCount = 0
     Object.defineProperty(window.URL, 'createObjectURL', {
       configurable: true,
-      value: () => ++objectUrlCount === 1 ? 'blob:animated-art' : 'blob:poster-art'
+      value: () => {
+        objectUrlCount += 1
+        return ['blob:animated-art', 'blob:hero-poster-art', 'blob:polaroid-art', 'blob:polaroid-poster-art'][objectUrlCount - 1] ?? `blob:extra-${objectUrlCount}`
+      }
     })
 
     const animated = 'data:image/gif;base64,QU5JTUFURUQ='
@@ -2063,7 +2066,7 @@ describe('renderer home DOM adaptation', () => {
       conversation: animated,
       window: animated,
       bubble: `url("${animated}")`,
-      polaroid: `url("${animated}")`,
+      polaroid: 'url("blob:polaroid-art")',
       hero: 'url("blob:animated-art")'
     })
 
@@ -2082,6 +2085,31 @@ describe('renderer home DOM adaptation', () => {
     stateOf(window).cleanup()
     expect(reducedMotionQuery.removeEventListener).toHaveBeenCalledOnce()
     expect(changeListeners.size).toBe(0)
+  })
+
+  it('uses a blob URL for oversized polaroid images instead of storing data in CSS', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = homeFixture('Large-Polaroid')
+    const largeDataUrl = `data:image/png;base64,${'A'.repeat(1024 * 1024)}`
+    let objectUrlCount = 0
+    const createObjectURL = vi.fn(() => `blob:polaroid-${++objectUrlCount}`)
+    Object.defineProperty(window.URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+
+    inject(window, undefined, undefined, undefined, undefined, undefined, undefined, {
+      hero: null,
+      polaroid: {
+        asset: 'assets/polaroid.png',
+        kind: 'image',
+        mimeType: 'image/png',
+        transform: { flipHorizontal: false, flipVertical: false },
+        dataUrl: largeDataUrl
+      }
+    })
+
+    const surface = window.document.querySelector('.dream-polaroid-surface') as HTMLElement | null
+    expect(surface?.style.getPropertyValue('--dream-polaroid-art')).toBe('url("blob:polaroid-2")')
+    expect(surface?.getAttribute('style')).not.toContain(largeDataUrl)
+    expect(createObjectURL).toHaveBeenCalledTimes(2)
   })
 
   it('applies hidden and unfocused video pause policies without resuming manually paused media', async () => {

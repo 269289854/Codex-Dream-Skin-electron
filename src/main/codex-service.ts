@@ -51,12 +51,11 @@ interface RestoredRuntimeSessionMarker {
 const LEGACY_MAC_INSTALLATION_ID = 'com.openai.codex:2DC432GLL2'
 const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+X3Y5WQAAAABJRU5ErkJggg=='
 
-export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<string, string>): string {
+export function buildDynamicThemeCss(profile: ThemeProfile, _assets: Record<string, string>): string {
   const rules = [`:root.codex-dream-skin { ${buildThemeVariableDeclarations(profile)} }`,
     'html.codex-dream-skin body { color: var(--dream-global-text) !important; background: var(--dream-canvas) !important; font-family: var(--dream-font-ui) !important; }',
     `.dream-layout-root { --dream-art-scale: ${Math.round(profile.hero.scale * 100)}%; --dream-art-x: ${profile.hero.position.x * 100}%; --dream-art-y: ${profile.hero.position.y * 100}%; }`]
   const source = profile.polaroid.source?.asset ?? profile.polaroid.sourceImage ?? null
-  const imageSource = profile.polaroid.source?.kind === 'image' || !profile.polaroid.source ? source : null
   const fence = profile.polaroid.fence as Fence
   const layout = profile.polaroid.sourceSize ? getPolaroidLayout(profile.polaroid.mode, profile.polaroid.sourceSize, fence) : null
   if (profile.polaroid.visible && source && layout) {
@@ -65,7 +64,7 @@ export function buildDynamicThemeCss(profile: ThemeProfile, assets: Record<strin
     rules.push(`#codex-dream-skin-chrome .dream-polaroid { right: auto !important; left: ${p.x * 100}% !important; top: ${p.y * 100}% !important; width: ${p.width * 100}% !important; height: auto !important; aspect-ratio: ${layout.aspectRatio}; transform: rotate(${p.rotation}deg); transform-origin: center; opacity: ${style.opacity}; }`)
     rules.push(`#codex-dream-skin-chrome .dream-polaroid-shadow { filter: ${polaroidShadowFilter(style)} !important; }`)
     rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface { background-image: none !important; background-size: ${layout.backgroundSize} !important; background-position: ${layout.backgroundPosition} !important; clip-path: ${layout.clipPath ?? 'none'} !important; }`)
-    rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface::before { content: ""; position: absolute; inset: 0; background-image: ${imageSource && assets[source] ? `var(--dream-polaroid-art, url("${assets[source]}"))` : 'none'}; background-repeat: no-repeat; background-size: ${layout.backgroundSize}; background-position: ${layout.backgroundPosition}; transform: ${mediaFlipCssTransform(profile.polaroid.mediaTransform)}; transform-origin: center; pointer-events: none; }`)
+    rules.push(`#codex-dream-skin-chrome .dream-polaroid-surface::before { content: ""; position: absolute; inset: 0; background-image: var(--dream-polaroid-art, none); background-repeat: no-repeat; background-size: ${layout.backgroundSize}; background-position: ${layout.backgroundPosition}; transform: ${mediaFlipCssTransform(profile.polaroid.mediaTransform)}; transform-origin: center; pointer-events: none; }`)
     rules.push(`@media (max-width: ${p.hideBelowWidth}px) { #codex-dream-skin-chrome .dream-polaroid { display: none !important; } }`)
   } else rules.push('#codex-dream-skin-chrome .dream-polaroid { display: none !important; }')
   return rules.join('\n')

@@ -934,6 +934,9 @@
   const artUrl = dataUrlObjectUrl(artDataUrl);
   const artPosterUrl = dataUrlObjectUrl(mediaConfig?.hero?.posterDataUrl);
   const motionArtUrl = () => motionIsPaused() && artPosterUrl ? artPosterUrl : artUrl;
+  const polaroidArtUrl = dataUrlObjectUrl(mediaConfig?.polaroid?.dataUrl);
+  const polaroidPosterUrl = dataUrlObjectUrl(mediaConfig?.polaroid?.posterDataUrl);
+  const motionPolaroidArtUrl = () => motionIsPaused() && polaroidPosterUrl ? polaroidPosterUrl : polaroidArtUrl;
 
   const mediaUrls = {};
   const mediaInputs = {};
@@ -1343,7 +1346,7 @@
   const syncPolaroidArt = (surface) => {
     if (!(surface instanceof HTMLElement)) return;
     if (mediaConfig?.polaroid?.kind === "image") {
-      const source = motionDataUrl(mediaConfig.polaroid);
+      const source = motionPolaroidArtUrl();
       if (source) surface.style.setProperty("--dream-polaroid-art", `url("${source}")`);
       else surface.style.removeProperty("--dream-polaroid-art");
     } else {
@@ -2766,6 +2769,8 @@
     if (state?.scheduler?.contentTimeout) clearTimeout(state.scheduler.contentTimeout);
     if (state?.artUrl) URL.revokeObjectURL(state.artUrl);
     if (state?.artPosterUrl) URL.revokeObjectURL(state.artPosterUrl);
+    if (state?.polaroidArtUrl) URL.revokeObjectURL(state.polaroidArtUrl);
+    if (state?.polaroidPosterUrl) URL.revokeObjectURL(state.polaroidPosterUrl);
     for (const url of Object.values(mediaUrls)) if (url) URL.revokeObjectURL(url);
     const mediaNodes = new Set([...document.querySelectorAll(".dream-hero-video, .dream-hero-image, .dream-polaroid-video, .dream-conversation-background-video, .dream-window-background-video"), ...Object.values(retainedMediaNodes)]);
     mediaNodes.forEach((node) => { if (node instanceof HTMLVideoElement) clearPlaybackGuard(node); if (node instanceof HTMLMediaElement) node.pause(); if (node instanceof Element) node.remove(); });
@@ -2930,6 +2935,8 @@
     scheduler,
     artUrl,
     artPosterUrl,
+    polaroidArtUrl,
+    polaroidPosterUrl,
     mediaUrls,
     visibilityHandler,
     motionHandler,

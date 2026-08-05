@@ -744,6 +744,7 @@ describe('theme schema and compiler', () => {
     expect(fullCss).toContain('drop-shadow(0px 8px 10px rgba(24, 48, 54, 0.24))')
     expect(fullCss).toContain('background-size: 100% 100% !important')
     expect(fullCss).toContain('clip-path: none !important')
+    expect(fullCss).not.toContain(dataUrl)
 
     profile.polaroid.mode = 'fence'
     const fenceCss = buildDynamicThemeCss(profile, { 'assets/polaroid.png': dataUrl })
