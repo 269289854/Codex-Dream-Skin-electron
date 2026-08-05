@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const execFileAsync = promisify(execFile)
 const commonScript = resolve('resources/windows/common-windows.ps1').replaceAll("'", "''")
+const POWERSHELL_TEST_TIMEOUT = 30_000
 
 async function selectPort(availabilityBody: string): Promise<number> {
   const command = [
@@ -21,15 +22,15 @@ async function selectPort(availabilityBody: string): Promise<number> {
 describe.runIf(process.platform === 'win32')('Windows CDP port selection', () => {
   it('keeps the preferred port when it is available', async () => {
     await expect(selectPort('return $Port -eq 9335')).resolves.toBe(9335)
-  })
+  }, POWERSHELL_TEST_TIMEOUT)
 
   it('uses the next available port when the preferred port is occupied', async () => {
     await expect(selectPort('return $Port -eq 9336')).resolves.toBe(9336)
-  })
+  }, POWERSHELL_TEST_TIMEOUT)
 
   it('reports an error when the candidate range is occupied', async () => {
     await expect(selectPort('return $false')).rejects.toThrow('No free loopback port was found between 9335 and 9435.')
-  })
+  }, POWERSHELL_TEST_TIMEOUT)
 
   it('returns a numeric target count when PowerShell emits one target object', async () => {
     const command = [
@@ -43,5 +44,5 @@ describe.runIf(process.platform === 'win32')('Windows CDP port selection', () =>
       '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command
     ])
     expect(Number(stdout.trim())).toBe(1)
-  })
+  }, POWERSHELL_TEST_TIMEOUT)
 })
