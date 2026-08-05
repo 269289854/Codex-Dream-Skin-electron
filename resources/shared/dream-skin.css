@@ -697,11 +697,12 @@ html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-
   background: var(--dream-conversation-plan-message-hover);
 }
 
-html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble, .dream-conversation-plan-bubble, .dream-conversation-tool-bubble) > * {
+html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble, .dream-conversation-tool-bubble) > * {
   position: relative;
   z-index: 3;
 }
 
+/* Plan cards keep a native absolute click layer above their inert content. */
 html.codex-dream-skin[data-dream-plan-bubble-frame]:not([data-dream-plan-bubble-frame="none"]) .dream-conversation-plan-bubble > :is(.relative.flex.h-10, .relative.overflow-hidden) {
   z-index: 3;
 }

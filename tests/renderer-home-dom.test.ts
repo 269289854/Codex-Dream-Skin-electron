@@ -755,6 +755,7 @@ describe('renderer home DOM adaptation', () => {
 
   it('applies role-specific frame variables without adding message children and clears them on cleanup', () => {
     const window = createWindow()
+    window.document.head.innerHTML = '<style>.absolute { position: absolute; } .inset-0 { inset: 0; } .z-10 { z-index: 10; }</style>'
     window.document.body.innerHTML = `
       <main class="main-surface">
         <div data-user-message-bubble><span>用户消息</span></div>
@@ -763,7 +764,7 @@ describe('renderer home DOM adaptation', () => {
         </div>
         <section data-local-conversation-item-target-ids="plan-1">
           <div data-plan-card-surface class="relative rounded-lg bg-token-foreground/5 overflow-clip" style="background-color: rgb(229, 231, 235); overflow: clip; padding: 0; width: auto">
-            <button data-plan-open-layer type="button" aria-hidden="true" tabindex="-1" class="absolute inset-0 z-10 cursor-interaction" style="position: absolute; inset: 0; z-index: 10"></button>
+            <button data-plan-open-layer type="button" aria-hidden="true" tabindex="-1" class="absolute inset-0 z-10 cursor-interaction"></button>
             <div class="relative flex h-10 flex-wrap items-center justify-between gap-2 px-3 py-2"><span>计划</span></div>
             <div class="relative overflow-hidden" aria-hidden="true" inert><div class="px-4 py-3"><div class="text-size-chat"><h1>生成计划</h1><p>生成计划正文</p></div></div></div>
           </div>
