@@ -136,6 +136,7 @@ jobs:
           sudo rm -rf "$HOME/Library/Caches"
           sudo rm -rf "$HOME/.cache"
           sudo rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          sudo rm -rf /Applications/Xcode*.app
           sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes
           df -h /
 

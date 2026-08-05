@@ -48,6 +48,7 @@ describe('GitHub Actions release contract', () => {
     expect(macosJob).toContain('runs-on: macos-15')
     expect(macosJob).toContain('- name: Free macOS runner disk space')
     expect(macosJob).toContain('sudo rm -rf "$HOME/Library/Caches"')
+    expect(macosJob).toContain('sudo rm -rf /Applications/Xcode*.app')
     expect(macosJob).toContain('sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes')
     expect(macosJob).toContain('- run: npm test')
     expect(macosJob).toContain('- run: npm run package:mac')
