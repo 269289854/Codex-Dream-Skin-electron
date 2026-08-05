@@ -36,7 +36,7 @@ const copyFieldConfig: Record<PreviewCopyField, { label: string; maxLength: numb
   sidebarModeTitle: { label: 'Codex 标题', maxLength: 80 },
   sidebarProjectsTitle: { label: '项目标题', maxLength: 80 },
   sidebarTasksTitle: { label: '任务标题', maxLength: 80 },
-  sidebarNavNewTask: { label: '导航文字：新建任务', maxLength: 80 },
+  sidebarNavNewTask: { label: '导航文字：新对话', maxLength: 80 },
   sidebarNavPullRequests: { label: '导航文字：拉取请求', maxLength: 80 },
   sidebarNavSites: { label: '导航文字：站点', maxLength: 80 },
   sidebarNavScheduled: { label: '导航文字：已安排', maxLength: 80 },

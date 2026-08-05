@@ -5,7 +5,7 @@ export { builtinIcons }
 
 export const builtinIconLabels: Readonly<Record<string, string>> = Object.freeze({
   music: '音乐', sparkles: '闪烁', 'wand-sparkles': '魔法闪烁', image: '图片', send: '发送', 'folder-code': '代码文件夹',
-  'square-pen': '新建任务', 'git-pull-request': 'Git 拉取请求', 'grid-2x2': '站点', 'clock-3': '已安排', 'at-sign': '插件',
+  'square-pen': '新对话', 'git-pull-request': 'Git 拉取请求', 'grid-2x2': '站点', 'clock-3': '已安排', 'at-sign': '插件',
   heart: '爱心', droplet: '水滴', star: '星星', snowflake: '雪花', pin: '图钉', home: '首页', search: '搜索', settings: '设置',
   menu: '菜单', plus: '加号', minus: '减号', check: '勾选', 'check-circle': '完成', close: '关闭', 'arrow-up': '向上箭头',
   'arrow-down': '向下箭头', 'arrow-left': '向左箭头', 'arrow-right': '向右箭头', 'chevron-up': '向上折叠', 'chevron-down': '向下展开',

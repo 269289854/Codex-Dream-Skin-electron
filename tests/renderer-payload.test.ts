@@ -21,6 +21,7 @@ describe('renderer injection template', () => {
     expect(template).toContain('themeConfig?.builtinGlyphs')
     expect(template).toContain('ensureSidebarSurfaces()')
     expect(template).toContain('themeConfig?.sidebarNavigation')
+    expect(template).toContain('新对话')
     expect(template).toContain('data-dream-sidebar-nav')
     expect(template).toContain('restoreSidebarNav')
     expect(template).toContain('themeConfig?.accountMenu')

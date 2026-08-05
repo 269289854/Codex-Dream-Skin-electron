@@ -68,7 +68,7 @@ function homeFixture(projectName: string, nativeHeadingButton = false): string {
       <div data-app-action-sidebar-thread-row="" data-app-action-sidebar-thread-active="false"><span data-thread-title="true">Other task</span><button type="button" aria-label="置顶任务" class="enabled:active:text-token-foreground/70"></button></div>
       <footer><span data-testid="team-avatar">DT</span></footer>
       <nav aria-label="primary">
-        <div class="native-new-task-row"><a aria-current="page" href="#new"><span>新建任务</span></a><button type="button" aria-label="新建任务">+</button></div>
+        <div class="native-new-task-row"><a aria-current="page" href="#new"><span>新对话</span></a><button type="button" aria-label="新对话">+</button></div>
         <a href="#pull"><span>拉取请求</span></a>
       </nav>
     </aside>
@@ -105,7 +105,7 @@ function englishCodexHomeFixture(projectName: string): string {
     .replace('<main class="main-surface">', '<main>')
     .replace('切换模式：Codex', 'Switch mode: Codex')
     .replaceAll('搜索', 'Search')
-    .replace('<div class="native-new-task-row"><a aria-current="page" href="#new"><span>新建任务</span></a><button type="button" aria-label="新建任务">+</button></div>', '<button type="button" aria-current="page"><span>New chat</span></button>')
+    .replace('<div class="native-new-task-row"><a aria-current="page" href="#new"><span>新对话</span></a><button type="button" aria-label="新对话">+</button></div>', '<button type="button" aria-current="page"><span>New chat</span></button>')
     .replace('<a href="#pull"><span>拉取请求</span></a>', '<button type="button"><span>Pull requests</span></button>')
     .replace('归档任务', 'Archive task')
     .replace('置顶任务', 'Pin task')
@@ -310,6 +310,28 @@ function dispatchAnimationIteration(window: Window, node: Element, animationName
 }
 
 describe('renderer home DOM adaptation', () => {
+  it('recognizes the new conversation label and mounts the current home composer surface', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = `
+      <aside class="app-shell-left-panel">
+        <nav><button type="button" aria-current="page"><span>新对话</span></button></nav>
+      </aside>
+      ${currentCodexHomeFixture('新版首页项目')}`
+    const localized = {
+      copyByLocale: {
+        'zh-CN': { ...defaultProfile.copy['zh-CN'], sidebarNavNewTask: '主题新对话' },
+        'en-US': { ...defaultProfile.copy['en-US'], sidebarNavNewTask: 'Theme New Chat' }
+      },
+      actionsByLocale: { 'zh-CN': HOME_ACTIONS, 'en-US': HOME_ACTIONS_EN }
+    }
+
+    inject(window, undefined, undefined, homeLayoutCss, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, localized)
+
+    expect(window.document.querySelector('[data-dream-sidebar-nav="newTask"]')?.textContent).toContain('主题新对话')
+    expect(window.document.querySelector('[data-composer-surface-variant]')?.classList.contains('dream-composer')).toBe(true)
+    expect(window.document.querySelector('[data-codex-composer-root]')?.classList.contains('dream-composer')).toBe(false)
+  })
+
   it('supports the current Codex home composer root and keeps the whole home flow together', () => {
     const window = createWindow()
     window.document.body.innerHTML = currentCodexHomeFixture('Codex-Dream-Skin-electron')
@@ -373,7 +395,7 @@ describe('renderer home DOM adaptation', () => {
       <aside class="app-shell-left-panel">
         <button type="button" aria-label="切换模式：Codex"><span>Codex</span></button>
         <button type="button" aria-label="搜索">搜索</button>
-        <nav><a href="#new"><span>新建任务</span></a><a href="#pull"><span>拉取请求</span></a></nav>
+        <nav><a href="#new"><span>新对话</span></a><a href="#pull"><span>拉取请求</span></a></nav>
       </aside>
     `))
     window.document.documentElement.lang = 'zh-CN'
@@ -391,7 +413,7 @@ describe('renderer home DOM adaptation', () => {
     window.document.body.innerHTML = homeFixture('Legacy-Project')
       .replace('切换模式：Codex', 'Switch mode: Codex')
       .replaceAll('搜索', 'Search')
-      .replaceAll('新建任务', 'New task')
+      .replaceAll('新对话', 'New task')
       .replace('拉取请求', 'Pull requests')
     inject(window, undefined, {
       ...DEFAULT_HOME_COPY,
@@ -431,7 +453,7 @@ describe('renderer home DOM adaptation', () => {
       <aside class="app-shell-left-panel">
         <button type="button" aria-label="切换模式：Codex"><span>Codex</span></button>
         <button type="button" aria-label="搜索">搜索</button>
-        <nav><a href="#new"><span>新建任务</span></a><a href="#pull"><span>拉取请求</span></a></nav>
+        <nav><a href="#new"><span>新对话</span></a><a href="#pull"><span>拉取请求</span></a></nav>
       </aside>
     `))
     stateOf(window).ensure()
@@ -1064,7 +1086,7 @@ describe('renderer home DOM adaptation', () => {
         <button data-app-action-sidebar-section-toggle><span>项目</span><svg><path d="projects" /></svg></button>
         <button data-app-action-sidebar-section-toggle><span>任务</span><svg><path d="tasks" /></svg></button>
         <nav>${[
-          ['新建任务', 'newTask'],
+          ['新对话', 'newTask'],
           ['拉取请求', 'pullRequests'],
           ['站点', 'sites'],
           ['已安排', 'scheduled'],
@@ -1105,7 +1127,7 @@ describe('renderer home DOM adaptation', () => {
     stateOf(window).ensure()
     expect(window.document.querySelectorAll('[data-dream-sidebar-nav]')).toHaveLength(5)
     stateOf(window).cleanup()
-    expect(navButtons.map((button) => button.querySelector('.text-fade-truncate')?.textContent)).toEqual(['新建任务', '拉取请求', '站点', '已安排', '插件'])
+    expect(navButtons.map((button) => button.querySelector('.text-fade-truncate')?.textContent)).toEqual(['新对话', '拉取请求', '站点', '已安排', '插件'])
     expect(navButtons[0]?.querySelector('.native-icon svg path')?.getAttribute('d')).toBe('newTask')
     expect(navButtons[1]?.querySelector('.native-icon')?.getAttribute('class')).toBe('native-icon')
     expect(window.document.querySelector('button[aria-label^="切换模式"] span')?.textContent).toBe('Codex')

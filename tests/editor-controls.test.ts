@@ -305,7 +305,7 @@ describe('editor appearance controls', () => {
   })
 
   it('names the default sidebar icons without special original-icon labels', () => {
-    expect(builtinIconLabels['square-pen']).toBe('新建任务')
+    expect(builtinIconLabels['square-pen']).toBe('新对话')
     expect(builtinIconLabels['git-pull-request']).toBe('Git 拉取请求')
     expect(builtinIconLabels['grid-2x2']).toBe('站点')
     expect(builtinIconLabels['clock-3']).toBe('已安排')

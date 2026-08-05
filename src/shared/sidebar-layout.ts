@@ -5,7 +5,7 @@ export const DEFAULT_SIDEBAR_COPY = {
 } as const
 
 export const DEFAULT_SIDEBAR_NAV_COPY = {
-  sidebarNavNewTask: '新建任务',
+  sidebarNavNewTask: '新对话',
   sidebarNavPullRequests: '拉取请求',
   sidebarNavSites: '站点',
   sidebarNavScheduled: '已安排',
@@ -29,8 +29,8 @@ export const DEFAULT_SIDEBAR_NAV_COPY_EN = {
 export const SIDEBAR_NAV_ITEMS = [
   {
     id: 'newTask',
-    label: '新建任务',
-    aliases: ['新建任务', 'New task', 'New chat'],
+    label: '新对话',
+    aliases: ['新对话', '新建任务', 'New task', 'New chat'],
     iconName: 'square-pen',
     iconSlot: 'sidebarNavNewTask',
     copyField: 'sidebarNavNewTask',

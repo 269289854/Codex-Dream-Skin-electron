@@ -1212,7 +1212,7 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     input = legacy
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 29) {
-    const candidate = normalizeCurrentMediaReferences(input)
+    const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
   }
@@ -1659,14 +1659,14 @@ function migrateVersionTwentySeven(legacy: z.infer<typeof versionTwentySevenThem
 }
 
 function migrateVersionTwentyEight(legacy: z.infer<typeof versionTwentyEightThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse({
+  return addSourceImageHints(themeProfileSchema.parse(normalizeSidebarNavCopy({
     ...legacy,
     version: 29,
     copy: {
       'zh-CN': structuredClone(legacy.copy),
       'en-US': structuredClone(legacy.copy)
     }
-  }))
+  })))
 }
 
 function addSourceImageHints(profile: ThemeProfile): ThemeProfile {
@@ -1702,6 +1702,16 @@ function normalizeCurrentMediaReferences(input: object): Record<string, unknown>
   if (hero) candidate.hero = hero
   if (polaroid) candidate.polaroid = polaroid
   return candidate
+}
+
+function normalizeSidebarNavCopy(input: Record<string, unknown>): Record<string, unknown> {
+  const copy = input.copy && typeof input.copy === 'object' ? input.copy as Record<string, unknown> : null
+  if (!copy) return input
+  const zhCopy = copy['zh-CN'] && typeof copy['zh-CN'] === 'object' ? copy['zh-CN'] as Record<string, unknown> : null
+  const enCopy = copy['en-US'] && typeof copy['en-US'] === 'object' ? copy['en-US'] as Record<string, unknown> : null
+  if (zhCopy?.sidebarNavNewTask === '新建任务') zhCopy.sidebarNavNewTask = '新对话'
+  if (enCopy?.sidebarNavNewTask === 'New task') enCopy.sidebarNavNewTask = 'New chat'
+  return input
 }
 
 function stripSidebarFields(candidate: Record<string, unknown>): Record<string, unknown> {

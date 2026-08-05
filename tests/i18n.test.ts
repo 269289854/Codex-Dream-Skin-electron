@@ -23,6 +23,7 @@ describe('internationalization', () => {
   })
 
   it('translates compound appearance labels and dynamic technical errors', () => {
+    expect(translate('en-US', '新对话')).toBe('New chat')
     expect(translate('en-US', '新建任务')).toBe('New chat')
     expect(translate('en-US', 'Git 拉取请求')).toBe('Git pull request')
     expect(translate('en-US', '笔刷')).toBe('Brush')

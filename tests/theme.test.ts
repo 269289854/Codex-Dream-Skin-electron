@@ -403,8 +403,28 @@ describe('theme schema and compiler', () => {
     expect(current.version).toBe(29)
     expect(current.copy['zh-CN']).toMatchObject({ ...DEFAULT_SIDEBAR_COPY, ...DEFAULT_SIDEBAR_NAV_COPY })
     expect(current.copy['en-US']).toMatchObject({ ...DEFAULT_SIDEBAR_COPY_EN, ...DEFAULT_SIDEBAR_NAV_COPY_EN })
+    expect(current.copy['zh-CN'].sidebarNavNewTask).toBe('新对话')
     expect(current.copy['en-US'].sidebarNavNewTask).toBe('New chat')
+    expect(SIDEBAR_NAV_ITEMS.find((item) => item.id === 'newTask')?.aliases).toContain('新对话')
+    expect(SIDEBAR_NAV_ITEMS.find((item) => item.id === 'newTask')?.aliases).toContain('新建任务')
     expect(SIDEBAR_NAV_ITEMS.find((item) => item.id === 'newTask')?.aliases).toContain('New chat')
+
+    const normalized = parseThemeProfile({
+      ...current,
+      copy: {
+        ...current.copy,
+        'zh-CN': { ...current.copy['zh-CN'], sidebarNavNewTask: '新建任务' },
+        'en-US': { ...current.copy['en-US'], sidebarNavNewTask: 'New task' }
+      }
+    })
+    expect(normalized.copy['zh-CN'].sidebarNavNewTask).toBe('新对话')
+    expect(normalized.copy['en-US'].sidebarNavNewTask).toBe('New chat')
+
+    const custom = parseThemeProfile({
+      ...current,
+      copy: { ...current.copy, 'zh-CN': { ...current.copy['zh-CN'], sidebarNavNewTask: '自定义新建任务' } }
+    })
+    expect(custom.copy['zh-CN'].sidebarNavNewTask).toBe('自定义新建任务')
     for (const item of SIDEBAR_NAV_ITEMS) {
       expect(current.icons[item.iconSlot]).toEqual({ kind: 'builtin', name: item.iconName })
       expect(current.typography.slots[item.fontSlot]).toEqual({ kind: 'inherit' })

@@ -26,7 +26,7 @@
   let activeLocale = null;
   let actions = [];
   const localeSignals = {
-    "zh-CN": new Set(["新建任务", "拉取请求", "站点", "已安排", "插件", "项目", "任务", "搜索", "设置", "退出登录"]),
+    "zh-CN": new Set(["新对话", "新建任务", "拉取请求", "站点", "已安排", "插件", "项目", "任务", "搜索", "设置", "退出登录"]),
     "en-US": new Set(["new task", "new chat", "pull requests", "sites", "scheduled", "plugins", "projects", "tasks", "search", "settings", "log out"]),
   };
   const normalizedLocaleLabel = (value) => `${value || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
@@ -498,7 +498,7 @@
   };
 
   const SIDEBAR_NAV_FALLBACKS = [
-    { id: "newTask", copyField: "sidebarNavNewTask", iconSlot: "sidebarNavNewTask", previewTarget: "sidebar-nav-new-task", aliases: ["新建任务", "New task", "New chat"] },
+    { id: "newTask", copyField: "sidebarNavNewTask", iconSlot: "sidebarNavNewTask", previewTarget: "sidebar-nav-new-task", aliases: ["新对话", "新建任务", "New task", "New chat"] },
     { id: "pullRequests", copyField: "sidebarNavPullRequests", iconSlot: "sidebarNavPullRequests", previewTarget: "sidebar-nav-pull-requests", aliases: ["拉取请求", "Pull requests"] },
     { id: "sites", copyField: "sidebarNavSites", iconSlot: "sidebarNavSites", previewTarget: "sidebar-nav-sites", aliases: ["站点", "Sites"] },
     { id: "scheduled", copyField: "sidebarNavScheduled", iconSlot: "sidebarNavScheduled", previewTarget: "sidebar-nav-scheduled", aliases: ["已安排", "Scheduled"] },

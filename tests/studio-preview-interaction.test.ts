@@ -2571,7 +2571,7 @@ describe('Studio preview editing interaction', () => {
     const originalPullRequests = pullRequests.textContent
 
     pointerDown(newTask)
-    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('新建任务导航项快捷配置')
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('新对话导航项快捷配置')
     enterQuickCopy('快速创建')
 
     const font = container.querySelector<HTMLSelectElement>('[role="dialog"] [data-font-slot="sidebarNavNewTask"] select')
