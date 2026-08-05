@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.22 - 2026-08-05
+
+- Aligned the Chinese primary navigation label with current Codex: the first item is now “新对话”, while the runtime still recognizes the legacy “新建任务” label and English aliases.
+- Migrated existing themes that still contain the old default navigation copy without overwriting custom labels, and synchronized the Studio preview, quick editor, icon labels, and localization entries.
+- Added regression coverage for the current home DOM, including navigation recognition and mounting the composer decorations on the inner composer surface.
+- Fixed large Polaroid image data URLs being embedded directly in runtime CSS by using revocable Blob URLs.
+
 ## 1.1.21 - 2026-08-05
 
 - Added protected built-in and custom icon libraries with portable `.cdsicons` sharing.
