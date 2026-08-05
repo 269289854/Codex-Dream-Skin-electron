@@ -86,6 +86,15 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - name: Free macOS runner disk space
+        shell: bash
+        run: |
+          rm -rf "$HOME/Library/Caches"
+          rm -rf "$HOME/.cache"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes
+          df -h /
+
       - run: npm ci
       - run: npm test
       - run: npm run package:mac

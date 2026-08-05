@@ -25,6 +25,8 @@ npm run package:mac  -> macOS Universal DMG + ZIP，并执行 macOS 产物验证
 
 Windows 的 `npm run test:config` 依赖 PowerShell，只在 Windows Job 中运行。macOS 的验证脚本依赖 `lipo`、`hdiutil`、`ditto` 和 `PlistBuddy`，不能在 Windows Runner 上替代执行。
 
+macOS Job 会在安装依赖前清理临时 Runner 的用户缓存、Xcode 派生数据和模拟器运行时，以确保项目的 10 GB/15% 磁盘保护在标准 Runner 上可执行；这不会绕过应用自身的磁盘校验。
+
 ## 一次性配置
 
 1. 确认 GitHub 仓库的 Actions 功能已启用。
@@ -127,6 +129,15 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+
+      - name: Free macOS runner disk space
+        shell: bash
+        run: |
+          rm -rf "$HOME/Library/Caches"
+          rm -rf "$HOME/.cache"
+          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes
+          df -h /
 
       - run: npm ci
       - run: npm test
