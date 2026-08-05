@@ -133,9 +133,9 @@ jobs:
       - name: Free macOS runner disk space
         shell: bash
         run: |
-          rm -rf "$HOME/Library/Caches"
-          rm -rf "$HOME/.cache"
-          rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
+          sudo rm -rf "$HOME/Library/Caches"
+          sudo rm -rf "$HOME/.cache"
+          sudo rm -rf "$HOME/Library/Developer/Xcode/DerivedData"
           sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes
           df -h /
 
