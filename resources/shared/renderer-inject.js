@@ -1390,6 +1390,14 @@
   const findVisible = (root, selector) =>
     [...root.querySelectorAll(selector)].find(isVisible) || null;
 
+  const findComposerSurface = (home = document, composer = findComposer(home)) => {
+    if (!composer) return null;
+    const surface = composer.closest('.composer-surface-chrome, [data-composer-surface-variant], [data-composer-layout][data-composer-radius-variant]');
+    const root = composer.closest('[data-codex-composer-root]');
+    const candidate = surface || root;
+    return candidate instanceof HTMLElement && home.contains(candidate) && isVisible(candidate) ? candidate : null;
+  };
+
   const accountMenuItem = (id) => accountMenu.find((item) => item?.id === id) || ACCOUNT_MENU_FALLBACKS.find((item) => item.id === id);
   const accountMenuLabelMatches = (row, id) => {
     const item = accountMenuItem(id);
@@ -2141,8 +2149,8 @@
     for (const heading of headings) {
       const home = heading.closest('[role="main"]');
       if (!home || !isVisible(home)) continue;
-      const composerSurface = findVisible(home, ".composer-surface-chrome");
       const composer = findComposer(home);
+      const composerSurface = findComposerSurface(home, composer);
       if (!composerSurface || !composer || !composerSurface.contains(composer)) continue;
       const projectButton = findVisible(home, '[data-composer-navigation-target="workspace-project"]');
       return { home, heading, composerSurface, projectButton };
@@ -2162,13 +2170,12 @@
   };
 
   const findHomeFlow = ({ home, composerSurface }, hero) => {
-    const flow = hero?.parentElement;
-    return flow instanceof HTMLElement &&
-      home.contains(flow) &&
-      flow.contains(hero) &&
-      flow.contains(composerSurface)
-      ? flow
-      : null;
+    let flow = hero?.parentElement;
+    while (flow instanceof HTMLElement && home.contains(flow)) {
+      if (flow.contains(composerSurface)) return flow;
+      flow = flow.parentElement;
+    }
+    return null;
   };
 
   const populateComposer = (prompt) => {
@@ -2595,8 +2602,8 @@
       clearHomeLayout();
     }
 
-    const composerSurface = context?.composerSurface || findVisible(document, ".composer-surface-chrome");
-    markCurrentNode(".composer-surface-chrome.dream-composer", composerSurface, "dream-composer");
+    const composerSurface = context?.composerSurface || findComposerSurface(document);
+    markCurrentNode(".dream-composer", composerSurface, "dream-composer");
     ensureComposerBadge(composerSurface);
     ensureComposerMelody(composerSurface);
     ensureComposerToolIcons(composerSurface);
@@ -2833,7 +2840,7 @@
     }, 180);
   };
   const syncDynamicContent = () => {
-    const composer = findVisible(document, ".composer-surface-chrome");
+    const composer = findComposerSurface(document);
     ensureComposerBadge(composer);
     ensureComposerMelody(composer);
     ensureComposerToolIcons(composer);
@@ -2858,6 +2865,9 @@
     "aside.app-shell-left-panel",
     "[data-feature='game-source']",
     ".composer-surface-chrome",
+    "[data-codex-composer-root]",
+    "[data-composer-surface-variant]",
+    "[data-composer-layout][data-composer-radius-variant]",
     ".thread-scroll-container[data-app-action-timeline-scroll]",
     "[data-home-ambient-suggestions]"
   ].join(", ");

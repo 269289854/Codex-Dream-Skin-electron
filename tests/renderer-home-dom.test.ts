@@ -153,6 +153,32 @@ function layeredHomeFixture(projectName: string, voiceLabel = 'Try ChatGPT Voice
     </main>`
 }
 
+function currentCodexHomeFixture(projectName: string): string {
+  return `
+    <main class="_MainContentSurface_current">
+      <div role="main" class="home-main-content">
+        <div class="modern-home-flow">
+          <div class="modern-hero-stage">
+            <div class="modern-heading-stack">
+              <div data-feature="game-source"><span class="group/title">要在 <button type="button">${projectName}</button> 内开发什么？</span></div>
+            </div>
+            <div data-home-ambient-suggestions="true">native suggestions</div>
+          </div>
+          <div data-codex-composer-root data-composer-placement="home">
+            <div class="credit-banner">获得 500 额度</div>
+            <div class="project-bar"><button type="button" data-composer-navigation-target="workspace-project">${projectName}</button></div>
+            <div data-composer-layout="multiline" data-composer-radius-variant="default" data-composer-surface-variant="default">
+              <div class="ProseMirror" contenteditable="true" data-codex-composer="true"></div>
+              <button type="button" aria-label="添加文件等内容"><svg></svg></button>
+              <button type="button" aria-label="听写"><svg></svg></button>
+              <button type="button" aria-label="开始新的语音聊天" class="bg-token-foreground"><svg></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>`
+}
+
 function setElementRect<T extends object>(element: T | null, width: number, height: number): asserts element is T {
   if (!element) throw new Error('Expected fixture element was not found.')
   Object.defineProperty(element, 'getBoundingClientRect', {
@@ -284,6 +310,29 @@ function dispatchAnimationIteration(window: Window, node: Element, animationName
 }
 
 describe('renderer home DOM adaptation', () => {
+  it('supports the current Codex home composer root and keeps the whole home flow together', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = currentCodexHomeFixture('Codex-Dream-Skin-electron')
+
+    inject(window, undefined, undefined, homeLayoutCss)
+
+    const home = window.document.querySelector('[role="main"]')
+    const flow = window.document.querySelector('.modern-home-flow')
+    const hero = window.document.querySelector('.modern-hero-stage')
+    const composer = window.document.querySelector('[data-codex-composer-root]')
+    const surface = window.document.querySelector('[data-composer-surface-variant]')
+    expect(home?.classList.contains('dream-home')).toBe(true)
+    expect(flow?.classList.contains('dream-home-flow')).toBe(true)
+    expect(hero?.classList.contains('dream-layout-root')).toBe(true)
+    expect(window.document.querySelectorAll('.dream-action-card')).toHaveLength(4)
+    expect(composer?.classList.contains('dream-composer')).toBe(false)
+    expect(surface?.classList.contains('dream-composer')).toBe(true)
+    expect(surface?.querySelector(':scope > .dream-composer-badge')).not.toBeNull()
+    expect(surface?.querySelector(':scope > .dream-composer-melody')).not.toBeNull()
+    expect(surface?.querySelector('.dream-composer-send-button')).not.toBeNull()
+    expect(window.document.querySelector('main')?.classList.contains('dream-home-shell')).toBe(true)
+  })
+
   it('selects localized v29 copy from English native signals and rebuilds when Codex switches language', async () => {
     const window = createWindow()
     window.document.documentElement.lang = 'en-US'

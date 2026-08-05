@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.21 - 2026-08-05
+
+- Added protected built-in and custom icon libraries with portable `.cdsicons` sharing.
+- Added project and session marker icons, including deterministic random assignment and refreshed Codex discovery.
+- Improved home preview sizing, project/session row alignment, streaming assistant bubble detection, and background layer ordering.
+- Fixed particle and conversation bubble stacking so decorations remain behind readable content.
+- Fixed the current Codex home composer mount so its decorative frame targets the inner input surface instead of the surrounding credit and project controls.
+
 ## 1.1.1 - 2026-08-01
 
 - Added complete Simplified Chinese and English localization across the Studio interface, previews, status messages, errors, Codex operations, and update flows.
