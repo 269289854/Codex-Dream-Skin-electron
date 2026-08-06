@@ -8,7 +8,7 @@ import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bub
 import { gifPosterAssetKey } from '../src/shared/gif'
 import { LocalizedError, localizedMessage, translateLocalizedMessage, type SupportedLocale } from '../src/shared/i18n'
 import { createDefaultThemeProjectIconSettings, createSystemIconLibrary } from '../src/shared/project-icons'
-import { CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
+import { CONVERSATION_BUBBLE_CORNERS, CONVERSATION_BUBBLE_PRESETS, CONVERSATION_BUBBLE_ROLES, createDefaultConversationBubbleStyle, createDefaultTheme, THEME_COLOR_PRESETS, type CreateThemeInput, type ThemeProfile } from '../src/shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, VIDEO_SELECTION_EXPIRED_MESSAGE } from '../src/shared/video-transcode'
 import { App } from '../src/renderer/src/App'
 import { builtinIconAssetUrl } from '../src/renderer/src/builtin-icon-assets'
@@ -253,14 +253,20 @@ describe('Studio preview editing interaction', () => {
           const signatureGif = selected?.brandSignature.source?.mimeType === 'image/gif'
             ? selected.brandSignature.source.asset
             : null
+          const selectedBubblePresets = selected
+            ? CONVERSATION_BUBBLE_ROLES.flatMap((role) => {
+                const source = selected.conversationBubbles[role].source
+                return source.kind === 'preset' ? [source.presetId] : []
+              })
+            : []
           return {
             assets: {
               'assets/polaroid.png': 'data:image/png;base64,AA==',
               ...(signatureGif ? { [signatureGif]: 'data:image/gif;base64,COMPILED' } : {}),
-              ...Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
-                conversationBubblePresetAssetKey(preset.id),
-                `data:image/png;base64,${preset.id}`
-              ]))
+              ...Object.fromEntries(selectedBubblePresets.flatMap((presetId) => CONVERSATION_BUBBLE_CORNERS.map((corner) => [
+                conversationBubblePresetAssetKey(presetId, corner),
+                `data:image/png;base64,${presetId}-${corner}`
+              ])))
             }
           }
         }
@@ -268,6 +274,14 @@ describe('Studio preview editing interaction', () => {
     assets: {
       selectImage: async () => null,
       selectMedia,
+      getConversationBubblePreset: async (presetId) => ({
+        assets: Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner) => [
+          conversationBubblePresetAssetKey(presetId, corner),
+          `data:image/png;base64,${presetId}-${corner}`
+        ]))
+      }),
+      selectConversationBubbleCorner: async () => null,
+      discardPending: async () => undefined,
       commitVideoSelection,
       discardVideoSelection,
       inspectVideo,
@@ -760,7 +774,6 @@ describe('Studio preview editing interaction', () => {
       account: 'assets/reduced-account.gif',
       signature: 'assets/reduced-signature.gif',
       composer: 'assets/reduced-composer.gif',
-      bubble: 'assets/reduced-bubble.gif',
       icon: 'assets/reduced-icon.gif'
     }
     const reference = (asset: string) => ({ asset, kind: 'image' as const, mimeType: 'image/gif' as const })
@@ -781,12 +794,6 @@ describe('Studio preview editing interaction', () => {
     alternateProfile.decorations.composerMelody.visible = true
     alternateProfile.decorations.composerMelody.mode = 'gif'
     alternateProfile.decorations.composerMelody.source = reference(gifAssets.composer)
-    alternateProfile.conversationBubbles.visible = true
-    alternateProfile.conversationBubbles.user = {
-      ...createDefaultConversationBubbleStyle(),
-      fit: 'stretch',
-      source: { kind: 'custom', reference: reference(gifAssets.bubble) }
-    }
     for (const slot of Object.keys(alternateProfile.icons) as Array<keyof typeof alternateProfile.icons>) {
       alternateProfile.icons[slot] = { kind: 'asset', asset: gifAssets.icon }
     }
@@ -825,9 +832,8 @@ describe('Studio preview editing interaction', () => {
     ]
     expect(homePreviewSources()).toEqual(Array(7).fill(animatedUrl))
     expect(container.querySelector<HTMLImageElement>('.brand-signature-asset-picker img')?.getAttribute('src')).toBe(animatedUrl)
-    expect(container.querySelector<HTMLImageElement>('.conversation-bubble-custom-preview img')?.getAttribute('src')).toBe(animatedUrl)
     expect(container.querySelector<HTMLImageElement>('.composer-decoration-asset-picker img')?.getAttribute('src')).toBe(animatedUrl)
-    expect(container.querySelectorAll<HTMLImageElement>('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]').length).toBeGreaterThanOrEqual(4)
+    expect(container.querySelectorAll<HTMLImageElement>('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]').length).toBeGreaterThanOrEqual(3)
 
     await act(async () => {
       emitReducedMotion(true)
@@ -835,7 +841,6 @@ describe('Studio preview editing interaction', () => {
     })
     expect(homePreviewSources()).toEqual(Array(7).fill(posterUrl))
     expect(container.querySelector<HTMLImageElement>('.brand-signature-asset-picker img')?.getAttribute('src')).toBe(posterUrl)
-    expect(container.querySelector<HTMLImageElement>('.conversation-bubble-custom-preview img')?.getAttribute('src')).toBe(posterUrl)
     expect(container.querySelector<HTMLImageElement>('.composer-decoration-asset-picker img')?.getAttribute('src')).toBe(posterUrl)
     expect(container.querySelector('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]')).toBeNull()
 
@@ -850,7 +855,6 @@ describe('Studio preview editing interaction', () => {
     if (!conversation) throw new Error('Conversation preview command is missing.')
     act(() => conversation.click())
     expect(container.querySelector<HTMLImageElement>('.preview-conversation-background-media')?.getAttribute('src')).toBe(posterUrl)
-    expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-frame-source')).toContain(posterUrl)
     expect(container.querySelector<HTMLImageElement>('[data-preview-target="composer-melody"] img')?.getAttribute('src')).toBe(posterUrl)
 
     await act(async () => {
@@ -858,7 +862,6 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(container.querySelector<HTMLImageElement>('.preview-conversation-background-media')?.getAttribute('src')).toBe(animatedUrl)
-    expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-frame-source')).toContain(animatedUrl)
     expect(container.querySelectorAll<HTMLImageElement>('.inspector img[src="data:image/gif;base64,QU5JTUFURUQ="]').length).toBeGreaterThan(10)
   })
 
@@ -1547,7 +1550,12 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.appearance.paints.conversationMessage).toBeUndefined()
   })
 
-  it('selects presets and custom GIF frames for each preview role without losing the prior style on cancel', async () => {
+  it('selects layered presets and applies custom corners atomically while cleaning cancelled imports', async () => {
+    const studio = (browserWindow as unknown as { studio: StudioApi }).studio
+    const selectCorner = vi.fn()
+    const discardPending = vi.fn().mockResolvedValue(undefined)
+    studio.assets.selectConversationBubbleCorner = selectCorner
+    studio.assets.discardPending = discardPending
     const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
     if (!conversation) throw new Error('Conversation preview command is missing.')
     act(() => conversation.click())
@@ -1564,51 +1572,65 @@ describe('Studio preview editing interaction', () => {
     if (!moonStars) throw new Error('Moon and stars preset is missing.')
     act(() => moonStars.click())
     const moonStarsPreview = container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')
-    expect(moonStarsPreview?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
-    expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-frame-slice')).toBe('35% 25% 40% 25%')
-    expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-frame-border-widths')).toBe('33.6px 48px 38.4px 48px')
-    expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-frame-min-block-size')).toBe('')
+    expect(moonStarsPreview?.getAttribute('data-dream-bubble-frame')).toBe('layered')
+    expect(moonStarsPreview?.getAttribute('data-dream-bubble-body')).toBe('preset')
+    expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-corners').match(/url\(/g)).toHaveLength(4)
+    expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-corner-sizes')).toBe('40px 40px, 40px 40px, 40px 40px, 40px 40px')
     expect(container.querySelector('[data-preview-target="conversation-codex-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('none')
 
-    selectMedia.mockResolvedValueOnce(null)
     const customMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
     if (!customMode) throw new Error('Custom bubble mode is missing.')
+    act(() => customMode.click())
+    selectCorner.mockResolvedValueOnce({
+      reference: { asset: 'assets/cancelled-topLeft.png', kind: 'image', mimeType: 'image/png' },
+      relativePath: 'assets/cancelled-topLeft.png',
+      previewUrl: 'studio-media://theme/cancelled-topLeft.png',
+      originalName: 'cancelled-topLeft.png',
+      width: 64,
+      height: 48
+    })
+    const firstCorner = container.querySelector<HTMLButtonElement>('[role="dialog"] .conversation-bubble-corner-grid button')
+    if (!firstCorner) throw new Error('Top-left corner picker is missing.')
     await act(async () => {
-      customMode.click()
+      firstCorner.click()
       await Promise.resolve()
     })
-    const cancelledImage = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('选择图片'))
-    if (!cancelledImage) throw new Error('Initial bubble image picker is missing.')
+    const cancel = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('取消'))
+    if (!cancel) throw new Error('Custom bubble cancel command is missing.')
     await act(async () => {
-      cancelledImage.click()
+      cancel.click()
       await Promise.resolve()
     })
-    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationUserBubble', 'image')
-    expect(container.querySelector('[role="dialog"] .conversation-bubble-preset-grid')).not.toBeNull()
-    expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
+    expect(discardPending).toHaveBeenCalledWith(profile.id, ['assets/cancelled-topLeft.png'])
+    expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('layered')
+    expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-body')).toBe('preset')
 
-    selectMedia.mockResolvedValueOnce({
-      reference: { asset: 'assets/user-bubble.gif', kind: 'image', mimeType: 'image/gif' },
-      relativePath: 'assets/user-bubble.gif',
-      previewUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
-      originalName: 'user-bubble.gif',
-      width: 768,
-      height: 384
-    })
-    const selectUserGif = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('选择 GIF'))
-    if (!selectUserGif) throw new Error('Initial bubble GIF picker is missing.')
-    await act(async () => {
-      selectUserGif.click()
-      await Promise.resolve()
-    })
-    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationUserBubble', 'gif')
-    const stretch = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-fit-tabs button')].find((button) => button.textContent === '整图拉伸')
-    if (!stretch) throw new Error('Stretch bubble fit is missing.')
-    act(() => stretch.click())
+    pointerDown(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')!)
+    const customAgain = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
+    if (!customAgain) throw new Error('Custom bubble mode did not reopen.')
+    act(() => customAgain.click())
+    selectCorner.mockImplementation(async (_themeId: string, role: string, corner: string) => ({
+      reference: { asset: `assets/${role}-${corner}.png`, kind: 'image', mimeType: 'image/png' },
+      relativePath: `assets/${role}-${corner}.png`,
+      previewUrl: `studio-media://theme/${role}-${corner}.png`,
+      originalName: `${role}-${corner}.png`,
+      width: 64,
+      height: 48
+    }))
+    for (const [index, corner] of CONVERSATION_BUBBLE_CORNERS.entries()) {
+      const button = container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-corner-grid button')[index]
+      if (!button) throw new Error(`Corner picker is missing: ${corner}`)
+      await act(async () => { button.click(); await Promise.resolve() })
+    }
+    expect(selectCorner.mock.calls.slice(-4).map((call) => call.slice(1))).toEqual(CONVERSATION_BUBBLE_CORNERS.map((corner) => ['user', corner]))
+    const applyCorners = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('应用四角装饰'))
+    if (!applyCorners) throw new Error('Apply custom corners command is missing.')
+    act(() => applyCorners.click())
     const customPreview = container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')
-    expect(customPreview?.getAttribute('data-dream-bubble-frame')).toBe('stretch')
-    expect(customPreview?.style.getPropertyValue('--dream-preview-bubble-frame-slice')).toBe('25% 25% 25% 25%')
-    expect(customPreview?.style.getPropertyValue('--dream-preview-bubble-frame-border-widths')).toBe('24px 48px 24px 48px')
+    expect(customPreview?.getAttribute('data-dream-bubble-frame')).toBe('layered')
+    expect(customPreview?.getAttribute('data-dream-bubble-body')).toBe('theme')
+    expect(customPreview?.style.getPropertyValue('--dream-preview-bubble-corners')).toContain('user-topLeft.png')
+    expect(customPreview?.style.getPropertyValue('--dream-preview-bubble-corner-sizes')).toBe('56px 42px, 56px 42px, 56px 42px, 56px 42px')
 
     const codexBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
     if (!codexBubble) throw new Error('Codex bubble preview is missing.')
@@ -1621,34 +1643,21 @@ describe('Studio preview editing interaction', () => {
     if (!oceanShell) throw new Error('Ocean shell preset is missing.')
     act(() => oceanShell.click())
     const oceanShellPreview = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
-    expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-slice')).toBe('46% 25% 48% 25%')
-    expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-border-widths')).toBe('44.16px 48px 46.08px 48px')
-    expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-frame-min-block-size')).toBe('')
+    expect(oceanShellPreview?.getAttribute('data-dream-bubble-frame')).toBe('layered')
+    expect(oceanShellPreview?.style.getPropertyValue('--dream-preview-bubble-corner-sizes')).toBe('40px 40px, 40px 40px, 40px 40px, 40px 40px')
 
-    selectMedia.mockResolvedValueOnce({
-      reference: { asset: 'assets/plan-bubble.gif', kind: 'image', mimeType: 'image/gif' },
-      relativePath: 'assets/plan-bubble.gif',
-      previewUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
-      originalName: 'plan-bubble.gif',
-      width: 768,
-      height: 384
-    })
     const planBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-plan-message"]')
     if (!planBubble) throw new Error('Plan bubble preview is missing.')
     pointerDown(planBubble)
     expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('生成计划快捷配置')
     expect(container.querySelector('[role="dialog"] [data-bubble-role-controls="plan"]')).not.toBeNull()
-    const planCustomMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
-    if (!planCustomMode) throw new Error('Plan custom bubble mode is missing.')
-    act(() => planCustomMode.click())
-    const selectPlanGif = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('选择 GIF'))
-    if (!selectPlanGif) throw new Error('Plan bubble GIF picker is missing.')
-    await act(async () => {
-      selectPlanGif.click()
-      await Promise.resolve()
-    })
-    expect(selectMedia).toHaveBeenLastCalledWith(profile.id, 'conversationPlanBubble', 'gif')
-    expect(container.querySelector('[data-preview-target="conversation-plan-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('nineSlice')
+    const planPresetMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '预设')
+    if (!planPresetMode) throw new Error('Plan preset mode is missing.')
+    act(() => planPresetMode.click())
+    const rainbowCandy = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-preset-grid button')].find((button) => button.textContent?.includes('彩虹糖果'))
+    if (!rainbowCandy) throw new Error('Rainbow candy preset is missing.')
+    act(() => rainbowCandy.click())
+    expect(container.querySelector('[data-preview-target="conversation-plan-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('layered')
 
     const save = container.querySelector<HTMLButtonElement>('.preview-actions .primary-button')
     if (!save) throw new Error('Save command is missing.')
@@ -1657,27 +1666,17 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.conversationBubbles.user).toMatchObject({
-      source: { kind: 'custom', reference: { asset: 'assets/user-bubble.gif', mimeType: 'image/gif' } },
-      fit: 'stretch'
+      source: { kind: 'custom', corners: { topLeft: { reference: { asset: 'assets/user-topLeft.png', mimeType: 'image/png' } } } }
     })
     expect(savedProfiles.at(-1)?.conversationBubbles.codex).toEqual({
       source: { kind: 'preset', presetId: 'ocean-shell' },
-      fit: 'nineSlice',
-      slice: 25,
-      frameWidth: 24,
       contentPadding: 20
     })
     expect(savedProfiles.at(-1)?.conversationBubbles.plan).toEqual({
-      source: {
-        kind: 'custom',
-        reference: { asset: 'assets/plan-bubble.gif', kind: 'image', mimeType: 'image/gif' }
-      },
-      fit: 'nineSlice',
-      slice: 25,
-      frameWidth: 24,
+      source: { kind: 'preset', presetId: 'rainbow-candy' },
       contentPadding: 20
     })
-  })
+  }, 10_000)
 
   it('edits, undoes, saves, and resets tool activity bubbles independently', async () => {
     const conversation = container.querySelector<HTMLButtonElement>('button[title="会话预览"]')
@@ -2009,7 +2008,7 @@ describe('Studio preview editing interaction', () => {
     expect(savedProfiles.at(-1)?.hero.source?.videoVariants).toMatchObject({ active: 'original' })
     expect(savedProfiles.at(-1)?.hero.source?.videoVariants?.optimized.asset).toBe(regeneratedReference.asset)
     expect(savedProfiles.at(-1)?.conversationBackground.source?.videoVariants).toMatchObject({ active: 'optimized' })
-  })
+  }, 10_000)
 
   it('keeps low-load video conversion available but requires a meaningful reduction', async () => {
     const inspection = { width: 640, height: 360, frameRate: 24, duration: 8, codec: 'AVC avc1', videoProfile: 'High', bitDepth: 8, chromaSubsampling: '4:2:0', audioCodec: null, audioProfile: null, bitRate: 2_000_000, hasAudio: false, portable: true, highLoad: false }

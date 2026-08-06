@@ -10,9 +10,8 @@ import {
 import { headingTemplateError } from '../../shared/home-layout'
 import { t } from '../../shared/i18n'
 import { mediaFlipCssTransform } from '../../shared/media'
-import { conversationBubbleRolePurpose } from '../../shared/conversation-bubbles'
-import type { ThemeProfile } from '../../shared/theme'
-import type { MediaAssetPurpose, MediaSelectionKind } from '../../shared/contracts'
+import type { ConversationBubbleCorner, ConversationBubbleRole, ThemeProfile } from '../../shared/theme'
+import type { ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind } from '../../shared/contracts'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
 import { ConversationBackgroundControls } from './ConversationBackgroundControls'
 import { ConversationBubbleControls } from './ConversationBubbleControls'
@@ -58,6 +57,8 @@ interface PreviewQuickEditorProps {
   onChange: (mutator: (profile: ThemeProfile) => void, historyGroup?: string) => void
   onInteractionEnd: () => void
   onSelectImage: (purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => void
+  onSelectBubbleCorner: (role: ConversationBubbleRole, corner: ConversationBubbleCorner) => Promise<ImportedMediaAsset | null>
+  onDiscardPending: (assets: string[]) => Promise<void>
   onImportIcon: (slot: keyof ThemeProfile['icons']) => void
   onImportFont: (slot: TypographySlot) => void
   onStateChange: (state: AppearanceState) => void
@@ -65,7 +66,7 @@ interface PreviewQuickEditorProps {
   onClose: () => void
 }
 
-export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidUrl, conversationBackgroundUrl, windowBackgroundUrl, accountMenuBackgroundUrl, mediaBusy = false, position, popoverRef, onChange, onInteractionEnd, onSelectImage, onImportIcon, onImportFont, onStateChange, onMore, onClose }: PreviewQuickEditorProps): React.JSX.Element {
+export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidUrl, conversationBackgroundUrl, windowBackgroundUrl, accountMenuBackgroundUrl, mediaBusy = false, position, popoverRef, onChange, onInteractionEnd, onSelectImage, onSelectBubbleCorner, onDiscardPending, onImportIcon, onImportFont, onStateChange, onMore, onClose }: PreviewQuickEditorProps): React.JSX.Element {
   const editor = target.editor
   const [state, setState] = React.useState<AppearanceState>('normal')
   React.useEffect(() => { setState('normal'); onStateChange('normal') }, [target, onStateChange])
@@ -88,7 +89,7 @@ export function PreviewQuickEditor({ target, profile, assets, heroUrl, polaroidU
     {states.length > 1 && <div className="state-tabs segmented-control" aria-label={t('组件状态')}>{states.map((item) => <button type="button" className={state === item ? 'active' : ''} key={item} onClick={() => { setState(item); onStateChange(item) }}>{t(item === 'normal' ? '普通' : item === 'hover' ? '悬停' : '选中')}</button>)}</div>}
     <div className="preview-edit-popover-body">
       {editor.kind === 'style' && editor.visibility === 'composerBadge' && <label className="toggle-row"><span>{t('显示输入框装饰')}</span><input type="checkbox" checked={profile.composerBadge.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.composerBadge.visible = visible }) }} /></label>}
-      {editor.kind === 'style' && editor.conversationBubbleRole && <ConversationBubbleControls profile={profile} assets={assets} role={editor.conversationBubbleRole} mediaBusy={mediaBusy} showRoleTabs={false} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage(conversationBubbleRolePurpose(editor.conversationBubbleRole!), kind)} />}
+      {editor.kind === 'style' && editor.conversationBubbleRole && <ConversationBubbleControls profile={profile} assets={assets} role={editor.conversationBubbleRole} mediaBusy={mediaBusy} showRoleTabs={false} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectCorner={(corner) => onSelectBubbleCorner(editor.conversationBubbleRole!, corner)} onDiscardPending={onDiscardPending} />}
       {editor.kind === 'style' && editor.visibility === 'toolActivityBubbles' && <label className="toggle-row"><span>{t('显示工具活动气泡')}</span><input type="checkbox" checked={profile.toolActivityBubbles.visible} onChange={(event) => { const visible = event.currentTarget.checked; onChange((next) => { next.toolActivityBubbles.visible = visible }) }} /></label>}
       {brandSignatureTarget && <BrandSignatureControls profile={profile} assets={assets} mediaBusy={mediaBusy} onChange={onChange} onInteractionEnd={onInteractionEnd} onSelectMedia={(kind) => onSelectImage('brandSignature', kind)} />}
       {copyField && copyConfig && brandSignatureTextMode && <label className="quick-copy-field">{t(copyConfig.label)}{copyConfig.rows

@@ -1,6 +1,8 @@
 import {
+  CONVERSATION_BUBBLE_CORNERS,
   CONVERSATION_BUBBLE_PRESETS,
   CONVERSATION_BUBBLE_ROLES,
+  type ConversationBubbleCorner,
   type ConversationBubblePresetId,
   type ConversationBubbleRole,
   type ConversationBubbles,
@@ -8,18 +10,22 @@ import {
   type MediaReference,
   type ThemeProfile
 } from './theme'
-import { gifPosterAssetKey } from './gif'
 
-export type ConversationBubbleFrameInsets = readonly [top: number, right: number, bottom: number, left: number]
+export interface RuntimeConversationBubbleCorner {
+  dataUrl: string
+  width: number
+  height: number
+}
 
 export interface RuntimeConversationBubbleFrame {
-  mode: 'none' | 'nineSlice' | 'stretch'
-  dataUrl: string | null
-  posterDataUrl?: string | null
-  slice: number
-  sliceInsets: ConversationBubbleFrameInsets
-  frameWidth: number
-  borderWidths: ConversationBubbleFrameInsets
+  mode: 'none' | 'layered'
+  corners: Record<ConversationBubbleCorner, RuntimeConversationBubbleCorner> | null
+  bodyFill: string | null
+  borderColor: string
+  borderWidth: number
+  borderRadius: number
+  ornamentSize: number
+  ornamentOutset: number
   contentPadding: number
 }
 
@@ -30,23 +36,28 @@ export interface RuntimeConversationBubbles {
   plan: RuntimeConversationBubbleFrame
 }
 
-const PRESET_SOURCE_WIDTH = 768
-const PRESET_SOURCE_HEIGHT = 384
-const PRESET_RENDER_SCALE = 0.25
+interface ConversationBubblePresetStyle {
+  bodyFill: string
+  borderColor: string
+  borderWidth: number
+  borderRadius: number
+  ornamentSize: number
+  ornamentOutset: number
+}
 
-const PRESET_SLICE_INSETS = {
-  'daisy-heart': [65, 25, 28, 25],
-  'calico-cat': [58, 25, 27, 25],
-  'cloud-sprout': [35, 25, 30, 25],
-  'sakura-ribbon': [56, 25, 37, 25],
-  'moon-stars': [35, 25, 40, 25],
-  'strawberry-leaf': [40, 25, 38, 25],
-  'ocean-shell': [46, 25, 48, 25],
-  'rainbow-candy': [60, 25, 35, 25]
-} as const satisfies Record<ConversationBubblePresetId, ConversationBubbleFrameInsets>
+export const CONVERSATION_BUBBLE_PRESET_STYLES = {
+  'daisy-heart': { bodyFill: '#fffaf5', borderColor: '#b8834e', borderWidth: 2, borderRadius: 14, ornamentSize: 42, ornamentOutset: 2 },
+  'calico-cat': { bodyFill: '#fff9ef', borderColor: '#98531f', borderWidth: 2, borderRadius: 14, ornamentSize: 42, ornamentOutset: 4 },
+  'cloud-sprout': { bodyFill: '#f6fff9', borderColor: '#6c9f88', borderWidth: 2, borderRadius: 16, ornamentSize: 40, ornamentOutset: 3 },
+  'sakura-ribbon': { bodyFill: '#fff7fa', borderColor: '#cf819f', borderWidth: 2, borderRadius: 16, ornamentSize: 42, ornamentOutset: 4 },
+  'moon-stars': { bodyFill: '#fbf9ff', borderColor: '#8278b0', borderWidth: 2, borderRadius: 16, ornamentSize: 40, ornamentOutset: 4 },
+  'strawberry-leaf': { bodyFill: '#fff8f8', borderColor: '#c56d76', borderWidth: 2, borderRadius: 15, ornamentSize: 42, ornamentOutset: 3 },
+  'ocean-shell': { bodyFill: '#f5fcff', borderColor: '#6796a5', borderWidth: 2, borderRadius: 16, ornamentSize: 40, ornamentOutset: 3 },
+  'rainbow-candy': { bodyFill: '#fffaf7', borderColor: '#c37c8c', borderWidth: 2, borderRadius: 16, ornamentSize: 42, ornamentOutset: 4 }
+} as const satisfies Record<ConversationBubblePresetId, ConversationBubblePresetStyle>
 
-export function conversationBubblePresetAssetKey(id: ConversationBubblePresetId): string {
-  return `builtin/conversation-bubbles/${id}.png`
+export function conversationBubblePresetAssetKey(id: ConversationBubblePresetId, corner: ConversationBubbleCorner): string {
+  return `builtin/conversation-bubbles/${id}/${corner}.png`
 }
 
 export function conversationBubblePresetById(id: ConversationBubblePresetId): (typeof CONVERSATION_BUBBLE_PRESETS)[number] {
@@ -58,69 +69,69 @@ export function conversationBubblePresetById(id: ConversationBubblePresetId): (t
 export function conversationBubbleMediaReferences(profile: ThemeProfile): MediaReference[] {
   return CONVERSATION_BUBBLE_ROLES.flatMap((role) => {
     const source = profile.conversationBubbles[role].source
-    return source.kind === 'custom' ? [source.reference] : []
+    return source.kind === 'custom'
+      ? CONVERSATION_BUBBLE_CORNERS.map((corner) => source.corners[corner].reference)
+      : []
   })
 }
 
-function roundFrameWidth(value: number): number {
-  return Math.round(value * 100) / 100
-}
-
-function presetBorderWidths(sliceInsets: ConversationBubbleFrameInsets): ConversationBubbleFrameInsets {
-  const [top, right, bottom, left] = sliceInsets
-  return [
-    roundFrameWidth(PRESET_SOURCE_HEIGHT * top / 100 * PRESET_RENDER_SCALE),
-    roundFrameWidth(PRESET_SOURCE_WIDTH * right / 100 * PRESET_RENDER_SCALE),
-    roundFrameWidth(PRESET_SOURCE_HEIGHT * bottom / 100 * PRESET_RENDER_SCALE),
-    roundFrameWidth(PRESET_SOURCE_WIDTH * left / 100 * PRESET_RENDER_SCALE)
-  ]
-}
-
-function symmetricFrameGeometry(style: ConversationBubbleStyle): Pick<RuntimeConversationBubbleFrame, 'sliceInsets' | 'borderWidths'> {
+function renderedCorner(dataUrl: string, sourceWidth: number, sourceHeight: number, maxSize: number): RuntimeConversationBubbleCorner {
+  const scale = maxSize / Math.max(sourceWidth, sourceHeight)
   return {
-    sliceInsets: [style.slice, style.slice, style.slice, style.slice],
-    borderWidths: [style.frameWidth, style.frameWidth * 2, style.frameWidth, style.frameWidth * 2]
-  }
-}
-
-function resolveFrameGeometry(style: ConversationBubbleStyle): Pick<RuntimeConversationBubbleFrame, 'sliceInsets' | 'borderWidths'> {
-  if (style.source.kind !== 'preset') return symmetricFrameGeometry(style)
-  const sliceInsets = PRESET_SLICE_INSETS[style.source.presetId]
-  return {
-    sliceInsets,
-    borderWidths: presetBorderWidths(sliceInsets)
+    dataUrl,
+    width: Math.max(1, Math.round(sourceWidth * scale * 100) / 100),
+    height: Math.max(1, Math.round(sourceHeight * scale * 100) / 100)
   }
 }
 
 export function resolveConversationBubbleFrame(style: ConversationBubbleStyle, assets: Record<string, string>): RuntimeConversationBubbleFrame {
-  const geometry = resolveFrameGeometry(style)
   if (style.source.kind === 'none') {
     return {
       mode: 'none',
-      dataUrl: null,
-      slice: style.slice,
-      sliceInsets: geometry.sliceInsets,
-      frameWidth: style.frameWidth,
-      borderWidths: geometry.borderWidths,
+      corners: null,
+      bodyFill: null,
+      borderColor: 'transparent',
+      borderWidth: 0,
+      borderRadius: 14,
+      ornamentSize: 0,
+      ornamentOutset: 0,
       contentPadding: style.contentPadding
     }
   }
-  const asset = style.source.kind === 'preset'
-    ? conversationBubblePresetAssetKey(style.source.presetId)
-    : style.source.reference.asset
-  const dataUrl = assets[asset]
-  if (!dataUrl) throw new Error(`聊天气泡素材不存在: ${asset}`)
-  const posterDataUrl = dataUrl.startsWith('data:image/gif')
-    ? assets[gifPosterAssetKey(asset)] ?? null
-    : null
+
+  if (style.source.kind === 'preset') {
+    const presetId = style.source.presetId
+    const presetStyle = CONVERSATION_BUBBLE_PRESET_STYLES[presetId]
+    const corners = Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner) => {
+      const asset = conversationBubblePresetAssetKey(presetId, corner)
+      const dataUrl = assets[asset]
+      if (!dataUrl) throw new Error(`聊天气泡素材不存在: ${asset}`)
+      return [corner, renderedCorner(dataUrl, 256, 256, presetStyle.ornamentSize)]
+    })) as Record<ConversationBubbleCorner, RuntimeConversationBubbleCorner>
+    return {
+      mode: 'layered',
+      corners,
+      ...presetStyle,
+      contentPadding: style.contentPadding
+    }
+  }
+
+  const customSource = style.source
+  const corners = Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner) => {
+    const source = customSource.corners[corner]
+    const dataUrl = assets[source.reference.asset]
+    if (!dataUrl) throw new Error(`聊天气泡素材不存在: ${source.reference.asset}`)
+    return [corner, renderedCorner(dataUrl, source.width, source.height, customSource.ornamentSize)]
+  })) as Record<ConversationBubbleCorner, RuntimeConversationBubbleCorner>
   return {
-    mode: style.fit,
-    dataUrl,
-    ...(posterDataUrl ? { posterDataUrl } : {}),
-    slice: style.slice,
-    sliceInsets: geometry.sliceInsets,
-    frameWidth: style.frameWidth,
-    borderWidths: geometry.borderWidths,
+    mode: 'layered',
+    corners,
+    bodyFill: null,
+    borderColor: customSource.borderColor,
+    borderWidth: customSource.borderWidth,
+    borderRadius: customSource.borderRadius,
+    ornamentSize: customSource.ornamentSize,
+    ornamentOutset: customSource.ornamentOutset,
     contentPadding: style.contentPadding
   }
 }
@@ -132,9 +143,4 @@ export function resolveConversationBubbles(conversationBubbles: ConversationBubb
     codex: resolveConversationBubbleFrame(conversationBubbles.codex, assets),
     plan: resolveConversationBubbleFrame(conversationBubbles.plan, assets)
   }
-}
-
-export function conversationBubbleRolePurpose(role: ConversationBubbleRole): 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble' {
-  if (role === 'user') return 'conversationUserBubble'
-  return role === 'codex' ? 'conversationCodexBubble' : 'conversationPlanBubble'
 }

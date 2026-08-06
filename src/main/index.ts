@@ -16,7 +16,7 @@ import { PendingVideoSelectionRegistry } from './pending-video-selections'
 import { StudioMediaProtocol, toThemeDeleteError } from './studio-media-protocol'
 import { captureIpcResult } from '../shared/ipc-result'
 import type { AssetPurpose, MediaSelectionKind, OperationProgress, VideoAssetInspection, VideoMediaRole, VideoSourceSelection } from '../shared/contracts'
-import { CONVERSATION_BUBBLE_PRESETS } from '../shared/theme'
+import { CONVERSATION_BUBBLE_CORNERS, CONVERSATION_BUBBLE_PRESETS, CONVERSATION_BUBBLE_ROLES, type ConversationBubbleCorner, type ConversationBubbleRole } from '../shared/theme'
 import { VIDEO_IMPORT_CANCELLED_MESSAGE, assertVideoImportDecisionCompatible, resolveVideoOutputSize, videoImportDecisionSchema, videoTranscodeSettingsSchema, type VideoTranscodeSettings } from '../shared/video-transcode'
 import { localizedMessage, localizedMessageFrom, setActiveLocale, t, type LocalizedMessage } from '../shared/i18n'
 import { SYSTEM_ICON_LIBRARY_ID } from '../shared/project-icons'
@@ -200,6 +200,10 @@ function registerIpc(): void {
   }))
   ipcMain.handle('themes:activate', (_event, id: string) => captureIpcResult(() => store.activate(id)))
   ipcMain.handle('themes:compile', (_event, id: string) => captureIpcResult(() => store.compile(id)))
+  ipcMain.handle('assets:get-conversation-bubble-preset', (_event, presetId: unknown) => captureIpcResult(() => {
+    if (typeof presetId !== 'string' || !CONVERSATION_BUBBLE_PRESETS.some((preset) => preset.id === presetId)) throw new Error('聊天气泡预设无效。')
+    return store.getConversationBubblePreset(presetId as (typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'])
+  }))
   ipcMain.handle('assets:select', (_event, themeId: unknown, purpose: unknown) => captureIpcResult(async () => {
     if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
     if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'accountMenuBackground' && purpose !== 'icon' && purpose !== 'font') throw new Error('素材用途无效。')
@@ -220,12 +224,11 @@ function registerIpc(): void {
   }))
   ipcMain.handle('assets:select-media', (_event, themeId: unknown, purpose: unknown, requestedKind: unknown) => captureIpcResult(async () => {
     if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
-    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'windowBackground' && purpose !== 'accountMenuBackground' && purpose !== 'brandSignature' && purpose !== 'composerMelody' && purpose !== 'conversationUserBubble' && purpose !== 'conversationCodexBubble' && purpose !== 'conversationPlanBubble') throw new Error('媒体用途无效。')
+    if (purpose !== 'hero' && purpose !== 'polaroid' && purpose !== 'conversationBackground' && purpose !== 'windowBackground' && purpose !== 'accountMenuBackground' && purpose !== 'brandSignature' && purpose !== 'composerMelody') throw new Error('媒体用途无效。')
     if (requestedKind !== undefined && requestedKind !== 'image' && requestedKind !== 'gif' && requestedKind !== 'video') throw new Error('媒体类型无效。')
     if (purpose === 'brandSignature' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('品牌签名只能选择图片或 GIF 文件。')
     if (purpose === 'composerMelody' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('输入框装饰只能选择图片或 GIF 文件。')
     if (purpose === 'accountMenuBackground' && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('账号菜单背景只能选择图片或 GIF 文件。')
-    if ((purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble') && requestedKind !== 'image' && requestedKind !== 'gif') throw new Error('聊天气泡只能选择图片或 GIF 文件。')
     const kind = requestedKind as MediaSelectionKind | undefined
     const filters = kind === 'image'
       ? [{ name: t('图片文件'), extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }]
@@ -235,7 +238,7 @@ function registerIpc(): void {
           ? [{ name: t('视频文件'), extensions: ['mp4', 'webm'] }]
           : [{ name: t('图片和视频'), extensions: ['png', 'webp', 'jpg', 'jpeg', 'gif', 'svg', 'mp4', 'webm'] }]
     const options: OpenDialogOptions = {
-      title: t(purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : purpose === 'windowBackground' ? '选择整个窗口背景' : purpose === 'accountMenuBackground' ? kind === 'image' ? '选择账号菜单背景图片' : '选择账号菜单背景 GIF' : purpose === 'brandSignature' ? kind === 'image' ? '选择品牌签名图片' : '选择品牌签名 GIF' : purpose === 'conversationUserBubble' ? kind === 'image' ? '选择我的消息气泡图片' : '选择我的消息气泡 GIF' : purpose === 'conversationCodexBubble' ? kind === 'image' ? '选择 Codex 回复气泡图片' : '选择 Codex 回复气泡 GIF' : purpose === 'conversationPlanBubble' ? kind === 'image' ? '选择生成计划气泡图片' : '选择生成计划气泡 GIF' : kind === 'image' ? '选择输入框图片装饰' : '选择输入框 GIF 装饰'),
+      title: t(purpose === 'hero' ? '选择主视觉媒体' : purpose === 'polaroid' ? '选择拍立得媒体' : purpose === 'conversationBackground' ? '选择对话区域背景' : purpose === 'windowBackground' ? '选择整个窗口背景' : purpose === 'accountMenuBackground' ? kind === 'image' ? '选择账号菜单背景图片' : '选择账号菜单背景 GIF' : purpose === 'brandSignature' ? kind === 'image' ? '选择品牌签名图片' : '选择品牌签名 GIF' : kind === 'image' ? '选择输入框图片装饰' : '选择输入框 GIF 装饰'),
       properties: ['openFile'],
       filters
     }
@@ -280,6 +283,23 @@ function registerIpc(): void {
     } finally {
       operationControllers.delete(id)
     }
+  }))
+  ipcMain.handle('assets:select-conversation-bubble-corner', (_event, themeId: unknown, role: unknown, corner: unknown) => captureIpcResult(async () => {
+    if (typeof themeId !== 'string') throw new Error('主题 ID 无效。')
+    if (typeof role !== 'string' || !CONVERSATION_BUBBLE_ROLES.includes(role as ConversationBubbleRole)) throw new Error('聊天气泡角色无效。')
+    if (typeof corner !== 'string' || !CONVERSATION_BUBBLE_CORNERS.includes(corner as ConversationBubbleCorner)) throw new Error('聊天气泡角饰位置无效。')
+    const options: OpenDialogOptions = {
+      title: t('选择聊天气泡角饰'),
+      properties: ['openFile'],
+      filters: [{ name: t('PNG 或 WebP 图片'), extensions: ['png', 'webp'] }]
+    }
+    const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return null
+    return store.importConversationBubbleCornerAsset(themeId, result.filePaths[0], role as ConversationBubbleRole, corner as ConversationBubbleCorner)
+  }))
+  ipcMain.handle('assets:discard-pending', (_event, themeId: unknown, assets: unknown) => captureIpcResult(async () => {
+    if (typeof themeId !== 'string' || !Array.isArray(assets) || assets.length > 4 || assets.some((asset) => typeof asset !== 'string')) throw new Error('待清理素材参数无效。')
+    await store.discardPendingAssets(themeId, assets as string[])
   }))
   ipcMain.handle('icon-libraries:list', () => captureIpcResult(() => projectIconStore.listLibraries()))
   ipcMain.handle('icon-libraries:get', (_event, id: unknown) => captureIpcResult(() => projectIconStore.getLibrary(id)))
@@ -571,7 +591,10 @@ if (!hasSingleInstanceLock) {
     store = new ProfileStore(studioRoot, {
       hero: join(sharedResourcesRoot, 'dream-reference.png'),
       polaroid: join(sharedResourcesRoot, 'dream-polaroid.png'),
-      conversationBubbles: Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [preset.id, join(sharedResourcesRoot, 'conversation-bubbles', preset.fileName)])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>,
+      conversationBubbles: Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
+        preset.id,
+        Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner) => [corner, join(sharedResourcesRoot, 'conversation-bubbles', preset.id, `${corner}.png`)]))
+      ])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], Record<(typeof CONVERSATION_BUBBLE_CORNERS)[number], string>>,
       resourcesRoot: sharedResourcesRoot
     })
     await store.initialize()

@@ -10,12 +10,12 @@ import mediaInfoFactory, { isTrackType } from 'mediainfo.js'
 const nodeRequire = createRequire(import.meta.url)
 const archiver = nodeRequire('archiver') as typeof import('archiver')
 const yauzl = nodeRequire('yauzl') as typeof import('yauzl')
-import { createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type ConversationBubblePresetId, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoAssetVariant } from '../shared/theme'
+import { CONVERSATION_BUBBLE_CORNERS, CONVERSATION_BUBBLE_ROLES, createDefaultTheme, createThemeInputSchema, DEFAULT_THEME_COLORS, parseThemeProfile, type ConversationBubbleCorner, type ConversationBubblePresetId, type ConversationBubbleRole, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoAssetVariant } from '../shared/theme'
 import type { AssetPurpose, CompiledTheme, ImportedAsset, ImportedFontAsset, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, VideoAssetInspection, VideoMediaRole } from '../shared/contracts'
 import { importedFontFormatForAsset, type ImportedFontFormat } from '../shared/typography'
 import { compileTheme, compiledAssetNames } from './theme-compiler'
 import { createVideoVariantReference, mediaMimeTypeForPath, mediaReferenceAssets, mediaReferenceForPath } from '../shared/media'
-import { conversationBubbleMediaReferences } from '../shared/conversation-bubbles'
+import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey } from '../shared/conversation-bubbles'
 import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../shared/gif'
 import { MAX_ICON_GIF_BYTES } from '../shared/icon-assets'
 import { prepareGif } from './gif-assets'
@@ -33,6 +33,7 @@ import {
   collectThemeAssets,
   createShareProfile,
   encodeJson,
+  legacyConversationBubbleAssets,
   parseThemeShareManifest,
   shareEntryLimit,
   shareProfileVersionMatches
@@ -68,7 +69,7 @@ interface LegacyStudioSettingsV1 {
 export interface BundledSystemThemeAssets {
   hero: string
   polaroid: string
-  conversationBubbles?: Record<ConversationBubblePresetId, string>
+  conversationBubbles?: Record<ConversationBubblePresetId, Record<ConversationBubbleCorner, string>>
   resourcesRoot?: string
 }
 
@@ -122,7 +123,8 @@ const MIN_FREE_RATIO = 0.15
 const MAX_VIDEO_DIMENSION = 4096
 const MAX_CONVERSATION_BUBBLE_BYTES = 10 * 1024 * 1024
 const MAX_CONVERSATION_BUBBLE_DIMENSION = 2048
-const MAX_CONVERSATION_BUBBLE_GIF_FRAMES = 180
+type ConversationBubbleImportPurpose = 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble'
+type ImportMediaAssetPurpose = MediaAssetPurpose | ConversationBubbleImportPurpose
 const THEME_DELETE_TOMBSTONE_PATTERN = /^\.theme-delete-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-[0-9a-f-]{36}$/i
 const THEME_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const CONTROLLED_TEMP_DIRECTORY_PATTERN = /^\.(?:cdstheme-import|media-validate)-/
@@ -378,10 +380,12 @@ export class ProfileStore {
       if (manifest.themeName !== source.name || !shareProfileVersionMatches(manifest, themeInput, source.version)) throw new Error('分享包清单与主题配置不一致。')
       const listed = new Map(manifest.assets.map((asset) => [asset.path, asset]))
       const referenced = collectThemeAssets(source)
+      const legacyBubbleAssets = legacyConversationBubbleAssets(themeInput)
+      const acceptedReferences = [...new Set([...referenced, ...legacyBubbleAssets])]
       const gifIconAssets = new Set(Object.values(source.icons)
         .filter((icon) => icon.kind === 'asset' && extname(icon.asset).toLowerCase() === '.gif')
         .map((icon) => icon.kind === 'asset' ? icon.asset : ''))
-      if (referenced.length !== listed.size || referenced.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')
+      if (acceptedReferences.length !== listed.size || acceptedReferences.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')
       for (const [path, entry] of entries) {
         this.throwIfAborted(signal, '主题导入已取消。')
         if (path !== 'manifest.json' && path !== 'theme.json' && !listed.has(path)) throw new Error('分享包包含未列出的素材。')
@@ -400,6 +404,9 @@ export class ProfileStore {
         }
       }
       for (const asset of manifest.assets) if (!entries.has(asset.path)) throw new Error(`分享包缺少素材: ${asset.path}`)
+      for (const asset of legacyBubbleAssets) {
+        await rm(this.resolveWithinRoot(temporaryRoot, asset), { force: true })
+      }
       await this.assertProfileEmbeddedBudget(source, (asset) => this.resolveWithinRoot(temporaryRoot, asset), signal, '主题导入已取消。')
 
       const imported = parseThemeProfile({ ...structuredClone(source), id: randomUUID(), updatedAt: new Date().toISOString(), resetColors: { ...source.colors } })
@@ -575,14 +582,25 @@ export class ProfileStore {
     await this.assertProfileEmbeddedBudget(profile)
     const budget = new EmbeddedAssetBudget()
     const readPreset = this.bundledSystemAssets?.conversationBubbles
-      ? async (presetId: ConversationBubblePresetId): Promise<string> => {
-        const path = this.bundledSystemAssets?.conversationBubbles?.[presetId]
-        if (!path) throw new Error(`内置聊天气泡预设缺失: ${presetId}`)
-        const data = await this.readEmbeddedFile(path, `builtin/conversation-bubbles/${presetId}`, budget)
+      ? async (presetId: ConversationBubblePresetId, corner: ConversationBubbleCorner): Promise<string> => {
+        const path = this.bundledSystemAssets?.conversationBubbles?.[presetId]?.[corner]
+        if (!path) throw new Error(`内置聊天气泡预设缺失: ${presetId}/${corner}`)
+        const data = await this.readEmbeddedFile(path, `builtin/conversation-bubbles/${presetId}/${corner}`, budget)
         return `data:image/png;base64,${data.toString('base64')}`
       }
       : undefined
     return compileTheme(profile, (asset) => this.readAssetDataUrl(id, asset, budget), readPreset)
+  }
+
+  async getConversationBubblePreset(presetId: ConversationBubblePresetId): Promise<CompiledTheme> {
+    const preset = this.bundledSystemAssets?.conversationBubbles?.[presetId]
+    if (!preset) throw new Error(`内置聊天气泡预设缺失: ${presetId}`)
+    const entries = await Promise.all(CONVERSATION_BUBBLE_CORNERS.map(async (corner) => {
+      const asset = conversationBubblePresetAssetKey(presetId, corner)
+      const data = await this.readEmbeddedFile(preset[corner], asset)
+      return [asset, `data:image/png;base64,${data.toString('base64')}`] as const
+    }))
+    return { assets: Object.fromEntries(entries) }
   }
 
   resolveAsset(themeId: string, asset: string): string {
@@ -645,9 +663,17 @@ export class ProfileStore {
       }
     }
     if (this.bundledSystemAssets?.conversationBubbles) {
-      for (const [presetId, path] of Object.entries(this.bundledSystemAssets.conversationBubbles)) {
-        this.throwIfAborted(signal, cancelledMessage)
-        await this.readEmbeddedFile(path, `builtin/conversation-bubbles/${presetId}`, budget)
+      const selectedPresets = new Set(CONVERSATION_BUBBLE_ROLES.flatMap((role) => {
+        const source = profile.conversationBubbles[role].source
+        return source.kind === 'preset' ? [source.presetId] : []
+      }))
+      for (const presetId of selectedPresets) {
+        for (const corner of CONVERSATION_BUBBLE_CORNERS) {
+          this.throwIfAborted(signal, cancelledMessage)
+          const path = this.bundledSystemAssets.conversationBubbles[presetId]?.[corner]
+          if (!path) throw new Error(`内置聊天气泡预设缺失: ${presetId}/${corner}`)
+          await this.readEmbeddedFile(path, `builtin/conversation-bubbles/${presetId}/${corner}`, budget)
+        }
       }
     }
     if (this.bundledSystemAssets?.resourcesRoot) {
@@ -918,7 +944,7 @@ export class ProfileStore {
     }
   }
 
-  async importMediaAsset(themeId: string, sourcePath: string, purpose: MediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal, optimizeVideo = false, preflight?: VideoSourcePreflight, transcodeSettings?: VideoTranscodeSettings): Promise<ImportedMediaAsset> {
+  async importMediaAsset(themeId: string, sourcePath: string, purpose: ImportMediaAssetPurpose, expectedKind?: MediaSelectionKind, signal?: AbortSignal, optimizeVideo = false, preflight?: VideoSourcePreflight, transcodeSettings?: VideoTranscodeSettings): Promise<ImportedMediaAsset> {
     await this.get(themeId)
     if (!isAbsolute(sourcePath)) throw new Error('所选媒体路径必须是绝对路径。')
     const sourceStat = await stat(sourcePath)
@@ -929,13 +955,13 @@ export class ProfileStore {
     if (purpose === 'brandSignature' && VIDEO_EXTENSIONS.has(extension)) throw new Error('品牌签名只能选择图片或 GIF 文件。')
     if (purpose === 'composerMelody' && VIDEO_EXTENSIONS.has(extension)) throw new Error('输入框装饰只能选择图片或 GIF 文件。')
     if (purpose === 'accountMenuBackground' && VIDEO_EXTENSIONS.has(extension)) throw new Error('账号菜单背景只能选择图片或 GIF 文件。')
-    if (conversationBubble && VIDEO_EXTENSIONS.has(extension)) throw new Error('聊天气泡只能选择图片或 GIF 文件。')
+    if (conversationBubble && extension !== '.png' && extension !== '.webp') throw new Error('聊天气泡角饰只能选择 PNG 或 WebP 文件。')
     if (expectedKind === 'image' && (extension === '.gif' || VIDEO_EXTENSIONS.has(extension))) throw new Error('图片背景只支持 PNG、WebP、JPEG 或 SVG。')
     if (expectedKind === 'gif' && extension !== '.gif') throw new Error('GIF 背景必须选择 GIF 文件。')
     if (expectedKind === 'video' && !VIDEO_EXTENSIONS.has(extension)) throw new Error('视频背景只支持 MP4 或 WebM。')
     if (conversationBubble && expectedKind === 'video') throw new Error('聊天气泡不支持视频素材。')
     if ((extension === '.svg' || MEDIA_IMAGE_EXTENSIONS.has(extension)) && sourceStat.size > (conversationBubble ? MAX_CONVERSATION_BUBBLE_BYTES : MAX_ASSET_BYTES)) {
-      throw new Error(conversationBubble ? '聊天气泡图片和 GIF 不能超过 10 MB。' : '图片和 GIF 文件不能超过 30 MB。')
+      throw new Error(conversationBubble ? '聊天气泡角饰不能超过 10 MB。' : '图片和 GIF 文件不能超过 30 MB。')
     }
     if (signal?.aborted) throw new Error('媒体导入已取消。')
 
@@ -996,7 +1022,7 @@ export class ProfileStore {
       this.throwIfAborted(signal, '媒体导入已取消。')
       await rename(temporary, destination)
       if (conversationBubble && (await stat(destination)).size > MAX_CONVERSATION_BUBBLE_BYTES) {
-        throw new Error('聊天气泡图片和 GIF 不能超过 10 MB。')
+        throw new Error('聊天气泡角饰不能超过 10 MB。')
       }
     } catch (error) {
       await rm(temporary, { force: true }).catch(() => undefined)
@@ -1017,6 +1043,33 @@ export class ProfileStore {
       width: metadata.width,
       height: metadata.height
     }
+  }
+
+  async importConversationBubbleCornerAsset(themeId: string, sourcePath: string, role: ConversationBubbleRole, corner: ConversationBubbleCorner, signal?: AbortSignal): Promise<ImportedMediaAsset> {
+    if (!CONVERSATION_BUBBLE_ROLES.includes(role) || !CONVERSATION_BUBBLE_CORNERS.includes(corner)) throw new Error('聊天气泡角饰位置无效。')
+    const extension = extname(sourcePath).toLowerCase()
+    if (extension !== '.png' && extension !== '.webp') throw new Error('聊天气泡角饰只能选择 PNG 或 WebP 文件。')
+    const purpose = role === 'user' ? 'conversationUserBubble' : role === 'codex' ? 'conversationCodexBubble' : 'conversationPlanBubble'
+    const imported = await this.importMediaAsset(themeId, sourcePath, purpose, 'image', signal)
+    try {
+      await this.assertConversationBubbleCornerTransparency(this.resolveAsset(themeId, imported.relativePath))
+      return imported
+    } catch (error) {
+      await this.discardPendingAssets(themeId, [imported.relativePath])
+      throw error
+    }
+  }
+
+  async discardPendingAssets(themeId: string, assets: string[]): Promise<void> {
+    await this.get(themeId)
+    const pending = this.pendingAssets.get(themeId)
+    if (!pending) return
+    for (const asset of new Set(assets)) {
+      if (!pending.has(asset)) throw new Error('只能清理当前主题尚未保存的素材。')
+      await rm(this.resolveAsset(themeId, asset), { force: true })
+      pending.delete(asset)
+    }
+    if (pending.size === 0) this.pendingAssets.delete(themeId)
   }
 
   async inspectVideoSource(sourcePath: string, signal?: AbortSignal): Promise<VideoAssetInspection> {
@@ -1474,8 +1527,18 @@ export class ProfileStore {
     if (Math.max(metadata.width, metadata.height) > MAX_CONVERSATION_BUBBLE_DIMENSION) {
       throw new Error('聊天气泡图片最长边不能超过 2048px。')
     }
-    if (extension === '.gif' && (metadata.pages ?? 1) > MAX_CONVERSATION_BUBBLE_GIF_FRAMES) {
-      throw new Error('聊天气泡 GIF 不能超过 180 帧。')
+  }
+
+  private async assertConversationBubbleCornerTransparency(path: string): Promise<void> {
+    const { data, info } = await sharp(await readFile(path)).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    const alphaAt = (x: number, y: number): number => data[(y * info.width + x) * info.channels + 3] ?? 255
+    const edgeDepth = Math.min(2, Math.floor(Math.min(info.width, info.height) / 2))
+    for (let y = 0; y < info.height; y += 1) {
+      for (let x = 0; x < info.width; x += 1) {
+        if ((x < edgeDepth || y < edgeDepth || x >= info.width - edgeDepth || y >= info.height - edgeDepth) && alphaAt(x, y) > 16) {
+          throw new Error('聊天气泡角饰四周必须保留透明安全边距。')
+        }
+      }
     }
   }
 
@@ -1500,13 +1563,23 @@ export class ProfileStore {
         }
       }
     }
-    for (const reference of conversationBubbleMediaReferences(profile)) {
-      const sourcePath = this.resolveAsset(profile.id, reference.asset)
-      const sourceStat = await stat(sourcePath)
-      if (sourceStat.size > MAX_CONVERSATION_BUBBLE_BYTES) throw new Error('聊天气泡图片和 GIF 不能超过 10 MB。')
-      const extension = extname(reference.asset).toLowerCase()
-      const metadata = await this.inspectImage(sourcePath, extension)
-      this.assertConversationBubbleInspection(metadata, extension)
+    for (const role of CONVERSATION_BUBBLE_ROLES) {
+      const source = profile.conversationBubbles[role].source
+      if (source.kind !== 'custom') continue
+      let totalBytes = 0
+      for (const corner of CONVERSATION_BUBBLE_CORNERS) {
+        const asset = source.corners[corner]
+        const sourcePath = this.resolveAsset(profile.id, asset.reference.asset)
+        const sourceStat = await stat(sourcePath)
+        totalBytes += sourceStat.size
+        const extension = extname(asset.reference.asset).toLowerCase()
+        if (extension !== '.png' && extension !== '.webp') throw new Error('聊天气泡角饰只能使用 PNG 或 WebP 素材。')
+        const metadata = await this.inspectImage(sourcePath, extension)
+        this.assertConversationBubbleInspection(metadata, extension)
+        if (metadata.width !== asset.width || metadata.height !== asset.height) throw new Error('聊天气泡角饰尺寸与主题配置不一致。')
+        await this.assertConversationBubbleCornerTransparency(sourcePath)
+      }
+      if (totalBytes > MAX_CONVERSATION_BUBBLE_BYTES) throw new Error('同一聊天气泡的四张角饰合计不能超过 10 MB。')
     }
     const gifIconAssets = new Set(Object.values(profile.icons)
       .filter((icon) => icon.kind === 'asset' && extname(icon.asset).toLowerCase() === '.gif')
@@ -1722,7 +1795,7 @@ function isVideoMediaRole(value: unknown): value is VideoMediaRole {
   return value === 'hero' || value === 'polaroid' || value === 'conversationBackground' || value === 'windowBackground'
 }
 
-function isConversationBubblePurpose(purpose: MediaAssetPurpose): purpose is 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble' {
+function isConversationBubblePurpose(purpose: ImportMediaAssetPurpose): purpose is ConversationBubbleImportPurpose {
   return purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble'
 }
 

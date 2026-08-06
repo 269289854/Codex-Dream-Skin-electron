@@ -1,4 +1,4 @@
-import type { CreateThemeInput, MediaReference, ThemeProfile, ThemeSummary } from './theme'
+import type { ConversationBubbleCorner, ConversationBubblePresetId, ConversationBubbleRole, CreateThemeInput, MediaReference, ThemeProfile, ThemeSummary } from './theme'
 import type { LocalizedMessage, SupportedLocale } from './i18n'
 import type { ImportedFontFormat } from './typography'
 import type { VideoImportDecision, VideoTranscodeSettings } from './video-transcode'
@@ -92,7 +92,7 @@ export interface OperationProgress {
   message: LocalizedMessage
 }
 
-export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'accountMenuBackground' | 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble'
+export type MediaAssetPurpose = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground' | 'accountMenuBackground' | 'brandSignature' | 'composerMelody'
 export type VideoMediaRole = 'hero' | 'polaroid' | 'conversationBackground' | 'windowBackground'
 export type AssetPurpose = MediaAssetPurpose | 'icon' | 'font'
 export type MediaSelectionKind = 'image' | 'gif' | 'video'
@@ -145,8 +145,11 @@ export interface StudioApi {
     compile: (id: string) => Promise<CompiledTheme>
   }
   assets: {
-    selectImage: (themeId: string, purpose: Exclude<MediaAssetPurpose, 'brandSignature' | 'composerMelody' | 'conversationUserBubble' | 'conversationCodexBubble' | 'conversationPlanBubble'>) => Promise<ImportedAsset | null>
+    selectImage: (themeId: string, purpose: Exclude<MediaAssetPurpose, 'brandSignature' | 'composerMelody'>) => Promise<ImportedAsset | null>
     selectMedia: (themeId: string, purpose: MediaAssetPurpose, kind?: MediaSelectionKind) => Promise<MediaSelectionResult | null>
+    getConversationBubblePreset: (presetId: ConversationBubblePresetId) => Promise<CompiledTheme>
+    selectConversationBubbleCorner: (themeId: string, role: ConversationBubbleRole, corner: ConversationBubbleCorner) => Promise<ImportedMediaAsset | null>
+    discardPending: (themeId: string, assets: string[]) => Promise<void>
     commitVideoSelection: (themeId: string, selectionId: string, decision: VideoImportDecision) => Promise<ImportedMediaAsset>
     discardVideoSelection: (themeId: string, selectionId: string) => Promise<void>
     getPreviewUrl: (themeId: string, asset: string) => Promise<string>

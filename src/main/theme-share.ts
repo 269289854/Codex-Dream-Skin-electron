@@ -43,7 +43,7 @@ const manifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.union([z.literal(1), z.literal(THEME_SHARE_VERSION)]),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(29),
+  profileVersion: z.number().int().min(0).max(30),
   assets: z.array(assetManifestSchema).max(MAX_SHARE_ENTRIES - 2)
 }).strict()
 
@@ -121,7 +121,25 @@ export function shareProfileVersionMatches(manifest: ThemeShareManifest, seriali
   if (!serializedProfile || typeof serializedProfile !== 'object' || !('version' in serializedProfile)) return false
   const serializedVersion = serializedProfile.version
   if (typeof serializedVersion !== 'number' || manifest.profileVersion !== serializedVersion) return false
-  return serializedVersion === parsedVersion || (parsedVersion === 29 && serializedVersion >= 0 && serializedVersion <= 28)
+  return serializedVersion === parsedVersion || (parsedVersion === 30 && serializedVersion >= 0 && serializedVersion <= 29)
+}
+
+export function legacyConversationBubbleAssets(input: unknown): string[] {
+  if (!input || typeof input !== 'object') return []
+  const candidate = input as Record<string, unknown>
+  if (typeof candidate.version !== 'number' || candidate.version >= 30) return []
+  const bubbles = candidate.conversationBubbles
+  if (!bubbles || typeof bubbles !== 'object') return []
+  const assets = ['user', 'codex', 'plan'].flatMap((role) => {
+    const style = (bubbles as Record<string, unknown>)[role]
+    if (!style || typeof style !== 'object') return []
+    const source = (style as Record<string, unknown>).source
+    if (!source || typeof source !== 'object' || (source as Record<string, unknown>).kind !== 'custom') return []
+    const reference = (source as Record<string, unknown>).reference
+    const asset = reference && typeof reference === 'object' ? (reference as Record<string, unknown>).asset : null
+    return typeof asset === 'string' ? [asset] : []
+  })
+  return [...new Set(assets)]
 }
 
 function themeMediaReferences(profile: ThemeProfile): Array<MediaReference | null> {
@@ -276,7 +294,9 @@ export function validateShareContents(entries: Map<string, Buffer>): { profile: 
   if (manifest.themeName !== profile.name || !shareProfileVersionMatches(manifest, themeInput, profile.version)) throw new Error('分享包清单与主题配置不一致。')
   const listed = new Map(manifest.assets.map((asset) => [asset.path, asset]))
   const referenced = collectThemeAssets(profile)
-  if (referenced.length !== listed.size || referenced.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')
+  const legacyBubbleAssets = legacyConversationBubbleAssets(themeInput)
+  const acceptedReferences = [...new Set([...referenced, ...legacyBubbleAssets])]
+  if (acceptedReferences.length !== listed.size || acceptedReferences.some((asset) => !listed.has(asset))) throw new Error('分享包素材清单与主题引用不一致。')
   for (const path of entries.keys()) {
     if (path !== 'manifest.json' && path !== 'theme.json' && !listed.has(path)) throw new Error('分享包包含未列出的素材。')
   }
@@ -284,5 +304,5 @@ export function validateShareContents(entries: Map<string, Buffer>): { profile: 
     const data = entries.get(asset.path)
     if (!data || data.byteLength !== asset.size || sha256(data).toLowerCase() !== asset.sha256.toLowerCase()) throw new Error(`素材校验失败: ${asset.path}`)
   }
-  return { profile, manifest, assets: new Map(manifest.assets.map((asset) => [asset.path, entries.get(asset.path)!])) }
+  return { profile, manifest, assets: new Map(referenced.map((asset) => [asset, entries.get(asset)!])) }
 }

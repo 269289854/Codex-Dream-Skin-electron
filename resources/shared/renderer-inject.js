@@ -1692,48 +1692,58 @@
   const conversationBubbleFrameProperties = {
     user: {
       attribute: 'data-dream-user-bubble-frame',
-      source: '--dream-user-bubble-frame-source',
-      slice: '--dream-user-bubble-frame-slice',
-      width: '--dream-user-bubble-frame-width',
-      borderWidths: '--dream-user-bubble-frame-border-widths',
-      minBlockSize: '--dream-user-bubble-frame-min-block-size',
+      bodyAttribute: 'data-dream-user-bubble-body',
+      corners: '--dream-user-bubble-corners',
+      cornerSizes: '--dream-user-bubble-corner-sizes',
+      bodyFill: '--dream-user-bubble-body-fill',
+      borderColor: '--dream-user-bubble-border-color',
+      borderWidth: '--dream-user-bubble-border-width',
+      borderRadius: '--dream-user-bubble-border-radius',
+      ornamentSize: '--dream-user-bubble-ornament-size',
+      ornamentOutset: '--dream-user-bubble-ornament-outset',
       padding: '--dream-user-bubble-content-padding'
     },
     codex: {
       attribute: 'data-dream-codex-bubble-frame',
-      source: '--dream-codex-bubble-frame-source',
-      slice: '--dream-codex-bubble-frame-slice',
-      width: '--dream-codex-bubble-frame-width',
-      borderWidths: '--dream-codex-bubble-frame-border-widths',
-      minBlockSize: '--dream-codex-bubble-frame-min-block-size',
+      bodyAttribute: 'data-dream-codex-bubble-body',
+      corners: '--dream-codex-bubble-corners',
+      cornerSizes: '--dream-codex-bubble-corner-sizes',
+      bodyFill: '--dream-codex-bubble-body-fill',
+      borderColor: '--dream-codex-bubble-border-color',
+      borderWidth: '--dream-codex-bubble-border-width',
+      borderRadius: '--dream-codex-bubble-border-radius',
+      ornamentSize: '--dream-codex-bubble-ornament-size',
+      ornamentOutset: '--dream-codex-bubble-ornament-outset',
       padding: '--dream-codex-bubble-content-padding'
     },
     plan: {
       attribute: 'data-dream-plan-bubble-frame',
-      source: '--dream-plan-bubble-frame-source',
-      slice: '--dream-plan-bubble-frame-slice',
-      width: '--dream-plan-bubble-frame-width',
-      borderWidths: '--dream-plan-bubble-frame-border-widths',
-      minBlockSize: '--dream-plan-bubble-frame-min-block-size',
+      bodyAttribute: 'data-dream-plan-bubble-body',
+      corners: '--dream-plan-bubble-corners',
+      cornerSizes: '--dream-plan-bubble-corner-sizes',
+      bodyFill: '--dream-plan-bubble-body-fill',
+      borderColor: '--dream-plan-bubble-border-color',
+      borderWidth: '--dream-plan-bubble-border-width',
+      borderRadius: '--dream-plan-bubble-border-radius',
+      ornamentSize: '--dream-plan-bubble-ornament-size',
+      ornamentOutset: '--dream-plan-bubble-ornament-outset',
       padding: '--dream-plan-bubble-content-padding'
     }
-  };
-  const normalizeConversationBubbleQuad = (value, fallback, min, max) => {
-    if (!Array.isArray(value) || value.length !== 4) return fallback;
-    const normalized = value.map((entry) => Number(entry));
-    if (normalized.some((entry) => !Number.isFinite(entry) || entry < min || entry > max)) return fallback;
-    return normalized;
   };
   const clearConversationBubbleFrameConfig = () => {
     const root = document.documentElement;
     if (!root) return;
     Object.values(conversationBubbleFrameProperties).forEach((properties) => {
       root.removeAttribute(properties.attribute);
-      root.style.removeProperty(properties.source);
-      root.style.removeProperty(properties.slice);
-      root.style.removeProperty(properties.width);
-      root.style.removeProperty(properties.borderWidths);
-      root.style.removeProperty(properties.minBlockSize);
+      root.removeAttribute(properties.bodyAttribute);
+      root.style.removeProperty(properties.corners);
+      root.style.removeProperty(properties.cornerSizes);
+      root.style.removeProperty(properties.bodyFill);
+      root.style.removeProperty(properties.borderColor);
+      root.style.removeProperty(properties.borderWidth);
+      root.style.removeProperty(properties.borderRadius);
+      root.style.removeProperty(properties.ornamentSize);
+      root.style.removeProperty(properties.ornamentOutset);
       root.style.removeProperty(properties.padding);
     });
   };
@@ -1742,33 +1752,32 @@
     if (!root) return;
     Object.entries(conversationBubbleFrameProperties).forEach(([role, properties]) => {
       const config = themeConfig?.conversationBubbles?.[role];
-      const mode = config?.mode === 'nineSlice' || config?.mode === 'stretch' ? config.mode : 'none';
-      const dataUrl = motionDataUrl(config) || null;
-      const activeMode = dataUrl ? mode : 'none';
+      const cornerOrder = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'];
+      const corners = cornerOrder.map((corner) => config?.corners?.[corner]);
+      const activeMode = config?.mode === 'layered' && corners.every((corner) => typeof corner?.dataUrl === 'string' && corner.dataUrl.startsWith('data:image/')) ? 'layered' : 'none';
       root.setAttribute(properties.attribute, activeMode);
+      root.setAttribute(properties.bodyAttribute, typeof config?.bodyFill === 'string' ? 'preset' : 'theme');
       if (activeMode === 'none') {
-        root.style.removeProperty(properties.source);
-        root.style.removeProperty(properties.slice);
-        root.style.removeProperty(properties.width);
-        root.style.removeProperty(properties.borderWidths);
-        root.style.removeProperty(properties.minBlockSize);
+        root.style.removeProperty(properties.corners);
+        root.style.removeProperty(properties.cornerSizes);
+        root.style.removeProperty(properties.bodyFill);
+        root.style.removeProperty(properties.borderColor);
+        root.style.removeProperty(properties.borderWidth);
+        root.style.removeProperty(properties.borderRadius);
+        root.style.removeProperty(properties.ornamentSize);
+        root.style.removeProperty(properties.ornamentOutset);
         root.style.removeProperty(properties.padding);
         return;
       }
-      const slice = clamp(Number(config?.slice) || 25, 10, 45);
-      const frameWidth = clamp(Math.round(Number(config?.frameWidth) || 24), 8, 40);
-      const fallbackSlices = [slice, slice, slice, slice];
-      const candidateSlices = normalizeConversationBubbleQuad(config?.sliceInsets, fallbackSlices, 1, 90);
-      const sliceInsets = candidateSlices[0] + candidateSlices[2] < 100 && candidateSlices[1] + candidateSlices[3] < 100
-        ? candidateSlices
-        : fallbackSlices;
-      const fallbackBorderWidths = [frameWidth, frameWidth * 2, frameWidth, frameWidth * 2];
-      const borderWidths = normalizeConversationBubbleQuad(config?.borderWidths, fallbackBorderWidths, 8, 80);
-      root.style.setProperty(properties.source, `url(${JSON.stringify(dataUrl)})`);
-      root.style.setProperty(properties.slice, sliceInsets.map((value) => `${value}%`).join(' '));
-      root.style.setProperty(properties.width, `${frameWidth}px`);
-      root.style.setProperty(properties.borderWidths, borderWidths.map((value) => `${value}px`).join(' '));
-      root.style.setProperty(properties.minBlockSize, `${Math.ceil(borderWidths[0] + borderWidths[2])}px`);
+      root.style.setProperty(properties.corners, corners.map((corner) => `url(${JSON.stringify(corner.dataUrl)})`).join(', '));
+      root.style.setProperty(properties.cornerSizes, corners.map((corner) => `${clamp(Number(corner.width) || 1, 1, 96)}px ${clamp(Number(corner.height) || 1, 1, 96)}px`).join(', '));
+      if (typeof config?.bodyFill === 'string') root.style.setProperty(properties.bodyFill, config.bodyFill);
+      else root.style.removeProperty(properties.bodyFill);
+      root.style.setProperty(properties.borderColor, typeof config?.borderColor === 'string' ? config.borderColor : 'transparent');
+      root.style.setProperty(properties.borderWidth, `${clamp(Math.round(Number(config?.borderWidth) || 0), 0, 4)}px`);
+      root.style.setProperty(properties.borderRadius, `${clamp(Math.round(Number(config?.borderRadius) || 14), 8, 32)}px`);
+      root.style.setProperty(properties.ornamentSize, `${clamp(Math.round(Number(config?.ornamentSize) || 56), 24, 96)}px`);
+      root.style.setProperty(properties.ornamentOutset, `${clamp(Math.round(Number(config?.ornamentOutset) || 0), 0, 24)}px`);
       root.style.setProperty(properties.padding, `${clamp(Math.round(Number(config?.contentPadding) || 20), 12, 40)}px`);
     });
   };

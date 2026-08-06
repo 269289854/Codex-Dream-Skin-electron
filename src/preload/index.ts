@@ -37,6 +37,9 @@ const api: StudioApi = {
   assets: {
     selectImage: (themeId, purpose) => invokeIpcResult('assets:select', themeId, purpose),
     selectMedia: (themeId, purpose, kind) => invokeIpcResult('assets:select-media', themeId, purpose, kind),
+    getConversationBubblePreset: (presetId) => invokeIpcResult('assets:get-conversation-bubble-preset', presetId),
+    selectConversationBubbleCorner: (themeId, role, corner) => invokeIpcResult('assets:select-conversation-bubble-corner', themeId, role, corner),
+    discardPending: (themeId, assets) => invokeIpcResult('assets:discard-pending', themeId, assets),
     commitVideoSelection: (themeId, selectionId, decision) => invokeIpcResult('assets:commit-video-selection', themeId, selectionId, decision),
     discardVideoSelection: (themeId, selectionId) => invokeIpcResult('assets:discard-video-selection', themeId, selectionId),
     getPreviewUrl: (themeId, asset) => invokeIpcResult('assets:get-preview-url', themeId, asset),

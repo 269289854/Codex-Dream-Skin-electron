@@ -53,7 +53,7 @@ const compositeManifestSchema = z.object({
   format: z.literal(THEME_SHARE_FORMAT),
   version: z.literal(THEME_SHARE_COMPOSITE_VERSION),
   themeName: z.string().trim().min(1).max(80),
-  profileVersion: z.number().int().min(0).max(29),
+  profileVersion: z.number().int().min(0).max(30),
   themePackage: packageEntrySchema.extend({ path: z.literal(THEME_PACKAGE_PATH) }).strict(),
   iconLibraries: z.array(z.object({
     originalLibraryId: z.string().uuid(),

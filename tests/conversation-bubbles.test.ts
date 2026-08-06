@@ -1,229 +1,171 @@
-import { readFile, stat } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import sharp from 'sharp'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { compileTheme } from '../src/main/theme-compiler'
 import {
+  CONVERSATION_BUBBLE_PRESET_STYLES,
   conversationBubblePresetAssetKey,
   resolveConversationBubbles
 } from '../src/shared/conversation-bubbles'
 import {
+  CONVERSATION_BUBBLE_CORNERS,
   CONVERSATION_BUBBLE_PRESETS,
-  createDefaultTheme
+  createDefaultTheme,
+  type ConversationBubbleCorner,
+  type ConversationBubbleCornerAsset
 } from '../src/shared/theme'
-import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../src/shared/gif'
 
 const themeId = '11111111-1111-4111-8111-111111111111'
-const testGif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64')
 const presetRoot = join(process.cwd(), 'resources', 'shared', 'conversation-bubbles')
-const expectedPresetSlices = {
-  'daisy-heart': [65, 25, 28, 25],
-  'calico-cat': [58, 25, 27, 25],
-  'cloud-sprout': [35, 25, 30, 25],
-  'sakura-ribbon': [56, 25, 37, 25],
-  'moon-stars': [35, 25, 40, 25],
-  'strawberry-leaf': [40, 25, 38, 25],
-  'ocean-shell': [46, 25, 48, 25],
-  'rainbow-candy': [60, 25, 35, 25]
-} as const
+
+function customCorners(): Record<ConversationBubbleCorner, ConversationBubbleCornerAsset> {
+  return Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner, index) => [corner, {
+    reference: { asset: `assets/${corner}.png`, kind: 'image', mimeType: 'image/png' },
+    width: index % 2 === 0 ? 320 : 160,
+    height: index % 2 === 0 ? 160 : 320
+  }])) as Record<ConversationBubbleCorner, ConversationBubbleCornerAsset>
+}
 
 describe('conversation bubble frames', () => {
-  it('ships eight unique 768x384 transparent PNG presets below 200 KB', async () => {
+  it('ships eight unique four-corner PNG sets with transparent safety margins under 200 KB each', async () => {
     expect(CONVERSATION_BUBBLE_PRESETS).toHaveLength(8)
     expect(new Set(CONVERSATION_BUBBLE_PRESETS.map((preset) => preset.id)).size).toBe(8)
+    const rootEntries = await readdir(presetRoot, { withFileTypes: true })
+    expect(rootEntries.filter((entry) => entry.isFile() && entry.name.endsWith('.png'))).toHaveLength(0)
+    expect(rootEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()).toEqual(CONVERSATION_BUBBLE_PRESETS.map((preset) => preset.id).sort())
 
+    const hashes = new Set<string>()
     for (const preset of CONVERSATION_BUBBLE_PRESETS) {
-      const path = join(presetRoot, preset.fileName)
-      expect((await stat(path)).size).toBeLessThanOrEqual(200 * 1024)
-      const metadata = await sharp(path).metadata()
-      expect(metadata).toMatchObject({ format: 'png', width: 768, height: 384, hasAlpha: true, channels: 4 })
+      let totalBytes = 0
+      for (const corner of CONVERSATION_BUBBLE_CORNERS) {
+        const path = join(presetRoot, preset.id, `${corner}.png`)
+        const bytes = await readFile(path)
+        totalBytes += (await stat(path)).size
+        const hash = createHash('sha256').update(bytes).digest('hex')
+        expect(hashes.has(hash)).toBe(false)
+        hashes.add(hash)
 
-      const { data, info } = await sharp(await readFile(path)).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
-      const alphaAt = (x: number, y: number): number => data[(y * info.width + x) * info.channels + 3] ?? 255
-      expect([
-        alphaAt(0, 0),
-        alphaAt(info.width - 1, 0),
-        alphaAt(0, info.height - 1),
-        alphaAt(info.width - 1, info.height - 1),
-        alphaAt(Math.floor(info.width / 2), Math.floor(info.height / 2))
-      ]).toEqual([0, 0, 0, 0, 0])
-    }
-  })
-
-  it('keeps every preset decoration inside an undistorted asymmetric corner region', () => {
-    for (const preset of CONVERSATION_BUBBLE_PRESETS) {
-      const profile = createDefaultTheme(themeId)
-      profile.conversationBubbles.user = {
-        source: { kind: 'preset', presetId: preset.id },
-        fit: 'nineSlice',
-        slice: 25,
-        frameWidth: 24,
-        contentPadding: 20
+        const image = sharp(bytes)
+        const metadata = await image.metadata()
+        expect(metadata).toMatchObject({ format: 'png', width: 256, height: 256, hasAlpha: true })
+        const { data, info } = await image.ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+        let minX = info.width
+        let minY = info.height
+        let maxX = -1
+        let maxY = -1
+        for (let y = 0; y < info.height; y += 1) {
+          for (let x = 0; x < info.width; x += 1) {
+            const alpha = data[(y * info.width + x) * info.channels + 3] ?? 0
+            if (alpha === 0) continue
+            minX = Math.min(minX, x)
+            minY = Math.min(minY, y)
+            maxX = Math.max(maxX, x)
+            maxY = Math.max(maxY, y)
+          }
+        }
+        expect({ minX, minY, maxX, maxY }).toMatchObject({
+          minX: expect.any(Number),
+          minY: expect.any(Number),
+          maxX: expect.any(Number),
+          maxY: expect.any(Number)
+        })
+        expect(minX).toBeGreaterThanOrEqual(4)
+        expect(minY).toBeGreaterThanOrEqual(4)
+        expect(maxX).toBeLessThanOrEqual(251)
+        expect(maxY).toBeLessThanOrEqual(251)
       }
-      const frame = resolveConversationBubbles(profile.conversationBubbles, {
-        [conversationBubblePresetAssetKey(preset.id)]: `data:image/png;base64,${preset.id}`
-      }).user
-      const sliceInsets = expectedPresetSlices[preset.id]
-      const expectedWidths = [
-        Math.round(384 * sliceInsets[0] / 100 * 25) / 100,
-        Math.round(768 * sliceInsets[1] / 100 * 25) / 100,
-        Math.round(384 * sliceInsets[2] / 100 * 25) / 100,
-        Math.round(768 * sliceInsets[3] / 100 * 25) / 100
-      ]
-
-      expect(frame.sliceInsets).toEqual(sliceInsets)
-      expect(frame.borderWidths).toEqual(expectedWidths)
-      expect(frame.sliceInsets[0] + frame.sliceInsets[2]).toBeLessThan(100)
-      expect(frame.sliceInsets[1] + frame.sliceInsets[3]).toBeLessThan(100)
+      expect(totalBytes).toBeLessThanOrEqual(200 * 1024)
     }
+    expect(hashes.size).toBe(32)
   })
 
-  it('resolves user, Codex, and plan frames independently', () => {
+  it('resolves none, preset, and custom frames without changing corner aspect ratios', () => {
     const profile = createDefaultTheme(themeId)
     profile.conversationBubbles.user = {
-      source: { kind: 'preset', presetId: 'moon-stars' },
-      fit: 'nineSlice',
-      slice: 25,
-      frameWidth: 24,
-      contentPadding: 20
+      source: { kind: 'preset', presetId: 'calico-cat' },
+      contentPadding: 18
     }
     profile.conversationBubbles.codex = {
       source: {
         kind: 'custom',
-        reference: { asset: 'assets/codex-bubble.gif', kind: 'image', mimeType: 'image/gif' }
+        corners: customCorners(),
+        borderColor: '#123456',
+        borderWidth: 3,
+        borderRadius: 22,
+        ornamentSize: 72,
+        ornamentOutset: 9
       },
-      fit: 'stretch',
-      slice: 31,
-      frameWidth: 18,
-      contentPadding: 28
+      contentPadding: 26
     }
-    profile.conversationBubbles.plan = {
-      source: { kind: 'preset', presetId: 'ocean-shell' },
-      fit: 'nineSlice',
-      slice: 25,
-      frameWidth: 24,
-      contentPadding: 20
-    }
-    const resolved = resolveConversationBubbles(profile.conversationBubbles, {
-      [conversationBubblePresetAssetKey('moon-stars')]: 'data:image/png;base64,USER',
-      [conversationBubblePresetAssetKey('ocean-shell')]: 'data:image/png;base64,PLAN',
-      'assets/codex-bubble.gif': 'data:image/gif;base64,CODEX',
-      [gifPosterAssetKey('assets/codex-bubble.gif')]: 'data:image/png;base64,CODEX_POSTER'
-    })
+    const assets = Object.fromEntries([
+      ...CONVERSATION_BUBBLE_CORNERS.map((corner) => [conversationBubblePresetAssetKey('calico-cat', corner), `data:image/png;base64,${corner}`]),
+      ...CONVERSATION_BUBBLE_CORNERS.map((corner) => [`assets/${corner}.png`, `data:image/png;base64,custom-${corner}`])
+    ])
 
-    expect(resolved).toEqual({
-      visible: true,
-      user: {
-        mode: 'nineSlice',
-        dataUrl: 'data:image/png;base64,USER',
-        slice: 25,
-        sliceInsets: [35, 25, 40, 25],
-        frameWidth: 24,
-        borderWidths: [33.6, 48, 38.4, 48],
-        contentPadding: 20
-      },
-      codex: {
-        mode: 'stretch',
-        dataUrl: 'data:image/gif;base64,CODEX',
-        posterDataUrl: 'data:image/png;base64,CODEX_POSTER',
-        slice: 31,
-        sliceInsets: [31, 31, 31, 31],
-        frameWidth: 18,
-        borderWidths: [18, 36, 18, 36],
-        contentPadding: 28
-      },
-      plan: {
-        mode: 'nineSlice',
-        dataUrl: 'data:image/png;base64,PLAN',
-        slice: 25,
-        sliceInsets: [46, 25, 48, 25],
-        frameWidth: 24,
-        borderWidths: [44.16, 48, 46.08, 48],
-        contentPadding: 20
-      }
+    const frames = resolveConversationBubbles(profile.conversationBubbles, assets)
+    expect(frames.user).toMatchObject({
+      mode: 'layered',
+      bodyFill: CONVERSATION_BUBBLE_PRESET_STYLES['calico-cat'].bodyFill,
+      borderColor: CONVERSATION_BUBBLE_PRESET_STYLES['calico-cat'].borderColor,
+      contentPadding: 18
     })
+    expect(frames.user.corners?.topLeft).toMatchObject({ width: 42, height: 42 })
+    expect(frames.codex).toMatchObject({
+      mode: 'layered',
+      bodyFill: null,
+      borderColor: '#123456',
+      borderWidth: 3,
+      borderRadius: 22,
+      ornamentSize: 72,
+      ornamentOutset: 9,
+      contentPadding: 26
+    })
+    expect(frames.codex.corners?.topLeft).toMatchObject({ width: 72, height: 36 })
+    expect(frames.codex.corners?.topRight).toMatchObject({ width: 36, height: 72 })
+    expect(frames.plan).toMatchObject({ mode: 'none', corners: null, bodyFill: null })
   })
 
-  it('exposes all presets to Studio while runtime data contains only selected bubble frames', async () => {
+  it('compiles only the corner sets referenced by the three active roles', async () => {
     const profile = createDefaultTheme(themeId)
-    profile.conversationBubbles.user = {
-      source: { kind: 'preset', presetId: 'daisy-heart' },
-      fit: 'nineSlice',
-      slice: 25,
-      frameWidth: 24,
-      contentPadding: 20
-    }
-    profile.conversationBubbles.codex = {
-      source: {
-        kind: 'custom',
-        reference: { asset: 'assets/codex-bubble.gif', kind: 'image', mimeType: 'image/gif' }
-      },
-      fit: 'stretch',
-      slice: 25,
-      frameWidth: 24,
-      contentPadding: 30
-    }
-    profile.conversationBubbles.plan = {
-      source: { kind: 'preset', presetId: 'rainbow-candy' },
-      fit: 'nineSlice',
-      slice: 25,
-      frameWidth: 24,
-      contentPadding: 20
-    }
+    profile.conversationBubbles.user.source = { kind: 'preset', presetId: 'daisy-heart' }
+    profile.conversationBubbles.codex.source = { kind: 'preset', presetId: 'daisy-heart' }
+    profile.conversationBubbles.plan.source = { kind: 'preset', presetId: 'rainbow-candy' }
+    const readPreset = vi.fn(async (presetId: string, corner: string) => `data:image/png;base64,${Buffer.from(`${presetId}-${corner}`).toString('base64')}`)
 
-    const compiled = await compileTheme(
-      profile,
-      async () => `data:image/gif;base64,${testGif.toString('base64')}`,
-      async (presetId) => `data:image/png;base64,${Buffer.from(presetId).toString('base64')}`
-    )
+    const compiled = await compileTheme(profile, async () => { throw new Error('Unexpected custom asset read') }, readPreset)
 
+    expect(readPreset).toHaveBeenCalledTimes(8)
     expect(Object.keys(compiled.assets).filter((asset) => asset.startsWith('builtin/conversation-bubbles/'))).toHaveLength(8)
-    expect(compiled.assets['assets/codex-bubble.gif']).toBe(`data:image/gif;base64,${Buffer.from(ensureGifInfiniteLoop(testGif)).toString('base64')}`)
-    expect(compiled.assets[gifPosterAssetKey('assets/codex-bubble.gif')]).toMatch(/^data:image\/png;base64,/)
-    expect(compiled.assets[conversationBubblePresetAssetKey('daisy-heart')]).toBe(`data:image/png;base64,${Buffer.from('daisy-heart').toString('base64')}`)
-    expect(compiled.assets[conversationBubblePresetAssetKey('rainbow-candy')]).toBe(`data:image/png;base64,${Buffer.from('rainbow-candy').toString('base64')}`)
+    for (const presetId of ['daisy-heart', 'rainbow-candy'] as const) {
+      for (const corner of CONVERSATION_BUBBLE_CORNERS) {
+        expect(compiled.assets[conversationBubblePresetAssetKey(presetId, corner)]).toBe(`data:image/png;base64,${Buffer.from(`${presetId}-${corner}`).toString('base64')}`)
+      }
+    }
+    expect(compiled.assets[conversationBubblePresetAssetKey('calico-cat', 'topLeft')]).toBeUndefined()
   })
 
-  it('keeps Studio and runtime CSS on the same undistorted frame and inner-fill primitives', async () => {
+  it('keeps Studio and runtime CSS on the same body, ornament, and text layers', async () => {
     const [runtimeCss, studioCss] = await Promise.all([
       readFile(join(process.cwd(), 'resources', 'shared', 'dream-skin.css'), 'utf8'),
       readFile(join(process.cwd(), 'src', 'renderer', 'src', 'styles.css'), 'utf8')
     ])
 
-    for (const declaration of [
-      'background: transparent !important',
-      '::after',
-      'border-image-slice:',
-      'border-image-width:',
-      'frame-border-widths',
-      'border-image-repeat: stretch',
-      'background-size: 100% 100%'
-    ]) {
-      expect(runtimeCss).toContain(declaration)
-      expect(studioCss).toContain(declaration)
-    }
-    expect(runtimeCss).toContain('padding-block: max(var(--dream-user-bubble-content-padding), var(--dream-user-bubble-frame-width)) !important')
-    expect(runtimeCss).toContain('padding-inline: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-frame-width) * 2)) !important')
-    expect(runtimeCss).toContain('padding-block: max(var(--dream-codex-bubble-content-padding), var(--dream-codex-bubble-frame-width)) !important')
-    expect(runtimeCss).toContain('padding-inline: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-frame-width) * 2)) !important')
-    expect(studioCss).toContain('padding-block: max(var(--dream-preview-bubble-content-padding), var(--dream-preview-bubble-frame-width)) !important')
-    expect(studioCss).toContain('padding-inline: max(var(--dream-preview-bubble-content-padding), calc(var(--dream-preview-bubble-frame-width) * 2)) !important')
-    expect(runtimeCss).not.toContain('min-block-size: var(--dream-user-bubble-frame-min-block-size)')
-    expect(runtimeCss).not.toContain('min-block-size: var(--dream-codex-bubble-frame-min-block-size)')
-    expect(studioCss).not.toContain('min-block-size: var(--dream-preview-bubble-frame-min-block-size)')
-    expect(runtimeCss).toContain('inset: calc(var(--dream-user-bubble-frame-width) * .6667) calc(var(--dream-user-bubble-frame-width) * .5) !important')
-    expect(runtimeCss).toContain('inset: calc(var(--dream-codex-bubble-frame-width) * .6667) calc(var(--dream-codex-bubble-frame-width) * .5) !important')
-    expect(runtimeCss).toContain('inset: calc(var(--dream-plan-bubble-frame-width) * .6667) calc(var(--dream-plan-bubble-frame-width) * .5) !important')
-    expect(studioCss).toContain('inset: calc(var(--dream-preview-bubble-frame-width) * .6667) calc(var(--dream-preview-bubble-frame-width) * .5) !important')
-    expect(runtimeCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*z-index: 1;\s*inset: 0;\s*border-width: 0;/)
-    expect(studioCss).toMatch(/\.preview-message\.bubble\[data-dream-bubble-frame\]:not\(\[data-dream-bubble-frame="none"\]\)::before \{\s*z-index: 1;/)
-    expect(studioCss).toMatch(/\.preview-message\.bubble\[data-dream-bubble-frame\]:not\(\[data-dream-bubble-frame="none"\]\)::after \{\s*z-index: 1;/)
-    expect(studioCss).toMatch(/\.preview-message\.bubble\[data-dream-bubble-frame\]:not\(\[data-dream-bubble-frame="none"\]\) > \* \{\s*position: relative;\s*z-index: 3;/)
-    expect(runtimeCss).not.toContain('border-width: var(--dream-user-bubble-frame-border-widths)')
-    expect(runtimeCss).not.toContain('border-width: var(--dream-codex-bubble-frame-border-widths)')
-    expect(runtimeCss).not.toContain('border-width: var(--dream-plan-bubble-frame-border-widths)')
-    expect(studioCss).toContain('border-width: 0; border-image-source: var(--dream-preview-bubble-frame-source)')
-    expect(runtimeCss).not.toContain('border-image-repeat: round')
-    expect(studioCss).not.toContain('border-image-repeat: round')
+    expect(runtimeCss).not.toContain('border-image')
+    expect(studioCss).not.toContain('border-image')
+    expect(runtimeCss).toContain('[data-dream-user-bubble-frame="layered"] .dream-conversation-user-bubble::before')
+    expect(runtimeCss).toContain('background-image: var(--dream-user-bubble-corners)')
+    expect(runtimeCss).toContain('background-size: var(--dream-user-bubble-corner-sizes)')
+    expect(runtimeCss).toContain('background-position: left top, right top, right bottom, left bottom')
+    expect(runtimeCss).toContain('padding-inline: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-ornament-size) * .9)) !important')
+    expect(runtimeCss).toContain('.dream-conversation-plan-bubble > :is(.relative.flex.h-10, .relative.overflow-hidden)')
+    expect(runtimeCss).toMatch(/\.dream-conversation-plan-bubble > :is\([^}]+\) \{\s*z-index: 3;/)
+
+    expect(studioCss).toContain('.preview-message.bubble[data-dream-bubble-frame="layered"]::before')
+    expect(studioCss).toContain('background-image: var(--dream-preview-bubble-corners)')
+    expect(studioCss).toContain('background-size: var(--dream-preview-bubble-corner-sizes)')
+    expect(studioCss).toContain('padding-inline: max(var(--dream-preview-bubble-content-padding),calc(var(--dream-preview-bubble-ornament-size) * .9))')
+    expect(studioCss).toMatch(/\.preview-message\.bubble\[data-dream-bubble-frame\]:not\([^}]+> \* \{ position: relative; z-index: 3; \}/)
   })
 })

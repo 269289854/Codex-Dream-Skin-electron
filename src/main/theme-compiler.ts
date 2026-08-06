@@ -1,7 +1,7 @@
 import type { CompiledTheme } from '../shared/contracts'
 import { conversationBubbleMediaReferences, conversationBubblePresetAssetKey } from '../shared/conversation-bubbles'
 import { gifPosterAssetKey } from '../shared/gif'
-import { CONVERSATION_BUBBLE_PRESETS, type ConversationBubblePresetId, type ThemeProfile } from '../shared/theme'
+import { CONVERSATION_BUBBLE_CORNERS, CONVERSATION_BUBBLE_ROLES, type ConversationBubbleCorner, type ConversationBubblePresetId, type ThemeProfile } from '../shared/theme'
 import { selectedImportedFonts } from '../shared/typography'
 import { budgetDataUrls } from './embedded-assets'
 import { prepareGifDataUrl } from './gif-assets'
@@ -10,7 +10,7 @@ import { prepareIconGifDataUrl } from './icon-assets'
 export async function compileTheme(
   profile: ThemeProfile,
   readAsset: (asset: string) => Promise<string>,
-  readConversationBubblePreset?: (presetId: ConversationBubblePresetId) => Promise<string>
+  readConversationBubblePreset?: (presetId: ConversationBubblePresetId, corner: ConversationBubbleCorner) => Promise<string>
 ): Promise<CompiledTheme> {
   const assetNames = compiledAssetNames(profile)
   const assets: Record<string, string> = {}
@@ -28,8 +28,14 @@ export async function compileTheme(
   }
 
   if (readConversationBubblePreset) {
-    for (const preset of CONVERSATION_BUBBLE_PRESETS) {
-      assets[conversationBubblePresetAssetKey(preset.id)] = await readConversationBubblePreset(preset.id)
+    const selectedPresets = new Set(CONVERSATION_BUBBLE_ROLES.flatMap((role) => {
+      const source = profile.conversationBubbles[role].source
+      return source.kind === 'preset' ? [source.presetId] : []
+    }))
+    for (const presetId of selectedPresets) {
+      for (const corner of CONVERSATION_BUBBLE_CORNERS) {
+        assets[conversationBubblePresetAssetKey(presetId, corner)] = await readConversationBubblePreset(presetId, corner)
+      }
     }
   }
 

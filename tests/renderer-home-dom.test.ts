@@ -775,33 +775,45 @@ describe('renderer home DOM adaptation', () => {
     const plan = window.document.querySelector('[data-plan-card-surface]')
     if (!user || !codex || !plan) throw new Error('Conversation bubble fixtures are missing.')
     const childCounts = [user.childNodes.length, codex.childNodes.length, plan.childNodes.length]
+    const corners = (prefix: string) => ({
+      topLeft: { dataUrl: `data:image/png;base64,${prefix}-TL`, width: 42, height: 36 },
+      topRight: { dataUrl: `data:image/png;base64,${prefix}-TR`, width: 36, height: 42 },
+      bottomRight: { dataUrl: `data:image/png;base64,${prefix}-BR`, width: 40, height: 38 },
+      bottomLeft: { dataUrl: `data:image/png;base64,${prefix}-BL`, width: 38, height: 40 }
+    })
     const frames: RuntimeConversationBubblesConfig = {
       visible: true,
       user: {
-        mode: 'nineSlice',
-        dataUrl: 'data:image/png;base64,VVNFUg==',
-        slice: 25,
-        sliceInsets: [35, 25, 40, 25],
-        frameWidth: 24,
-        borderWidths: [33.6, 48, 38.4, 48],
+        mode: 'layered',
+        corners: corners('USER'),
+        bodyFill: '#fffaf5',
+        borderColor: '#98531f',
+        borderWidth: 2,
+        borderRadius: 14,
+        ornamentSize: 42,
+        ornamentOutset: 4,
         contentPadding: 20
       },
       codex: {
-        mode: 'stretch',
-        dataUrl: 'data:image/gif;base64,Q09ERVg=',
-        slice: 31,
-        sliceInsets: [31, 31, 31, 31],
-        frameWidth: 18,
-        borderWidths: [18, 36, 18, 36],
+        mode: 'layered',
+        corners: corners('CODEX'),
+        bodyFill: null,
+        borderColor: '#123456',
+        borderWidth: 3,
+        borderRadius: 22,
+        ornamentSize: 64,
+        ornamentOutset: 8,
         contentPadding: 28
       },
       plan: {
-        mode: 'nineSlice',
-        dataUrl: 'data:image/png;base64,UExBTg==',
-        slice: 20,
-        sliceInsets: [20, 30, 25, 30],
-        frameWidth: 16,
-        borderWidths: [54, 32, 36, 32],
+        mode: 'layered',
+        corners: corners('PLAN'),
+        bodyFill: '#f6fff9',
+        borderColor: '#6c9f88',
+        borderWidth: 1,
+        borderRadius: 18,
+        ornamentSize: 48,
+        ornamentOutset: 6,
         contentPadding: 24
       }
     }
@@ -809,25 +821,25 @@ describe('renderer home DOM adaptation', () => {
     inject(window, undefined, undefined, dreamSkinCss, undefined, undefined, undefined, undefined, frames)
     const root = window.document.documentElement
     const planOpenLayer = window.document.querySelector('[data-plan-open-layer]')
-    expect(root.getAttribute('data-dream-user-bubble-frame')).toBe('nineSlice')
-    expect(root.getAttribute('data-dream-codex-bubble-frame')).toBe('stretch')
-    expect(root.getAttribute('data-dream-plan-bubble-frame')).toBe('nineSlice')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-slice')).toBe('35% 25% 40% 25%')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-width')).toBe('24px')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('33.6px 48px 38.4px 48px')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('72px')
+    expect(root.getAttribute('data-dream-user-bubble-frame')).toBe('layered')
+    expect(root.getAttribute('data-dream-codex-bubble-frame')).toBe('layered')
+    expect(root.getAttribute('data-dream-plan-bubble-frame')).toBe('layered')
+    expect(root.getAttribute('data-dream-user-bubble-body')).toBe('preset')
+    expect(root.getAttribute('data-dream-codex-bubble-body')).toBe('theme')
+    expect(root.getAttribute('data-dream-plan-bubble-body')).toBe('preset')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corners')).toContain('USER-TL')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corner-sizes')).toBe('42px 36px, 36px 42px, 40px 38px, 38px 40px')
+    expect(root.style.getPropertyValue('--dream-user-bubble-border-width')).toBe('2px')
+    expect(root.style.getPropertyValue('--dream-user-bubble-body-fill')).toBe('#fffaf5')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('28px')
-    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-slice')).toBe('20% 30% 25% 30%')
-    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-border-widths')).toBe('54px 32px 36px 32px')
-    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-min-block-size')).toBe('90px')
+    expect(root.style.getPropertyValue('--dream-codex-bubble-body-fill')).toBe('')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-corners')).toContain('PLAN-BL')
     expect(root.style.getPropertyValue('--dream-plan-bubble-content-padding')).toBe('24px')
     expect(plan.classList.contains('dream-conversation-plan-bubble')).toBe(true)
     expect(plan.classList.contains('dream-conversation-codex-bubble')).toBe(false)
-    expect(window.getComputedStyle(plan).overflow).toBe('clip')
-    expect(window.getComputedStyle(plan).padding).toBe('0px')
+    expect(window.getComputedStyle(plan).overflow).toBe('visible')
     expect(window.getComputedStyle(planOpenLayer as unknown as Parameters<typeof window.getComputedStyle>[0]).position).toBe('absolute')
     expect(window.getComputedStyle(planOpenLayer as unknown as Parameters<typeof window.getComputedStyle>[0]).zIndex).toBe('10')
-    expect(window.getComputedStyle(plan).minBlockSize).toBe('max(40px, 90px)')
     expect([user.childNodes.length, codex.childNodes.length, plan.childNodes.length]).toEqual(childCounts)
 
     stateOf(window).ensure()
@@ -841,9 +853,9 @@ describe('renderer home DOM adaptation', () => {
     expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(true)
     expect(streamingSurface?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(streaming.childNodes).toHaveLength(2)
-    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*z-index: 1;/)
-    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::after \{\s*z-index: 1;/)
-    expect(dreamSkinCss).toContain('padding-block: max(var(--dream-codex-bubble-content-padding), var(--dream-codex-bubble-frame-width))')
+    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*border:/)
+    expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::after \{ inset:[^}]+background-image:/)
+    expect(dreamSkinCss).toContain('padding-block: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-ornament-size) * .65))')
 
     streamingSurface?.append(window.document.createElement('p'))
     stateOf(window).ensure()
@@ -862,39 +874,39 @@ describe('renderer home DOM adaptation', () => {
     expect(root.hasAttribute('data-dream-user-bubble-frame')).toBe(false)
     expect(root.hasAttribute('data-dream-codex-bubble-frame')).toBe(false)
     expect(root.hasAttribute('data-dream-plan-bubble-frame')).toBe(false)
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-source')).toBe('')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corners')).toBe('')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corner-sizes')).toBe('')
+    expect(root.style.getPropertyValue('--dream-user-bubble-border-width')).toBe('')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('')
-    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-source')).toBe('')
-    expect(root.style.getPropertyValue('--dream-plan-bubble-frame-border-widths')).toBe('')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-corners')).toBe('')
+    expect(root.style.getPropertyValue('--dream-plan-bubble-corner-sizes')).toBe('')
     expect(root.style.getPropertyValue('--dream-plan-bubble-content-padding')).toBe('')
     expect(user.classList.contains('dream-conversation-user-bubble')).toBe(false)
     expect(streaming.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(plan.classList.contains('dream-conversation-plan-bubble')).toBe(false)
   })
 
-  it('falls back to symmetric frame geometry for legacy or invalid runtime values', () => {
+  it('disables incomplete layered runtime values instead of partially rendering them', () => {
     const window = createWindow()
     window.document.body.innerHTML = '<main class="main-surface"><div data-user-message-bubble><span>用户消息</span></div></main>'
     const frames = {
       visible: true,
       user: {
-        mode: 'nineSlice',
-        dataUrl: 'data:image/png;base64,VVNFUg==',
-        slice: 31,
-        sliceInsets: [70, 25, 40, 25],
-        frameWidth: 18,
-        borderWidths: [18, 'invalid', 18, 36],
+        mode: 'layered',
+        corners: {
+          topLeft: { dataUrl: 'data:image/png;base64,TL', width: 42, height: 42 },
+          topRight: { dataUrl: 'data:image/png;base64,TR', width: 42, height: 42 },
+          bottomRight: { dataUrl: 'not-a-data-url', width: 42, height: 42 }
+        },
         contentPadding: 20
       }
     } as unknown as RuntimeConversationBubblesConfig
 
     inject(window, undefined, undefined, undefined, undefined, undefined, undefined, undefined, frames)
     const root = window.document.documentElement
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-slice')).toBe('31% 31% 31% 31%')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-border-widths')).toBe('18px 36px 18px 36px')
-    expect(root.style.getPropertyValue('--dream-user-bubble-frame-min-block-size')).toBe('36px')
+    expect(root.getAttribute('data-dream-user-bubble-frame')).toBe('none')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corners')).toBe('')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corner-sizes')).toBe('')
   })
 
   it('marks only outermost tool activities and clears disabled, rebuilt, and cleaned nodes', () => {
@@ -2034,19 +2046,6 @@ describe('renderer home DOM adaptation', () => {
         style: { opacity: '1', objectPosition: '50% 50%', transform: 'scale(1)', transformOrigin: '50% 50%' }
       }
     }
-    const frames: RuntimeConversationBubblesConfig = {
-      visible: true,
-      user: {
-        mode: 'stretch',
-        dataUrl: animated,
-        posterDataUrl: poster,
-        slice: 25,
-        sliceInsets: [25, 25, 25, 25],
-        frameWidth: 20,
-        borderWidths: [20, 40, 20, 40],
-        contentPadding: 20
-      }
-    }
     const signature: RuntimeBrandSignature = {
       mode: 'gif',
       source: { asset: 'assets/signature.gif', kind: 'image', mimeType: 'image/gif' },
@@ -2063,7 +2062,7 @@ describe('renderer home DOM adaptation', () => {
       decorations,
       undefined,
       media,
-      frames,
+      undefined,
       undefined,
       undefined,
       signature,
@@ -2077,7 +2076,6 @@ describe('renderer home DOM adaptation', () => {
       account: (window.document.querySelector('.dream-account-menu-background') as unknown as HTMLImageElement | null)?.getAttribute('src'),
       conversation: (window.document.querySelector('.dream-conversation-background-media') as unknown as HTMLImageElement | null)?.getAttribute('src'),
       window: (window.document.querySelector('.dream-window-background-media') as unknown as HTMLImageElement | null)?.getAttribute('src'),
-      bubble: window.document.documentElement.style.getPropertyValue('--dream-user-bubble-frame-source'),
       polaroid: (window.document.querySelector('.dream-polaroid-surface') as unknown as HTMLElement | null)?.style.getPropertyValue('--dream-polaroid-art'),
       hero: (window.document.querySelector('.dream-hero-image') as unknown as HTMLElement | null)?.style.backgroundImage
     })
@@ -2088,7 +2086,6 @@ describe('renderer home DOM adaptation', () => {
       account: animated,
       conversation: animated,
       window: animated,
-      bubble: `url("${animated}")`,
       polaroid: 'url("blob:polaroid-art")',
       hero: 'url("blob:animated-art")'
     })

@@ -72,6 +72,18 @@ describe('preload share import IPC results', () => {
     expect(electronMocks.invoke).toHaveBeenNthCalledWith(4, 'project-icons:clear-session-assignment', 'theme-id', 'project-id', 'session-id')
   })
 
+  it('forwards conversation bubble corner selection and pending cleanup', async () => {
+    electronMocks.invoke.mockResolvedValue({ ok: true, value: null })
+
+    await studio.assets.getConversationBubblePreset('calico-cat')
+    await studio.assets.selectConversationBubbleCorner('theme-id', 'codex', 'bottomRight')
+    await studio.assets.discardPending('theme-id', ['assets/top-left.png', 'assets/bottom-right.webp'])
+
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(1, 'assets:get-conversation-bubble-preset', 'calico-cat')
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(2, 'assets:select-conversation-bubble-corner', 'theme-id', 'codex', 'bottomRight')
+    expect(electronMocks.invoke).toHaveBeenNthCalledWith(3, 'assets:discard-pending', 'theme-id', ['assets/top-left.png', 'assets/bottom-right.webp'])
+  })
+
   it('throws clean serialized errors without Electron remote-method wrappers', async () => {
     const error = localizedMessage('分享包校验失败。')
     electronMocks.invoke.mockResolvedValue({ ok: false, error })

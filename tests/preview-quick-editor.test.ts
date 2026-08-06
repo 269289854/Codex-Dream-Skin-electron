@@ -70,6 +70,8 @@ describe('preview quick editor', () => {
       onChange,
       onInteractionEnd: vi.fn(),
       onSelectImage,
+      onSelectBubbleCorner: vi.fn().mockResolvedValue(null),
+      onDiscardPending: vi.fn().mockResolvedValue(undefined),
       onImportIcon: vi.fn(),
       onImportFont: vi.fn(),
       onStateChange: vi.fn(),

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,11 +8,12 @@ import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ProfileStore } from './test-profile-store'
+import type { ImportedMediaAsset } from '../src/shared/contracts'
 import { resolveAppearanceColor } from '../src/shared/appearance'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../src/shared/gif'
 import { iconGifPosterAssetKey, MAX_ICON_GIF_BYTES } from '../src/shared/icon-assets'
-import { CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS } from '../src/shared/theme'
+import { CONVERSATION_BUBBLE_CORNERS, CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS, type ConversationBubbleCorner, type ConversationBubbleCornerAsset, type ConversationBubbleRole } from '../src/shared/theme'
 
 const roots: string[] = []
 const execFileAsync = promisify(execFile)
@@ -27,6 +29,39 @@ async function writeBundledSystemAssets(root: string): Promise<{ hero: string; p
   return assets
 }
 
+function bundledConversationBubbleAssets(): Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], Record<ConversationBubbleCorner, string>> {
+  return Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
+    preset.id,
+    Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner) => [corner, join(process.cwd(), 'resources', 'shared', 'conversation-bubbles', preset.id, `${corner}.png`)]))
+  ])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], Record<ConversationBubbleCorner, string>>
+}
+
+async function writeTransparentCorner(path: string, format: 'png' | 'webp' = 'png'): Promise<void> {
+  const width = 64
+  const height = 64
+  const pixels = Buffer.alloc(width * height * 4)
+  for (let y = 8; y < height - 8; y += 1) {
+    for (let x = 8; x < width - 8; x += 1) {
+      const offset = (y * width + x) * 4
+      pixels[offset] = 220
+      pixels[offset + 1] = 120
+      pixels[offset + 2] = 160
+      pixels[offset + 3] = 255
+    }
+  }
+  const image = sharp(pixels, { raw: { width, height, channels: 4 } })
+  if (format === 'webp') await image.webp({ lossless: true }).toFile(path)
+  else await image.png().toFile(path)
+}
+
+function importedCorners(imported: Record<ConversationBubbleCorner, ImportedMediaAsset>): Record<ConversationBubbleCorner, ConversationBubbleCornerAsset> {
+  return Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner) => [corner, {
+    reference: imported[corner].reference,
+    width: imported[corner].width,
+    height: imported[corner].height
+  }])) as Record<ConversationBubbleCorner, ConversationBubbleCornerAsset>
+}
+
 function animatedGif(frameCount: number): Buffer {
   const frameStart = ANIMATED_GIF_FRAME.indexOf(Buffer.from([0x21, 0xf9]))
   const header = ANIMATED_GIF_FRAME.subarray(0, frameStart)
@@ -35,7 +70,7 @@ function animatedGif(frameCount: number): Buffer {
 }
 
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })))
 })
 
 describe('ProfileStore', () => {
@@ -189,7 +224,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 29, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 30, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -373,7 +408,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 29,
+      version: 30,
       videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
@@ -615,22 +650,26 @@ describe('ProfileStore', () => {
     expect((await readdir(join(store.themesRoot, profile.id, 'assets'))).some((entry) => entry.endsWith('.tmp'))).toBe(false)
   })
 
-  it('exposes every bundled bubble preset to Studio compilation', async () => {
+  it('exposes every bundled bubble preset to Studio without expanding theme compilation', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-bubble-presets-'))
     roots.push(root)
     const bundled = await writeBundledSystemAssets(root)
-    const conversationBubbles = Object.fromEntries(CONVERSATION_BUBBLE_PRESETS.map((preset) => [
-      preset.id,
-      join(process.cwd(), 'resources', 'shared', 'conversation-bubbles', preset.fileName)
-    ])) as Record<(typeof CONVERSATION_BUBBLE_PRESETS)[number]['id'], string>
-    const store = new ProfileStore(root, { ...bundled, conversationBubbles })
+    const store = new ProfileStore(root, { ...bundled, conversationBubbles: bundledConversationBubbleAssets() })
     await store.initialize()
     const profile = await store.create('气泡预设主题')
-    const compiled = await store.compile(profile.id)
 
     for (const preset of CONVERSATION_BUBBLE_PRESETS) {
-      expect(compiled.assets[conversationBubblePresetAssetKey(preset.id)]).toMatch(/^data:image\/png;base64,/)
+      const compiled = await store.getConversationBubblePreset(preset.id)
+      expect(Object.keys(compiled.assets)).toHaveLength(4)
+      for (const corner of CONVERSATION_BUBBLE_CORNERS) {
+        expect(compiled.assets[conversationBubblePresetAssetKey(preset.id, corner)]).toMatch(/^data:image\/png;base64,/)
+      }
     }
+
+    profile.conversationBubbles.user.source = { kind: 'preset', presetId: 'calico-cat' }
+    await store.update(profile)
+    const runtime = await store.compile(profile.id)
+    expect(Object.keys(runtime.assets).filter((asset) => asset.startsWith('builtin/conversation-bubbles/'))).toHaveLength(4)
   })
 
   it('imports, compiles, duplicates, and prunes independent custom bubble assets', async () => {
@@ -639,59 +678,59 @@ describe('ProfileStore', () => {
     const store = new ProfileStore(root)
     await store.initialize()
     const profile = await store.create('自定义气泡主题')
-    const svgSource = join(root, 'user-bubble.svg')
-    const gifSource = join(root, 'codex-bubble.gif')
-    const planSource = join(root, 'plan-bubble.png')
+    const userSource = join(root, 'user-corner.png')
+    const codexSource = join(root, 'codex-corner.webp')
+    const planSource = join(root, 'plan-corner.png')
     await Promise.all([
-      writeFile(svgSource, '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect width="320" height="160" rx="24" fill="#ffffff"/></svg>'),
-      writeFile(gifSource, TEST_GIF),
-      writeFile(planSource, TEST_PNG)
+      writeTransparentCorner(userSource),
+      writeTransparentCorner(codexSource, 'webp'),
+      writeTransparentCorner(planSource)
     ])
 
-    const user = await store.importMediaAsset(profile.id, svgSource, 'conversationUserBubble', 'image')
-    const codex = await store.importMediaAsset(profile.id, gifSource, 'conversationCodexBubble', 'gif')
-    const plan = await store.importMediaAsset(profile.id, planSource, 'conversationPlanBubble', 'image')
-    expect(user.reference).toMatchObject({ kind: 'image', mimeType: 'image/png' })
-    expect(user.relativePath).toMatch(/\.png$/)
-    expect(codex.reference).toMatchObject({ kind: 'image', mimeType: 'image/gif' })
-    expect(plan.reference).toMatchObject({ kind: 'image', mimeType: 'image/png' })
-    profile.conversationBubbles.user.source = { kind: 'custom', reference: user.reference }
+    const importSet = async (role: ConversationBubbleRole, sourcePath: string): Promise<Record<ConversationBubbleCorner, ImportedMediaAsset>> => Object.fromEntries(await Promise.all(CONVERSATION_BUBBLE_CORNERS.map(async (corner) => [corner, await store.importConversationBubbleCornerAsset(profile.id, sourcePath, role, corner)]))) as Record<ConversationBubbleCorner, ImportedMediaAsset>
+    const user = await importSet('user', userSource)
+    const codex = await importSet('codex', codexSource)
+    const plan = await importSet('plan', planSource)
+    expect(user.topLeft.reference).toMatchObject({ kind: 'image', mimeType: 'image/png' })
+    expect(codex.topLeft.reference).toMatchObject({ kind: 'image', mimeType: 'image/webp' })
     profile.conversationBubbles.codex = {
-      source: { kind: 'custom', reference: codex.reference },
-      fit: 'stretch',
-      slice: 25,
-      frameWidth: 24,
+      source: { kind: 'custom', corners: importedCorners(codex), borderColor: '#78909c', borderWidth: 1, borderRadius: 20, ornamentSize: 60, ornamentOutset: 6 },
       contentPadding: 28
     }
+    profile.conversationBubbles.user = {
+      source: { kind: 'custom', corners: importedCorners(user), borderColor: '#9b6b72', borderWidth: 2, borderRadius: 18, ornamentSize: 56, ornamentOutset: 4 },
+      contentPadding: 22
+    }
     profile.conversationBubbles.plan = {
-      source: { kind: 'custom', reference: plan.reference },
-      fit: 'nineSlice',
-      slice: 30,
-      frameWidth: 20,
+      source: { kind: 'custom', corners: importedCorners(plan), borderColor: '#5e8c72', borderWidth: 3, borderRadius: 24, ornamentSize: 64, ornamentOutset: 8 },
       contentPadding: 24
     }
     await store.update(profile)
 
     const compiled = await store.compile(profile.id)
-    expect(compiled.assets[user.relativePath]).toMatch(/^data:image\/png;base64,/)
-    expect(compiled.assets[codex.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
-    expect(compiled.assets[plan.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+    for (const imported of [...Object.values(user), ...Object.values(codex), ...Object.values(plan)]) {
+      expect(compiled.assets[imported.relativePath]).toMatch(/^data:image\/(png|webp);base64,/)
+    }
 
     const duplicate = await store.duplicate(profile, '自定义气泡副本')
     expect(duplicate.conversationBubbles).toEqual(profile.conversationBubbles)
-    expect((await store.compile(duplicate.id)).assets[user.relativePath]).toMatch(/^data:image\/png;base64,/)
-    expect((await store.compile(duplicate.id)).assets[codex.relativePath]).toBe(`data:image/gif;base64,${NORMALIZED_TEST_GIF.toString('base64')}`)
-    expect((await store.compile(duplicate.id)).assets[plan.relativePath]).toBe(`data:image/png;base64,${TEST_PNG.toString('base64')}`)
+    const duplicateCompiled = await store.compile(duplicate.id)
+    for (const imported of [...Object.values(user), ...Object.values(codex), ...Object.values(plan)]) {
+      expect(duplicateCompiled.assets[imported.relativePath]).toMatch(/^data:image\/(png|webp);base64,/)
+    }
 
     profile.conversationBubbles.user.source = { kind: 'none' }
     profile.conversationBubbles.plan.source = { kind: 'none' }
     await store.update(profile)
-    await expect(readFile(join(store.themesRoot, profile.id, user.relativePath))).rejects.toThrow()
-    await expect(readFile(join(store.themesRoot, profile.id, codex.relativePath))).resolves.toEqual(TEST_GIF)
-    await expect(readFile(join(store.themesRoot, profile.id, plan.relativePath))).rejects.toThrow()
+    for (const imported of [...Object.values(user), ...Object.values(plan)]) {
+      await expect(readFile(join(store.themesRoot, profile.id, imported.relativePath))).rejects.toThrow()
+    }
+    for (const imported of Object.values(codex)) {
+      await expect(readFile(join(store.themesRoot, profile.id, imported.relativePath))).resolves.toBeInstanceOf(Buffer)
+    }
   })
 
-  it('rejects oversized, over-dimensioned, over-frame, video, and cancelled bubble imports without artifacts', async () => {
+  it('rejects invalid corner files and cleans cancelled pending imports', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dream-skin-bubble-limits-'))
     roots.push(root)
     const store = new ProfileStore(root)
@@ -699,25 +738,53 @@ describe('ProfileStore', () => {
     const profile = await store.create('气泡限制主题')
     const oversized = join(root, 'oversized.png')
     const overDimension = join(root, 'over-dimension.png')
-    const overFrames = join(root, 'over-frames.gif')
+    const opaqueEdge = join(root, 'opaque-edge.png')
+    const gif = join(root, 'bubble.gif')
     const video = join(root, 'bubble.mp4')
     const valid = join(root, 'valid.png')
     await Promise.all([
       writeFile(oversized, Buffer.alloc(10 * 1024 * 1024 + 1)),
-      sharp({ create: { width: 2049, height: 1, channels: 4, background: '#ffffff' } }).png().toFile(overDimension),
-      writeFile(overFrames, animatedGif(181)),
+      sharp({ create: { width: 2049, height: 8, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } } }).png().toFile(overDimension),
+      sharp({ create: { width: 64, height: 64, channels: 4, background: '#ffffff' } }).png().toFile(opaqueEdge),
+      writeFile(gif, TEST_GIF),
       writeFile(video, Buffer.from('video')),
-      writeFile(valid, TEST_PNG)
+      writeTransparentCorner(valid)
     ])
 
-    await expect(store.importMediaAsset(profile.id, oversized, 'conversationUserBubble', 'image')).rejects.toThrow('10 MB')
-    await expect(store.importMediaAsset(profile.id, overDimension, 'conversationUserBubble', 'image')).rejects.toThrow('2048px')
-    await expect(store.importMediaAsset(profile.id, overFrames, 'conversationCodexBubble', 'gif')).rejects.toThrow('180')
-    await expect(store.importMediaAsset(profile.id, video, 'conversationPlanBubble', 'video')).rejects.toThrow('图片或 GIF')
+    await expect(store.importConversationBubbleCornerAsset(profile.id, oversized, 'user', 'topLeft')).rejects.toThrow('10 MB')
+    await expect(store.importConversationBubbleCornerAsset(profile.id, overDimension, 'user', 'topLeft')).rejects.toThrow('2048px')
+    await expect(store.importConversationBubbleCornerAsset(profile.id, opaqueEdge, 'codex', 'topRight')).rejects.toThrow('透明安全边距')
+    await expect(store.importConversationBubbleCornerAsset(profile.id, gif, 'codex', 'bottomRight')).rejects.toThrow('PNG 或 WebP')
+    await expect(store.importConversationBubbleCornerAsset(profile.id, video, 'plan', 'bottomLeft')).rejects.toThrow('PNG 或 WebP')
     const controller = new AbortController()
     controller.abort()
-    await expect(store.importMediaAsset(profile.id, valid, 'conversationUserBubble', 'image', controller.signal)).rejects.toThrow('取消')
+    await expect(store.importConversationBubbleCornerAsset(profile.id, valid, 'user', 'topLeft', controller.signal)).rejects.toThrow('取消')
+    const pending = await store.importConversationBubbleCornerAsset(profile.id, valid, 'user', 'topLeft')
+    await store.discardPendingAssets(profile.id, [pending.relativePath])
+    await expect(readFile(join(store.themesRoot, profile.id, pending.relativePath))).rejects.toThrow()
     expect((await readdir(join(store.themesRoot, profile.id, 'assets'))).filter((entry) => entry.startsWith('conversation'))).toHaveLength(0)
+  })
+
+  it('enforces the 10 MB four-corner budget when applying a custom bubble', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dream-skin-bubble-total-budget-'))
+    roots.push(root)
+    const store = new ProfileStore(root)
+    await store.initialize()
+    const profile = await store.create('气泡总预算主题')
+    const source = join(root, 'large-corner.png')
+    const width = 1024
+    const height = 1024
+    const pixels = randomBytes(width * height * 4)
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) pixels[(y * width + x) * 4 + 3] = x < 4 || y < 4 || x >= width - 4 || y >= height - 4 ? 0 : 255
+    }
+    await sharp(pixels, { raw: { width, height, channels: 4 } }).png({ compressionLevel: 0 }).toFile(source)
+    const imported = Object.fromEntries(await Promise.all(CONVERSATION_BUBBLE_CORNERS.map(async (corner) => [corner, await store.importConversationBubbleCornerAsset(profile.id, source, 'user', corner)]))) as Record<ConversationBubbleCorner, ImportedMediaAsset>
+    profile.conversationBubbles.user = {
+      source: { kind: 'custom', corners: importedCorners(imported), borderColor: '#123456', borderWidth: 2, borderRadius: 16, ornamentSize: 56, ornamentOutset: 4 },
+      contentPadding: 20
+    }
+    await expect(store.update(profile)).rejects.toThrow('四张角饰合计不能超过 10 MB')
   })
 
   it('inspects and optimizes real MP4 and WebM videos while pruning both variants after save', async () => {
@@ -934,7 +1001,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(29)
+    expect(migrated.version).toBe(30)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'

@@ -471,24 +471,24 @@ export type WindowBackgroundMask = z.infer<typeof windowBackgroundMaskSchema>
 export type AccountMenuBackground = z.infer<typeof accountMenuBackgroundSchema>
 
 export const CONVERSATION_BUBBLE_PRESETS = [
-  { id: 'daisy-heart', name: '雏菊爱心', fileName: 'daisy-heart.png' },
-  { id: 'calico-cat', name: '三花猫耳', fileName: 'calico-cat.png' },
-  { id: 'cloud-sprout', name: '云朵嫩芽', fileName: 'cloud-sprout.png' },
-  { id: 'sakura-ribbon', name: '樱花丝带', fileName: 'sakura-ribbon.png' },
-  { id: 'moon-stars', name: '月亮星星', fileName: 'moon-stars.png' },
-  { id: 'strawberry-leaf', name: '草莓叶片', fileName: 'strawberry-leaf.png' },
-  { id: 'ocean-shell', name: '海盐贝壳', fileName: 'ocean-shell.png' },
-  { id: 'rainbow-candy', name: '彩虹糖果', fileName: 'rainbow-candy.png' }
+  { id: 'daisy-heart', name: '雏菊爱心' },
+  { id: 'calico-cat', name: '三花猫耳' },
+  { id: 'cloud-sprout', name: '云朵嫩芽' },
+  { id: 'sakura-ribbon', name: '樱花丝带' },
+  { id: 'moon-stars', name: '月亮星星' },
+  { id: 'strawberry-leaf', name: '草莓叶片' },
+  { id: 'ocean-shell', name: '海盐贝壳' },
+  { id: 'rainbow-candy', name: '彩虹糖果' }
 ] as const
 
 export const CONVERSATION_BUBBLE_ROLES = ['user', 'codex', 'plan'] as const
-export const CONVERSATION_BUBBLE_FRAME_FITS = ['nineSlice', 'stretch'] as const
+export const CONVERSATION_BUBBLE_CORNERS = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'] as const
 export type ConversationBubbleRole = typeof CONVERSATION_BUBBLE_ROLES[number]
 export type ConversationBubblePresetId = typeof CONVERSATION_BUBBLE_PRESETS[number]['id']
-export type ConversationBubbleFrameFit = typeof CONVERSATION_BUBBLE_FRAME_FITS[number]
+export type ConversationBubbleCorner = typeof CONVERSATION_BUBBLE_CORNERS[number]
 
 const conversationBubblePresetIdSchema = z.enum(CONVERSATION_BUBBLE_PRESETS.map((preset) => preset.id) as [ConversationBubblePresetId, ...ConversationBubblePresetId[]])
-const conversationBubbleFrameSourceSchema = z.discriminatedUnion('kind', [
+const versionTwentyNineConversationBubbleFrameSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('none') }).strict(),
   z.object({ kind: z.literal('preset'), presetId: conversationBubblePresetIdSchema }).strict(),
   z.object({ kind: z.literal('custom'), reference: mediaReferenceSchema }).strict().superRefine((source, context) => {
@@ -498,9 +498,9 @@ const conversationBubbleFrameSourceSchema = z.discriminatedUnion('kind', [
   })
 ])
 
-const conversationBubbleStyleSchema = z.object({
-  source: conversationBubbleFrameSourceSchema,
-  fit: z.enum(CONVERSATION_BUBBLE_FRAME_FITS),
+const versionTwentyNineConversationBubbleStyleSchema = z.object({
+  source: versionTwentyNineConversationBubbleFrameSourceSchema,
+  fit: z.enum(['nineSlice', 'stretch']),
   slice: z.number().finite().min(10).max(45),
   frameWidth: z.number().int().min(8).max(40),
   contentPadding: z.number().int().min(12).max(40)
@@ -512,8 +512,45 @@ const conversationBubbleStyleSchema = z.object({
   if (style.contentPadding !== 20) context.addIssue({ code: 'custom', path: ['contentPadding'], message: '内置气泡预设内容边距必须为 20px。' })
 })
 
+const conversationBubbleCornerAssetSchema = z.object({
+  reference: mediaReferenceSchema,
+  width: z.number().int().min(1).max(2048),
+  height: z.number().int().min(1).max(2048)
+}).strict().superRefine((asset, context) => {
+  if (asset.reference.kind !== 'image' || (asset.reference.mimeType !== 'image/png' && asset.reference.mimeType !== 'image/webp')) {
+    context.addIssue({ code: 'custom', path: ['reference'], message: '聊天气泡角饰只能使用 PNG 或 WebP 素材。' })
+  }
+})
+
+const conversationBubbleCornersSchema = z.object({
+  topLeft: conversationBubbleCornerAssetSchema,
+  topRight: conversationBubbleCornerAssetSchema,
+  bottomRight: conversationBubbleCornerAssetSchema,
+  bottomLeft: conversationBubbleCornerAssetSchema
+}).strict()
+
+const conversationBubbleFrameSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }).strict(),
+  z.object({ kind: z.literal('preset'), presetId: conversationBubblePresetIdSchema }).strict(),
+  z.object({
+    kind: z.literal('custom'),
+    corners: conversationBubbleCornersSchema,
+    borderColor: cssColorSchema,
+    borderWidth: z.number().int().min(0).max(4),
+    borderRadius: z.number().int().min(8).max(32),
+    ornamentSize: z.number().int().min(24).max(96),
+    ornamentOutset: z.number().int().min(0).max(24)
+  }).strict()
+])
+
+const conversationBubbleStyleSchema = z.object({
+  source: conversationBubbleFrameSourceSchema,
+  contentPadding: z.number().int().min(12).max(40)
+}).strict()
+
 export type ConversationBubbleFrameSource = z.infer<typeof conversationBubbleFrameSourceSchema>
 export type ConversationBubbleStyle = z.infer<typeof conversationBubbleStyleSchema>
+export type ConversationBubbleCornerAsset = z.infer<typeof conversationBubbleCornerAssetSchema>
 
 const versionTwentyThreeConversationBubblesSchema = z.object({
   visible: z.boolean()
@@ -521,11 +558,18 @@ const versionTwentyThreeConversationBubblesSchema = z.object({
 
 const versionTwentySevenConversationBubblesSchema = z.object({
   visible: z.boolean(),
-  user: conversationBubbleStyleSchema,
-  codex: conversationBubbleStyleSchema
+  user: versionTwentyNineConversationBubbleStyleSchema,
+  codex: versionTwentyNineConversationBubbleStyleSchema
 }).strict()
 
-const conversationBubblesSchema = versionTwentySevenConversationBubblesSchema.extend({
+const versionTwentyNineConversationBubblesSchema = versionTwentySevenConversationBubblesSchema.extend({
+  plan: versionTwentyNineConversationBubbleStyleSchema
+}).strict()
+
+const conversationBubblesSchema = z.object({
+  visible: z.boolean(),
+  user: conversationBubbleStyleSchema,
+  codex: conversationBubbleStyleSchema,
   plan: conversationBubbleStyleSchema
 }).strict()
 
@@ -916,7 +960,27 @@ const versionTwentyEightThemeSchema = z.object({
   conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
   windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
   accountMenuBackground: accountMenuBackgroundSchema.default(createDefaultAccountMenuBackground()),
-  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
+  conversationBubbles: versionTwentyNineConversationBubblesSchema.default(createDefaultVersionTwentyNineConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+const versionTwentyNineThemeSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(29),
+  copy: localizedThemeCopySchema,
+  icons: currentComposerToolIconsSchema,
+  videoPlayback: globalVideoPlaybackSchema,
+  brandSignature: brandSignatureSchema,
+  decorations: decorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  accountMenuBackground: accountMenuBackgroundSchema.default(createDefaultAccountMenuBackground()),
+  conversationBubbles: versionTwentyNineConversationBubblesSchema.default(createDefaultVersionTwentyNineConversationBubbles()),
   toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
   resetColors: themeColorsSchema
 }).strict().superRefine((profile, context) => {
@@ -927,7 +991,7 @@ const versionTwentyEightThemeSchema = z.object({
 
 export const themeProfileSchema = z.object({
   ...versionThirteenThemeFields,
-  version: z.literal(29),
+  version: z.literal(30),
   copy: localizedThemeCopySchema,
   icons: currentComposerToolIconsSchema,
   videoPlayback: globalVideoPlaybackSchema,
@@ -1056,7 +1120,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 29,
+    version: 30,
     updatedAt: new Date().toISOString(),
     videoPlayback: { pausePolicy: 'hidden' },
     brandSignature: createDefaultBrandSignature(),
@@ -1211,10 +1275,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 29) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 30) {
     const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 29) {
+    const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
+    return migrateVersionTwentyNine(versionTwentyNineThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 28) {
     const candidate = normalizeCurrentMediaReferences(input)
@@ -1597,8 +1665,8 @@ function migrateVersionTwentyThree(legacy: z.infer<typeof versionTwentyThreeThem
     version: 24,
     conversationBubbles: {
       visible: legacy.conversationBubbles.visible,
-      user: createDefaultConversationBubbleStyle(),
-      codex: createDefaultConversationBubbleStyle()
+      user: createDefaultVersionTwentyNineConversationBubbleStyle(),
+      codex: createDefaultVersionTwentyNineConversationBubbleStyle()
     }
   }))
 }
@@ -1653,13 +1721,13 @@ function migrateVersionTwentySeven(legacy: z.infer<typeof versionTwentySevenThem
     },
     conversationBubbles: {
       ...legacy.conversationBubbles,
-      plan: createDefaultConversationBubbleStyle()
+      plan: createDefaultVersionTwentyNineConversationBubbleStyle()
     }
   }))
 }
 
 function migrateVersionTwentyEight(legacy: z.infer<typeof versionTwentyEightThemeSchema>): ThemeProfile {
-  return addSourceImageHints(themeProfileSchema.parse(normalizeSidebarNavCopy({
+  return migrateVersionTwentyNine(versionTwentyNineThemeSchema.parse(normalizeSidebarNavCopy({
     ...legacy,
     version: 29,
     copy: {
@@ -1667,6 +1735,23 @@ function migrateVersionTwentyEight(legacy: z.infer<typeof versionTwentyEightThem
       'en-US': structuredClone(legacy.copy)
     }
   })))
+}
+
+function migrateVersionTwentyNine(legacy: z.infer<typeof versionTwentyNineThemeSchema>): ThemeProfile {
+  const migrateStyle = (style: z.infer<typeof versionTwentyNineConversationBubbleStyleSchema>): ConversationBubbleStyle => ({
+    source: style.source.kind === 'preset' ? style.source : { kind: 'none' },
+    contentPadding: style.contentPadding
+  })
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 30,
+    conversationBubbles: {
+      visible: legacy.conversationBubbles.visible,
+      user: migrateStyle(legacy.conversationBubbles.user),
+      codex: migrateStyle(legacy.conversationBubbles.codex),
+      plan: migrateStyle(legacy.conversationBubbles.plan)
+    }
+  }))
 }
 
 function addSourceImageHints(profile: ThemeProfile): ThemeProfile {
@@ -1747,6 +1832,22 @@ function createDefaultConversationBackground(): ConversationBackground {
 export function createDefaultConversationBubbleStyle(): ConversationBubbleStyle {
   return {
     source: { kind: 'none' },
+    contentPadding: 20
+  }
+}
+
+function createDefaultConversationBubbles(): ConversationBubbles {
+  return {
+    visible: true,
+    user: createDefaultConversationBubbleStyle(),
+    codex: createDefaultConversationBubbleStyle(),
+    plan: createDefaultConversationBubbleStyle()
+  }
+}
+
+function createDefaultVersionTwentyNineConversationBubbleStyle(): z.infer<typeof versionTwentyNineConversationBubbleStyleSchema> {
+  return {
+    source: { kind: 'none' },
     fit: 'nineSlice',
     slice: 25,
     frameWidth: 24,
@@ -1754,18 +1855,18 @@ export function createDefaultConversationBubbleStyle(): ConversationBubbleStyle 
   }
 }
 
-function createDefaultConversationBubbles(): ConversationBubbles {
+function createDefaultVersionTwentyNineConversationBubbles(): z.infer<typeof versionTwentyNineConversationBubblesSchema> {
   return {
     ...createDefaultVersionTwentySevenConversationBubbles(),
-    plan: createDefaultConversationBubbleStyle()
+    plan: createDefaultVersionTwentyNineConversationBubbleStyle()
   }
 }
 
 function createDefaultVersionTwentySevenConversationBubbles(): z.infer<typeof versionTwentySevenConversationBubblesSchema> {
   return {
     visible: true,
-    user: createDefaultConversationBubbleStyle(),
-    codex: createDefaultConversationBubbleStyle()
+    user: createDefaultVersionTwentyNineConversationBubbleStyle(),
+    codex: createDefaultVersionTwentyNineConversationBubbleStyle()
   }
 }
 

@@ -17,9 +17,9 @@ import { brandCopyError, headingTemplateError, HOME_ACTIONS_BY_LOCALE, HOME_PREV
 import { clampPolaroidPosition, getPolaroidLayout, getPolaroidPlacementMetrics } from '../../shared/polaroid'
 import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../shared/runtime-theme'
 import { activateVideoVariant, mediaFlipCssTransform } from '../../shared/media'
-import { resolveThemeCopy, type ConversationBubbleRole, type CreateThemeInput, type IconSlot, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoVariants } from '../../shared/theme'
+import { CONVERSATION_BUBBLE_PRESETS, resolveThemeCopy, type ConversationBubbleCorner, type ConversationBubbleRole, type CreateThemeInput, type IconSlot, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoVariants } from '../../shared/theme'
 import { DEFAULT_LOCALE, localizedMessage, localizedMessageFrom, setActiveLocale, t, tm, type LocalizedMessage, type SupportedLocale } from '../../shared/i18n'
-import { conversationBubbleMediaReferences, conversationBubbleRolePurpose, resolveConversationBubbleFrame } from '../../shared/conversation-bubbles'
+import { conversationBubbleMediaReferences, resolveConversationBubbleFrame } from '../../shared/conversation-bubbles'
 import { SIDEBAR_NAV_ITEMS } from '../../shared/sidebar-layout'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
@@ -226,11 +226,12 @@ export function App(): React.JSX.Element {
   }, [])
 
   const prepareTheme = useCallback(async (id: string, knownProfile?: ThemeProfile): Promise<PreparedTheme> => {
-    const [profile, compiled] = await Promise.all([
+    const [profile, compiled, bubblePresets] = await Promise.all([
       knownProfile ? Promise.resolve(knownProfile) : window.studio.themes.get(id),
-      window.studio.themes.compile(id)
+      window.studio.themes.compile(id),
+      Promise.all(CONVERSATION_BUBBLE_PRESETS.map((preset) => window.studio.assets.getConversationBubblePreset(preset.id)))
     ])
-    const nextAssets = { ...compiled.assets }
+    const nextAssets = Object.assign({}, compiled.assets, ...bubblePresets.map((preset) => preset.assets))
     const compiledBrandSignatureGif = profile.brandSignature.source?.mimeType === 'image/gif'
       ? profile.brandSignature.source.asset
       : null
@@ -820,10 +821,6 @@ export function App(): React.JSX.Element {
       } else if (purpose === 'brandSignature') {
         profile.brandSignature.source = imported.reference
         profile.brandSignature.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
-      } else if (purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble') {
-        const role = purpose === 'conversationUserBubble' ? 'user' : purpose === 'conversationCodexBubble' ? 'codex' : 'plan'
-        profile.conversationBubbles.visible = true
-        profile.conversationBubbles[role].source = { kind: 'custom', reference: imported.reference }
       } else {
         profile.decorations.composerMelody.source = imported.reference
         profile.decorations.composerMelody.mode = imported.reference.mimeType === 'image/gif' ? 'gif' : 'image'
@@ -841,7 +838,7 @@ export function App(): React.JSX.Element {
     try {
       const selected = window.studio.assets.selectMedia
         ? await window.studio.assets.selectMedia(themeId, purpose, requestedKind)
-        : purpose === 'brandSignature' || purpose === 'composerMelody' || purpose === 'conversationUserBubble' || purpose === 'conversationCodexBubble' || purpose === 'conversationPlanBubble' ? null : await window.studio.assets.selectImage(themeId, purpose).then((legacy) => legacy ? {
+        : purpose === 'brandSignature' || purpose === 'composerMelody' ? null : await window.studio.assets.selectImage(themeId, purpose).then((legacy) => legacy ? {
           reference: { asset: legacy.relativePath, kind: 'image' as const, mimeType: legacy.mediaType as 'image/png' | 'image/webp' | 'image/jpeg' | 'image/gif' },
           relativePath: legacy.relativePath, previewUrl: legacy.dataUrl, gifPosterDataUrl: legacy.gifPosterDataUrl, originalName: legacy.originalName, width: legacy.width, height: legacy.height
         } : null)
@@ -996,6 +993,40 @@ export function App(): React.JSX.Element {
       if (isThemeOperationCurrent(token)) setError(messageOf(reason))
     } finally {
       finishThemeOperation(token)
+    }
+  }
+
+  const selectConversationBubbleCorner = async (role: ConversationBubbleRole, corner: ConversationBubbleCorner): Promise<ImportedMediaAsset | null> => {
+    if (!draft) return null
+    const themeId = draft.id
+    const token = beginThemeOperation(themeId)
+    if (!token) return null
+    setMediaBusy(true)
+    setError(null)
+    try {
+      const imported = await window.studio.assets.selectConversationBubbleCorner(themeId, role, corner)
+      if (!imported) return null
+      if (!isThemeOperationCurrent(token)) {
+        await window.studio.assets.discardPending(themeId, [imported.relativePath]).catch(() => undefined)
+        return null
+      }
+      mergeAssetsForThemeOperation(token, { [imported.relativePath]: imported.previewUrl })
+      return imported
+    } catch (reason) {
+      if (isThemeOperationCurrent(token)) setError(messageOf(reason))
+      return null
+    } finally {
+      if (isThemeOperationActive(token)) setMediaBusy(false)
+      finishThemeOperation(token)
+    }
+  }
+
+  const discardPendingConversationBubbleAssets = async (assets: string[]): Promise<void> => {
+    if (!draft || assets.length === 0) return
+    try {
+      await window.studio.assets.discardPending(draft.id, assets)
+    } catch (reason) {
+      setError(messageOf(reason))
     }
   }
 
@@ -1455,6 +1486,8 @@ export function App(): React.JSX.Element {
               onChange={change}
               onInteractionEnd={endHistoryGroup}
               onSelectImage={(purpose, kind) => { void selectImage(purpose, kind) }}
+              onSelectBubbleCorner={selectConversationBubbleCorner}
+              onDiscardPending={discardPendingConversationBubbleAssets}
               onImportIcon={(slot) => { void importIcon(slot) }}
               onImportFont={(slot) => { void importFont(slot) }}
               onStateChange={setPreviewComponentState}
@@ -1496,7 +1529,7 @@ export function App(): React.JSX.Element {
               <Range label={t('垂直位置')} min={0} max={1} step={.01} value={draft.hero.position.y} onChange={(value) => change((profile) => { profile.hero.position.y = value })} />
             </Property>
             <Property title="首页标题装饰" anchor="visual-home-heading-decoration" highlighted={inspectorAnchor === 'visual-home-heading-decoration'}><HomeHeadingDecorationControls profile={draft} assets={previewAssets} onChange={change} onInteractionEnd={endHistoryGroup} onImportIcon={(slot) => { void importIcon(slot) }} onImportFont={(slot) => { void importFont(slot) }} /></Property>
-            <Property title="聊天气泡" anchor="visual-conversation-bubbles" highlighted={inspectorAnchor === 'visual-conversation-bubbles'}><ConversationBubbleControls profile={draft} assets={previewAssets} role={conversationBubbleRole} mediaBusy={mediaBusy} onRoleChange={setConversationBubbleRole} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage(conversationBubbleRolePurpose(conversationBubbleRole), kind) }} /></Property>
+            <Property title="聊天气泡" anchor="visual-conversation-bubbles" highlighted={inspectorAnchor === 'visual-conversation-bubbles'}><ConversationBubbleControls profile={draft} assets={previewAssets} role={conversationBubbleRole} mediaBusy={mediaBusy} onRoleChange={setConversationBubbleRole} onChange={change} onInteractionEnd={endHistoryGroup} onSelectCorner={(corner) => selectConversationBubbleCorner(conversationBubbleRole, corner)} onDiscardPending={discardPendingConversationBubbleAssets} /></Property>
             <Property title="对话区域背景" anchor="visual-conversation-background" highlighted={inspectorAnchor === 'visual-conversation-background'}><ConversationBackgroundControls profile={draft} backgroundUrl={conversationBackgroundUrl} mediaBusy={mediaBusy} onChange={change} onInteractionEnd={endHistoryGroup} onSelectMedia={(kind) => { void selectImage('conversationBackground', kind) }} /></Property>
             <Property title="拍立得" anchor="visual-polaroid" highlighted={inspectorAnchor === 'visual-polaroid'}>
               <PolaroidControls profile={draft} polaroidUrl={polaroidUrl} mediaBusy={mediaBusy} showAdvanced onChange={change} onInteractionEnd={endHistoryGroup} onSelectImage={() => void selectImage('polaroid')} />
@@ -1805,16 +1838,22 @@ function ConversationPreview({ profile, assets, locale }: { profile: ThemeProfil
   </div></div>
 }
 
-function conversationBubblePreviewFrameProps(profile: ThemeProfile, assets: Record<string, string>, role: ConversationBubbleRole): { 'data-dream-bubble-frame': 'none' | 'nineSlice' | 'stretch'; style?: React.CSSProperties } {
+function conversationBubblePreviewFrameProps(profile: ThemeProfile, assets: Record<string, string>, role: ConversationBubbleRole): { 'data-dream-bubble-frame': 'none' | 'layered'; 'data-dream-bubble-body'?: 'preset' | 'theme'; style?: React.CSSProperties } {
   const frame = resolveConversationBubbleFrame(profile.conversationBubbles[role], assets)
-  if (frame.mode === 'none' || !frame.dataUrl) return { 'data-dream-bubble-frame': 'none' }
+  if (frame.mode === 'none' || !frame.corners) return { 'data-dream-bubble-frame': 'none' }
+  const [topLeft, topRight, bottomRight, bottomLeft] = [frame.corners.topLeft, frame.corners.topRight, frame.corners.bottomRight, frame.corners.bottomLeft]
   return {
-    'data-dream-bubble-frame': frame.mode,
+    'data-dream-bubble-frame': 'layered',
+    'data-dream-bubble-body': frame.bodyFill ? 'preset' : 'theme',
     style: {
-      '--dream-preview-bubble-frame-source': `url(${JSON.stringify(frame.dataUrl)})`,
-      '--dream-preview-bubble-frame-slice': frame.sliceInsets.map((value) => `${value}%`).join(' '),
-      '--dream-preview-bubble-frame-width': `${frame.frameWidth}px`,
-      '--dream-preview-bubble-frame-border-widths': frame.borderWidths.map((value) => `${value}px`).join(' '),
+      '--dream-preview-bubble-corners': [topLeft, topRight, bottomRight, bottomLeft].map((corner) => `url(${JSON.stringify(corner.dataUrl)})`).join(', '),
+      '--dream-preview-bubble-corner-sizes': [topLeft, topRight, bottomRight, bottomLeft].map((corner) => `${corner.width}px ${corner.height}px`).join(', '),
+      '--dream-preview-bubble-body-fill': frame.bodyFill ?? 'transparent',
+      '--dream-preview-bubble-border-color': frame.borderColor,
+      '--dream-preview-bubble-border-width': `${frame.borderWidth}px`,
+      '--dream-preview-bubble-border-radius': `${frame.borderRadius}px`,
+      '--dream-preview-bubble-ornament-size': `${frame.ornamentSize}px`,
+      '--dream-preview-bubble-ornament-outset': `${frame.ornamentOutset}px`,
       '--dream-preview-bubble-content-padding': `${frame.contentPadding}px`
     } as React.CSSProperties
   }
