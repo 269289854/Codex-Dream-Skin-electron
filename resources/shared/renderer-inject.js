@@ -1695,39 +1695,54 @@
       bodyAttribute: 'data-dream-user-bubble-body',
       corners: '--dream-user-bubble-corners',
       cornerSizes: '--dream-user-bubble-corner-sizes',
+      cornerPositions: '--dream-user-bubble-corner-positions',
       bodyFill: '--dream-user-bubble-body-fill',
       borderColor: '--dream-user-bubble-border-color',
       borderWidth: '--dream-user-bubble-border-width',
       borderRadius: '--dream-user-bubble-border-radius',
       ornamentSize: '--dream-user-bubble-ornament-size',
       ornamentOutset: '--dream-user-bubble-ornament-outset',
-      padding: '--dream-user-bubble-content-padding'
+      padding: '--dream-user-bubble-content-padding',
+      paddingTop: '--dream-user-bubble-padding-top',
+      paddingRight: '--dream-user-bubble-padding-right',
+      paddingBottom: '--dream-user-bubble-padding-bottom',
+      paddingLeft: '--dream-user-bubble-padding-left'
     },
     codex: {
       attribute: 'data-dream-codex-bubble-frame',
       bodyAttribute: 'data-dream-codex-bubble-body',
       corners: '--dream-codex-bubble-corners',
       cornerSizes: '--dream-codex-bubble-corner-sizes',
+      cornerPositions: '--dream-codex-bubble-corner-positions',
       bodyFill: '--dream-codex-bubble-body-fill',
       borderColor: '--dream-codex-bubble-border-color',
       borderWidth: '--dream-codex-bubble-border-width',
       borderRadius: '--dream-codex-bubble-border-radius',
       ornamentSize: '--dream-codex-bubble-ornament-size',
       ornamentOutset: '--dream-codex-bubble-ornament-outset',
-      padding: '--dream-codex-bubble-content-padding'
+      padding: '--dream-codex-bubble-content-padding',
+      paddingTop: '--dream-codex-bubble-padding-top',
+      paddingRight: '--dream-codex-bubble-padding-right',
+      paddingBottom: '--dream-codex-bubble-padding-bottom',
+      paddingLeft: '--dream-codex-bubble-padding-left'
     },
     plan: {
       attribute: 'data-dream-plan-bubble-frame',
       bodyAttribute: 'data-dream-plan-bubble-body',
       corners: '--dream-plan-bubble-corners',
       cornerSizes: '--dream-plan-bubble-corner-sizes',
+      cornerPositions: '--dream-plan-bubble-corner-positions',
       bodyFill: '--dream-plan-bubble-body-fill',
       borderColor: '--dream-plan-bubble-border-color',
       borderWidth: '--dream-plan-bubble-border-width',
       borderRadius: '--dream-plan-bubble-border-radius',
       ornamentSize: '--dream-plan-bubble-ornament-size',
       ornamentOutset: '--dream-plan-bubble-ornament-outset',
-      padding: '--dream-plan-bubble-content-padding'
+      padding: '--dream-plan-bubble-content-padding',
+      paddingTop: '--dream-plan-bubble-padding-top',
+      paddingRight: '--dream-plan-bubble-padding-right',
+      paddingBottom: '--dream-plan-bubble-padding-bottom',
+      paddingLeft: '--dream-plan-bubble-padding-left'
     }
   };
   const clearConversationBubbleFrameConfig = () => {
@@ -1738,6 +1753,7 @@
       root.removeAttribute(properties.bodyAttribute);
       root.style.removeProperty(properties.corners);
       root.style.removeProperty(properties.cornerSizes);
+      root.style.removeProperty(properties.cornerPositions);
       root.style.removeProperty(properties.bodyFill);
       root.style.removeProperty(properties.borderColor);
       root.style.removeProperty(properties.borderWidth);
@@ -1745,6 +1761,10 @@
       root.style.removeProperty(properties.ornamentSize);
       root.style.removeProperty(properties.ornamentOutset);
       root.style.removeProperty(properties.padding);
+      root.style.removeProperty(properties.paddingTop);
+      root.style.removeProperty(properties.paddingRight);
+      root.style.removeProperty(properties.paddingBottom);
+      root.style.removeProperty(properties.paddingLeft);
     });
   };
   const applyConversationBubbleFrameConfig = () => {
@@ -1760,6 +1780,7 @@
       if (activeMode === 'none') {
         root.style.removeProperty(properties.corners);
         root.style.removeProperty(properties.cornerSizes);
+        root.style.removeProperty(properties.cornerPositions);
         root.style.removeProperty(properties.bodyFill);
         root.style.removeProperty(properties.borderColor);
         root.style.removeProperty(properties.borderWidth);
@@ -1767,10 +1788,22 @@
         root.style.removeProperty(properties.ornamentSize);
         root.style.removeProperty(properties.ornamentOutset);
         root.style.removeProperty(properties.padding);
+        root.style.removeProperty(properties.paddingTop);
+        root.style.removeProperty(properties.paddingRight);
+        root.style.removeProperty(properties.paddingBottom);
+        root.style.removeProperty(properties.paddingLeft);
         return;
       }
       root.style.setProperty(properties.corners, corners.map((corner) => `url(${JSON.stringify(corner.dataUrl)})`).join(', '));
       root.style.setProperty(properties.cornerSizes, corners.map((corner) => `${clamp(Number(corner.width) || 1, 1, 96)}px ${clamp(Number(corner.height) || 1, 1, 96)}px`).join(', '));
+      const offset = (corner, axis) => clamp(Math.round(Number(corner?.[axis]) || 0), -32, 32);
+      const positions = [
+        `calc(0% + ${32 + offset(corners[0], 'offsetX')}px) calc(0% + ${32 + offset(corners[0], 'offsetY')}px)`,
+        `calc(100% - ${32 - offset(corners[1], 'offsetX')}px) calc(0% + ${32 + offset(corners[1], 'offsetY')}px)`,
+        `calc(100% - ${32 - offset(corners[2], 'offsetX')}px) calc(100% - ${32 - offset(corners[2], 'offsetY')}px)`,
+        `calc(0% + ${32 + offset(corners[3], 'offsetX')}px) calc(100% - ${32 - offset(corners[3], 'offsetY')}px)`
+      ];
+      root.style.setProperty(properties.cornerPositions, positions.join(', '));
       if (typeof config?.bodyFill === 'string') root.style.setProperty(properties.bodyFill, config.bodyFill);
       else root.style.removeProperty(properties.bodyFill);
       root.style.setProperty(properties.borderColor, typeof config?.borderColor === 'string' ? config.borderColor : 'transparent');
@@ -1779,6 +1812,11 @@
       root.style.setProperty(properties.ornamentSize, `${clamp(Math.round(Number(config?.ornamentSize) || 56), 24, 96)}px`);
       root.style.setProperty(properties.ornamentOutset, `${clamp(Math.round(Number(config?.ornamentOutset) || 0), 0, 24)}px`);
       root.style.setProperty(properties.padding, `${clamp(Math.round(Number(config?.contentPadding) || 20), 12, 40)}px`);
+      const contentInsets = config?.contentInsets;
+      root.style.setProperty(properties.paddingTop, `${clamp(Number(contentInsets?.top) || 20, 12, 128)}px`);
+      root.style.setProperty(properties.paddingRight, `${clamp(Number(contentInsets?.right) || 20, 12, 128)}px`);
+      root.style.setProperty(properties.paddingBottom, `${clamp(Number(contentInsets?.bottom) || 20, 12, 128)}px`);
+      root.style.setProperty(properties.paddingLeft, `${clamp(Number(contentInsets?.left) || 20, 12, 128)}px`);
     });
   };
   const clearConversationBubbles = () => {

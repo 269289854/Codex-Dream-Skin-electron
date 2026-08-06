@@ -10,20 +10,25 @@ app.whenReady().then(async () => {
   const html = `<!doctype html>
     <html class="codex-dream-skin" data-dream-user-bubble-frame="layered" data-dream-user-bubble-body="preset" style="
       --dream-user-bubble-content-padding: 12px;
-      --dream-user-bubble-ornament-size: 72px;
+      --dream-user-bubble-padding-top: 47.6px;
+      --dream-user-bubble-padding-right: 53.6px;
+      --dream-user-bubble-padding-bottom: 47.6px;
+      --dream-user-bubble-padding-left: 53.6px;
+      --dream-user-bubble-ornament-size: 24px;
       --dream-user-bubble-ornament-outset: 8px;
       --dream-user-bubble-border-width: 2px;
       --dream-user-bubble-border-color: #123456;
       --dream-user-bubble-border-radius: 18px;
       --dream-user-bubble-body-fill: #ffffff;
       --dream-user-bubble-corners: url('${pixel}'), url('${pixel}'), url('${pixel}'), url('${pixel}');
-      --dream-user-bubble-corner-sizes: 72px 36px, 36px 72px, 60px 30px, 30px 60px;
+      --dream-user-bubble-corner-sizes: 24px 12px, 21px 15px, 20px 10px, 21px 15px;
+      --dream-user-bubble-corner-positions: calc(0% + 0px) calc(0% + 0px), calc(100% - 64px) calc(0% + 64px), calc(100% - 0px) calc(100% - 0px), calc(0% + 64px) calc(100% - 64px);
     ">
       <head><style>${css}</style><style>
         body { margin: 0; }
         .probe { position: relative; margin: 20px; }
-        #short { width: 220px; height: 96px; }
-        #wide { width: 720px; height: 96px; }
+        #short { width: 220px; height: 120px; }
+        #wide { width: 720px; height: 120px; }
         #narrow { width: 160px; height: 180px; }
         #high { width: 360px; height: 480px; }
       </style></head>
@@ -46,6 +51,8 @@ app.whenReady().then(async () => {
       const element = document.getElementById(id)
       const bounds = element.getBoundingClientRect()
       const ornament = getComputedStyle(element, '::after')
+      const content = element.querySelector('span').getBoundingClientRect()
+      const computed = getComputedStyle(element)
       return {
         id,
         width: bounds.width,
@@ -53,7 +60,9 @@ app.whenReady().then(async () => {
         backgroundImage: ornament.backgroundImage,
         backgroundPosition: ornament.backgroundPosition,
         backgroundSize: ornament.backgroundSize,
-        inset: [ornament.top, ornament.right, ornament.bottom, ornament.left]
+        inset: [ornament.top, ornament.right, ornament.bottom, ornament.left],
+        padding: [computed.paddingTop, computed.paddingRight, computed.paddingBottom, computed.paddingLeft],
+        content: { left: content.left - bounds.left, top: content.top - bounds.top, right: bounds.right - content.right, bottom: bounds.bottom - content.bottom }
       }
     })
   `)

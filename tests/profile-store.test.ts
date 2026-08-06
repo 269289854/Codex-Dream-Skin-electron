@@ -13,7 +13,7 @@ import { resolveAppearanceColor } from '../src/shared/appearance'
 import { conversationBubblePresetAssetKey } from '../src/shared/conversation-bubbles'
 import { ensureGifInfiniteLoop, gifPosterAssetKey } from '../src/shared/gif'
 import { iconGifPosterAssetKey, MAX_ICON_GIF_BYTES } from '../src/shared/icon-assets'
-import { CONVERSATION_BUBBLE_CORNERS, CONVERSATION_BUBBLE_PRESETS, DEFAULT_THEME_COLORS, type ConversationBubbleCorner, type ConversationBubbleCornerAsset, type ConversationBubbleRole } from '../src/shared/theme'
+import { CONVERSATION_BUBBLE_CORNERS, CONVERSATION_BUBBLE_PRESETS, createDefaultConversationBubbleCornerOffsets, DEFAULT_THEME_COLORS, type ConversationBubbleCorner, type ConversationBubbleCornerAsset, type ConversationBubbleRole } from '../src/shared/theme'
 
 const roots: string[] = []
 const execFileAsync = promisify(execFile)
@@ -224,7 +224,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated).toMatchObject({ version: 30, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
+    expect(migrated).toMatchObject({ version: 31, videoPlayback: { pausePolicy: 'hidden' }, colors, resetColors: colors })
     migrated.colors.accent = '#123456'
     await store.update(migrated)
     expect((await store.getDefault(created.id)).colors).toEqual(colors)
@@ -408,7 +408,7 @@ describe('ProfileStore', () => {
     if (!systemTheme) throw new Error('System theme was not initialized.')
     const systemProfile = await store.get(systemTheme.id)
     expect(systemProfile).toMatchObject({
-      version: 30,
+      version: 31,
       videoPlayback: { pausePolicy: 'hidden' },
       hero: {
         source: { asset: 'assets/dream-reference.png', kind: 'image', mimeType: 'image/png' },
@@ -695,15 +695,18 @@ describe('ProfileStore', () => {
     expect(codex.topLeft.reference).toMatchObject({ kind: 'image', mimeType: 'image/webp' })
     profile.conversationBubbles.codex = {
       source: { kind: 'custom', corners: importedCorners(codex), borderColor: '#78909c', borderWidth: 1, borderRadius: 20, ornamentSize: 60, ornamentOutset: 6 },
-      contentPadding: 28
+      contentPadding: 28,
+      cornerOffsets: { ...createDefaultConversationBubbleCornerOffsets(), topRight: { x: -18, y: 7 } }
     }
     profile.conversationBubbles.user = {
       source: { kind: 'custom', corners: importedCorners(user), borderColor: '#9b6b72', borderWidth: 2, borderRadius: 18, ornamentSize: 56, ornamentOutset: 4 },
-      contentPadding: 22
+      contentPadding: 22,
+      cornerOffsets: { ...createDefaultConversationBubbleCornerOffsets(), topLeft: { x: 12, y: 9 } }
     }
     profile.conversationBubbles.plan = {
       source: { kind: 'custom', corners: importedCorners(plan), borderColor: '#5e8c72', borderWidth: 3, borderRadius: 24, ornamentSize: 64, ornamentOutset: 8 },
-      contentPadding: 24
+      contentPadding: 24,
+      cornerOffsets: { ...createDefaultConversationBubbleCornerOffsets(), bottomRight: { x: -8, y: -14 } }
     }
     await store.update(profile)
 
@@ -782,7 +785,8 @@ describe('ProfileStore', () => {
     const imported = Object.fromEntries(await Promise.all(CONVERSATION_BUBBLE_CORNERS.map(async (corner) => [corner, await store.importConversationBubbleCornerAsset(profile.id, source, 'user', corner)]))) as Record<ConversationBubbleCorner, ImportedMediaAsset>
     profile.conversationBubbles.user = {
       source: { kind: 'custom', corners: importedCorners(imported), borderColor: '#123456', borderWidth: 2, borderRadius: 16, ornamentSize: 56, ornamentOutset: 4 },
-      contentPadding: 20
+      contentPadding: 20,
+      cornerOffsets: createDefaultConversationBubbleCornerOffsets()
     }
     await expect(store.update(profile)).rejects.toThrow('四张角饰合计不能超过 10 MB')
   })
@@ -1001,7 +1005,7 @@ describe('ProfileStore', () => {
     }, null, 2)}\n`, 'utf8')
 
     const migrated = await store.get(created.id)
-    expect(migrated.version).toBe(30)
+    expect(migrated.version).toBe(31)
     expect(migrated.appearance.colors).toEqual({})
     expect(resolveAppearanceColor(migrated.appearance, migrated.colors, 'sidebarProjectsTitleText')).toBe('#214537')
     migrated.colors.ink = '#123456'

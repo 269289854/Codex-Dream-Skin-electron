@@ -12,6 +12,7 @@ import {
 import {
   CONVERSATION_BUBBLE_CORNERS,
   CONVERSATION_BUBBLE_PRESETS,
+  createDefaultConversationBubbleCornerOffsets,
   createDefaultTheme,
   type ConversationBubbleCorner,
   type ConversationBubbleCornerAsset
@@ -85,7 +86,11 @@ describe('conversation bubble frames', () => {
     const profile = createDefaultTheme(themeId)
     profile.conversationBubbles.user = {
       source: { kind: 'preset', presetId: 'calico-cat' },
-      contentPadding: 18
+      contentPadding: 18,
+      cornerOffsets: {
+        ...createDefaultConversationBubbleCornerOffsets(),
+        topLeft: { x: 12, y: 8 }
+      }
     }
     profile.conversationBubbles.codex = {
       source: {
@@ -97,7 +102,12 @@ describe('conversation bubble frames', () => {
         ornamentSize: 72,
         ornamentOutset: 9
       },
-      contentPadding: 26
+      contentPadding: 26,
+      cornerOffsets: {
+        ...createDefaultConversationBubbleCornerOffsets(),
+        topRight: { x: -32, y: 32 },
+        bottomLeft: { x: 32, y: -32 }
+      }
     }
     const assets = Object.fromEntries([
       ...CONVERSATION_BUBBLE_CORNERS.map((corner) => [conversationBubblePresetAssetKey('calico-cat', corner), `data:image/png;base64,${corner}`]),
@@ -111,7 +121,9 @@ describe('conversation bubble frames', () => {
       borderColor: CONVERSATION_BUBBLE_PRESET_STYLES['calico-cat'].borderColor,
       contentPadding: 18
     })
-    expect(frames.user.corners?.topLeft).toMatchObject({ width: 42, height: 42 })
+    expect(frames.user.corners?.topLeft).toMatchObject({ width: 42, height: 42, offsetX: 12, offsetY: 8 })
+    expect(frames.user.contentInsets.top).toBeGreaterThan(CONVERSATION_BUBBLE_PRESET_STYLES['calico-cat'].ornamentSize * .65)
+    expect(frames.user.contentInsets.left).toBeGreaterThan(CONVERSATION_BUBBLE_PRESET_STYLES['calico-cat'].ornamentSize * .9)
     expect(frames.codex).toMatchObject({
       mode: 'layered',
       bodyFill: null,
@@ -122,8 +134,9 @@ describe('conversation bubble frames', () => {
       ornamentOutset: 9,
       contentPadding: 26
     })
-    expect(frames.codex.corners?.topLeft).toMatchObject({ width: 72, height: 36 })
-    expect(frames.codex.corners?.topRight).toMatchObject({ width: 36, height: 72 })
+    expect(frames.codex.corners?.topLeft).toMatchObject({ width: 72, height: 36, offsetX: 0, offsetY: 0 })
+    expect(frames.codex.corners?.topRight).toMatchObject({ width: 36, height: 72, offsetX: -32, offsetY: 32 })
+    expect(frames.codex.contentInsets).toEqual({ top: 78.8, right: 96.8, bottom: 78.8, left: 96.8 })
     expect(frames.plan).toMatchObject({ mode: 'none', corners: null, bodyFill: null })
   })
 
@@ -157,15 +170,18 @@ describe('conversation bubble frames', () => {
     expect(runtimeCss).toContain('[data-dream-user-bubble-frame="layered"] .dream-conversation-user-bubble::before')
     expect(runtimeCss).toContain('background-image: var(--dream-user-bubble-corners)')
     expect(runtimeCss).toContain('background-size: var(--dream-user-bubble-corner-sizes)')
-    expect(runtimeCss).toContain('background-position: left top, right top, right bottom, left bottom')
-    expect(runtimeCss).toContain('padding-inline: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-ornament-size) * .9)) !important')
+    expect(runtimeCss).toContain('background-position: var(--dream-user-bubble-corner-positions)')
+    expect(runtimeCss).toContain('inset: calc(-1 * var(--dream-user-bubble-ornament-outset) - 32px)')
+    expect(runtimeCss).toContain('padding: var(--dream-user-bubble-padding-top) var(--dream-user-bubble-padding-right) var(--dream-user-bubble-padding-bottom) var(--dream-user-bubble-padding-left) !important')
     expect(runtimeCss).toContain('.dream-conversation-plan-bubble > :is(.relative.flex.h-10, .relative.overflow-hidden)')
     expect(runtimeCss).toMatch(/\.dream-conversation-plan-bubble > :is\([^}]+\) \{\s*z-index: 3;/)
 
     expect(studioCss).toContain('.preview-message.bubble[data-dream-bubble-frame="layered"]::before')
     expect(studioCss).toContain('background-image: var(--dream-preview-bubble-corners)')
     expect(studioCss).toContain('background-size: var(--dream-preview-bubble-corner-sizes)')
-    expect(studioCss).toContain('padding-inline: max(var(--dream-preview-bubble-content-padding),calc(var(--dream-preview-bubble-ornament-size) * .9))')
+    expect(studioCss).toContain('background-position: var(--dream-preview-bubble-corner-positions)')
+    expect(studioCss).toContain('inset: calc(-1 * var(--dream-preview-bubble-ornament-outset) - 32px)')
+    expect(studioCss).toContain('padding: var(--dream-preview-bubble-padding-top) var(--dream-preview-bubble-padding-right) var(--dream-preview-bubble-padding-bottom) var(--dream-preview-bubble-padding-left)')
     expect(studioCss).toMatch(/\.preview-message\.bubble\[data-dream-bubble-frame\]:not\([^}]+> \* \{ position: relative; z-index: 3; \}/)
   })
 })

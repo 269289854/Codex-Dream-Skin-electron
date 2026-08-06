@@ -483,6 +483,7 @@ export const CONVERSATION_BUBBLE_PRESETS = [
 
 export const CONVERSATION_BUBBLE_ROLES = ['user', 'codex', 'plan'] as const
 export const CONVERSATION_BUBBLE_CORNERS = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'] as const
+export const CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT = 32
 export type ConversationBubbleRole = typeof CONVERSATION_BUBBLE_ROLES[number]
 export type ConversationBubblePresetId = typeof CONVERSATION_BUBBLE_PRESETS[number]['id']
 export type ConversationBubbleCorner = typeof CONVERSATION_BUBBLE_CORNERS[number]
@@ -543,14 +544,32 @@ const conversationBubbleFrameSourceSchema = z.discriminatedUnion('kind', [
   }).strict()
 ])
 
-const conversationBubbleStyleSchema = z.object({
+const versionThirtyConversationBubbleStyleSchema = z.object({
   source: conversationBubbleFrameSourceSchema,
   contentPadding: z.number().int().min(12).max(40)
+}).strict()
+
+const conversationBubbleCornerOffsetSchema = z.object({
+  x: z.number().int().min(-CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT).max(CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT),
+  y: z.number().int().min(-CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT).max(CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT)
+}).strict()
+
+const conversationBubbleCornerOffsetsSchema = z.object({
+  topLeft: conversationBubbleCornerOffsetSchema,
+  topRight: conversationBubbleCornerOffsetSchema,
+  bottomRight: conversationBubbleCornerOffsetSchema,
+  bottomLeft: conversationBubbleCornerOffsetSchema
+}).strict()
+
+const conversationBubbleStyleSchema = versionThirtyConversationBubbleStyleSchema.extend({
+  cornerOffsets: conversationBubbleCornerOffsetsSchema
 }).strict()
 
 export type ConversationBubbleFrameSource = z.infer<typeof conversationBubbleFrameSourceSchema>
 export type ConversationBubbleStyle = z.infer<typeof conversationBubbleStyleSchema>
 export type ConversationBubbleCornerAsset = z.infer<typeof conversationBubbleCornerAssetSchema>
+export type ConversationBubbleCornerOffset = z.infer<typeof conversationBubbleCornerOffsetSchema>
+export type ConversationBubbleCornerOffsets = z.infer<typeof conversationBubbleCornerOffsetsSchema>
 
 const versionTwentyThreeConversationBubblesSchema = z.object({
   visible: z.boolean()
@@ -564,6 +583,13 @@ const versionTwentySevenConversationBubblesSchema = z.object({
 
 const versionTwentyNineConversationBubblesSchema = versionTwentySevenConversationBubblesSchema.extend({
   plan: versionTwentyNineConversationBubbleStyleSchema
+}).strict()
+
+const versionThirtyConversationBubblesSchema = z.object({
+  visible: z.boolean(),
+  user: versionThirtyConversationBubbleStyleSchema,
+  codex: versionThirtyConversationBubbleStyleSchema,
+  plan: versionThirtyConversationBubbleStyleSchema
 }).strict()
 
 const conversationBubblesSchema = z.object({
@@ -989,9 +1015,29 @@ const versionTwentyNineThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionThirtyThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(30),
+  copy: localizedThemeCopySchema,
+  icons: currentComposerToolIconsSchema,
+  videoPlayback: globalVideoPlaybackSchema,
+  brandSignature: brandSignatureSchema,
+  decorations: decorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  accountMenuBackground: accountMenuBackgroundSchema.default(createDefaultAccountMenuBackground()),
+  conversationBubbles: versionThirtyConversationBubblesSchema.default(createDefaultVersionThirtyConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(31),
   copy: localizedThemeCopySchema,
   icons: currentComposerToolIconsSchema,
   videoPlayback: globalVideoPlaybackSchema,
@@ -1120,7 +1166,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 30,
+    version: 31,
     updatedAt: new Date().toISOString(),
     videoPlayback: { pausePolicy: 'hidden' },
     brandSignature: createDefaultBrandSignature(),
@@ -1275,10 +1321,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 30) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 31) {
     const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 30) {
+    const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
+    return migrateVersionThirty(versionThirtyThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 29) {
     const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
@@ -1738,13 +1788,30 @@ function migrateVersionTwentyEight(legacy: z.infer<typeof versionTwentyEightThem
 }
 
 function migrateVersionTwentyNine(legacy: z.infer<typeof versionTwentyNineThemeSchema>): ThemeProfile {
-  const migrateStyle = (style: z.infer<typeof versionTwentyNineConversationBubbleStyleSchema>): ConversationBubbleStyle => ({
+  const migrateStyle = (style: z.infer<typeof versionTwentyNineConversationBubbleStyleSchema>): z.infer<typeof versionThirtyConversationBubbleStyleSchema> => ({
     source: style.source.kind === 'preset' ? style.source : { kind: 'none' },
     contentPadding: style.contentPadding
   })
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionThirty(versionThirtyThemeSchema.parse({
     ...legacy,
     version: 30,
+    conversationBubbles: {
+      visible: legacy.conversationBubbles.visible,
+      user: migrateStyle(legacy.conversationBubbles.user),
+      codex: migrateStyle(legacy.conversationBubbles.codex),
+      plan: migrateStyle(legacy.conversationBubbles.plan)
+    }
+  }))
+}
+
+function migrateVersionThirty(legacy: z.infer<typeof versionThirtyThemeSchema>): ThemeProfile {
+  const migrateStyle = (style: z.infer<typeof versionThirtyConversationBubbleStyleSchema>): ConversationBubbleStyle => ({
+    ...style,
+    cornerOffsets: createDefaultConversationBubbleCornerOffsets()
+  })
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 31,
     conversationBubbles: {
       visible: legacy.conversationBubbles.visible,
       user: migrateStyle(legacy.conversationBubbles.user),
@@ -1832,7 +1899,17 @@ function createDefaultConversationBackground(): ConversationBackground {
 export function createDefaultConversationBubbleStyle(): ConversationBubbleStyle {
   return {
     source: { kind: 'none' },
-    contentPadding: 20
+    contentPadding: 20,
+    cornerOffsets: createDefaultConversationBubbleCornerOffsets()
+  }
+}
+
+export function createDefaultConversationBubbleCornerOffsets(): ConversationBubbleCornerOffsets {
+  return {
+    topLeft: { x: 0, y: 0 },
+    topRight: { x: 0, y: 0 },
+    bottomRight: { x: 0, y: 0 },
+    bottomLeft: { x: 0, y: 0 }
   }
 }
 
@@ -1859,6 +1936,16 @@ function createDefaultVersionTwentyNineConversationBubbles(): z.infer<typeof ver
   return {
     ...createDefaultVersionTwentySevenConversationBubbles(),
     plan: createDefaultVersionTwentyNineConversationBubbleStyle()
+  }
+}
+
+function createDefaultVersionThirtyConversationBubbles(): z.infer<typeof versionThirtyConversationBubblesSchema> {
+  const createStyle = (): z.infer<typeof versionThirtyConversationBubbleStyleSchema> => ({ source: { kind: 'none' }, contentPadding: 20 })
+  return {
+    visible: true,
+    user: createStyle(),
+    codex: createStyle(),
+    plan: createStyle()
   }
 }
 

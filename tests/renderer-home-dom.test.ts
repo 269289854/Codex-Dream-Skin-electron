@@ -776,10 +776,10 @@ describe('renderer home DOM adaptation', () => {
     if (!user || !codex || !plan) throw new Error('Conversation bubble fixtures are missing.')
     const childCounts = [user.childNodes.length, codex.childNodes.length, plan.childNodes.length]
     const corners = (prefix: string) => ({
-      topLeft: { dataUrl: `data:image/png;base64,${prefix}-TL`, width: 42, height: 36 },
-      topRight: { dataUrl: `data:image/png;base64,${prefix}-TR`, width: 36, height: 42 },
-      bottomRight: { dataUrl: `data:image/png;base64,${prefix}-BR`, width: 40, height: 38 },
-      bottomLeft: { dataUrl: `data:image/png;base64,${prefix}-BL`, width: 38, height: 40 }
+      topLeft: { dataUrl: `data:image/png;base64,${prefix}-TL`, width: 42, height: 36, offsetX: 32, offsetY: 32 },
+      topRight: { dataUrl: `data:image/png;base64,${prefix}-TR`, width: 36, height: 42, offsetX: -32, offsetY: 32 },
+      bottomRight: { dataUrl: `data:image/png;base64,${prefix}-BR`, width: 40, height: 38, offsetX: -32, offsetY: -32 },
+      bottomLeft: { dataUrl: `data:image/png;base64,${prefix}-BL`, width: 38, height: 40, offsetX: 32, offsetY: -32 }
     })
     const frames: RuntimeConversationBubblesConfig = {
       visible: true,
@@ -792,7 +792,8 @@ describe('renderer home DOM adaptation', () => {
         borderRadius: 14,
         ornamentSize: 42,
         ornamentOutset: 4,
-        contentPadding: 20
+        contentPadding: 20,
+        contentInsets: { top: 59.3, right: 69.8, bottom: 59.3, left: 69.8 }
       },
       codex: {
         mode: 'layered',
@@ -803,7 +804,8 @@ describe('renderer home DOM adaptation', () => {
         borderRadius: 22,
         ornamentSize: 64,
         ornamentOutset: 8,
-        contentPadding: 28
+        contentPadding: 28,
+        contentInsets: { top: 73.6, right: 89.6, bottom: 73.6, left: 89.6 }
       },
       plan: {
         mode: 'layered',
@@ -814,7 +816,8 @@ describe('renderer home DOM adaptation', () => {
         borderRadius: 18,
         ornamentSize: 48,
         ornamentOutset: 6,
-        contentPadding: 24
+        contentPadding: 24,
+        contentInsets: { top: 63.2, right: 75.2, bottom: 63.2, left: 75.2 }
       }
     }
 
@@ -829,9 +832,11 @@ describe('renderer home DOM adaptation', () => {
     expect(root.getAttribute('data-dream-plan-bubble-body')).toBe('preset')
     expect(root.style.getPropertyValue('--dream-user-bubble-corners')).toContain('USER-TL')
     expect(root.style.getPropertyValue('--dream-user-bubble-corner-sizes')).toBe('42px 36px, 36px 42px, 40px 38px, 38px 40px')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corner-positions')).toBe('calc(0% + 64px) calc(0% + 64px), calc(100% - 64px) calc(0% + 64px), calc(100% - 64px) calc(100% - 64px), calc(0% + 64px) calc(100% - 64px)')
     expect(root.style.getPropertyValue('--dream-user-bubble-border-width')).toBe('2px')
     expect(root.style.getPropertyValue('--dream-user-bubble-body-fill')).toBe('#fffaf5')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('28px')
+    expect(root.style.getPropertyValue('--dream-codex-bubble-padding-right')).toBe('89.6px')
     expect(root.style.getPropertyValue('--dream-codex-bubble-body-fill')).toBe('')
     expect(root.style.getPropertyValue('--dream-plan-bubble-corners')).toContain('PLAN-BL')
     expect(root.style.getPropertyValue('--dream-plan-bubble-content-padding')).toBe('24px')
@@ -855,7 +860,7 @@ describe('renderer home DOM adaptation', () => {
     expect(streaming.childNodes).toHaveLength(2)
     expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::before \{\s*border:/)
     expect(dreamSkinCss).toMatch(/\.dream-conversation-plan-bubble::after \{ inset:[^}]+background-image:/)
-    expect(dreamSkinCss).toContain('padding-block: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-ornament-size) * .65))')
+    expect(dreamSkinCss).toContain('padding: var(--dream-codex-bubble-padding-top) var(--dream-codex-bubble-padding-right) var(--dream-codex-bubble-padding-bottom) var(--dream-codex-bubble-padding-left)')
 
     streamingSurface?.append(window.document.createElement('p'))
     stateOf(window).ensure()
@@ -876,8 +881,10 @@ describe('renderer home DOM adaptation', () => {
     expect(root.hasAttribute('data-dream-plan-bubble-frame')).toBe(false)
     expect(root.style.getPropertyValue('--dream-user-bubble-corners')).toBe('')
     expect(root.style.getPropertyValue('--dream-user-bubble-corner-sizes')).toBe('')
+    expect(root.style.getPropertyValue('--dream-user-bubble-corner-positions')).toBe('')
     expect(root.style.getPropertyValue('--dream-user-bubble-border-width')).toBe('')
     expect(root.style.getPropertyValue('--dream-codex-bubble-content-padding')).toBe('')
+    expect(root.style.getPropertyValue('--dream-codex-bubble-padding-right')).toBe('')
     expect(root.style.getPropertyValue('--dream-plan-bubble-corners')).toBe('')
     expect(root.style.getPropertyValue('--dream-plan-bubble-corner-sizes')).toBe('')
     expect(root.style.getPropertyValue('--dream-plan-bubble-content-padding')).toBe('')

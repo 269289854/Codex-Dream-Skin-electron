@@ -1,11 +1,14 @@
 import * as React from 'react'
-import { Check, Image as ImageIcon, Trash2, Upload, X } from 'lucide-react'
+import { Check, Image as ImageIcon, RotateCcw, Trash2, Upload, X } from 'lucide-react'
 import {
+  CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT,
   CONVERSATION_BUBBLE_CORNERS,
   CONVERSATION_BUBBLE_PRESETS,
+  createDefaultConversationBubbleCornerOffsets,
   createDefaultConversationBubbleStyle,
   type ConversationBubbleCorner,
   type ConversationBubbleCornerAsset,
+  type ConversationBubbleCornerOffsets,
   type ConversationBubbleRole,
   type ThemeProfile
 } from '../../shared/theme'
@@ -40,6 +43,7 @@ interface StagedCustomBubble {
   ornamentSize: number
   ornamentOutset: number
   contentPadding: number
+  cornerOffsets: ConversationBubbleCornerOffsets
 }
 
 interface ConversationBubbleControlsProps {
@@ -60,10 +64,35 @@ function emptyCorners(): Record<ConversationBubbleCorner, StagedCorner | null> {
   return { topLeft: null, topRight: null, bottomRight: null, bottomLeft: null }
 }
 
+interface CornerPositionControlsProps {
+  offsets: ConversationBubbleCornerOffsets
+  selectedCorner: ConversationBubbleCorner
+  onSelectedCornerChange: (corner: ConversationBubbleCorner) => void
+  onOffsetChange: (axis: 'x' | 'y', value: number) => void
+  onResetCorner: () => void
+  onResetAll: () => void
+  onInteractionEnd: () => void
+}
+
+function CornerPositionControls({ offsets, selectedCorner, onSelectedCornerChange, onOffsetChange, onResetCorner, onResetAll, onInteractionEnd }: CornerPositionControlsProps): React.JSX.Element {
+  const selectedOffset = offsets[selectedCorner]
+  return <section className="conversation-bubble-position-controls" aria-label={t('角饰位置')}>
+    <div className="conversation-bubble-corner-position-tabs segmented-control" role="tablist" aria-label={t('选择角饰')}>
+      {CONVERSATION_BUBBLE_CORNERS.map((corner) => <button type="button" role="tab" aria-selected={selectedCorner === corner} className={selectedCorner === corner ? 'active' : ''} key={corner} onClick={() => onSelectedCornerChange(corner)}>{t(cornerLabels[corner])}</button>)}
+    </div>
+    <Range label="水平位置" min={-CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT} max={CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT} step={1} suffix="px" value={selectedOffset.x} onChange={(value) => onOffsetChange('x', value)} onChangeEnd={onInteractionEnd} />
+    <Range label="垂直位置" min={-CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT} max={CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT} step={1} suffix="px" value={selectedOffset.y} onChange={(value) => onOffsetChange('y', value)} onChangeEnd={onInteractionEnd} />
+    <div className="conversation-bubble-position-actions">
+      <button type="button" onClick={onResetCorner}><RotateCcw size={12} />{t('重置当前角')}</button>
+      <button type="button" onClick={onResetAll}><RotateCcw size={12} />{t('重置全部角饰')}</button>
+    </div>
+  </section>
+}
+
 function stageFromProfile(profile: ThemeProfile, assets: Record<string, string>, role: ConversationBubbleRole): StagedCustomBubble {
   const style = profile.conversationBubbles[role]
   if (style.source.kind !== 'custom') {
-    return { corners: emptyCorners(), borderColor: '#9b7b6a', borderWidth: 2, borderRadius: 14, ornamentSize: 56, ornamentOutset: 4, contentPadding: style.contentPadding }
+    return { corners: emptyCorners(), borderColor: '#9b7b6a', borderWidth: 2, borderRadius: 14, ornamentSize: 56, ornamentOutset: 4, contentPadding: style.contentPadding, cornerOffsets: createDefaultConversationBubbleCornerOffsets() }
   }
   const customSource = style.source
   const corners = Object.fromEntries(CONVERSATION_BUBBLE_CORNERS.map((corner) => {
@@ -77,7 +106,8 @@ function stageFromProfile(profile: ThemeProfile, assets: Record<string, string>,
     borderRadius: customSource.borderRadius,
     ornamentSize: customSource.ornamentSize,
     ornamentOutset: customSource.ornamentOutset,
-    contentPadding: style.contentPadding
+    contentPadding: style.contentPadding,
+    cornerOffsets: structuredClone(style.cornerOffsets)
   }
 }
 
@@ -95,6 +125,7 @@ export function ConversationBubbleControls({
   onDiscardPending
 }: ConversationBubbleControlsProps): React.JSX.Element {
   const [customPickerOpen, setCustomPickerOpen] = React.useState(false)
+  const [selectedCorner, setSelectedCorner] = React.useState<ConversationBubbleCorner>('topLeft')
   const [staged, setStaged] = React.useState<StagedCustomBubble>(() => stageFromProfile(profile, assets, role))
   const pendingAssetsRef = React.useRef<string[]>([])
   const discardPendingRef = React.useRef(onDiscardPending)
@@ -133,6 +164,10 @@ export function ConversationBubbleControls({
     })
   }
   const selectPreset = (presetId: (typeof CONVERSATION_BUBBLE_PRESETS)[number]['id']): void => {
+    if (style.source.kind === 'preset' && style.source.presetId === presetId) {
+      if (!profile.conversationBubbles.visible) onChange((next) => { next.conversationBubbles.visible = true })
+      return
+    }
     void discardStaged()
     setCustomPickerOpen(false)
     onChange((next) => {
@@ -173,7 +208,8 @@ export function ConversationBubbleControls({
           ornamentSize: staged.ornamentSize,
           ornamentOutset: staged.ornamentOutset
         },
-        contentPadding: staged.contentPadding
+        contentPadding: staged.contentPadding,
+        cornerOffsets: structuredClone(staged.cornerOffsets)
       }
     })
     pendingAssetsRef.current = []
@@ -185,6 +221,30 @@ export function ConversationBubbleControls({
   }
   const updateNumber = (field: 'borderWidth' | 'borderRadius' | 'ornamentSize' | 'ornamentOutset' | 'contentPadding', value: number): void => {
     setStaged((current) => ({ ...current, [field]: value }))
+  }
+  const updatePresetOffset = (axis: 'x' | 'y', value: number): void => {
+    onChange((next) => {
+      next.conversationBubbles[role].cornerOffsets[selectedCorner][axis] = value
+    }, `conversation-bubble-${role}-${selectedCorner}-${axis}`)
+  }
+  const resetPresetCorner = (): void => {
+    onChange((next) => {
+      next.conversationBubbles[role].cornerOffsets[selectedCorner] = { x: 0, y: 0 }
+    })
+  }
+  const resetPresetOffsets = (): void => {
+    onChange((next) => {
+      next.conversationBubbles[role].cornerOffsets = createDefaultConversationBubbleCornerOffsets()
+    })
+  }
+  const updateStagedOffset = (axis: 'x' | 'y', value: number): void => {
+    setStaged((current) => ({
+      ...current,
+      cornerOffsets: {
+        ...current.cornerOffsets,
+        [selectedCorner]: { ...current.cornerOffsets[selectedCorner], [axis]: value }
+      }
+    }))
   }
 
   return <div className="conversation-bubble-controls" data-bubble-role-controls={role}>
@@ -212,6 +272,7 @@ export function ConversationBubbleControls({
         </button>
       })}
     </div>}
+    {style.source.kind === 'preset' && !customPickerOpen && <CornerPositionControls offsets={style.cornerOffsets} selectedCorner={selectedCorner} onSelectedCornerChange={setSelectedCorner} onOffsetChange={updatePresetOffset} onResetCorner={resetPresetCorner} onResetAll={resetPresetOffsets} onInteractionEnd={onInteractionEnd} />}
 
     {editorVisible && <div className="conversation-bubble-custom">
       <div className="conversation-bubble-corner-grid">
@@ -224,6 +285,7 @@ export function ConversationBubbleControls({
         })}
       </div>
       {!complete && <p className="conversation-bubble-corner-requirement">{t('请上传完整的四张角饰图片')}</p>}
+      <CornerPositionControls offsets={staged.cornerOffsets} selectedCorner={selectedCorner} onSelectedCornerChange={setSelectedCorner} onOffsetChange={updateStagedOffset} onResetCorner={() => setStaged((current) => ({ ...current, cornerOffsets: { ...current.cornerOffsets, [selectedCorner]: { x: 0, y: 0 } } }))} onResetAll={() => setStaged((current) => ({ ...current, cornerOffsets: createDefaultConversationBubbleCornerOffsets() }))} onInteractionEnd={onInteractionEnd} />
       <SolidColorControl label="边框颜色" value={staged.borderColor} onChange={(borderColor) => setStaged((current) => ({ ...current, borderColor }))} onChangeEnd={onInteractionEnd} />
       <Range label="边框宽度" min={0} max={4} step={1} value={staged.borderWidth} onChange={(value) => updateNumber('borderWidth', value)} onChangeEnd={onInteractionEnd} />
       <Range label="圆角大小" min={8} max={32} step={1} value={staged.borderRadius} onChange={(value) => updateNumber('borderRadius', value)} onChangeEnd={onInteractionEnd} />

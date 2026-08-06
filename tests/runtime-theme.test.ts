@@ -106,8 +106,7 @@ describe('runtime appearance compilation', () => {
     expect(framedPlanBubbleRule).not.toContain('padding:')
     expect(css).not.toContain('.dream-conversation-plan-bubble > *')
     expect(css).toContain('.dream-conversation-plan-bubble > :is(.relative.flex.h-10, .relative.overflow-hidden)')
-    expect(css).toContain('padding-block: max(var(--dream-plan-bubble-content-padding), calc(var(--dream-plan-bubble-ornament-size) * .65))')
-    expect(css).toContain('padding-inline: max(var(--dream-plan-bubble-content-padding), calc(var(--dream-plan-bubble-ornament-size) * .9))')
+    expect(css).toContain('padding: var(--dream-plan-bubble-padding-top) var(--dream-plan-bubble-padding-right) var(--dream-plan-bubble-padding-bottom) var(--dream-plan-bubble-padding-left)')
     const toolBubbleRule = css.match(/html\.codex-dream-skin \.dream-conversation-tool-bubble\s*\{([^}]*)\}/)?.[1]
     const toolMutedRule = css.match(/html\.codex-dream-skin \.dream-conversation-tool-bubble :is\(\[class~="group\/output"\][^}]+\{([^}]*)\}/)?.[1]
     expect(toolBubbleRule).toContain('color: var(--dream-conversation-tool-text)')

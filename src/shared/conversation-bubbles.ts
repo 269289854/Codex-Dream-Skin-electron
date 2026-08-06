@@ -1,8 +1,10 @@
 import {
   CONVERSATION_BUBBLE_CORNERS,
+  CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT,
   CONVERSATION_BUBBLE_PRESETS,
   CONVERSATION_BUBBLE_ROLES,
   type ConversationBubbleCorner,
+  type ConversationBubbleCornerOffset,
   type ConversationBubblePresetId,
   type ConversationBubbleRole,
   type ConversationBubbles,
@@ -15,6 +17,15 @@ export interface RuntimeConversationBubbleCorner {
   dataUrl: string
   width: number
   height: number
+  offsetX: number
+  offsetY: number
+}
+
+export interface RuntimeConversationBubbleContentInsets {
+  top: number
+  right: number
+  bottom: number
+  left: number
 }
 
 export interface RuntimeConversationBubbleFrame {
@@ -27,6 +38,7 @@ export interface RuntimeConversationBubbleFrame {
   ornamentSize: number
   ornamentOutset: number
   contentPadding: number
+  contentInsets: RuntimeConversationBubbleContentInsets
 }
 
 export interface RuntimeConversationBubbles {
@@ -75,13 +87,43 @@ export function conversationBubbleMediaReferences(profile: ThemeProfile): MediaR
   })
 }
 
-function renderedCorner(dataUrl: string, sourceWidth: number, sourceHeight: number, maxSize: number): RuntimeConversationBubbleCorner {
+function renderedCorner(dataUrl: string, sourceWidth: number, sourceHeight: number, maxSize: number, offset: ConversationBubbleCornerOffset): RuntimeConversationBubbleCorner {
   const scale = maxSize / Math.max(sourceWidth, sourceHeight)
   return {
     dataUrl,
     width: Math.max(1, Math.round(sourceWidth * scale * 100) / 100),
-    height: Math.max(1, Math.round(sourceHeight * scale * 100) / 100)
+    height: Math.max(1, Math.round(sourceHeight * scale * 100) / 100),
+    offsetX: offset.x,
+    offsetY: offset.y
   }
+}
+
+function roundedInset(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+export function conversationBubbleContentInsets(style: ConversationBubbleStyle, ornamentSize: number): RuntimeConversationBubbleContentInsets {
+  const offsets = style.cornerOffsets
+  return {
+    top: roundedInset(Math.max(style.contentPadding, ornamentSize * .65 + Math.max(0, offsets.topLeft.y, offsets.topRight.y))),
+    right: roundedInset(Math.max(style.contentPadding, ornamentSize * .9 + Math.max(0, -offsets.topRight.x, -offsets.bottomRight.x))),
+    bottom: roundedInset(Math.max(style.contentPadding, ornamentSize * .65 + Math.max(0, -offsets.bottomLeft.y, -offsets.bottomRight.y))),
+    left: roundedInset(Math.max(style.contentPadding, ornamentSize * .9 + Math.max(0, offsets.topLeft.x, offsets.bottomLeft.x)))
+  }
+}
+
+export function conversationBubbleCornerPositions(corners: Record<ConversationBubbleCorner, RuntimeConversationBubbleCorner>): string {
+  const reserve = CONVERSATION_BUBBLE_CORNER_OFFSET_LIMIT
+  const topLeft = corners.topLeft
+  const topRight = corners.topRight
+  const bottomRight = corners.bottomRight
+  const bottomLeft = corners.bottomLeft
+  return [
+    `calc(0% + ${reserve + topLeft.offsetX}px) calc(0% + ${reserve + topLeft.offsetY}px)`,
+    `calc(100% - ${reserve - topRight.offsetX}px) calc(0% + ${reserve + topRight.offsetY}px)`,
+    `calc(100% - ${reserve - bottomRight.offsetX}px) calc(100% - ${reserve - bottomRight.offsetY}px)`,
+    `calc(0% + ${reserve + bottomLeft.offsetX}px) calc(100% - ${reserve - bottomLeft.offsetY}px)`
+  ].join(', ')
 }
 
 export function resolveConversationBubbleFrame(style: ConversationBubbleStyle, assets: Record<string, string>): RuntimeConversationBubbleFrame {
@@ -95,7 +137,8 @@ export function resolveConversationBubbleFrame(style: ConversationBubbleStyle, a
       borderRadius: 14,
       ornamentSize: 0,
       ornamentOutset: 0,
-      contentPadding: style.contentPadding
+      contentPadding: style.contentPadding,
+      contentInsets: { top: style.contentPadding, right: style.contentPadding, bottom: style.contentPadding, left: style.contentPadding }
     }
   }
 
@@ -106,13 +149,14 @@ export function resolveConversationBubbleFrame(style: ConversationBubbleStyle, a
       const asset = conversationBubblePresetAssetKey(presetId, corner)
       const dataUrl = assets[asset]
       if (!dataUrl) throw new Error(`聊天气泡素材不存在: ${asset}`)
-      return [corner, renderedCorner(dataUrl, 256, 256, presetStyle.ornamentSize)]
+      return [corner, renderedCorner(dataUrl, 256, 256, presetStyle.ornamentSize, style.cornerOffsets[corner])]
     })) as Record<ConversationBubbleCorner, RuntimeConversationBubbleCorner>
     return {
       mode: 'layered',
       corners,
       ...presetStyle,
-      contentPadding: style.contentPadding
+      contentPadding: style.contentPadding,
+      contentInsets: conversationBubbleContentInsets(style, presetStyle.ornamentSize)
     }
   }
 
@@ -121,7 +165,7 @@ export function resolveConversationBubbleFrame(style: ConversationBubbleStyle, a
     const source = customSource.corners[corner]
     const dataUrl = assets[source.reference.asset]
     if (!dataUrl) throw new Error(`聊天气泡素材不存在: ${source.reference.asset}`)
-    return [corner, renderedCorner(dataUrl, source.width, source.height, customSource.ornamentSize)]
+    return [corner, renderedCorner(dataUrl, source.width, source.height, customSource.ornamentSize, style.cornerOffsets[corner])]
   })) as Record<ConversationBubbleCorner, RuntimeConversationBubbleCorner>
   return {
     mode: 'layered',
@@ -132,7 +176,8 @@ export function resolveConversationBubbleFrame(style: ConversationBubbleStyle, a
     borderRadius: customSource.borderRadius,
     ornamentSize: customSource.ornamentSize,
     ornamentOutset: customSource.ornamentOutset,
-    contentPadding: style.contentPadding
+    contentPadding: style.contentPadding,
+    contentInsets: conversationBubbleContentInsets(style, customSource.ornamentSize)
   }
 }
 

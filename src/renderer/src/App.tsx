@@ -19,7 +19,7 @@ import { buildPreviewImportedFontCss, buildThemeStyleVariables } from '../../sha
 import { activateVideoVariant, mediaFlipCssTransform } from '../../shared/media'
 import { CONVERSATION_BUBBLE_PRESETS, resolveThemeCopy, type ConversationBubbleCorner, type ConversationBubbleRole, type CreateThemeInput, type IconSlot, type MediaReference, type ThemeProfile, type ThemeSummary, type VideoVariants } from '../../shared/theme'
 import { DEFAULT_LOCALE, localizedMessage, localizedMessageFrom, setActiveLocale, t, tm, type LocalizedMessage, type SupportedLocale } from '../../shared/i18n'
-import { conversationBubbleMediaReferences, resolveConversationBubbleFrame } from '../../shared/conversation-bubbles'
+import { conversationBubbleCornerPositions, conversationBubbleMediaReferences, resolveConversationBubbleFrame } from '../../shared/conversation-bubbles'
 import { SIDEBAR_NAV_ITEMS } from '../../shared/sidebar-layout'
 import { AppearanceColorControl, colorLabels, FontControl, iconLabels, PaintControl, Range, RenderIcon, ThemeColorControl, ThemeIconControl } from './editor-controls'
 import { ComposerMelodyControls, HomeHeadingDecorationControls } from './DecorationControls'
@@ -1848,13 +1848,18 @@ function conversationBubblePreviewFrameProps(profile: ThemeProfile, assets: Reco
     style: {
       '--dream-preview-bubble-corners': [topLeft, topRight, bottomRight, bottomLeft].map((corner) => `url(${JSON.stringify(corner.dataUrl)})`).join(', '),
       '--dream-preview-bubble-corner-sizes': [topLeft, topRight, bottomRight, bottomLeft].map((corner) => `${corner.width}px ${corner.height}px`).join(', '),
+      '--dream-preview-bubble-corner-positions': conversationBubbleCornerPositions(frame.corners),
       '--dream-preview-bubble-body-fill': frame.bodyFill ?? 'transparent',
       '--dream-preview-bubble-border-color': frame.borderColor,
       '--dream-preview-bubble-border-width': `${frame.borderWidth}px`,
       '--dream-preview-bubble-border-radius': `${frame.borderRadius}px`,
       '--dream-preview-bubble-ornament-size': `${frame.ornamentSize}px`,
       '--dream-preview-bubble-ornament-outset': `${frame.ornamentOutset}px`,
-      '--dream-preview-bubble-content-padding': `${frame.contentPadding}px`
+      '--dream-preview-bubble-content-padding': `${frame.contentPadding}px`,
+      '--dream-preview-bubble-padding-top': `${frame.contentInsets.top}px`,
+      '--dream-preview-bubble-padding-right': `${frame.contentInsets.right}px`,
+      '--dream-preview-bubble-padding-bottom': `${frame.contentInsets.bottom}px`,
+      '--dream-preview-bubble-padding-left': `${frame.contentInsets.left}px`
     } as React.CSSProperties
   }
 }

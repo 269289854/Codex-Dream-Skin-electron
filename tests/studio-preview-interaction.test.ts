@@ -1578,6 +1578,56 @@ describe('Studio preview editing interaction', () => {
     expect(moonStarsPreview?.style.getPropertyValue('--dream-preview-bubble-corner-sizes')).toBe('40px 40px, 40px 40px, 40px 40px, 40px 40px')
     expect(container.querySelector('[data-preview-target="conversation-codex-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('none')
 
+    const positionRange = (label: string): HTMLInputElement | undefined => [...container.querySelectorAll<HTMLElement>('[role="dialog"] .conversation-bubble-position-controls .range-row')].find((row) => row.querySelector('span')?.textContent === label)?.querySelector<HTMLInputElement>('input') ?? undefined
+    const topRightPosition = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-corner-position-tabs button')].find((button) => button.textContent === '右上角')
+    if (!topRightPosition) throw new Error('Top-right position selector is missing.')
+    act(() => topRightPosition.click())
+    const horizontalPosition = positionRange('水平位置')
+    const verticalPosition = positionRange('垂直位置')
+    if (!horizontalPosition || !verticalPosition) throw new Error('Corner position ranges are missing.')
+    act(() => {
+      setInputValue(horizontalPosition, '-32')
+      horizontalPosition.dispatchEvent(new browserWindow.PointerEvent('pointerup', { bubbles: true }) as unknown as PointerEvent)
+    })
+    expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-corner-positions')).toContain('calc(100% - 64px) calc(0% + 32px)')
+    const undo = container.querySelector<HTMLButtonElement>('button[title="撤销"]')
+    if (!undo) throw new Error('Undo command is missing.')
+    act(() => undo.click())
+    expect(positionRange('水平位置')?.value).toBe('0')
+    act(() => {
+      setInputValue(positionRange('水平位置')!, '-12')
+      setInputValue(positionRange('垂直位置')!, '8')
+    })
+    expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-padding-right')).toBe('48px')
+    const resetCurrentCorner = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-position-actions button')].find((button) => button.textContent?.includes('重置当前角'))
+    if (!resetCurrentCorner) throw new Error('Reset selected corner command is missing.')
+    act(() => resetCurrentCorner.click())
+    expect(positionRange('水平位置')?.value).toBe('0')
+    expect(positionRange('垂直位置')?.value).toBe('0')
+    act(() => {
+      setInputValue(positionRange('水平位置')!, '-12')
+      setInputValue(positionRange('垂直位置')!, '8')
+    })
+    const resetAllCorners = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-position-actions button')].find((button) => button.textContent?.includes('重置全部角饰'))
+    if (!resetAllCorners) throw new Error('Reset all corners command is missing.')
+    act(() => resetAllCorners.click())
+    expect(positionRange('水平位置')?.value).toBe('0')
+    expect(positionRange('垂直位置')?.value).toBe('0')
+    act(() => {
+      setInputValue(positionRange('水平位置')!, '-12')
+      setInputValue(positionRange('垂直位置')!, '8')
+    })
+    const daisyHeart = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-preset-grid button')].find((button) => button.textContent?.includes('雏菊爱心'))
+    if (!daisyHeart) throw new Error('Daisy heart preset is missing.')
+    act(() => daisyHeart.click())
+    expect(positionRange('水平位置')?.value).toBe('0')
+    expect(positionRange('垂直位置')?.value).toBe('0')
+    act(() => moonStars.click())
+    act(() => {
+      setInputValue(positionRange('水平位置')!, '-12')
+      setInputValue(positionRange('垂直位置')!, '8')
+    })
+
     const customMode = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
     if (!customMode) throw new Error('Custom bubble mode is missing.')
     act(() => customMode.click())
@@ -1595,6 +1645,11 @@ describe('Studio preview editing interaction', () => {
       firstCorner.click()
       await Promise.resolve()
     })
+    const customTopRight = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-corner-position-tabs button')].find((button) => button.textContent === '右上角')
+    if (!customTopRight) throw new Error('Custom top-right position selector is missing.')
+    act(() => customTopRight.click())
+    expect(positionRange('水平位置')?.value).toBe('0')
+    act(() => setInputValue(positionRange('水平位置')!, '20'))
     const cancel = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('取消'))
     if (!cancel) throw new Error('Custom bubble cancel command is missing.')
     await act(async () => {
@@ -1604,6 +1659,7 @@ describe('Studio preview editing interaction', () => {
     expect(discardPending).toHaveBeenCalledWith(profile.id, ['assets/cancelled-topLeft.png'])
     expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-frame')).toBe('layered')
     expect(container.querySelector('[data-preview-target="conversation-user-message"]')?.getAttribute('data-dream-bubble-body')).toBe('preset')
+    expect(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')?.style.getPropertyValue('--dream-preview-bubble-corner-positions')).toContain('calc(100% - 44px) calc(0% + 40px)')
 
     pointerDown(container.querySelector<HTMLElement>('[data-preview-target="conversation-user-message"]')!)
     const customAgain = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-mode-tabs button')].find((button) => button.textContent === '自定义')
@@ -1622,6 +1678,13 @@ describe('Studio preview editing interaction', () => {
       if (!button) throw new Error(`Corner picker is missing: ${corner}`)
       await act(async () => { button.click(); await Promise.resolve() })
     }
+    const customTopLeft = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-corner-position-tabs button')].find((button) => button.textContent === '左上角')
+    if (!customTopLeft) throw new Error('Custom top-left position selector is missing.')
+    act(() => customTopLeft.click())
+    act(() => {
+      setInputValue(positionRange('水平位置')!, '16')
+      setInputValue(positionRange('垂直位置')!, '12')
+    })
     expect(selectCorner.mock.calls.slice(-4).map((call) => call.slice(1))).toEqual(CONVERSATION_BUBBLE_CORNERS.map((corner) => ['user', corner]))
     const applyCorners = [...container.querySelectorAll<HTMLButtonElement>('[role="dialog"] .conversation-bubble-custom-actions button')].find((button) => button.textContent?.includes('应用四角装饰'))
     if (!applyCorners) throw new Error('Apply custom corners command is missing.')
@@ -1631,6 +1694,7 @@ describe('Studio preview editing interaction', () => {
     expect(customPreview?.getAttribute('data-dream-bubble-body')).toBe('theme')
     expect(customPreview?.style.getPropertyValue('--dream-preview-bubble-corners')).toContain('user-topLeft.png')
     expect(customPreview?.style.getPropertyValue('--dream-preview-bubble-corner-sizes')).toBe('56px 42px, 56px 42px, 56px 42px, 56px 42px')
+    expect(customPreview?.style.getPropertyValue('--dream-preview-bubble-corner-positions')).toContain('calc(0% + 48px) calc(0% + 44px)')
 
     const codexBubble = container.querySelector<HTMLElement>('[data-preview-target="conversation-codex-message"]')
     if (!codexBubble) throw new Error('Codex bubble preview is missing.')
@@ -1666,15 +1730,18 @@ describe('Studio preview editing interaction', () => {
       await Promise.resolve()
     })
     expect(savedProfiles.at(-1)?.conversationBubbles.user).toMatchObject({
-      source: { kind: 'custom', corners: { topLeft: { reference: { asset: 'assets/user-topLeft.png', mimeType: 'image/png' } } } }
+      source: { kind: 'custom', corners: { topLeft: { reference: { asset: 'assets/user-topLeft.png', mimeType: 'image/png' } } } },
+      cornerOffsets: { topLeft: { x: 16, y: 12 } }
     })
     expect(savedProfiles.at(-1)?.conversationBubbles.codex).toEqual({
       source: { kind: 'preset', presetId: 'ocean-shell' },
-      contentPadding: 20
+      contentPadding: 20,
+      cornerOffsets: createDefaultConversationBubbleStyle().cornerOffsets
     })
     expect(savedProfiles.at(-1)?.conversationBubbles.plan).toEqual({
       source: { kind: 'preset', presetId: 'rainbow-candy' },
-      contentPadding: 20
+      contentPadding: 20,
+      cornerOffsets: createDefaultConversationBubbleStyle().cornerOffsets
     })
   }, 10_000)
 

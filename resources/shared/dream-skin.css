@@ -634,18 +634,15 @@ html.codex-dream-skin[data-dream-plan-bubble-frame="layered"] .dream-conversatio
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame="layered"] .dream-conversation-user-bubble {
-  padding-block: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-ornament-size) * .65)) !important;
-  padding-inline: max(var(--dream-user-bubble-content-padding), calc(var(--dream-user-bubble-ornament-size) * .9)) !important;
+  padding: var(--dream-user-bubble-padding-top) var(--dream-user-bubble-padding-right) var(--dream-user-bubble-padding-bottom) var(--dream-user-bubble-padding-left) !important;
 }
 
 html.codex-dream-skin[data-dream-codex-bubble-frame="layered"] .dream-conversation-codex-bubble {
-  padding-block: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-ornament-size) * .65)) !important;
-  padding-inline: max(var(--dream-codex-bubble-content-padding), calc(var(--dream-codex-bubble-ornament-size) * .9)) !important;
+  padding: var(--dream-codex-bubble-padding-top) var(--dream-codex-bubble-padding-right) var(--dream-codex-bubble-padding-bottom) var(--dream-codex-bubble-padding-left) !important;
 }
 
 html.codex-dream-skin[data-dream-plan-bubble-frame="layered"] .dream-conversation-plan-bubble {
-  padding-block: max(var(--dream-plan-bubble-content-padding), calc(var(--dream-plan-bubble-ornament-size) * .65)) !important;
-  padding-inline: max(var(--dream-plan-bubble-content-padding), calc(var(--dream-plan-bubble-ornament-size) * .9)) !important;
+  padding: var(--dream-plan-bubble-padding-top) var(--dream-plan-bubble-padding-right) var(--dream-plan-bubble-padding-bottom) var(--dream-plan-bubble-padding-left) !important;
 }
 
 html.codex-dream-skin[data-dream-user-bubble-frame="layered"] .dream-conversation-user-bubble::before,
@@ -697,12 +694,11 @@ html.codex-dream-skin[data-dream-codex-bubble-frame="layered"] .dream-conversati
 html.codex-dream-skin[data-dream-plan-bubble-frame="layered"] .dream-conversation-plan-bubble::after {
   z-index: 2;
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-  background-position: left top, right top, right bottom, left bottom;
 }
 
-html.codex-dream-skin[data-dream-user-bubble-frame="layered"] .dream-conversation-user-bubble::after { inset: calc(-1 * var(--dream-user-bubble-ornament-outset)); background-image: var(--dream-user-bubble-corners); background-size: var(--dream-user-bubble-corner-sizes); }
-html.codex-dream-skin[data-dream-codex-bubble-frame="layered"] .dream-conversation-codex-bubble::after { inset: calc(-1 * var(--dream-codex-bubble-ornament-outset)); background-image: var(--dream-codex-bubble-corners); background-size: var(--dream-codex-bubble-corner-sizes); }
-html.codex-dream-skin[data-dream-plan-bubble-frame="layered"] .dream-conversation-plan-bubble::after { inset: calc(-1 * var(--dream-plan-bubble-ornament-outset)); background-image: var(--dream-plan-bubble-corners); background-size: var(--dream-plan-bubble-corner-sizes); }
+html.codex-dream-skin[data-dream-user-bubble-frame="layered"] .dream-conversation-user-bubble::after { inset: calc(-1 * var(--dream-user-bubble-ornament-outset) - 32px); background-image: var(--dream-user-bubble-corners); background-position: var(--dream-user-bubble-corner-positions); background-size: var(--dream-user-bubble-corner-sizes); }
+html.codex-dream-skin[data-dream-codex-bubble-frame="layered"] .dream-conversation-codex-bubble::after { inset: calc(-1 * var(--dream-codex-bubble-ornament-outset) - 32px); background-image: var(--dream-codex-bubble-corners); background-position: var(--dream-codex-bubble-corner-positions); background-size: var(--dream-codex-bubble-corner-sizes); }
+html.codex-dream-skin[data-dream-plan-bubble-frame="layered"] .dream-conversation-plan-bubble::after { inset: calc(-1 * var(--dream-plan-bubble-ornament-outset) - 32px); background-image: var(--dream-plan-bubble-corners); background-position: var(--dream-plan-bubble-corner-positions); background-size: var(--dream-plan-bubble-corner-sizes); }
 
 html.codex-dream-skin :is(.dream-conversation-user-bubble, .dream-conversation-codex-bubble, .dream-conversation-tool-bubble) > * {
   position: relative;
