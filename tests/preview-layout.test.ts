@@ -147,6 +147,14 @@ describe('Studio home preview', () => {
     expect(composerRule).not.toMatch(/(?:background|box-shadow|border):/)
   })
 
+  it('hides horizontal overflow while preserving conversation list scrolling', async () => {
+    const css = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'styles.css'), 'utf8')
+    const messageListRule = css.match(/\.preview-message-list\s*\{[^}]+\}/)?.[0]
+
+    expect(messageListRule).toContain('overflow-x: hidden')
+    expect(messageListRule).toContain('overflow-y: auto')
+  })
+
   it('keeps quick editor chrome fixed while only its body scrolls', async () => {
     const css = await readFile(join(process.cwd(), 'src', 'renderer', 'src', 'styles.css'), 'utf8')
     const popoverRule = css.match(/\.preview-edit-popover\s*\{[^}]+\}/)?.[0]
