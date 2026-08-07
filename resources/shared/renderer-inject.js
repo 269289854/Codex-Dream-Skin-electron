@@ -1975,14 +1975,16 @@
       '[data-tool-result]',
       '[data-file-diff-card]'
     ].join(',');
-    const findStreamingCodexBubbleSurface = (candidate) => {
-      const contentNode = candidate.matches(codexContentSelector)
-        ? candidate
-        : [...candidate.querySelectorAll(codexContentSelector)].find((content) =>
-          content instanceof HTMLElement &&
-          !content.closest(excludedAssistantSelector) &&
-          Boolean(content.textContent?.trim())
-        );
+    const findStreamingCodexBubbleSurface = (candidate, preferredContentNode = null) => {
+      const contentNode = preferredContentNode instanceof HTMLElement
+        ? preferredContentNode
+        : candidate.matches(codexContentSelector)
+          ? candidate
+          : [...candidate.querySelectorAll(codexContentSelector)].find((content) =>
+              content instanceof HTMLElement &&
+              !content.closest(excludedAssistantSelector) &&
+              Boolean(content.textContent?.trim())
+          );
       if (!(contentNode instanceof HTMLElement)) return null;
       let current = contentNode;
       let surface = null;
@@ -1993,11 +1995,14 @@
       }
       return surface;
     };
-    document.querySelectorAll('[data-content-search-unit-key$=":assistant"]').forEach((node) => {
+    const assistantMessageContentSelector = '[data-markdown-text-style="assistant-message"]';
+    document.querySelectorAll('[data-content-search-unit-key]').forEach((node) => {
       if (!(node instanceof HTMLElement)) return;
       if (node.querySelector(responseAnnotationSelector)) return;
       if (node.matches(excludedAssistantSelector) || node.querySelector(excludedAssistantSelector)) return;
-      const surface = findStreamingCodexBubbleSurface(node);
+      const assistantContent = node.querySelector(assistantMessageContentSelector);
+      if (!node.matches('[data-content-search-unit-key$=":assistant"]') && !(assistantContent instanceof HTMLElement)) return;
+      const surface = findStreamingCodexBubbleSurface(node, assistantContent);
       if (surface) codexBubbles.add(surface);
     });
     const planMarkerSelector = [
@@ -3079,7 +3084,7 @@
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["data-state", "hidden", "aria-hidden", "lang", "data-response-annotation-conversation", "data-content-search-unit-key"],
+    attributeFilter: ["data-state", "hidden", "aria-hidden", "lang", "data-response-annotation-conversation", "data-content-search-unit-key", "data-markdown-text-style"],
     subtree: true
   });
   const resizeHandler = scheduleEnsure;

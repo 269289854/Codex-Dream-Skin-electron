@@ -738,6 +738,12 @@ describe('renderer home DOM adaptation', () => {
         <div data-content-search-unit-key="turn-1:assistant" data-streaming-assistant style="display: contents">
           <div data-streaming-assistant-surface><div data-selected-text-overlay-target><p>正在生成的 Codex 正文</p></div></div>
         </div>
+        <div data-content-search-unit-key="turn-1:msg-1">
+          <div data-new-assistant-surface class="group flex min-w-0 flex-col">
+            <h4 class="sr-only select-none">ChatGPT 说：</h4>
+            <div data-selected-text-overlay-target data-markdown-text-style="assistant-message"><p>更新后的 Codex 正文</p></div>
+          </div>
+        </div>
       </main>`
     inject(window)
 
@@ -757,6 +763,8 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('[data-streaming-assistant]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-streaming-assistant-surface]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
     expect(window.document.querySelector('[data-streaming-assistant] [data-selected-text-overlay-target]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
+    expect(window.document.querySelector('[data-new-assistant-surface]')?.classList.contains('dream-conversation-codex-bubble')).toBe(true)
+    expect(window.document.querySelector('[data-new-assistant-surface] [data-markdown-text-style="assistant-message"]')?.classList.contains('dream-conversation-codex-bubble')).toBe(false)
     expect(window.document.querySelector('[data-tool-result]')?.className).toBe('')
     expect(window.document.querySelector('[data-file-diff-card]')?.className).toBe('')
 
