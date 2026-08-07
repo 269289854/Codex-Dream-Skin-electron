@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.23 - 2026-08-07
+
+- Added independent theme icon slots for the project, environment, and branch controls in the Codex home composer.
+- Added per-corner conversation bubble decoration controls with independent padding and geometry handling.
+- Reworked conversation bubble rendering into four independently layered corner assets while preserving safe fallback behavior.
+- Fixed plan card click-layer styling and added runtime, preview, migration, sharing, and DOM regression coverage for the new controls.
+
 ## 1.1.22 - 2026-08-05
 
 - Aligned the Chinese primary navigation label with current Codex: the first item is now “新对话”, while the runtime still recognizes the legacy “新建任务” label and English aliases.
