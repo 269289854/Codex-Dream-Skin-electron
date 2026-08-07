@@ -182,6 +182,8 @@ describe('CodexService operation queue', () => {
   it('includes builtin SVG data URLs for Codex slots and project icon assignments', async () => {
     const root = join(tmpdir(), `codex-dream-skin-svg-payload-${process.pid}-${Date.now()}`)
     const profile = createDefaultTheme('33333333-3333-4333-8333-333333333333')
+    profile.icons.projectEnvironment = { kind: 'builtin', name: 'laptop' }
+    profile.icons.projectBranch = { kind: 'builtin', name: 'git-branch' }
     const builtinSvg = 'data:image/svg+xml;base64,PHN2Zy8+'
     const projectIcon = {
       ref: { libraryId: 'system', iconId: 'star' },
@@ -212,6 +214,8 @@ describe('CodexService operation queue', () => {
 
     expect(projectIcons.getSystemIconDataUrl).toHaveBeenCalled()
     expect(payload.script).toContain(`"sidebarNavNewTask":{"name":"square-pen","dataUrl":"${builtinSvg}"}`)
+    expect(payload.script).toContain(`"projectEnvironment":{"name":"laptop","dataUrl":"${builtinSvg}"}`)
+    expect(payload.script).toContain(`"projectBranch":{"name":"git-branch","dataUrl":"${builtinSvg}"}`)
     expect(payload.script).toContain(`"projectIcons":{"showSessionIcons":true,"pool":[{"ref":{"libraryId":"system","iconId":"star"},"weight":1,"builtinName":"star","dataUrl":"${builtinSvg}"}`)
     expect(payload.script).toContain('"sessionId":"sample-session"')
   })

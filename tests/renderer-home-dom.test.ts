@@ -355,6 +355,115 @@ describe('renderer home DOM adaptation', () => {
     expect(window.document.querySelector('main')?.classList.contains('dream-home-shell')).toBe(true)
   })
 
+  it('replaces all three project context icons and restores native nodes on cleanup', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = currentCodexHomeFixture('Codex-Dream-Skin-electron')
+    const projectButton = window.document.querySelector('[data-composer-navigation-target="workspace-project"]')
+    const projectBar = projectButton?.closest('.horizontal-scroll-fade-mask') || projectButton?.parentElement
+    if (!projectButton || !projectBar) throw new Error('Project context fixture is missing.')
+    projectButton.innerHTML = '<span class="native-project"><svg data-native-project></svg></span><span>Codex-Dream-Skin-electron</span>'
+    projectBar.insertAdjacentHTML('beforeend', '<button type="button"><span class="native-environment"><svg data-native-environment></svg></span><span>本地</span></button><button type="button"><span class="native-branch"><svg data-native-branch></svg></span><span>Miku</span></button>')
+    for (const button of projectBar.querySelectorAll('button')) setElementRect(button, 120, 30)
+
+    const dataUrl = 'data:image/png;base64,AA=='
+    inject(window, {
+      project: { name: 'heart', dataUrl },
+      projectEnvironment: { name: 'star', dataUrl },
+      projectBranch: { name: 'sparkles', dataUrl }
+    })
+
+    expect(projectBar.classList.contains('dream-project-bar')).toBe(true)
+    expect(projectBar.querySelectorAll('.dream-project-context-icon .dream-custom-icon')).toHaveLength(3)
+    expect(projectBar.querySelectorAll('[data-native-project], [data-native-environment], [data-native-branch]')).toHaveLength(0)
+
+    stateOf(window).cleanup()
+    expect(projectBar.querySelectorAll('.dream-project-context-icon .dream-custom-icon')).toHaveLength(0)
+    expect(projectBar.querySelectorAll('[data-native-project], [data-native-environment], [data-native-branch]')).toHaveLength(3)
+  })
+
+  it('uses Codex utility bar slots and ignores the project clear button', () => {
+    const window = createWindow()
+    window.document.body.innerHTML = currentCodexHomeFixture('Codex-Dream-Skin-electron')
+    const projectBar = window.document.querySelector('.project-bar')
+    if (!projectBar) throw new Error('Project bar fixture is missing.')
+    projectBar.innerHTML = `
+      <div class="horizontal-scroll-fade-mask" data-composer-utility-bar-scroll-area>
+        <div class="flex w-max min-w-full items-center gap-1">
+          <div data-clear-project-available>
+            <button type="button" data-composer-navigation-target="workspace-project">
+              <span class="_ComposerDropdownLabel_jo7jz_3">
+                <span class="_ComposerDropdownLabelIcon_jo7jz_35"><span data-project-selector-icon="true"><svg data-native-project></svg></span></span>
+                <span>Codex-Dream-Skin-electron</span>
+              </span>
+            </button>
+            <button type="button" data-clear-project-button="true" aria-label="不在项目中工作"><svg data-native-clear></svg></button>
+          </div>
+          <button type="button" data-composer-navigation-target="run-location">
+            <span class="_ComposerDropdownLabelIcon_jo7jz_35"><svg data-native-environment></svg></span><span>本地</span>
+          </button>
+          <button type="button" data-composer-navigation-target="branch">
+            <span class="_ComposerDropdownLabelIcon_jo7jz_35"><svg data-native-branch></svg></span><span>main</span>
+          </button>
+        </div>
+      </div>`
+    const projectButton = window.document.querySelector('[data-composer-navigation-target="workspace-project"]')
+    const environmentButton = window.document.querySelector('[data-composer-navigation-target="run-location"]')
+    const branchButton = window.document.querySelector('[data-composer-navigation-target="branch"]')
+    const clearButton = window.document.querySelector('[data-clear-project-button]')
+    const row = projectBar.querySelector('[data-composer-utility-bar-scroll-area] > div')
+    if (!projectButton || !environmentButton || !branchButton || !clearButton || !row) throw new Error('Codex utility bar fixture is missing.')
+    for (const button of [projectButton, environmentButton, branchButton, clearButton]) setElementRect(button, 120, 30)
+
+    const dataUrl = 'data:image/png;base64,AA=='
+    inject(window, {
+      project: { name: 'heart', dataUrl },
+      projectEnvironment: { name: 'star', dataUrl },
+      projectBranch: { name: 'sparkles', dataUrl }
+    })
+
+    expect(row.children).toHaveLength(3)
+    expect(row.querySelectorAll('.dream-project-context-icon .dream-custom-icon')).toHaveLength(3)
+    expect(projectButton.querySelector('[data-project-selector-icon] .dream-custom-icon')).not.toBeNull()
+    expect(environmentButton.querySelector('.dream-project-context-icon .dream-custom-icon')).not.toBeNull()
+    expect(branchButton.querySelector('.dream-project-context-icon .dream-custom-icon')).not.toBeNull()
+    expect(clearButton.querySelector('.dream-project-context-icon, .dream-custom-icon')).toBeNull()
+    expect(row.querySelectorAll('button')).toHaveLength(4)
+
+    stateOf(window).cleanup()
+    expect(row.children).toHaveLength(3)
+    expect(row.querySelectorAll('.dream-project-context-icon, .dream-custom-icon')).toHaveLength(0)
+    expect(row.querySelectorAll('[data-native-project], [data-native-environment], [data-native-branch], [data-native-clear]')).toHaveLength(4)
+  })
+
+  it('reapplies project context icons after Codex rerenders the project bar', async () => {
+    const window = createWindow()
+    window.document.body.innerHTML = currentCodexHomeFixture('Codex-Dream-Skin-electron')
+    const projectButton = window.document.querySelector('[data-composer-navigation-target="workspace-project"]')
+    const projectBar = projectButton?.closest('.horizontal-scroll-fade-mask') || projectButton?.parentElement
+    if (!projectButton || !projectBar) throw new Error('Project context fixture is missing.')
+    projectButton.innerHTML = '<span class="native-project"><svg></svg></span><span>Codex-Dream-Skin-electron</span>'
+    projectBar.insertAdjacentHTML('beforeend', '<button type="button"><span class="native-environment"><svg></svg></span><span>本地</span></button><button type="button"><span class="native-branch"><svg></svg></span><span>Miku</span></button>')
+    for (const button of projectBar.querySelectorAll('button')) setElementRect(button, 120, 30)
+
+    const dataUrl = 'data:image/png;base64,AA=='
+    inject(window, {
+      project: { name: 'heart', dataUrl },
+      projectEnvironment: { name: 'star', dataUrl },
+      projectBranch: { name: 'sparkles', dataUrl }
+    })
+    expect(projectBar.querySelectorAll('.dream-project-context-icon .dream-custom-icon')).toHaveLength(3)
+
+    projectButton.innerHTML = '<span class="rerendered-project"><svg></svg></span><span>Codex-Dream-Skin-electron</span>'
+    const buttons = [...projectBar.querySelectorAll('button')]
+    buttons[1]?.replaceChildren(window.document.createElement('span'), window.document.createElement('span'))
+    buttons[1]?.lastElementChild?.append('本地')
+    buttons[2]?.replaceChildren(window.document.createElement('span'), window.document.createElement('span'))
+    buttons[2]?.lastElementChild?.append('Miku')
+    await new Promise((resolve) => window.setTimeout(resolve, 240))
+
+    expect(projectBar.querySelectorAll('.dream-project-context-icon .dream-custom-icon')).toHaveLength(3)
+  })
+
   it('selects localized v29 copy from English native signals and rebuilds when Codex switches language', async () => {
     const window = createWindow()
     window.document.documentElement.lang = 'en-US'

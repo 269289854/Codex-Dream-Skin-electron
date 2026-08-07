@@ -220,7 +220,7 @@ describe('theme share packages', () => {
     expect(Buffer.from(archive['theme.json']!).toString('utf8')).not.toContain(root)
     expect(Object.keys(archive).sort()).toEqual([font.relativePath, image.relativePath, polaroidImage.relativePath, composerGif.relativePath, ...Object.values(importedCornerSet).map((asset) => asset.relativePath), 'manifest.json', 'theme.json'].sort())
     expect(Buffer.from(archive['theme.json']!).toString('utf8')).not.toContain('icon-posters')
-    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 31 })
+    expect(JSON.parse(Buffer.from(archive['manifest.json']!).toString('utf8'))).toMatchObject({ profileVersion: 32 })
     const rawProfile = JSON.parse(Buffer.from(archive['theme.json']!).toString('utf8')) as Record<string, unknown>
     expect(rawProfile).not.toHaveProperty('locale')
     expect(rawProfile).not.toHaveProperty('contentLocale')
@@ -376,7 +376,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(31)
+    expect(imported.version).toBe(32)
     expect(imported.videoPlayback).toEqual({ pausePolicy: 'hidden' })
     expect(imported.conversationBubbles).toEqual({
       visible: true,
@@ -407,7 +407,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(31)
+    expect(imported.version).toBe(32)
     expect(imported.conversationBubbles).toEqual({
       visible: false,
       user: createDefaultConversationBubbleStyle(),
@@ -451,7 +451,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync(archive))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(31)
+    expect(imported.version).toBe(32)
     expect(imported.conversationBubbles.user.source).toEqual({ kind: 'preset', presetId: 'moon-stars' })
     expect(imported.conversationBubbles.codex.source).toEqual({ kind: 'none' })
     await expect(readFile(join(store.themesRoot, imported.id, image.relativePath))).rejects.toThrow()
@@ -488,7 +488,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync(archive))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(31)
+    expect(imported.version).toBe(32)
     expect(imported.conversationBubbles.user.source).toEqual({ kind: 'preset', presetId: 'sakura-ribbon' })
     expect(imported.conversationBubbles.user.cornerOffsets).toEqual(createDefaultConversationBubbleStyle().cornerOffsets)
   })
@@ -523,7 +523,7 @@ describe('theme share packages', () => {
     await writeFile(packagePath, zipSync({ ...archive, 'manifest.json': Buffer.from(JSON.stringify(manifest)) }))
 
     const imported = await store.importSharePackage(packagePath)
-    expect(imported.version).toBe(31)
+    expect(imported.version).toBe(32)
     expect(imported.conversationBubbles).toEqual({
       visible: true,
       user: createDefaultConversationBubbleStyle(),

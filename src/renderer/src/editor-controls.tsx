@@ -27,7 +27,7 @@ export const colorLabels: Record<keyof ThemeColors, string> = {
 }
 
 export const iconLabels: Record<IconSlot, string> = {
-  sidebarMode: '侧边栏模式', sidebarSearch: '搜索图标', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composerAdd: '输入框添加按钮', composerMicrophone: '输入框麦克风按钮', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '呼吸闪烁', backgroundFloat: '轻盈漂浮', backgroundRain: '垂直雨落', backgroundMeteor: '斜向流星', backgroundSnow: '摇曳飘雪', project: '项目', decoration: '装饰', polaroidPin: '图钉', sidebarNavNewTask: '新对话图标', sidebarNavPullRequests: '拉取请求图标', sidebarNavSites: '站点图标', sidebarNavScheduled: '已安排图标', sidebarNavPlugins: '插件图标', accountMenuAccount: '账号信息图标', accountMenuTeam: '团队图标', accountMenuUsage: '剩余用量图标', accountMenuHidePet: '隐藏宠物图标', accountMenuSettings: '设置图标', accountMenuLogout: '退出登录图标'
+  sidebarMode: '侧边栏模式', sidebarSearch: '搜索图标', branding: '品牌', cardPrimary: '主卡片', cardSecondary: '副卡片', composerAdd: '输入框添加按钮', composerMicrophone: '输入框麦克风按钮', composer: '输入框发送按钮', composerBadge: '输入框装饰', backgroundSparkle: '呼吸闪烁', backgroundFloat: '轻盈漂浮', backgroundRain: '垂直雨落', backgroundMeteor: '斜向流星', backgroundSnow: '摇曳飘雪', project: '项目', projectEnvironment: '项目环境', projectBranch: '项目分支', decoration: '装饰', polaroidPin: '图钉', sidebarNavNewTask: '新对话图标', sidebarNavPullRequests: '拉取请求图标', sidebarNavSites: '站点图标', sidebarNavScheduled: '已安排图标', sidebarNavPlugins: '插件图标', accountMenuAccount: '账号信息图标', accountMenuTeam: '团队图标', accountMenuUsage: '剩余用量图标', accountMenuHidePet: '隐藏宠物图标', accountMenuSettings: '设置图标', accountMenuLogout: '退出登录图标'
 }
 
 export const typographyLabels: Record<TypographySlot, string> = {

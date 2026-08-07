@@ -366,7 +366,7 @@ html.codex-dream-skin main.main-surface.dream-home-shell .app-shell-main-content
   white-space: nowrap;
 }
 
-.dream-project-bar button {
+.dream-project-bar button:not([data-clear-project-button]) {
   border-color: var(--dream-project-chip-border) !important;
   background: var(--dream-project-chip) !important;
   color: var(--dream-project-chip-text) !important;
@@ -377,9 +377,25 @@ html.codex-dream-skin main.main-surface.dream-home-shell .app-shell-main-content
   color: var(--dream-action-card-muted-text);
 }
 
-.dream-project-bar button:hover { background: var(--dream-project-chip-hover) !important; }
-.dream-project-bar button:active,
-.dream-project-bar button[aria-pressed="true"] { background: var(--dream-project-chip-selected) !important; }
+.dream-project-bar button:not([data-clear-project-button]):hover { background: var(--dream-project-chip-hover) !important; }
+.dream-project-bar button:not([data-clear-project-button]):active,
+.dream-project-bar button:not([data-clear-project-button])[aria-pressed="true"] { background: var(--dream-project-chip-selected) !important; }
+
+.dream-project-bar .dream-project-context-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.dream-project-bar .dream-project-context-icon :is(svg, img, .dream-custom-icon) {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
 
 .dream-native-suggestions {
   display: none !important;

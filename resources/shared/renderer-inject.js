@@ -9,6 +9,8 @@
   const WINDOW_BACKGROUND_ID = "codex-dream-skin-window-background";
   const PARTICLE_LAYER_ID = "codex-dream-skin-particle-layer";
   const projectAnchorRestorers = new WeakMap();
+  const projectBarIconRestorers = new WeakMap();
+  const projectBarIconButtons = new Set();
   const projectIconNodes = new Set();
   const sessionIconNodes = new Set();
   const runtimeProjectIconAssignments = new Map();
@@ -745,6 +747,117 @@
     }
     for (const node of [...sessionIconNodes]) {
       if (!node.isConnected || !activeNodes.has(node)) restoreSessionIcon(node);
+    }
+  };
+  const projectBarIconHost = (button) => {
+    const existingHost = button.querySelector(".dream-project-context-icon");
+    if (existingHost) return { node: existingHost, created: false, restore: null };
+    const markedHost = button.querySelector("[data-project-selector-icon]");
+    const labelIconHost = button.querySelector('[class*="ComposerDropdownLabelIcon"]');
+    const nativeHost = markedHost || labelIconHost;
+    if (nativeHost instanceof HTMLElement) {
+      nativeHost.classList.add("dream-project-context-icon");
+      return { node: nativeHost, created: false, restore: () => nativeHost.classList.remove("dream-project-context-icon") };
+    }
+    const wrappedIcon = [...button.children].find((child) => child.matches?.("svg, img, .dream-custom-icon"));
+    if (wrappedIcon) {
+      const host = document.createElement("span");
+      host.className = "dream-project-context-icon";
+      host.setAttribute("aria-hidden", "true");
+      button.insertBefore(host, wrappedIcon);
+      host.appendChild(wrappedIcon);
+      return { node: host, created: true, restore: () => { if (host.isConnected) host.replaceWith(wrappedIcon); } };
+    }
+    const nestedHost = [...button.children].find((child) => child instanceof HTMLElement && child.querySelector?.(":scope > svg, :scope > img, :scope > .dream-custom-icon"));
+    if (nestedHost) {
+      nestedHost.classList.add("dream-project-context-icon");
+      return { node: nestedHost, created: false, restore: () => nestedHost.classList.remove("dream-project-context-icon") };
+    }
+    const descendantIcon = button.querySelector("svg, img, .dream-custom-icon");
+    const descendantHost = descendantIcon?.parentElement;
+    if (descendantHost instanceof HTMLElement && descendantHost !== button) {
+      descendantHost.classList.add("dream-project-context-icon");
+      return { node: descendantHost, created: false, restore: () => descendantHost.classList.remove("dream-project-context-icon") };
+    }
+    const host = document.createElement("span");
+    host.className = "dream-project-context-icon";
+    host.setAttribute("aria-hidden", "true");
+    button.insertBefore(host, button.firstChild);
+    return { node: host, created: true, restore: () => host.remove() };
+  };
+  const restoreProjectBarIcon = (button) => {
+    const record = projectBarIconRestorers.get(button);
+    if (!record) return;
+    if (record.created) record.restore?.();
+    else {
+      if (record.node.isConnected) record.node.innerHTML = record.iconHtml;
+      record.restore?.();
+    }
+    projectBarIconRestorers.delete(button);
+    projectBarIconButtons.delete(button);
+  };
+  const ensureProjectBarIcon = (button, slot, nativeName, fallback) => {
+    if (!(button instanceof HTMLElement)) return;
+    const source = themeConfig?.icons?.[slot];
+    if (!source?.dataUrl && (!source?.name || source.name === nativeName)) {
+      restoreProjectBarIcon(button);
+      return;
+    }
+    let record = projectBarIconRestorers.get(button);
+    if (!record || !record.node.isConnected) {
+      if (record) restoreProjectBarIcon(button);
+      const host = projectBarIconHost(button);
+      record = { node: host.node, created: host.created, restore: host.restore, iconHtml: host.node.innerHTML };
+      projectBarIconRestorers.set(button, record);
+      projectBarIconButtons.add(button);
+    }
+    renderSlot(record.node, slot, fallback);
+  };
+  const projectBarForButton = (button) =>
+    button?.closest("[data-composer-utility-bar-scroll-area]")?.parentElement ||
+    button?.closest(".horizontal-scroll-fade-mask")?.parentElement ||
+    button?.parentElement || null;
+  const ensureProjectBarIcons = (projectBar, projectButton) => {
+    const activeButtons = new Set();
+    if (!(projectBar instanceof HTMLElement) || !(projectButton instanceof HTMLElement)) {
+      for (const button of [...projectBarIconButtons]) restoreProjectBarIcon(button);
+      return;
+    }
+    const utilityBar = projectButton.closest("[data-composer-utility-bar-scroll-area]");
+    const buttonScope = utilityBar instanceof HTMLElement
+      ? utilityBar
+      : projectButton.closest(".horizontal-scroll-fade-mask") || projectButton.parentElement;
+    const scopedButton = (selector) => {
+      const button = buttonScope?.querySelector(selector);
+      return button instanceof HTMLElement && isVisible(button) ? button : null;
+    };
+    const environmentButton = scopedButton('button[data-composer-navigation-target="run-location"]');
+    const branchButton = scopedButton('button[data-composer-navigation-target="branch"]');
+    const fallbackButtons = buttonScope instanceof HTMLElement
+      ? [...buttonScope.querySelectorAll("button")].filter((button) =>
+        button instanceof HTMLElement &&
+        button !== projectButton &&
+        !button.matches("[data-clear-project-button], [aria-hidden=\"true\"]") &&
+        (!button.hasAttribute("data-composer-navigation-target") ||
+          button.matches('[data-composer-navigation-target="workspace-project"], [data-composer-navigation-target="run-location"], [data-composer-navigation-target="branch"]')) &&
+        isVisible(button)
+      )
+      : [];
+    const fallbackEnvironmentButton = environmentButton || fallbackButtons.find((button) => /本地|local|environment|workspace|computer|device/i.test(normalizedNodeLabel(button)));
+    const fallbackBranchButton = branchButton || fallbackButtons.find((button) => button !== fallbackEnvironmentButton && /分支|branch|git/i.test(normalizedNodeLabel(button)));
+    const remainingButtons = fallbackButtons.filter((button) => button !== fallbackEnvironmentButton && button !== fallbackBranchButton);
+    const assignments = [
+      [projectButton, "project", "folder-code", "⌘"],
+      [fallbackEnvironmentButton || remainingButtons.shift(), "projectEnvironment", "laptop", "▱"],
+      [fallbackBranchButton || remainingButtons.shift(), "projectBranch", "git-branch", "⑂"]
+    ];
+    for (const [button, slot, nativeName, fallback] of assignments) {
+      if (!(button instanceof HTMLElement)) continue;
+      activeButtons.add(button);
+      ensureProjectBarIcon(button, slot, nativeName, fallback);
+    }
+    for (const button of [...projectBarIconButtons]) {
+      if (!button.isConnected || !activeButtons.has(button)) restoreProjectBarIcon(button);
     }
   };
   const findSidebarSearchIconNode = (button) => {
@@ -2593,6 +2706,7 @@
     markCurrentNode(".dream-hero", null, "dream-hero");
     markCurrentNode(".dream-layout-root", null, "dream-layout-root");
     markCurrentNode(".dream-project-bar", null, "dream-project-bar");
+    for (const button of [...projectBarIconButtons]) restoreProjectBarIcon(button);
     markCurrentNode(".dream-quick-mode-banner", null, "dream-quick-mode-banner");
     markCurrentNode(".dream-native-suggestions", null, "dream-native-suggestions");
     document.getElementById(PROJECT_PROXY_ID)?.remove();
@@ -2642,9 +2756,9 @@
       const voicePromo = findVoicePromo(home);
       markCurrentNode(".dream-home-voice-promo", voicePromo, "dream-home-voice-promo");
 
-      const projectBar = context.projectButton?.closest(".horizontal-scroll-fade-mask")?.parentElement ||
-        context.projectButton?.parentElement || null;
+      const projectBar = projectBarForButton(context.projectButton);
       markCurrentNode(".dream-project-bar", projectBar, "dream-project-bar");
+      ensureProjectBarIcons(projectBar, context.projectButton);
       const nativeSuggestions = home.querySelector('[data-home-ambient-suggestions="true"], [data-home-ambient-suggestions]');
       markCurrentNode(".dream-native-suggestions", nativeSuggestions, "dream-native-suggestions");
       ensureHeroMedia(hero);
@@ -2779,6 +2893,7 @@
     for (const button of [...sidebarSearchButtons]) restoreSidebarSearch(button);
     for (const node of [...projectIconNodes]) restoreProjectIcon(node);
     for (const node of [...sessionIconNodes]) restoreSessionIcon(node);
+    for (const button of [...projectBarIconButtons]) restoreProjectBarIcon(button);
     runtimeProjectIconAssignments.clear();
     runtimeSessionIconAssignments.clear();
     document.querySelectorAll("[data-dream-sidebar-nav]").forEach((node) => { if (node instanceof HTMLElement) restoreSidebarNav(node); node.removeAttribute("data-dream-sidebar-nav"); });
@@ -2898,7 +3013,10 @@
     ensureComposerToolIcons(composer);
     ensureComposerSendIcon(composer);
     ensureAccountMenu();
-    const home = document.querySelector("[role=main].dream-home");
+    const context = findHomeContext();
+    const projectBar = projectBarForButton(context?.projectButton);
+    ensureProjectBarIcons(projectBar, context?.projectButton);
+    const home = context?.home || document.querySelector("[role=main].dream-home");
     const voicePromo = home instanceof HTMLElement ? findVoicePromo(home) : null;
     markCurrentNode(".dream-home-voice-promo", voicePromo, "dream-home-voice-promo");
     ensureConversationBubbles();
@@ -2934,6 +3052,7 @@
     ".dream-composer-melody",
     ".dream-composer-tool-icon-button .dream-custom-icon",
     ".dream-composer-send-icon",
+    ".dream-project-context-icon",
     ".dream-account-menu-icon",
     ".dream-account-menu-background"
   ].join(", ");

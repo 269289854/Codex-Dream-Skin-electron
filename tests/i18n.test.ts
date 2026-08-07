@@ -56,6 +56,10 @@ describe('internationalization', () => {
     expect(translate('en-US', '随机素材已用尽 · Codex 默认图标')).toBe('Random icons exhausted · Codex default icon')
     expect(translate('en-US', '已刷新 {projectCount} 个 Codex 项目和 {sessionCount} 个会话。', { projectCount: 2, sessionCount: 5 })).toBe('Refreshed 2 Codex projects and 5 sessions.')
     expect(translate('en-US', '搜索图标')).toBe('Search icons')
+    expect(translate('en-US', '项目环境')).toBe('Project environment')
+    expect(translate('en-US', '项目分支')).toBe('Project branch')
+    expect(translate('en-US', '项目环境图标')).toBe('Project environment icon')
+    expect(translate('en-US', '项目分支图标')).toBe('Project branch icon')
     expect(translate('en-US', '没有匹配的图标')).toBe('No matching icons')
   })
 

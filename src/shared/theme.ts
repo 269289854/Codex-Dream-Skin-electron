@@ -87,6 +87,11 @@ const currentComposerToolIconsSchema = currentSearchIconsSchema.extend({
   composerMicrophone: iconSourceSchema
 }).strict()
 
+const currentProjectContextIconsSchema = currentComposerToolIconsSchema.extend({
+  projectEnvironment: iconSourceSchema,
+  projectBranch: iconSourceSchema
+}).strict()
+
 const composerBadgeSchema = z.object({ visible: z.boolean() }).strict()
 
 const sparkleFields = {
@@ -1035,11 +1040,31 @@ const versionThirtyThemeSchema = z.object({
   }
 })
 
-export const themeProfileSchema = z.object({
+const versionThirtyOneThemeSchema = z.object({
   ...versionThirteenThemeFields,
   version: z.literal(31),
   copy: localizedThemeCopySchema,
   icons: currentComposerToolIconsSchema,
+  videoPlayback: globalVideoPlaybackSchema,
+  brandSignature: brandSignatureSchema,
+  decorations: decorationsSchema,
+  conversationBackground: conversationBackgroundSchema.default(createDefaultConversationBackground()),
+  windowBackground: windowBackgroundSchema.default(createDefaultWindowBackground()),
+  accountMenuBackground: accountMenuBackgroundSchema.default(createDefaultAccountMenuBackground()),
+  conversationBubbles: conversationBubblesSchema.default(createDefaultConversationBubbles()),
+  toolActivityBubbles: toolActivityBubblesSchema.default(createDefaultToolActivityBubbles()),
+  resetColors: themeColorsSchema
+}).strict().superRefine((profile, context) => {
+  if (profile.hero.playback.sound && profile.polaroid.playback.sound) {
+    context.addIssue({ code: 'custom', path: ['polaroid', 'playback', 'sound'], message: 'Only one media source may have sound enabled.' })
+  }
+})
+
+export const themeProfileSchema = z.object({
+  ...versionThirteenThemeFields,
+  version: z.literal(32),
+  copy: localizedThemeCopySchema,
+  icons: currentProjectContextIconsSchema,
   videoPlayback: globalVideoPlaybackSchema,
   brandSignature: brandSignatureSchema,
   decorations: decorationsSchema,
@@ -1166,7 +1191,7 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
   return {
     id,
     name,
-    version: 31,
+    version: 32,
     updatedAt: new Date().toISOString(),
     videoPlayback: { pausePolicy: 'hidden' },
     brandSignature: createDefaultBrandSignature(),
@@ -1220,6 +1245,8 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
       backgroundMeteor: { kind: 'builtin', name: 'star' },
       backgroundSnow: { kind: 'builtin', name: 'snowflake' },
       project: { kind: 'builtin', name: 'folder-code' },
+      projectEnvironment: { kind: 'builtin', name: 'laptop' },
+      projectBranch: { kind: 'builtin', name: 'git-branch' },
       decoration: { kind: 'builtin', name: 'heart' },
       polaroidPin: { kind: 'builtin', name: 'pin' },
       sidebarNavNewTask: { kind: 'builtin', name: 'square-pen' },
@@ -1243,6 +1270,15 @@ export function createDefaultTheme(id: string, name = '初音未来', resetColor
 }
 
 export function parseThemeProfile(input: unknown): ThemeProfile {
+  if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version <= 31) {
+    const legacy = structuredClone(input) as Record<string, unknown>
+    const icons = legacy.icons && typeof legacy.icons === 'object' ? legacy.icons as Record<string, unknown> : null
+    if (icons) {
+      delete icons.projectEnvironment
+      delete icons.projectBranch
+    }
+    input = legacy
+  }
   if (input && typeof input === 'object' && 'version' in input && typeof input.version === 'number' && input.version >= 0 && input.version <= 27) {
     const legacy = structuredClone(input) as Record<string, unknown>
     const bubbles = legacy.conversationBubbles && typeof legacy.conversationBubbles === 'object' ? legacy.conversationBubbles as Record<string, unknown> : null
@@ -1321,10 +1357,14 @@ export function parseThemeProfile(input: unknown): ThemeProfile {
     delete legacy.conversationBackground
     input = legacy
   }
-  if (input && typeof input === 'object' && 'version' in input && input.version === 31) {
+  if (input && typeof input === 'object' && 'version' in input && input.version === 32) {
     const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
     const parsed = themeProfileSchema.parse(candidate) as ThemeProfile
     return addSourceImageHints(parsed)
+  }
+  if (input && typeof input === 'object' && 'version' in input && input.version === 31) {
+    const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
+    return migrateVersionThirtyOne(versionThirtyOneThemeSchema.parse(candidate))
   }
   if (input && typeof input === 'object' && 'version' in input && input.version === 30) {
     const candidate = normalizeSidebarNavCopy(normalizeCurrentMediaReferences(input))
@@ -1809,7 +1849,7 @@ function migrateVersionThirty(legacy: z.infer<typeof versionThirtyThemeSchema>):
     ...style,
     cornerOffsets: createDefaultConversationBubbleCornerOffsets()
   })
-  return addSourceImageHints(themeProfileSchema.parse({
+  return migrateVersionThirtyOne(versionThirtyOneThemeSchema.parse({
     ...legacy,
     version: 31,
     conversationBubbles: {
@@ -1817,6 +1857,18 @@ function migrateVersionThirty(legacy: z.infer<typeof versionThirtyThemeSchema>):
       user: migrateStyle(legacy.conversationBubbles.user),
       codex: migrateStyle(legacy.conversationBubbles.codex),
       plan: migrateStyle(legacy.conversationBubbles.plan)
+    }
+  }))
+}
+
+function migrateVersionThirtyOne(legacy: z.infer<typeof versionThirtyOneThemeSchema>): ThemeProfile {
+  return addSourceImageHints(themeProfileSchema.parse({
+    ...legacy,
+    version: 32,
+    icons: {
+      ...legacy.icons,
+      projectEnvironment: { kind: 'builtin', name: 'laptop' },
+      projectBranch: { kind: 'builtin', name: 'git-branch' }
     }
   }))
 }

@@ -112,6 +112,8 @@ export const PREVIEW_TARGETS = {
   'palette-project-bar': styleTarget('项目栏', 'projects', { colors: ['projectBarText'], paints: ['projectBar'], fontSlot: 'ui' }),
   'project-chip': styleTarget('项目标签', 'projects', { colors: ['projectChipText', 'projectChipBorder'], paints: ['projectChip', 'projectChipHover', 'projectChipSelected'], fontSlot: 'ui' }),
   'icon-project': styleTarget('项目图标', 'projects', { colors: ['projectChipText'], iconSlot: 'project' }),
+  'icon-project-environment': styleTarget('项目环境图标', 'projects', { colors: ['projectChipText'], iconSlot: 'projectEnvironment' }),
+  'icon-project-branch': styleTarget('项目分支图标', 'projects', { colors: ['projectChipText'], iconSlot: 'projectBranch' }),
   'icon-project-sidebar': styleTarget('侧边栏项目图标', 'sidebar', { colors: ['sidebarProjectText', 'sidebarProjectHoverText'], iconSlot: 'project' }),
 
   'palette-composer': styleTarget('输入框', 'composer', { colors: ['composerBorder', 'composerText'], paints: ['composer'], fontSlot: 'ui' }),
@@ -148,6 +150,8 @@ export const ICON_PREVIEW_TARGETS: Record<IconSlot, PreviewTargetId> = {
   backgroundMeteor: 'sparkles',
   backgroundSnow: 'sparkles',
   project: 'icon-project',
+  projectEnvironment: 'icon-project-environment',
+  projectBranch: 'icon-project-branch',
   decoration: 'icon-decoration',
   polaroidPin: 'icon-polaroid-pin',
   sidebarNavNewTask: 'sidebar-nav-new-task',

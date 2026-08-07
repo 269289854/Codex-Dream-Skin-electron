@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Box, Check, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Copy, Download, ExternalLink,
-  FolderCog, GitBranch, Home, Image, Languages, Laptop, LibraryBig, LogOut, MessageSquare, MonitorPlay,
+  FolderCog, Home, Image, Languages, LibraryBig, LogOut, MessageSquare, MonitorPlay,
   Palette, Play, Plus, RefreshCw, RotateCcw, Save, Settings2, Sparkles, Trash2, Undo2, Upload, X
 } from 'lucide-react'
 import type { AppInfo, AppUpdateStatus, ImportedMediaAsset, MediaAssetPurpose, MediaSelectionKind, OperationProgress, RuntimeStatus, VideoAssetInspection, VideoImportDecision, VideoMediaRole, VideoSourceSelection } from '../../shared/contracts'
@@ -1460,8 +1460,8 @@ export function App(): React.JSX.Element {
                       <div className="dream-project-bar preview-project-bar" data-preview-target="palette-project-bar">
                         <div className="preview-project-chips">
                           <button type="button" data-preview-target="project-chip" data-preview-context="project"><span className="preview-project-icon" data-preview-target="icon-project"><RenderIcon slot="project" profile={draft} assets={previewAssets} /></span><span>{previewContext.projectName}</span></button>
-                          <button type="button" data-preview-target="project-chip" data-preview-context="environment"><Laptop size={15} /><span>{previewContext.environment}</span></button>
-                          <button type="button" data-preview-target="project-chip" data-preview-context="branch"><GitBranch size={15} /><span>{previewContext.branch}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="environment"><span className="preview-project-icon" data-preview-target="icon-project-environment"><RenderIcon slot="projectEnvironment" profile={draft} assets={previewAssets} /></span><span>{previewContext.environment}</span></button>
+                          <button type="button" data-preview-target="project-chip" data-preview-context="branch"><span className="preview-project-icon" data-preview-target="icon-project-branch"><RenderIcon slot="projectBranch" profile={draft} assets={previewAssets} /></span><span>{previewContext.branch}</span></button>
                         </div>
                       </div>
                       <PreviewComposer profile={draft} assets={previewAssets} locale={contentLocale} />
